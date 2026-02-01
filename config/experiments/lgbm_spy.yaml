@@ -1,0 +1,71 @@
+extends: base/daily.yaml
+
+data:
+  symbol: "SPY"
+  start: "2015-01-01"
+  end: null
+
+features:
+  - step: returns
+    params:
+      log: false
+      col_name: close_ret
+  - step: volatility
+    params:
+      returns_col: close_ret
+      rolling_windows: [20, 60]
+      ewma_spans: [20]
+  - step: trend
+    params:
+      price_col: close
+      sma_windows: [20, 50]
+      ema_spans: [20]
+  - step: indicators
+    params:
+      price_col: close
+      high_col: high
+      low_col: low
+      volume_col: volume
+  - step: oscillators
+    params:
+      price_col: close
+      high_col: high
+      low_col: low
+      rsi_windows: [14]
+      stoch_windows: [14]
+      stoch_smooth: 3
+  - step: lags
+    params:
+      cols: [close_ret]
+      lags: [1, 2, 5]
+
+model:
+  kind: lightgbm_clf
+  params:
+    n_estimators: 600
+    learning_rate: 0.02
+    num_leaves: 63
+    max_depth: 6
+    subsample: 0.8
+    colsample_bytree: 0.8
+    min_child_samples: 10
+    random_state: 7
+  split:
+    method: time
+    train_frac: 0.7
+
+signals:
+  kind: probability_threshold
+  params:
+    prob_col: pred_prob
+    upper: 0.58
+    lower: 0.42
+    signal_name: signal_prob
+
+risk:
+  target_vol: 0.10
+  max_leverage: 3.0
+  cost_per_turnover: 0.0005
+  dd_guard:
+    max_drawdown: 0.2
+    cooloff_bars: 20

@@ -1,0 +1,34 @@
+# python3 -m venv .venv
+# source .venv/bin/activate
+# pip install -r requirements.txt
+
+# Core data & ML
+pandas
+numpy
+scipy
+statsmodels
+scikit-learn
+xgboost
+lightgbm
+
+torch
+torchmetrics
+pytorch-lightning
+
+gymnasium
+stable-baselines3
+
+# Utilities / plotting
+pyyaml
+tqdm
+matplotlib
+seaborn
+
+yfinance
+requests
+
+# Notebooks
+jupyterlab
+notebook
+ipykernel
+ipywidgets

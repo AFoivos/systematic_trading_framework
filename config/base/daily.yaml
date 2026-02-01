@@ -1,0 +1,18 @@
+data:
+  source: yahoo          
+  interval: "1d"
+  start: "2010-01-01"
+  end: null
+
+risk:
+  cost_per_turnover: 0.0005
+  slippage_per_turnover: 0.0
+  target_vol: null     
+  max_leverage: 3.0
+  dd_guard:
+    max_drawdown: 0.2
+    cooloff_bars: 20
+
+backtest:
+  periods_per_year: 252
+  returns_ty

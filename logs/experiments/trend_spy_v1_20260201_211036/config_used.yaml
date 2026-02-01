@@ -1,0 +1,56 @@
+data:
+  source: yahoo
+  interval: 1d
+  start: '2020-01-01'
+  end: null
+  symbol: 6E=F
+risk:
+  cost_per_turnover: 0.0005
+  target_vol: 0.1
+  max_leverage: 3.0
+  dd_guard:
+    max_drawdown: 0.2
+    cooloff_bars: 20
+backtest:
+  periods_per_year: 252
+  returns_col: close_logret
+  signal_col: signal_trend_state
+logging:
+  output_dir: /Users/foivosampatzis/Documents/Projects/systematic_trading_framework/logs/experiments
+  run_name: trend_spy_v1
+config_path: /Users/foivosampatzis/Documents/Projects/systematic_trading_framework/config/experiments/trend_spy.yaml
+features:
+- step: returns
+  params:
+    log: true
+    col_name: close_logret
+- step: volatility
+  params:
+    returns_col: close_logret
+    rolling_windows:
+    - 20
+    - 60
+    ewma_spans:
+    - 20
+- step: trend
+  params:
+    price_col: close
+    sma_windows:
+    - 20
+    - 50
+    ema_spans:
+    - 20
+- step: trend_regime
+  params:
+    price_col: close
+    base_sma_for_sign: 50
+    short_sma: 20
+    long_sma: 50
+model:
+  kind: none
+signals:
+  kind: trend_state
+  params:
+    state_col: close_trend_state_sma_20_50
+    mode: long_short_hold
+    signal_name: signal_trend_state
