@@ -52,4 +52,4 @@ backtest:
   returns_type: log
 
 logging:
-  run
+  run_name: trend_spy_v1

@@ -195,4 +195,28 @@ def run_experiment(config_path: str | Path) -> ExperimentResult:
     logging_cfg = cfg.get("logging", {}) or {}
     if logging_cfg.get("enabled", True):
         base_dir = Path(logging_cfg.get("output_dir", "logs/experiments"))
- 
+        run_name = logging_cfg.get("run_name", Path(config_path).stem)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_dir = in_project(base_dir) / f"{run_name}_{timestamp}"
+        artifacts = _save_artifacts(run_dir, cfg, df, bt, model_meta)
+
+    return ExperimentResult(
+        config=cfg,
+        data=df,
+        backtest=bt,
+        model=model,
+        model_meta=model_meta,
+        artifacts=artifacts,
+    )
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run a config-based trading experiment.")
+    parser.add_argument("config", help="Path to experiment YAML (relative to config/ or absolute).")
+    args = parser.parse_args()
+
+    result = run_experiment(args.config)
+    print("Run summary:", result.backtest.summary)
+    if result.artifacts:
+        print("Artifacts saved to:", result.artifacts.get("run_dir"))

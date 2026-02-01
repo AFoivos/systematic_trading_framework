@@ -32,3 +32,6 @@ jupyterlab
 notebook
 ipykernel
 ipywidgets
+
+# Testing
+pytest

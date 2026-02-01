@@ -69,3 +69,12 @@ risk:
   dd_guard:
     max_drawdown: 0.2
     cooloff_bars: 20
+
+backtest:
+  returns_col: close_ret
+  signal_col: signal_prob
+  periods_per_year: 252
+  returns_type: simple
+
+logging:
+  run_name: lgbm_spy_v1

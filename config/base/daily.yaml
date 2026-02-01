@@ -15,4 +15,7 @@ risk:
 
 backtest:
   periods_per_year: 252
-  returns_ty
+  returns_type: simple
+
+logging:
+  output_dir: logs/experiments

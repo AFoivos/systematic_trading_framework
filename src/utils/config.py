@@ -183,4 +183,22 @@ def load_experiment_config(config_path: str | Path) -> dict[str, Any]:
     cfg.setdefault("signals", {"kind": "none", "params": {}})
     cfg["risk"] = _default_risk_block(cfg.get("risk", {}))
     cfg["backtest"] = _default_backtest_block(cfg.get("backtest", {}))
-    cfg["logging"] = _resolve_logging_block(cfg.get("logging",
+    cfg["logging"] = _resolve_logging_block(cfg.get("logging", {}), path)
+
+    _inject_api_key_from_env(cfg["data"])
+
+    _validate_data_block(cfg["data"])
+    _validate_features_block(cfg["features"])
+    _validate_model_block(cfg["model"])
+    _validate_signals_block(cfg["signals"])
+    _validate_risk_block(cfg["risk"])
+    _validate_backtest_block(cfg["backtest"])
+
+    return cfg
+
+
+__all__ = [
+    "ConfigError",
+    "_resolve_config_path",
+    "load_experiment_config",
+]

@@ -113,3 +113,8 @@ def run_backtest(
 
     return BacktestResult(
         equity_curve=equity_curve,
+        returns=strat_returns,
+        positions=positions,
+        turnover=turnover,
+        summary=summary,
+    )
