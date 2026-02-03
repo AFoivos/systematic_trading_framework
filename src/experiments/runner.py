@@ -180,6 +180,7 @@ def run_experiment(config_path: str | Path) -> ExperimentResult:
         bt_df,
         signal_col=signal_col,
         returns_col=returns_col,
+        returns_type=returns_type,
         cost_per_unit_turnover=risk_cfg.get("cost_per_turnover", 0.0),
         slippage_per_unit_turnover=risk_cfg.get("slippage_per_turnover", 0.0),
         target_vol=target_vol,

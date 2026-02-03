@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Literal, Optional
 
 import numpy as np
 import pandas as pd
@@ -51,6 +51,7 @@ def run_backtest(
     df: pd.DataFrame,
     signal_col: str,
     returns_col: str,
+    returns_type: Literal["simple", "log"] = "simple",
     cost_per_unit_turnover: float = 0.0,
     slippage_per_unit_turnover: float = 0.0,
     target_vol: Optional[float] = None,
@@ -63,8 +64,8 @@ def run_backtest(
 ) -> BacktestResult:
     """
     Simple vectorized backtest with optional vol targeting, slippage, and drawdown guard.
-    Assumes returns are simple returns (not log). For log returns, results are
-    an approximation.
+    Returns are interpreted as simple returns by default. If returns_type="log",
+    they are converted to simple returns via expm1 for PnL accounting.
     """
     if signal_col not in df.columns:
         raise KeyError(f"signal_col '{signal_col}' not found in DataFrame")
@@ -73,6 +74,10 @@ def run_backtest(
 
     signal = df[signal_col].astype(float).fillna(0.0)
     returns = df[returns_col].astype(float).fillna(0.0)
+    if returns_type == "log":
+        returns = np.expm1(returns)
+    elif returns_type != "simple":
+        raise ValueError("returns_type must be 'simple' or 'log'.")
 
     positions = signal.copy()
 

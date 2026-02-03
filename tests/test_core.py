@@ -72,3 +72,26 @@ def test_run_backtest_costs_and_slippage_reduce_returns() -> None:
     )
 
     assert with_cost.returns.sum() < no_cost.returns.sum()
+
+
+def test_run_backtest_log_returns_are_converted() -> None:
+    idx = pd.date_range("2020-01-01", periods=3, freq="D")
+    logret = float(np.log(1.1))
+    df = pd.DataFrame(
+        {
+            "signal": [1.0, 1.0, 1.0],
+            "logret": [0.0, logret, logret],
+        },
+        index=idx,
+    )
+
+    bt = run_backtest(
+        df,
+        signal_col="signal",
+        returns_col="logret",
+        returns_type="log",
+        dd_guard=False,
+    )
+
+    assert np.isclose(bt.returns.iloc[1], 0.1)
+    assert np.isclose(bt.equity_curve.iloc[-1], 1.21)
