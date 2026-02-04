@@ -218,6 +218,16 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     result = run_experiment(args.config)
+
+    print("Experiment completed")
+    print("Summary:")
+    for k, v in result.backtest.summary.items():
+        print(f"  {k}: {v}")
+    if result.artifacts:
+        print("")
+        print("Artifacts:")
+        for k, v in result.artifacts.items():
+            print(f"  {k}: {v}")
     print("Run summary:", result.backtest.summary)
     if result.artifacts:
         print("Artifacts saved to:", result.artifacts.get("run_dir"))
