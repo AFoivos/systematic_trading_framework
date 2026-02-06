@@ -40,6 +40,12 @@ This framework is built around those principles.
   * reinforcement learning agents
 * Explicit **risk modeling and control**
 * Modular, extensible architecture suitable for research → production transition
+* **Point-in-time data integrity** (survivorship-bias control, corporate actions, timestamp alignment)
+* **Feature store & provenance** for reproducibility (data/feature versioning)
+* **Signal aggregation layer** (rank/decay/confidence-weighted sizing)
+* **Portfolio optimization with constraints** (market/sector neutrality, turnover caps)
+* **Robustness & stress testing** (regime splits, sensitivity checks)
+* **Monitoring & drift detection** for production-grade iteration
 
 ---
 
@@ -63,6 +69,9 @@ quant-research-lab/
 │   ├── backtesting/        # Time-aware backtesting engine
 │   ├── risk/               # Position sizing, exposure control, costs
 │   ├── evaluation/         # Metrics & performance analysis
+│   ├── signals/            # Signal aggregation (rank/decay/confidence)
+│   ├── portfolio/          # Portfolio construction & optimization
+│   ├── monitoring/         # Drift, data quality, and live diagnostics
 │   └── utils/              # Shared utilities
 │
 ├── tests/                  # Unit & integration tests
@@ -121,6 +130,7 @@ All models:
 * operate on **lagged, causal features**
 * are evaluated **out-of-sample**
 * are benchmarked against naive baselines
+* are trained with **purged / embargoed time-series CV** when labels overlap
 
 ---
 
@@ -132,6 +142,8 @@ Evaluation follows strict time-series principles:
 * ✅ Walk-forward / expanding window validation
 * ✅ Explicit transaction costs & slippage
 * ✅ Capital-aware performance accounting
+* ✅ **Point-in-time alignment** (avoid lookahead & survivorship leakage)
+* ✅ **Robustness checks** (regime splits, sensitivity analysis)
 
 ### Key Metrics
 
@@ -151,6 +163,7 @@ Risk is modeled explicitly via:
 * volatility scaling
 * exposure limits
 * drawdown-aware constraints
+* liquidity-aware cost/impact models
 
 In RL settings, **risk-adjusted reward functions** are used instead of raw returns.
 
@@ -164,6 +177,7 @@ Where applicable, the framework includes:
 * regime-conditional performance
 * failure mode diagnostics
 * model vs baseline attribution
+* data quality & drift monitoring hooks
 
 The goal is not just performance, but **understanding**.
 
@@ -184,6 +198,9 @@ It does **not** constitute financial advice and is **not** designed for live tra
 * Portfolio-level optimization
 * Advanced regime detection
 * Model ensemble & meta-learning
+* Alternative data/NLP pipeline (news, filings, embeddings)
+* Feature store with data/feature lineage
+* Production monitoring & alerting (drift, performance decay)
 
 ---
 
