@@ -6,7 +6,52 @@ import numpy as np
 import pandas as pd
 from lightgbm import LGBMClassifier
 
+from src.evaluation.time_splits import build_time_splits
 from src.models.lightgbm_baseline import default_feature_columns
+
+
+def _resolve_runtime_for_model(model_cfg: dict[str, Any], model_params: dict[str, Any]) -> dict[str, Any]:
+    runtime_cfg = dict(model_cfg.get("runtime", {}) or {})
+
+    seed = runtime_cfg.get("seed", model_params.get("random_state", 7))
+    if not isinstance(seed, int) or seed < 0:
+        raise ValueError("model.runtime.seed must be an integer >= 0.")
+
+    deterministic = runtime_cfg.get("deterministic", True)
+    if not isinstance(deterministic, bool):
+        raise ValueError("model.runtime.deterministic must be a boolean.")
+
+    repro_mode = runtime_cfg.get("repro_mode", "strict")
+    if repro_mode not in {"strict", "relaxed"}:
+        raise ValueError("model.runtime.repro_mode must be 'strict' or 'relaxed'.")
+
+    threads = runtime_cfg.get("threads")
+    if threads is not None and (not isinstance(threads, int) or threads <= 0):
+        raise ValueError("model.runtime.threads must be null or a positive integer.")
+    if repro_mode == "strict" and threads is None:
+        threads = 1
+
+    model_params.setdefault("random_state", seed)
+    model_params.setdefault("seed", seed)
+
+    if deterministic:
+        model_params.setdefault("deterministic", True)
+        model_params.setdefault("force_col_wise", True)
+        model_params.setdefault("feature_fraction_seed", seed)
+        model_params.setdefault("bagging_seed", seed)
+        model_params.setdefault("data_random_seed", seed)
+
+    if threads is not None:
+        model_params["n_jobs"] = threads
+    else:
+        model_params.setdefault("n_jobs", -1)
+
+    return {
+        "seed": seed,
+        "deterministic": deterministic,
+        "threads": model_params.get("n_jobs"),
+        "repro_mode": repro_mode,
+    }
 
 
 def infer_feature_columns(
@@ -86,7 +131,7 @@ def train_lightgbm_classifier(
 ) -> tuple[pd.DataFrame, LGBMClassifier, dict[str, Any]]:
     model_cfg = dict(model_cfg or {})
     model_params = dict(model_cfg.get("params", {}) or {})
-    model_params.setdefault("n_jobs", -1)
+    runtime_meta = _resolve_runtime_for_model(model_cfg=model_cfg, model_params=model_params)
 
     pred_prob_col = model_cfg.get("pred_prob_col", "pred_prob")
     target_cfg = model_cfg.get("target", {}) or {}
@@ -106,46 +151,88 @@ def train_lightgbm_classifier(
 
     split_cfg = model_cfg.get("split", {}) or {}
     method = split_cfg.get("method", "time")
-    train_frac = float(split_cfg.get("train_frac", 0.7))
-    if method != "time":
+    if method not in {"time", "walk_forward", "purged"}:
         raise ValueError(f"Unsupported split.method: {method}")
-    if not 0.0 < train_frac < 1.0:
-        raise ValueError("split.train_frac must be in (0,1)")
 
-    split_idx = int(len(out) * train_frac)
-    train_df = out.iloc[:split_idx]
-    test_df = out.iloc[split_idx:]
-
-    train_fit = train_df.dropna(subset=feature_cols + [label_col])
-    if train_fit.empty:
-        raise ValueError("No training rows after dropping NaNs in features/labels.")
-
-    X_train = train_fit[feature_cols]
-    y_train = train_fit[label_col].astype(int)
-
-    model = LGBMClassifier(**model_params)
-    model.fit(X_train, y_train)
+    splits = build_time_splits(
+        method=method,
+        n_samples=len(out),
+        split_cfg=dict(split_cfg),
+        target_horizon=int(target_meta.get("horizon", 1)),
+    )
 
     pred_prob = pd.Series(np.nan, index=out.index, name=pred_prob_col, dtype="float32")
-    test_features = test_df[feature_cols]
-    valid_mask = test_features.notna().all(axis=1)
-    if valid_mask.any():
-        proba = model.predict_proba(test_features.loc[valid_mask])[:, 1]
-        pred_prob.loc[test_features.loc[valid_mask].index] = proba
+    oos_mask = pd.Series(False, index=out.index, name="pred_is_oos")
+    oos_assignment_count = pd.Series(0, index=out.index, dtype="int32")
+
+    fold_meta: list[dict[str, Any]] = []
+    model: LGBMClassifier | None = None
+    total_train_rows = 0
+    total_test_pred_rows = 0
+
+    for split in splits:
+        train_df = out.iloc[split.train_idx]
+        test_df = out.iloc[split.test_idx]
+
+        train_fit = train_df.dropna(subset=feature_cols + [label_col])
+        if train_fit.empty:
+            raise ValueError(f"Fold {split.fold} has no train rows after dropping NaNs in features/labels.")
+
+        X_train = train_fit[feature_cols]
+        y_train = train_fit[label_col].astype(int)
+
+        model = LGBMClassifier(**model_params)
+        model.fit(X_train, y_train)
+
+        test_features = test_df[feature_cols]
+        valid_mask = test_features.notna().all(axis=1)
+        pred_rows = int(valid_mask.sum())
+        if pred_rows > 0:
+            proba = model.predict_proba(test_features.loc[valid_mask])[:, 1].astype("float32")
+            pred_prob.loc[test_features.loc[valid_mask].index] = proba
+
+        fold_test_idx = out.index[split.test_idx]
+        oos_mask.loc[fold_test_idx] = True
+        oos_assignment_count.loc[fold_test_idx] += 1
+
+        total_train_rows += int(len(train_fit))
+        total_test_pred_rows += pred_rows
+        fold_meta.append(
+            {
+                "fold": int(split.fold),
+                "train_start": int(split.train_start),
+                "train_end": int(split.train_end),
+                "test_start": int(split.test_start),
+                "test_end": int(split.test_end),
+                "train_rows": int(len(train_fit)),
+                "test_rows": int(len(split.test_idx)),
+                "test_pred_rows": pred_rows,
+            }
+        )
+
+    if model is None:
+        raise ValueError("Model training failed: no valid folds were trained.")
+
+    if (oos_assignment_count > 1).any():
+        raise ValueError("Overlapping test windows detected. Use non-overlapping split configuration.")
 
     out[pred_prob_col] = pred_prob
+    out["pred_is_oos"] = oos_mask
 
     meta = {
         "model_kind": "lightgbm_clf",
+        "runtime": runtime_meta,
         "feature_cols": feature_cols,
         "pred_prob_col": pred_prob_col,
         "label_col": label_col,
         "fwd_col": fwd_col,
         "split_method": method,
-        "train_frac": train_frac,
-        "split_index": split_idx,
-        "train_rows": int(len(train_fit)),
-        "test_pred_rows": int(valid_mask.sum()),
+        "split_index": int(splits[0].test_start),
+        "n_folds": int(len(splits)),
+        "folds": fold_meta,
+        "train_rows": int(total_train_rows),
+        "test_pred_rows": int(total_test_pred_rows),
+        "oos_rows": int(oos_mask.sum()),
         "target": target_meta,
         "returns_col": returns_col,
     }

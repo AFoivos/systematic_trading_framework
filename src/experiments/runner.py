@@ -15,6 +15,13 @@ from src.src_data.validation import validate_ohlcv
 from src.experiments.registry import get_feature_fn, get_model_fn, get_signal_fn
 from src.utils.config import load_experiment_config
 from src.utils.paths import in_project
+from src.utils.repro import apply_runtime_reproducibility
+from src.utils.run_metadata import (
+    build_artifact_manifest,
+    build_run_metadata,
+    compute_config_hash,
+    compute_dataframe_fingerprint,
+)
 
 
 @dataclass
@@ -87,6 +94,9 @@ def _save_artifacts(
     data: pd.DataFrame,
     bt: BacktestResult,
     model_meta: dict[str, Any],
+    run_metadata: dict[str, Any],
+    config_hash_sha256: str,
+    data_fingerprint: dict[str, Any],
 ) -> dict[str, str]:
     run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -107,9 +117,18 @@ def _save_artifacts(
             "start": str(data.index.min()) if not data.empty else None,
             "end": str(data.index.max()) if not data.empty else None,
         },
+        "reproducibility": {
+            "config_hash_sha256": config_hash_sha256,
+            "data_hash_sha256": data_fingerprint.get("sha256"),
+            "runtime": run_metadata.get("runtime", {}),
+        },
     }
     with summary_path.open("w") as f:
         json.dump(payload, f, indent=2, default=str)
+
+    metadata_path = run_dir / "run_metadata.json"
+    with metadata_path.open("w") as f:
+        json.dump(run_metadata, f, indent=2, default=str)
 
     equity_path = run_dir / "equity_curve.csv"
     bt.equity_curve.to_csv(equity_path, header=True)
@@ -123,19 +142,30 @@ def _save_artifacts(
     turnover_path = run_dir / "turnover.csv"
     bt.turnover.to_csv(turnover_path, header=True)
 
-    return {
+    artifacts = {
         "run_dir": str(run_dir),
         "config": str(cfg_path),
         "summary": str(summary_path),
+        "run_metadata": str(metadata_path),
         "equity_curve": str(equity_path),
         "returns": str(returns_path),
         "positions": str(positions_path),
         "turnover": str(turnover_path),
     }
 
+    manifest = build_artifact_manifest(artifacts)
+    manifest_path = run_dir / "artifact_manifest.json"
+    with manifest_path.open("w") as f:
+        json.dump(manifest, f, indent=2, default=str)
+    artifacts["manifest"] = str(manifest_path)
+
+    return artifacts
+
 
 def run_experiment(config_path: str | Path) -> ExperimentResult:
     cfg = load_experiment_config(config_path)
+    runtime_applied = apply_runtime_reproducibility(cfg.get("runtime", {}))
+    config_hash_sha256, config_hash_input = compute_config_hash(cfg)
 
     data_cfg = cfg["data"]
     data_kwargs = {
@@ -145,10 +175,12 @@ def run_experiment(config_path: str | Path) -> ExperimentResult:
     }
     df = load_ohlcv(**data_kwargs)
     validate_ohlcv(df)
+    data_fingerprint = compute_dataframe_fingerprint(df)
 
     df = _apply_feature_steps(df, cfg.get("features", []))
 
-    model_cfg = cfg.get("model", {"kind": "none"})
+    model_cfg = dict(cfg.get("model", {"kind": "none"}) or {})
+    model_cfg.setdefault("runtime", cfg.get("runtime", {}))
     returns_col = cfg.get("backtest", {}).get("returns_col")
     df, model, model_meta = _apply_model_step(df, model_cfg, returns_col)
 
@@ -195,11 +227,32 @@ def run_experiment(config_path: str | Path) -> ExperimentResult:
     artifacts: dict[str, str] = {}
     logging_cfg = cfg.get("logging", {}) or {}
     if logging_cfg.get("enabled", True):
+        run_metadata = build_run_metadata(
+            config_path=cfg.get("config_path", config_path),
+            runtime_applied=runtime_applied,
+            config_hash_sha256=config_hash_sha256,
+            config_hash_input=config_hash_input,
+            data_fingerprint=data_fingerprint,
+            data_context={
+                k: data_cfg.get(k)
+                for k in ("symbol", "source", "interval", "start", "end")
+            },
+            model_meta=model_meta,
+        )
         base_dir = Path(logging_cfg.get("output_dir", "logs/experiments"))
         run_name = logging_cfg.get("run_name", Path(config_path).stem)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         run_dir = in_project(base_dir) / f"{run_name}_{timestamp}"
-        artifacts = _save_artifacts(run_dir, cfg, df, bt, model_meta)
+        artifacts = _save_artifacts(
+            run_dir=run_dir,
+            cfg=cfg,
+            data=df,
+            bt=bt,
+            model_meta=model_meta,
+            run_metadata=run_metadata,
+            config_hash_sha256=config_hash_sha256,
+            data_fingerprint=data_fingerprint,
+        )
 
     return ExperimentResult(
         config=cfg,

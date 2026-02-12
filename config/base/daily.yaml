@@ -4,6 +4,13 @@ data:
   start: "2010-01-01"
   end: null
 
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+
 risk:
   cost_per_turnover: 0.0005
   slippage_per_turnover: 0.0
