@@ -7,7 +7,7 @@ from typing import Literal, Optional
 import pandas as pd
 import requests
 
-from src.data.providers.base import MarketDataProvider
+from src.src_data.providers.base import MarketDataProvider
 
 
 @dataclass

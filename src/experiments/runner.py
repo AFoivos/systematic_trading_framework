@@ -10,8 +10,8 @@ import yaml
 import pandas as pd
 
 from src.backtesting.engine import BacktestResult, run_backtest
-from src.data.loaders import load_ohlcv
-from src.data.validation import validate_ohlcv
+from src.src_data.loaders import load_ohlcv
+from src.src_data.validation import validate_ohlcv
 from src.experiments.registry import get_feature_fn, get_model_fn, get_signal_fn
 from src.utils.config import load_experiment_config
 from src.utils.paths import in_project

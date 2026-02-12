@@ -4,7 +4,7 @@ import pytest
 
 from src.features.returns import compute_returns
 from src.features.technical.trend import add_trend_features
-from src.data.validation import validate_ohlcv
+from src.src_data.validation import validate_ohlcv
 from src.backtesting.engine import run_backtest
 
 

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import pandas as pd
 import yfinance as yf
 
-from src.data.providers.base import MarketDataProvider
+from src.src_data.providers.base import MarketDataProvider
 
 
 @dataclass

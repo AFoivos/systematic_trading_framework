@@ -4,8 +4,8 @@ from typing import Literal, Optional
 
 import pandas as pd
 
-from src.data.providers.yahoo import YahooFinanceProvider
-from src.data.providers.alphavantage import AlphaVantageFXProvider
+from src.src_data.providers.yahoo import YahooFinanceProvider
+from src.src_data.providers.alphavantage import AlphaVantageFXProvider
 
 
 def load_ohlcv(
