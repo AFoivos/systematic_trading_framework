@@ -1,0 +1,15 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: systematic-trading-framework:latest
+    container_name: systematic-trading-framework
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+    environment:
+      PYTHONPATH: /workspace
+    stdin_open: true
+    tty: true
+    command: bash

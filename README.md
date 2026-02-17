@@ -83,6 +83,45 @@ quant-research-lab/
 
 ---
 
+## 🐳 Docker Workflow (No `venv`)
+
+Use Docker/Compose to run everything inside a containerized Python environment.
+
+Build the image:
+
+```bash
+docker compose build
+```
+
+Run an interactive shell:
+
+```bash
+docker compose run --rm app
+```
+
+Run tests:
+
+```bash
+docker compose run --rm app pytest
+```
+
+Run an experiment:
+
+```bash
+docker compose run --rm app python -m src.experiments.runner config/experiments/trend_spy.yaml
+```
+
+Notes:
+
+* Source code is mounted into `/workspace`, so local edits are visible immediately in the container.
+* You can keep API keys in a local `.env` file (already git-ignored) and pass them to Compose with:
+
+```bash
+docker compose --env-file .env run --rm app <command>
+```
+
+---
+
 ## ⚙️ Config-Based Experiments
 
 Define experiments in YAML under `config/` (e.g., `config/experiments/trend_spy.yaml`). Inherit defaults via `extends: base/daily.yaml`. Load and run:
