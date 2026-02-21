@@ -120,6 +120,21 @@ Notes:
 docker compose --env-file .env run --rm app <command>
 ```
 
+### VSCode Dev Container
+
+For full VSCode integration (Run/Debug, testing, Jupyter, extensions) directly in Docker:
+
+1. Install the VSCode extension **Dev Containers** (`ms-vscode-remote.remote-containers`).
+2. Open the project in VSCode.
+3. Run: `Dev Containers: Reopen in Container`.
+
+The container uses `.devcontainer/devcontainer.json` and auto-configures:
+
+* Python interpreter: `/usr/local/bin/python`
+* Pytest discovery under `tests/`
+* Jupyter support
+* Essential extensions (Python, Pylance, Debugpy, Jupyter, Docker, YAML)
+
 ---
 
 ## ⚙️ Config-Based Experiments
