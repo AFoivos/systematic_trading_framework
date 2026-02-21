@@ -6,7 +6,12 @@ import numpy as np
 import pandas as pd
 from lightgbm import LGBMClassifier
 
-from src.evaluation.time_splits import build_time_splits
+from src.evaluation.time_splits import (
+    assert_no_forward_label_leakage,
+    build_time_splits,
+    trim_train_indices_for_horizon,
+)
+from src.experiments.contracts import TargetContract, validate_feature_target_contract
 from src.models.lightgbm_baseline import default_feature_columns
 
 
@@ -90,6 +95,8 @@ def _build_forward_return_target(
     cfg = dict(target_cfg or {})
     price_col = cfg.get("price_col", "close")
     horizon = int(cfg.get("horizon", 1))
+    if horizon <= 0:
+        raise ValueError("target.horizon must be a positive integer.")
     fwd_col = cfg.get("fwd_col", f"target_fwd_{horizon}")
     label_col = cfg.get("label_col", "label")
     threshold = float(cfg.get("threshold", 0.0))
@@ -148,6 +155,11 @@ def train_lightgbm_classifier(
     )
     if not feature_cols:
         raise ValueError("No feature columns resolved for model training.")
+    contract_meta = validate_feature_target_contract(
+        out,
+        feature_cols=feature_cols,
+        target=TargetContract(target_col=label_col, horizon=int(target_meta["horizon"])),
+    )
 
     split_cfg = model_cfg.get("split", {}) or {}
     method = split_cfg.get("method", "time")
@@ -169,9 +181,26 @@ def train_lightgbm_classifier(
     model: LGBMClassifier | None = None
     total_train_rows = 0
     total_test_pred_rows = 0
+    total_trimmed_rows = 0
+    target_horizon = int(target_meta["horizon"])
 
     for split in splits:
-        train_df = out.iloc[split.train_idx]
+        raw_train_idx = split.train_idx
+        safe_train_idx = trim_train_indices_for_horizon(
+            raw_train_idx,
+            test_start=int(split.test_start),
+            target_horizon=target_horizon,
+        )
+        assert_no_forward_label_leakage(
+            safe_train_idx,
+            test_start=int(split.test_start),
+            target_horizon=target_horizon,
+        )
+
+        trimmed_rows = int(len(raw_train_idx) - len(safe_train_idx))
+        total_trimmed_rows += trimmed_rows
+
+        train_df = out.iloc[safe_train_idx]
         test_df = out.iloc[split.test_idx]
 
         train_fit = train_df.dropna(subset=feature_cols + [label_col])
@@ -180,6 +209,8 @@ def train_lightgbm_classifier(
 
         X_train = train_fit[feature_cols]
         y_train = train_fit[label_col].astype(int)
+        if int(y_train.nunique()) < 2:
+            raise ValueError(f"Fold {split.fold} has a single target class after preprocessing.")
 
         model = LGBMClassifier(**model_params)
         model.fit(X_train, y_train)
@@ -202,6 +233,9 @@ def train_lightgbm_classifier(
                 "fold": int(split.fold),
                 "train_start": int(split.train_start),
                 "train_end": int(split.train_end),
+                "effective_train_start": int(safe_train_idx.min()) if len(safe_train_idx) else None,
+                "effective_train_end": int(safe_train_idx.max() + 1) if len(safe_train_idx) else None,
+                "trimmed_for_horizon_rows": trimmed_rows,
                 "test_start": int(split.test_start),
                 "test_end": int(split.test_end),
                 "train_rows": int(len(train_fit)),
@@ -235,5 +269,10 @@ def train_lightgbm_classifier(
         "oos_rows": int(oos_mask.sum()),
         "target": target_meta,
         "returns_col": returns_col,
+        "contracts": contract_meta,
+        "anti_leakage": {
+            "target_horizon": target_horizon,
+            "total_trimmed_train_rows": int(total_trimmed_rows),
+        },
     }
     return out, model, meta

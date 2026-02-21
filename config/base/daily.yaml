@@ -3,6 +3,16 @@ data:
   interval: "1d"
   start: "2010-01-01"
   end: null
+  pit:
+    timestamp_alignment:
+      source_timezone: "UTC"
+      output_timezone: "UTC"
+      normalize_daily: true
+      duplicate_policy: "last"
+    corporate_actions:
+      policy: "none"
+      adj_close_col: "adj_close"
+    universe_snapshot: {}
 
 runtime:
   seed: 7

@@ -53,7 +53,8 @@ class YahooFinanceProvider(MarketDataProvider):
                 f"Available columns: {list(df.columns)}"
             )
 
-        df = df[expected_cols]
+        output_cols = expected_cols + (["adj_close"] if "adj_close" in df.columns else [])
+        df = df[output_cols]
 
         # Clean index
         df = df.sort_index()

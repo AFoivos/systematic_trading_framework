@@ -148,6 +148,55 @@ def purged_walk_forward_split_indices(
     return splits
 
 
+def trim_train_indices_for_horizon(
+    train_idx: np.ndarray,
+    test_start: int,
+    target_horizon: int,
+) -> np.ndarray:
+    """
+    Trim training indices so forward-looking labels cannot overlap the test window.
+
+    For a forward target with horizon ``h``, the label at row ``t`` depends on data up to
+    ``t + h``. Therefore, training rows must satisfy ``t < test_start - h``.
+    """
+    if not isinstance(test_start, int) or test_start <= 0:
+        raise ValueError("test_start must be a positive integer.")
+    _require_positive_int("target_horizon", target_horizon)
+
+    arr = np.asarray(train_idx, dtype=int)
+    if arr.size == 0:
+        return arr
+
+    cutoff = test_start - target_horizon
+    if cutoff <= 0:
+        return np.asarray([], dtype=int)
+    return arr[arr < cutoff]
+
+
+def assert_no_forward_label_leakage(
+    train_idx: np.ndarray,
+    test_start: int,
+    target_horizon: int,
+) -> None:
+    """
+    Ensure train indices are safe for forward labels of length ``target_horizon``.
+    """
+    if not isinstance(test_start, int) or test_start <= 0:
+        raise ValueError("test_start must be a positive integer.")
+    _require_positive_int("target_horizon", target_horizon)
+
+    arr = np.asarray(train_idx, dtype=int)
+    if arr.size == 0:
+        return
+
+    boundary = test_start - target_horizon
+    if int(arr.max()) >= boundary:
+        raise ValueError(
+            "Forward-label leakage detected: train indices overlap with the test window "
+            f"for target_horizon={target_horizon}."
+        )
+
+
 def build_time_splits(
     *,
     method: Literal["time", "walk_forward", "purged"],
@@ -207,5 +256,7 @@ __all__ = [
     "time_split_indices",
     "walk_forward_split_indices",
     "purged_walk_forward_split_indices",
+    "trim_train_indices_for_horizon",
+    "assert_no_forward_label_leakage",
     "build_time_splits",
 ]

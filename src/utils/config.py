@@ -81,6 +81,32 @@ def _default_risk_block(risk: dict[str, Any]) -> dict[str, Any]:
     return risk
 
 
+def _default_data_block(data: dict[str, Any]) -> dict[str, Any]:
+    data = dict(data) if data else {}
+    data.setdefault("source", "yahoo")
+    data.setdefault("interval", "1d")
+    data.setdefault("start", None)
+    data.setdefault("end", None)
+
+    pit = dict(data.get("pit", {}) or {})
+    ts = dict(pit.get("timestamp_alignment", {}) or {})
+    ts.setdefault("source_timezone", "UTC")
+    ts.setdefault("output_timezone", "UTC")
+    ts.setdefault("normalize_daily", True)
+    ts.setdefault("duplicate_policy", "last")
+    pit["timestamp_alignment"] = ts
+
+    corp = dict(pit.get("corporate_actions", {}) or {})
+    corp.setdefault("policy", "none")
+    corp.setdefault("adj_close_col", "adj_close")
+    pit["corporate_actions"] = corp
+
+    snapshot = dict(pit.get("universe_snapshot", {}) or {})
+    pit["universe_snapshot"] = snapshot
+    data["pit"] = pit
+    return data
+
+
 def _default_backtest_block(backtest: dict[str, Any]) -> dict[str, Any]:
     backtest = dict(backtest) if backtest else {}
     backtest.setdefault("periods_per_year", 252)
@@ -106,6 +132,52 @@ def _validate_data_block(data: dict[str, Any]) -> None:
     interval = data.get("interval", "1d")
     if not isinstance(interval, str):
         raise ConfigError("data.interval must be a string (e.g. '1d').")
+    for key in ("start", "end"):
+        if key in data and data[key] is not None and not isinstance(data[key], str):
+            raise ConfigError(f"data.{key} must be a string date or null.")
+
+    pit = data.get("pit", {})
+    if pit is None:
+        return
+    if not isinstance(pit, dict):
+        raise ConfigError("data.pit must be a mapping.")
+
+    ts = pit.get("timestamp_alignment", {})
+    if ts is not None:
+        if not isinstance(ts, dict):
+            raise ConfigError("data.pit.timestamp_alignment must be a mapping.")
+        duplicate_policy = ts.get("duplicate_policy", "last")
+        if duplicate_policy not in {"first", "last", "raise"}:
+            raise ConfigError(
+                "data.pit.timestamp_alignment.duplicate_policy must be one of: first, last, raise."
+            )
+        for k in ("source_timezone", "output_timezone"):
+            if k in ts and not isinstance(ts[k], str):
+                raise ConfigError(f"data.pit.timestamp_alignment.{k} must be a string.")
+        if "normalize_daily" in ts and not isinstance(ts["normalize_daily"], bool):
+            raise ConfigError("data.pit.timestamp_alignment.normalize_daily must be boolean.")
+
+    corp = pit.get("corporate_actions", {})
+    if corp is not None:
+        if not isinstance(corp, dict):
+            raise ConfigError("data.pit.corporate_actions must be a mapping.")
+        policy = corp.get("policy", "none")
+        if policy not in {"none", "adj_close_ratio", "adj_close_replace_close"}:
+            raise ConfigError(
+                "data.pit.corporate_actions.policy must be one of: "
+                "none, adj_close_ratio, adj_close_replace_close."
+            )
+        if "adj_close_col" in corp and not isinstance(corp["adj_close_col"], str):
+            raise ConfigError("data.pit.corporate_actions.adj_close_col must be a string.")
+
+    snapshot = pit.get("universe_snapshot", {})
+    if snapshot is not None:
+        if not isinstance(snapshot, dict):
+            raise ConfigError("data.pit.universe_snapshot must be a mapping.")
+        if "path" in snapshot and snapshot["path"] is not None and not isinstance(snapshot["path"], str):
+            raise ConfigError("data.pit.universe_snapshot.path must be a string or null.")
+        if "as_of" in snapshot and snapshot["as_of"] is not None and not isinstance(snapshot["as_of"], str):
+            raise ConfigError("data.pit.universe_snapshot.as_of must be a string date or null.")
 
 
 def _inject_api_key_from_env(data: dict[str, Any]) -> None:
@@ -120,6 +192,10 @@ def _validate_features_block(features: Any) -> None:
     for step in features:
         if not isinstance(step, dict) or "step" not in step:
             raise ConfigError("Each feature entry must be a mapping with a 'step' key.")
+        if not isinstance(step["step"], str):
+            raise ConfigError("features[].step must be a string.")
+        if "params" in step and step["params"] is not None and not isinstance(step["params"], dict):
+            raise ConfigError("features[].params must be a mapping when provided.")
 
 
 def _validate_model_block(model: dict[str, Any]) -> None:
@@ -127,6 +203,26 @@ def _validate_model_block(model: dict[str, Any]) -> None:
         raise ConfigError("model.kind is required.")
     if not isinstance(model["kind"], str):
         raise ConfigError("model.kind must be a string.")
+
+    if model["kind"] != "none":
+        target = model.get("target", {}) or {}
+        if not isinstance(target, dict):
+            raise ConfigError("model.target must be a mapping when provided.")
+        target_kind = target.get("kind", "forward_return")
+        if target_kind != "forward_return":
+            raise ConfigError("model.target.kind must be 'forward_return'.")
+        if "price_col" in target and not isinstance(target["price_col"], str):
+            raise ConfigError("model.target.price_col must be a string.")
+        horizon = int(target.get("horizon", 1))
+        if horizon <= 0:
+            raise ConfigError("model.target.horizon must be a positive integer.")
+        quantiles = target.get("quantiles")
+        if quantiles is not None:
+            if not isinstance(quantiles, (list, tuple)) or len(quantiles) != 2:
+                raise ConfigError("model.target.quantiles must be a [low, high] pair.")
+            q_low, q_high = float(quantiles[0]), float(quantiles[1])
+            if not (0.0 <= q_low < q_high <= 1.0):
+                raise ConfigError("model.target.quantiles must satisfy 0 <= low < high <= 1.")
 
     split = model.get("split")
     if split is None:
@@ -233,7 +329,7 @@ def load_experiment_config(config_path: str | Path) -> dict[str, Any]:
     path = _resolve_config_path(config_path)
     cfg = _load_with_extends(path)
 
-    cfg.setdefault("data", {})
+    cfg["data"] = _default_data_block(cfg.get("data", {}))
     cfg.setdefault("features", [])
     cfg.setdefault("model", {"kind": "none"})
     cfg.setdefault("signals", {"kind": "none", "params": {}})

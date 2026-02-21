@@ -6,6 +6,7 @@ from typing import Literal, Optional
 import numpy as np
 import pandas as pd
 
+from src.evaluation.metrics import compute_backtest_metrics
 from src.risk.controls import drawdown_cooloff_multiplier
 from src.risk.position_sizing import scale_signal_by_vol
 
@@ -14,37 +15,11 @@ from src.risk.position_sizing import scale_signal_by_vol
 class BacktestResult:
     equity_curve: pd.Series
     returns: pd.Series
+    gross_returns: pd.Series
+    costs: pd.Series
     positions: pd.Series
     turnover: pd.Series
     summary: dict
-
-
-def _compute_summary(returns: pd.Series, periods_per_year: int = 252) -> dict:
-    rets = returns.dropna().astype(float)
-    if rets.empty:
-        return {
-            "cumulative_return": 0.0,
-            "annualized_return": 0.0,
-            "annualized_vol": 0.0,
-            "sharpe": 0.0,
-            "max_drawdown": 0.0,
-        }
-
-    equity = (1.0 + rets).cumprod()
-    cum_ret = equity.iloc[-1] - 1.0
-    ann_ret = (1.0 + cum_ret) ** (periods_per_year / len(rets)) - 1.0
-    ann_vol = rets.std(ddof=1) * np.sqrt(periods_per_year)
-    sharpe = ann_ret / ann_vol if ann_vol > 0 else 0.0
-    dd = equity / equity.cummax() - 1.0
-    max_dd = dd.min()
-
-    return {
-        "cumulative_return": float(cum_ret),
-        "annualized_return": float(ann_ret),
-        "annualized_vol": float(ann_vol),
-        "sharpe": float(sharpe),
-        "max_drawdown": float(max_dd),
-    }
 
 
 def run_backtest(
@@ -95,8 +70,8 @@ def run_backtest(
 
     turnover = positions.diff().abs().fillna(0.0)
     costs = (cost_per_unit_turnover + slippage_per_unit_turnover) * turnover
-
-    strat_returns = positions.shift(1).fillna(0.0) * returns - costs
+    gross_returns = positions.shift(1).fillna(0.0) * returns
+    strat_returns = gross_returns - costs
 
     if dd_guard:
         equity_raw = (1.0 + strat_returns).cumprod()
@@ -109,16 +84,25 @@ def run_backtest(
         positions = positions * mult
         turnover = positions.diff().abs().fillna(0.0)
         costs = (cost_per_unit_turnover + slippage_per_unit_turnover) * turnover
-        strat_returns = positions.shift(1).fillna(0.0) * returns - costs
+        gross_returns = positions.shift(1).fillna(0.0) * returns
+        strat_returns = gross_returns - costs
 
     equity_curve = (1.0 + strat_returns).cumprod()
     equity_curve.name = "equity"
 
-    summary = _compute_summary(strat_returns, periods_per_year=periods_per_year)
+    summary = compute_backtest_metrics(
+        net_returns=strat_returns,
+        periods_per_year=periods_per_year,
+        turnover=turnover,
+        costs=costs,
+        gross_returns=gross_returns,
+    )
 
     return BacktestResult(
         equity_curve=equity_curve,
         returns=strat_returns,
+        gross_returns=gross_returns,
+        costs=costs,
         positions=positions,
         turnover=turnover,
         summary=summary,

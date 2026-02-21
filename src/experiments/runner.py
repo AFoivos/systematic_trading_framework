@@ -10,7 +10,9 @@ import yaml
 import pandas as pd
 
 from src.backtesting.engine import BacktestResult, run_backtest
+from src.experiments.contracts import validate_data_contract
 from src.src_data.loaders import load_ohlcv
+from src.src_data.pit import apply_pit_hardening
 from src.src_data.validation import validate_ohlcv
 from src.experiments.registry import get_feature_fn, get_model_fn, get_signal_fn
 from src.utils.config import load_experiment_config
@@ -136,6 +138,12 @@ def _save_artifacts(
     returns_path = run_dir / "returns.csv"
     bt.returns.to_csv(returns_path, header=True)
 
+    gross_returns_path = run_dir / "gross_returns.csv"
+    bt.gross_returns.to_csv(gross_returns_path, header=True)
+
+    costs_path = run_dir / "costs.csv"
+    bt.costs.to_csv(costs_path, header=True)
+
     positions_path = run_dir / "positions.csv"
     bt.positions.to_csv(positions_path, header=True)
 
@@ -149,6 +157,8 @@ def _save_artifacts(
         "run_metadata": str(metadata_path),
         "equity_curve": str(equity_path),
         "returns": str(returns_path),
+        "gross_returns": str(gross_returns_path),
+        "costs": str(costs_path),
         "positions": str(positions_path),
         "turnover": str(turnover_path),
     }
@@ -174,7 +184,16 @@ def run_experiment(config_path: str | Path) -> ExperimentResult:
         if k in {"symbol", "start", "end", "interval", "source", "api_key"}
     }
     df = load_ohlcv(**data_kwargs)
+    pit_cfg = data_cfg.get("pit", {}) or {}
+    pit_meta: dict[str, Any] = {}
+    if pit_cfg:
+        df, pit_meta = apply_pit_hardening(
+            df,
+            pit_cfg=pit_cfg,
+            symbol=data_cfg.get("symbol"),
+        )
     validate_ohlcv(df)
+    validate_data_contract(df)
     data_fingerprint = compute_dataframe_fingerprint(df)
 
     df = _apply_feature_steps(df, cfg.get("features", []))
@@ -233,10 +252,16 @@ def run_experiment(config_path: str | Path) -> ExperimentResult:
             config_hash_sha256=config_hash_sha256,
             config_hash_input=config_hash_input,
             data_fingerprint=data_fingerprint,
-            data_context={
-                k: data_cfg.get(k)
-                for k in ("symbol", "source", "interval", "start", "end")
-            },
+            data_context=(
+                {
+                    k: data_cfg.get(k)
+                    for k in ("symbol", "source", "interval", "start", "end")
+                }
+                | {
+                    "pit_config": pit_cfg,
+                    "pit_meta": pit_meta,
+                }
+            ),
             model_meta=model_meta,
         )
         base_dir = Path(logging_cfg.get("output_dir", "logs/experiments"))
