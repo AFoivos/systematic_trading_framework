@@ -243,6 +243,15 @@ It does **not** constitute financial advice and is **not** designed for live tra
 
 ---
 
+## 📄 License
+
+This project is licensed under the MIT License.
+Copyright (c) 2026 FOIVOS GEORGIOS AMPATZIS.
+
+See `/Users/foivosampatzis/Projects/personal/systematic_trading_framework/LICENSE` for details.
+
+---
+
 ## 👤 Author
 
 Quantitative Research & Machine Learning Engineer
