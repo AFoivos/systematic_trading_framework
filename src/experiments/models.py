@@ -108,16 +108,19 @@ def _build_forward_return_target(
     out = df.copy()
     out[fwd_col] = out[price_col].pct_change(periods=horizon).shift(-horizon)
 
+    valid_mask = out[fwd_col].notna()
+    out[label_col] = np.nan
     if quantiles:
         if not isinstance(quantiles, (list, tuple)) or len(quantiles) != 2:
             raise ValueError("target.quantiles must be a [low, high] pair")
-        q_low, q_high = out[fwd_col].quantile([quantiles[0], quantiles[1]])
-        label = pd.Series(np.nan, index=out.index, dtype="float32")
-        label[out[fwd_col] <= q_low] = 0.0
-        label[out[fwd_col] >= q_high] = 1.0
-        out[label_col] = label
+        q_low, q_high = float(quantiles[0]), float(quantiles[1])
+        if not (0.0 <= q_low < q_high <= 1.0):
+            raise ValueError("target.quantiles must satisfy 0 <= low < high <= 1")
+        # Quantile labels are computed per fold using train-only forward returns to avoid leakage.
     else:
-        out[label_col] = (out[fwd_col] > threshold).astype(int)
+        out.loc[valid_mask, label_col] = (
+            out.loc[valid_mask, fwd_col] > threshold
+        ).astype("float32")
 
     meta = {
         "kind": "forward_return",
@@ -148,6 +151,18 @@ def train_lightgbm_classifier(
 
     out, label_col, fwd_col, target_meta = _build_forward_return_target(df=df, target_cfg=target_cfg)
 
+    contract_df = out
+    contract_target_col = label_col
+    if target_meta.get("quantiles") is not None:
+        # Contract validation needs a non-null target column; build a temporary, causal-safe proxy.
+        contract_target_col = "__contract_label__"
+        contract_df = out.copy()
+        valid_mask = contract_df[fwd_col].notna()
+        contract_df[contract_target_col] = np.nan
+        contract_df.loc[valid_mask, contract_target_col] = (
+            contract_df.loc[valid_mask, fwd_col] > float(target_meta["threshold"])
+        ).astype("float32")
+
     feature_cols = infer_feature_columns(
         out,
         explicit_cols=model_cfg.get("feature_cols"),
@@ -156,9 +171,9 @@ def train_lightgbm_classifier(
     if not feature_cols:
         raise ValueError("No feature columns resolved for model training.")
     contract_meta = validate_feature_target_contract(
-        out,
+        contract_df,
         feature_cols=feature_cols,
-        target=TargetContract(target_col=label_col, horizon=int(target_meta["horizon"])),
+        target=TargetContract(target_col=contract_target_col, horizon=int(target_meta["horizon"])),
     )
 
     split_cfg = model_cfg.get("split", {}) or {}
@@ -202,6 +217,20 @@ def train_lightgbm_classifier(
 
         train_df = out.iloc[safe_train_idx]
         test_df = out.iloc[split.test_idx]
+        quantile_low_value: float | None = None
+        quantile_high_value: float | None = None
+        if target_meta.get("quantiles") is not None:
+            q_low, q_high = target_meta["quantiles"]
+            train_fwd = train_df[fwd_col].dropna()
+            if train_fwd.empty:
+                raise ValueError(f"Fold {split.fold} has no forward returns for quantile labeling.")
+            quantile_low_value = float(train_fwd.quantile(float(q_low)))
+            quantile_high_value = float(train_fwd.quantile(float(q_high)))
+            labels = pd.Series(np.nan, index=train_df.index, dtype="float32")
+            labels.loc[train_df[fwd_col] <= quantile_low_value] = 0.0
+            labels.loc[train_df[fwd_col] >= quantile_high_value] = 1.0
+            train_df = train_df.copy()
+            train_df[label_col] = labels
 
         train_fit = train_df.dropna(subset=feature_cols + [label_col])
         if train_fit.empty:
@@ -241,6 +270,8 @@ def train_lightgbm_classifier(
                 "train_rows": int(len(train_fit)),
                 "test_rows": int(len(split.test_idx)),
                 "test_pred_rows": pred_rows,
+                "quantile_low_value": quantile_low_value,
+                "quantile_high_value": quantile_high_value,
             }
         )
 

@@ -141,7 +141,7 @@ def optimize_mean_variance(
             raw = centered / denom
         else:
             raw = pd.Series(0.0, index=assets, dtype=float)
-        w = raw * min(1.0, constraints.max_gross_leverage)
+        w = raw * float(constraints.max_gross_leverage)
 
     w, diag = apply_constraints(
         w,
@@ -162,4 +162,3 @@ def optimize_mean_variance(
 
 
 __all__ = ["optimize_mean_variance"]
-

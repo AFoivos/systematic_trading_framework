@@ -133,3 +133,41 @@ def test_compute_portfolio_performance_uses_shifted_weights() -> None:
     assert np.isclose(perf.costs.iloc[1], 0.02)
     assert np.isclose(perf.net_returns.iloc[1], -0.02)
 
+
+def test_compute_portfolio_performance_charges_initial_turnover() -> None:
+    idx = pd.date_range("2024-01-01", periods=3, freq="D")
+    weights = pd.DataFrame({"A": [1.0, 1.0, 1.0]}, index=idx)
+    returns = pd.DataFrame({"A": [0.0, 0.0, 0.0]}, index=idx)
+
+    perf = compute_portfolio_performance(
+        weights,
+        returns,
+        cost_per_turnover=0.01,
+        slippage_per_turnover=0.0,
+    )
+
+    assert np.isclose(perf.turnover.iloc[0], 1.0)
+    assert np.isclose(perf.costs.iloc[0], 0.01)
+    assert np.isclose(perf.net_returns.iloc[0], -0.01)
+
+
+def test_optimize_mean_variance_fallback_respects_max_gross_leverage() -> None:
+    mu = pd.Series({"A": 0.10, "B": -0.10, "C": 0.05}, dtype=float)
+    cov = pd.DataFrame(np.full((3, 3), np.inf), index=mu.index, columns=mu.index)
+    constraints = PortfolioConstraints(
+        min_weight=-3.0,
+        max_weight=3.0,
+        max_gross_leverage=2.0,
+        target_net_exposure=0.0,
+    )
+
+    weights, meta = optimize_mean_variance(
+        mu,
+        covariance=cov,
+        constraints=constraints,
+        allow_fallback=True,
+    )
+
+    assert bool(meta["used_fallback"]) is True
+    assert float(np.abs(weights).sum()) > 1.0
+    assert float(np.abs(weights).sum()) <= 2.0 + 1e-8

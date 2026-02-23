@@ -70,3 +70,56 @@ def test_purged_splits_respect_anti_leakage_gap() -> None:
     assert out["pred_is_oos"].any()
     for fold in meta["folds"]:
         assert fold["train_end"] <= fold["test_start"] - purge_bars
+
+
+def test_binary_forward_target_keeps_tail_labels_nan() -> None:
+    horizon = 5
+    df = _synthetic_price_frame()
+    out, _, meta = train_lightgbm_classifier(
+        df=df,
+        model_cfg={
+            "params": {"n_estimators": 30, "learning_rate": 0.05},
+            "feature_cols": ["feat_1", "feat_2"],
+            "target": {"kind": "forward_return", "price_col": "close", "horizon": horizon},
+            "runtime": {"seed": 7, "deterministic": True, "threads": 1, "repro_mode": "strict"},
+            "split": {"method": "time", "train_frac": 0.7},
+        },
+    )
+
+    label_col = str(meta["label_col"])
+    assert out[label_col].tail(horizon).isna().all()
+
+
+def test_quantile_target_uses_train_only_distribution_per_fold() -> None:
+    df = _synthetic_price_frame()
+    tail_idx = df.index[-40:]
+    base = float(df.loc[df.index[-41], "close"])
+    df.loc[tail_idx, "close"] = base * np.exp(np.linspace(0.0, 4.0, len(tail_idx)))
+
+    out, _, meta = train_lightgbm_classifier(
+        df=df,
+        model_cfg={
+            "params": {"n_estimators": 30, "learning_rate": 0.05},
+            "feature_cols": ["feat_1", "feat_2"],
+            "target": {
+                "kind": "forward_return",
+                "price_col": "close",
+                "horizon": 1,
+                "quantiles": [0.2, 0.8],
+            },
+            "runtime": {"seed": 7, "deterministic": True, "threads": 1, "repro_mode": "strict"},
+            "split": {
+                "method": "walk_forward",
+                "train_size": 120,
+                "test_size": 40,
+                "step_size": 40,
+                "expanding": True,
+            },
+        },
+    )
+
+    fwd_col = str(meta["fwd_col"])
+    first_fold = meta["folds"][0]
+    fold_q_high = float(first_fold["quantile_high_value"])
+    global_q_high = float(out[fwd_col].dropna().quantile(0.8))
+    assert fold_q_high < global_q_high

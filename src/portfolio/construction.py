@@ -157,7 +157,8 @@ def compute_portfolio_performance(
     w = weights.reindex(index=common_index, columns=common_cols).fillna(0.0).astype(float)
     r = asset_returns.reindex(index=common_index, columns=common_cols).fillna(0.0).astype(float)
 
-    turnover = w.diff().abs().sum(axis=1).fillna(0.0)
+    prev_w = w.shift(1).fillna(0.0)
+    turnover = (w - prev_w).abs().sum(axis=1)
     gross_returns = (w.shift(1).fillna(0.0) * r).sum(axis=1)
     costs = (cost_per_turnover + slippage_per_turnover) * turnover
     net_returns = gross_returns - costs
@@ -194,4 +195,3 @@ __all__ = [
     "build_optimized_weights_over_time",
     "compute_portfolio_performance",
 ]
-

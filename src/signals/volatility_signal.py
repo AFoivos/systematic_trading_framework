@@ -12,10 +12,12 @@ def compute_volatility_regime_signal(
     quantile: float = 0.5,
     signal_col: str = "volatility_regime_signal",
     mode: str = "long_short_hold",
+    causal: bool = True,
 ) -> pd.DataFrame:
     """
     Long when volatility is at or below the specified quantile,
     short when above (if mode allows shorts).
+    If causal=True, quantile threshold is computed with expanding history and shifted by one bar.
     """
     if vol_col not in df.columns:
         raise KeyError(f"vol_col '{vol_col}' not found in DataFrame")
@@ -26,11 +28,15 @@ def compute_volatility_regime_signal(
 
     out = df.copy()
     vol = out[vol_col].astype(float)
-    threshold = vol.quantile(quantile)
+    if causal:
+        threshold = vol.expanding(min_periods=1).quantile(quantile).shift(1)
+    else:
+        threshold = pd.Series(float(vol.quantile(quantile)), index=vol.index)
 
     out[signal_col] = 0.0
-    long_mask = vol <= threshold
-    short_mask = vol > threshold
+    ready = threshold.notna()
+    long_mask = ready & (vol <= threshold)
+    short_mask = ready & (vol > threshold)
 
     if mode in {"long_only", "long_short", "long_short_hold"}:
         out.loc[long_mask, signal_col] = 1.0

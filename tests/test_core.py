@@ -6,6 +6,7 @@ from src.features.returns import compute_returns
 from src.features.technical.trend import add_trend_features
 from src.src_data.validation import validate_ohlcv
 from src.backtesting.engine import run_backtest
+from src.signals.volatility_signal import compute_volatility_regime_signal
 
 
 def test_compute_returns_simple_and_log() -> None:
@@ -95,3 +96,37 @@ def test_run_backtest_log_returns_are_converted() -> None:
 
     assert np.isclose(bt.returns.iloc[1], 0.1)
     assert np.isclose(bt.equity_curve.iloc[-1], 1.21)
+
+
+def test_run_backtest_charges_initial_entry_turnover() -> None:
+    idx = pd.date_range("2020-01-01", periods=3, freq="D")
+    df = pd.DataFrame(
+        {
+            "signal": [1.0, 1.0, 1.0],
+            "returns": [0.0, 0.0, 0.0],
+        },
+        index=idx,
+    )
+
+    bt = run_backtest(
+        df,
+        signal_col="signal",
+        returns_col="returns",
+        cost_per_unit_turnover=0.01,
+        slippage_per_unit_turnover=0.0,
+        dd_guard=False,
+    )
+
+    assert np.isclose(bt.turnover.iloc[0], 1.0)
+    assert np.isclose(bt.costs.iloc[0], 0.01)
+    assert np.isclose(bt.returns.iloc[0], -0.01)
+
+
+def test_volatility_regime_signal_is_causal_by_default() -> None:
+    idx = pd.date_range("2020-01-01", periods=4, freq="D")
+    df = pd.DataFrame({"vol": [1.0, 2.0, 3.0, 100.0]}, index=idx)
+
+    out = compute_volatility_regime_signal(df, vol_col="vol", quantile=0.5)
+
+    assert np.isclose(out.loc[idx[0], "volatility_regime_signal"], 0.0)
+    assert np.isclose(out.loc[idx[1], "volatility_regime_signal"], -1.0)

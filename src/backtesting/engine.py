@@ -68,7 +68,8 @@ def run_backtest(
             max_leverage=max_leverage,
         )
 
-    turnover = positions.diff().abs().fillna(0.0)
+    prev_positions = positions.shift(1).fillna(0.0)
+    turnover = (positions - prev_positions).abs()
     costs = (cost_per_unit_turnover + slippage_per_unit_turnover) * turnover
     gross_returns = positions.shift(1).fillna(0.0) * returns
     strat_returns = gross_returns - costs
@@ -82,7 +83,8 @@ def run_backtest(
             min_exposure=0.0,
         )
         positions = positions * mult
-        turnover = positions.diff().abs().fillna(0.0)
+        prev_positions = positions.shift(1).fillna(0.0)
+        turnover = (positions - prev_positions).abs()
         costs = (cost_per_unit_turnover + slippage_per_unit_turnover) * turnover
         gross_returns = positions.shift(1).fillna(0.0) * returns
         strat_returns = gross_returns - costs
