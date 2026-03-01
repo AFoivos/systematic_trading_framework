@@ -1,6 +1,11 @@
 # Technical Book Chapters
 
-Ο κατάλογος chapter files της enhanced ελληνικής τεχνικής τεκμηρίωσης.
+Ο κατάλογος chapter files της ελληνικής τεχνικής τεκμηρίωσης `STF_documentation_v01.03`.
+
+## Source Documents
+
+- `docs/technical_book_el/STF_documentation_v01.03.md`
+- `output/pdf/STF_documentation_v01.03.pdf`
 
 ## Chapters
 
@@ -23,8 +28,3 @@
 - `docs/technical_book_el/chapters/15-refactor-optimization.md`
 - `docs/technical_book_el/chapters/16-appendix.md`
 - `docs/technical_book_el/chapters/17-module-atlas.md`
-
-## PDFs
-
-- `output/pdf/systematic_trading_framework_technical_book_el.pdf`
-- `output/pdf/systematic_trading_framework_technical_book_el_enhanced.pdf`

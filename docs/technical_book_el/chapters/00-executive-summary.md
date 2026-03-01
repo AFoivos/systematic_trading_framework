@@ -3,8 +3,8 @@
 Το repository αποτελεί ένα ερευνητικό αλλά σαφώς production-oriented framework για systematic trading, με
 δηλωτική παραμετροποίηση πειραμάτων, anti-leakage time-series evaluation, point-in-time hardening,
 signal-to-portfolio mapping, portfolio constraints, drift diagnostics και paper execution artifacts.
-Η παρούσα τεκμηρίωση βασίζεται στην πραγματική κατάσταση του κώδικα την 1η Μαρτίου 2026, σε ανάγνωση όλου
-του repository, καθώς και σε εκτέλεση του test suite (`36 passed, 4 warnings`). Το framework σήμερα
+Η παρούσα τεκμηρίωση βασίζεται στην πραγματική κατάσταση του κώδικα την 2 Μαρτίου 2026, σε ανάγνωση όλου
+του repository, καθώς και σε εκτέλεση του test suite (`51 passed, 2 warnings`). Το framework σήμερα
 υλοποιεί πλήρως data ingestion, feature engineering, classification-based signal generation, single-asset και
 multi-asset portfolio backtesting, reproducibility metadata και artifact persistence. Αντίθετα, deep
 learning, reinforcement learning και live broker execution αναφέρονται στο README ως roadmap και όχι ως
@@ -13,10 +13,10 @@ learning, reinforcement learning και live broker execution αναφέροντ
 Βασικά μετρήσιμα μεγέθη του codebase:
 
 - `63` Python modules (source + tests).
-- `235` top-level functions / methods-like module routines.
+- `268` callable definitions (top-level functions, test callables και class methods).
 - `13` classes/dataclasses/interfaces.
 - `5` YAML configuration files.
-- `7` primary test modules με συνολικά 36 passing tests.
+- `7` primary test modules με συνολικά 51 passing tests.
 
 Αρχιτεκτονικά, το σύστημα ακολουθεί layered modular design με σαφή ροή: `config -> data -> PIT ->
 features -> model -> signal -> backtest/portfolio -> evaluation -> monitoring -> execution -> artifacts`.

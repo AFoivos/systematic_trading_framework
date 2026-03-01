@@ -24,7 +24,7 @@
 
 ### 12.3 Εκτελεσμένη Κατάσταση Test Suite
 
-Στην παρούσα ανάλυση εκτελέστηκε `pytest -q` με αποτέλεσμα `36 passed, 4 warnings in 4.31s`. Οι warnings είναι:
+Στην παρούσα ανάλυση εκτελέστηκε `pytest -q` με αποτέλεσμα `51 passed, 2 warnings in 3.16s`. Οι warnings είναι:
 
 - δύο `DeprecationWarning` από `google.protobuf` internals, εκτός του άμεσου application code.
 - δύο `RuntimeWarning` στην fallback optimizer test όταν η covariance matrix είναι `inf`, κάτι αναμενόμενο για τον ελεγχόμενο failure path.
