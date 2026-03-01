@@ -10,6 +10,11 @@ from src.signals.volatility_signal import compute_volatility_regime_signal
 
 
 def test_compute_returns_simple_and_log() -> None:
+    """
+    Verify that returns simple and log behaves as expected under a representative regression
+    scenario. The test protects the intended contract of the surrounding component and makes
+    failures easier to localize.
+    """
     prices = pd.Series([100.0, 110.0, 121.0], name="close")
     simple = compute_returns(prices, log=False, dropna=False)
     log = compute_returns(prices, log=True, dropna=False)
@@ -20,6 +25,11 @@ def test_compute_returns_simple_and_log() -> None:
 
 
 def test_add_trend_features_columns() -> None:
+    """
+    Verify that trend features columns behaves as expected under a representative regression
+    scenario. The test protects the intended contract of the surrounding component and makes
+    failures easier to localize.
+    """
     df = pd.DataFrame({"close": [1.0, 2.0, 3.0, 4.0, 5.0]})
     out = add_trend_features(df, sma_windows=(2,), ema_spans=(2,))
 
@@ -30,6 +40,11 @@ def test_add_trend_features_columns() -> None:
 
 
 def test_validate_ohlcv_flags_invalid_high_low() -> None:
+    """
+    Verify that OHLCV flags invalid high low behaves as expected under a representative
+    regression scenario. The test protects the intended contract of the surrounding component
+    and makes failures easier to localize.
+    """
     idx = pd.date_range("2020-01-01", periods=2, freq="D")
     df = pd.DataFrame(
         {
@@ -46,6 +61,11 @@ def test_validate_ohlcv_flags_invalid_high_low() -> None:
 
 
 def test_run_backtest_costs_and_slippage_reduce_returns() -> None:
+    """
+    Verify that backtest costs and slippage reduce returns behaves as expected under a
+    representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
     idx = pd.date_range("2020-01-01", periods=3, freq="D")
     df = pd.DataFrame(
         {
@@ -76,6 +96,11 @@ def test_run_backtest_costs_and_slippage_reduce_returns() -> None:
 
 
 def test_run_backtest_log_returns_are_converted() -> None:
+    """
+    Verify that backtest log returns are converted behaves as expected under a representative
+    regression scenario. The test protects the intended contract of the surrounding component
+    and makes failures easier to localize.
+    """
     idx = pd.date_range("2020-01-01", periods=3, freq="D")
     logret = float(np.log(1.1))
     df = pd.DataFrame(
@@ -99,6 +124,11 @@ def test_run_backtest_log_returns_are_converted() -> None:
 
 
 def test_run_backtest_charges_initial_entry_turnover() -> None:
+    """
+    Verify that backtest charges initial entry turnover behaves as expected under a
+    representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
     idx = pd.date_range("2020-01-01", periods=3, freq="D")
     df = pd.DataFrame(
         {
@@ -122,7 +152,36 @@ def test_run_backtest_charges_initial_entry_turnover() -> None:
     assert np.isclose(bt.returns.iloc[0], -0.01)
 
 
+def test_run_backtest_raises_on_missing_return_while_exposed() -> None:
+    """
+    Verify that backtest raises on missing return while exposed behaves as expected under a
+    representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
+    idx = pd.date_range("2020-01-01", periods=3, freq="D")
+    df = pd.DataFrame(
+        {
+            "signal": [1.0, 1.0, 1.0],
+            "returns": [0.0, np.nan, 0.01],
+        },
+        index=idx,
+    )
+
+    with pytest.raises(ValueError):
+        run_backtest(
+            df,
+            signal_col="signal",
+            returns_col="returns",
+            dd_guard=False,
+        )
+
+
 def test_volatility_regime_signal_is_causal_by_default() -> None:
+    """
+    Verify that volatility regime signal is causal by default behaves as expected under a
+    representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
     idx = pd.date_range("2020-01-01", periods=4, freq="D")
     df = pd.DataFrame({"vol": [1.0, 2.0, 3.0, 100.0]}, index=idx)
 

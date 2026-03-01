@@ -12,6 +12,11 @@ def validate_ohlcv(
     allow_missing_volume: bool = True,
 ) -> None:
 
+    """
+    Validate OHLCV before downstream logic depends on it. The function raises early when
+    assumptions of the data ingestion and storage layer are violated, which keeps failures
+    deterministic and easier to diagnose.
+    """
     problems: list[str] = []
 
     missing = [c for c in required_columns if c not in df.columns]

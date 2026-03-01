@@ -12,6 +12,11 @@ from src.utils.run_metadata import build_artifact_manifest, compute_config_hash,
 
 
 def test_runtime_defaults_are_loaded_from_config() -> None:
+    """
+    Verify that runtime defaults are loaded from config behaves as expected under a
+    representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
     cfg = load_experiment_config("experiments/lgbm_spy.yaml")
     runtime = cfg["runtime"]
 
@@ -22,11 +27,21 @@ def test_runtime_defaults_are_loaded_from_config() -> None:
 
 
 def test_validate_runtime_config_rejects_invalid_threads() -> None:
+    """
+    Verify that runtime config rejects invalid threads behaves as expected under a
+    representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
     with pytest.raises(RuntimeConfigError):
         validate_runtime_config({"threads": 0})
 
 
 def test_apply_runtime_reproducibility_sets_deterministic_numpy_stream() -> None:
+    """
+    Verify that runtime reproducibility sets deterministic numpy stream behaves as expected
+    under a representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
     runtime = {
         "seed": 123,
         "deterministic": True,
@@ -45,6 +60,11 @@ def test_apply_runtime_reproducibility_sets_deterministic_numpy_stream() -> None
 
 
 def test_compute_config_hash_ignores_config_path_field() -> None:
+    """
+    Verify that config hash ignores config path field behaves as expected under a representative
+    regression scenario. The test protects the intended contract of the surrounding component
+    and makes failures easier to localize.
+    """
     cfg = load_experiment_config("experiments/lgbm_spy.yaml")
     h1, _ = compute_config_hash(cfg)
 
@@ -56,6 +76,11 @@ def test_compute_config_hash_ignores_config_path_field() -> None:
 
 
 def test_dataframe_fingerprint_is_stable_across_row_and_column_order() -> None:
+    """
+    Verify that dataframe fingerprint is stable across row and column order behaves as expected
+    under a representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
     idx = pd.to_datetime(["2024-01-03", "2024-01-01", "2024-01-02"])
     df = pd.DataFrame({"b": [1.0, 2.0, 3.0], "a": [10.0, 20.0, 30.0]}, index=idx)
     fp1 = compute_dataframe_fingerprint(df)
@@ -72,6 +97,11 @@ def test_dataframe_fingerprint_is_stable_across_row_and_column_order() -> None:
 
 
 def test_artifact_manifest_contains_file_hashes(tmp_path) -> None:
+    """
+    Verify that artifact manifest contains file hashes behaves as expected under a
+    representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
     a = tmp_path / "a.txt"
     b = tmp_path / "b.txt"
     a.write_text("alpha", encoding="utf-8")

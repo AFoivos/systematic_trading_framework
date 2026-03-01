@@ -7,6 +7,11 @@ from src.experiments.models import train_lightgbm_classifier
 
 
 def _synthetic_price_frame(n: int = 260) -> pd.DataFrame:
+    """
+    Verify that synthetic price frame behaves as expected under a representative regression
+    scenario. The test protects the intended contract of the surrounding component and makes
+    failures easier to localize.
+    """
     rng = np.random.default_rng(42)
     base = np.where(np.arange(n) % 2 == 0, 0.01, -0.01)
     rets = base + rng.normal(0.0, 0.001, size=n)
@@ -20,6 +25,11 @@ def _synthetic_price_frame(n: int = 260) -> pd.DataFrame:
 
 
 def test_walk_forward_predictions_are_oos_only() -> None:
+    """
+    Verify that walk forward predictions are out-of-sample only behaves as expected under a
+    representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
     df = _synthetic_price_frame()
     out, _, meta = train_lightgbm_classifier(
         df=df,
@@ -45,6 +55,11 @@ def test_walk_forward_predictions_are_oos_only() -> None:
 
 
 def test_purged_splits_respect_anti_leakage_gap() -> None:
+    """
+    Verify that purged splits respect anti leakage gap behaves as expected under a
+    representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
     df = _synthetic_price_frame()
     purge_bars = 3
     out, _, meta = train_lightgbm_classifier(
@@ -73,6 +88,11 @@ def test_purged_splits_respect_anti_leakage_gap() -> None:
 
 
 def test_binary_forward_target_keeps_tail_labels_nan() -> None:
+    """
+    Verify that binary forward target keeps tail labels nan behaves as expected under a
+    representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
     horizon = 5
     df = _synthetic_price_frame()
     out, _, meta = train_lightgbm_classifier(
@@ -91,6 +111,11 @@ def test_binary_forward_target_keeps_tail_labels_nan() -> None:
 
 
 def test_quantile_target_uses_train_only_distribution_per_fold() -> None:
+    """
+    Verify that quantile target uses train only distribution per fold behaves as expected under
+    a representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
     df = _synthetic_price_frame()
     tail_idx = df.index[-40:]
     base = float(df.loc[df.index[-41], "close"])

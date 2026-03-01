@@ -21,6 +21,10 @@ class RuntimeConfigError(ValueError):
 
 
 def normalize_runtime_config(runtime_cfg: Mapping[str, Any] | None) -> dict[str, Any]:
+    """
+    Normalize runtime config into a canonical representation used throughout the infrastructure
+    layer. This avoids repeated formatting logic and makes hashing or comparisons stable.
+    """
     runtime = dict(runtime_cfg or {})
     runtime.setdefault("seed", 7)
     runtime.setdefault("deterministic", True)
@@ -31,6 +35,11 @@ def normalize_runtime_config(runtime_cfg: Mapping[str, Any] | None) -> dict[str,
 
 
 def validate_runtime_config(runtime_cfg: Mapping[str, Any] | None) -> dict[str, Any]:
+    """
+    Validate runtime config before downstream logic depends on it. The function raises early
+    when assumptions of the infrastructure layer are violated, which keeps failures
+    deterministic and easier to diagnose.
+    """
     runtime = normalize_runtime_config(runtime_cfg)
 
     seed = runtime.get("seed")
@@ -60,6 +69,11 @@ def validate_runtime_config(runtime_cfg: Mapping[str, Any] | None) -> dict[str, 
 
 
 def apply_runtime_reproducibility(runtime_cfg: Mapping[str, Any] | None) -> dict[str, Any]:
+    """
+    Apply runtime reproducibility to the provided inputs in a controlled and reusable way. The
+    helper makes a single transformation step explicit inside the broader infrastructure
+    workflow.
+    """
     runtime = validate_runtime_config(runtime_cfg)
 
     seed = int(runtime["seed"])
@@ -69,7 +83,7 @@ def apply_runtime_reproducibility(runtime_cfg: Mapping[str, Any] | None) -> dict
     seed_torch = bool(runtime.get("seed_torch", False))
 
     pyhash_before = os.getenv("PYTHONHASHSEED")
-    os.environ.setdefault("PYTHONHASHSEED", str(seed))
+    os.environ["PYTHONHASHSEED"] = str(seed)
     pyhash_after = os.getenv("PYTHONHASHSEED")
 
     random.seed(seed)

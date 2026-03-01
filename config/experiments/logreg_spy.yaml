@@ -1,0 +1,76 @@
+extends: base/daily.yaml
+
+data:
+  symbol: "SPY"
+  start: "2015-01-01"
+  end: null
+  storage:
+    mode: live_or_cached
+    dataset_id: "spy_daily_core"
+    save_raw: true
+    save_processed: true
+
+features:
+  - step: returns
+    params:
+      log: false
+      col_name: close_ret
+  - step: volatility
+    params:
+      returns_col: close_ret
+      rolling_windows: [20, 60]
+      ewma_spans: [20]
+  - step: trend
+    params:
+      price_col: close
+      sma_windows: [20, 50]
+      ema_spans: [20]
+  - step: lags
+    params:
+      cols: [close_ret]
+      lags: [1, 2, 5]
+
+model:
+  kind: logistic_regression_clf
+  params:
+    max_iter: 1000
+    C: 0.5
+  split:
+    method: walk_forward
+    train_size: 504
+    test_size: 63
+    step_size: 63
+    expanding: true
+  target:
+    kind: forward_return
+    price_col: close
+    horizon: 5
+
+signals:
+  kind: probability_threshold
+  params:
+    prob_col: pred_prob
+    upper: 0.55
+    lower: 0.45
+    signal_name: signal_prob
+
+backtest:
+  returns_col: close_ret
+  signal_col: signal_prob
+  periods_per_year: 252
+  returns_type: simple
+
+monitoring:
+  enabled: true
+  psi_threshold: 0.15
+  n_bins: 10
+
+execution:
+  enabled: true
+  mode: paper
+  capital: 1000000
+  price_col: close
+  min_trade_notional: 1000
+
+logging:
+  run_name: logreg_spy_v1

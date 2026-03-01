@@ -10,6 +10,11 @@ from src.portfolio.constraints import PortfolioConstraints, apply_constraints
 
 
 def _prepare_covariance(assets: pd.Index, covariance: pd.DataFrame | None) -> pd.DataFrame:
+    """
+    Handle prepare covariance inside the portfolio construction layer. The helper isolates one
+    focused responsibility so the surrounding code remains modular, readable, and easier to
+    test.
+    """
     if covariance is None:
         return pd.DataFrame(np.eye(len(assets), dtype=float), index=assets, columns=assets)
 
@@ -28,6 +33,11 @@ def _initial_weights(
     constraints: PortfolioConstraints,
     prev_weights: pd.Series | None,
 ) -> np.ndarray:
+    """
+    Handle initial weights inside the portfolio construction layer. The helper isolates one
+    focused responsibility so the surrounding code remains modular, readable, and easier to
+    test.
+    """
     n_assets = len(assets)
     if prev_weights is not None:
         w0 = prev_weights.reindex(assets).fillna(0.0).astype(float).to_numpy()
@@ -52,6 +62,11 @@ def optimize_mean_variance(
     trade_aversion: float = 0.0,
     allow_fallback: bool = True,
 ) -> tuple[pd.Series, dict[str, float | str | bool | dict[str, float]]]:
+    """
+    Handle optimize mean variance inside the portfolio construction layer. The helper isolates
+    one focused responsibility so the surrounding code remains modular, readable, and easier to
+    test.
+    """
     if not isinstance(expected_returns, pd.Series):
         raise TypeError("expected_returns must be a pandas Series.")
     if risk_aversion < 0:

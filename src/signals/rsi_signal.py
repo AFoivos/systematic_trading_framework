@@ -14,6 +14,10 @@ def compute_rsi_signal(
     mode: str = "long_short_hold",
 ) -> pd.DataFrame:
 
+    """
+    Compute RSI signal for the signal generation layer. The helper keeps the calculation
+    isolated so the calling pipeline can reuse the same logic consistently across experiments.
+    """
     if mode not in _ALLOWED_MODES:
         raise ValueError(f"mode must be one of {_ALLOWED_MODES}")
 

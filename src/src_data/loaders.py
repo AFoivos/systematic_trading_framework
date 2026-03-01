@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Literal, Optional, Sequence
 
 import pandas as pd
 
@@ -53,3 +53,32 @@ def load_ohlcv(
         interval=interval,
     )
     return df
+
+
+def load_ohlcv_panel(
+    symbols: Sequence[str],
+    start: str | None = None,
+    end: str | None = None,
+    interval: str = "1d",
+    source: Literal["yahoo", "alpha"] = "yahoo",
+    api_key: Optional[str] = None,
+) -> dict[str, pd.DataFrame]:
+    """
+    Load OHLCV panel for the data ingestion and storage layer and normalize it into the shape
+    expected by the rest of the project. The helper centralizes path or provider handling so
+    callers do not duplicate I/O logic.
+    """
+    if not symbols:
+        raise ValueError("symbols cannot be empty.")
+
+    panel: dict[str, pd.DataFrame] = {}
+    for symbol in symbols:
+        panel[str(symbol)] = load_ohlcv(
+            symbol=str(symbol),
+            start=start,
+            end=end,
+            interval=interval,
+            source=source,
+            api_key=api_key,
+        )
+    return panel

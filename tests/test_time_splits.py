@@ -10,6 +10,11 @@ from src.evaluation.time_splits import (
 
 
 def test_walk_forward_splits_are_time_ordered_and_non_overlapping() -> None:
+    """
+    Verify that walk forward splits are time ordered and non overlapping behaves as expected
+    under a representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
     splits = walk_forward_split_indices(
         n_samples=220,
         train_size=100,
@@ -32,6 +37,11 @@ def test_walk_forward_splits_are_time_ordered_and_non_overlapping() -> None:
 
 
 def test_purged_walk_forward_respects_purge_and_embargo() -> None:
+    """
+    Verify that purged walk forward respects purge and embargo behaves as expected under a
+    representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
     purge_bars = 3
     embargo_bars = 2
     step_size = 10
@@ -55,7 +65,34 @@ def test_purged_walk_forward_respects_purge_and_embargo() -> None:
         assert curr.test_start >= prev.test_end + embargo_bars
 
 
+def test_purged_walk_forward_excludes_prior_embargo_rows_from_future_training() -> None:
+    """
+    Verify that purged walk forward excludes prior embargo rows from future training behaves as
+    expected under a representative regression scenario. The test protects the intended
+    contract of the surrounding component and makes failures easier to localize.
+    """
+    splits = purged_walk_forward_split_indices(
+        n_samples=40,
+        train_size=12,
+        test_size=5,
+        step_size=5,
+        purge_bars=1,
+        embargo_bars=3,
+        expanding=True,
+    )
+
+    assert len(splits) >= 2
+    first, second = splits[0], splits[1]
+    embargoed_after_first = np.arange(first.test_end, first.test_end + 3, dtype=int)
+    assert not np.isin(embargoed_after_first, second.train_idx).any()
+
+
 def test_build_time_splits_uses_target_horizon_for_default_purge() -> None:
+    """
+    Verify that time splits uses target horizon for default purge behaves as expected under a
+    representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
     splits = build_time_splits(
         method="purged",
         n_samples=150,

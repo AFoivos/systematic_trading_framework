@@ -9,6 +9,10 @@ from pandas.api.types import is_numeric_dtype
 
 @dataclass(frozen=True)
 class DataContract:
+    """
+    Describe the minimum structural guarantees expected from market data before feature
+    generation or model training proceeds.
+    """
     required_columns: tuple[str, ...] = ("open", "high", "low", "close", "volume")
     require_datetime_index: bool = True
     require_unique_index: bool = True
@@ -17,6 +21,10 @@ class DataContract:
 
 @dataclass(frozen=True)
 class TargetContract:
+    """
+    Describe the label column and prediction horizon that the feature-to-target validation logic
+    must enforce.
+    """
     target_col: str
     horizon: int = 1
 
@@ -25,6 +33,11 @@ def validate_data_contract(
     df: pd.DataFrame,
     contract: DataContract | None = None,
 ) -> dict[str, int]:
+    """
+    Validate data contract before downstream logic depends on it. The function raises early when
+    assumptions of the experiment orchestration layer are violated, which keeps failures
+    deterministic and easier to diagnose.
+    """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("df must be a pandas DataFrame")
 
@@ -52,6 +65,11 @@ def validate_feature_target_contract(
     target: TargetContract,
     forbidden_feature_prefixes: Iterable[str] = ("target_", "label", "pred_"),
 ) -> dict[str, int]:
+    """
+    Validate feature target contract before downstream logic depends on it. The function raises
+    early when assumptions of the experiment orchestration layer are violated, which keeps
+    failures deterministic and easier to diagnose.
+    """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("df must be a pandas DataFrame")
     if not feature_cols:

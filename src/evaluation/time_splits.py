@@ -8,6 +8,10 @@ import numpy as np
 
 @dataclass(frozen=True)
 class TimeSplit:
+    """
+    Represent one chronological train/test fold with both scalar boundaries and the exact numpy
+    indices used by the time-aware evaluation routines.
+    """
     fold: int
     train_start: int
     train_end: int
@@ -18,16 +22,49 @@ class TimeSplit:
 
 
 def _require_positive_int(name: str, value: int) -> None:
+    """
+    Handle require positive int inside the evaluation layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     if not isinstance(value, int) or value <= 0:
         raise ValueError(f"{name} must be a positive integer.")
 
 
 def _require_non_negative_int(name: str, value: int) -> None:
+    """
+    Handle require non negative int inside the evaluation layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     if not isinstance(value, int) or value < 0:
         raise ValueError(f"{name} must be an integer >= 0.")
 
 
+def _exclude_blocked_ranges(
+    train_idx: np.ndarray,
+    *,
+    blocked_ranges: list[tuple[int, int]],
+) -> np.ndarray:
+    """
+    Remove embargoed intervals from a candidate train index so later folds cannot silently reuse
+    rows that were intentionally excluded after earlier test windows.
+    """
+    arr = np.asarray(train_idx, dtype=int)
+    if arr.size == 0 or not blocked_ranges:
+        return arr
+
+    keep_mask = np.ones(arr.shape, dtype=bool)
+    for start, end in blocked_ranges:
+        if end <= start:
+            continue
+        keep_mask &= ~((arr >= int(start)) & (arr < int(end)))
+    return arr[keep_mask]
+
+
 def time_split_indices(n_samples: int, train_frac: float = 0.7) -> list[TimeSplit]:
+    """
+    Handle time split indices inside the evaluation layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     if not isinstance(n_samples, int) or n_samples < 2:
         raise ValueError("n_samples must be an integer >= 2.")
     if not isinstance(train_frac, float) or not 0.0 < train_frac < 1.0:
@@ -60,6 +97,11 @@ def walk_forward_split_indices(
     expanding: bool = True,
     max_folds: int | None = None,
 ) -> list[TimeSplit]:
+    """
+    Handle walk forward split indices inside the evaluation layer. The helper isolates one
+    focused responsibility so the surrounding code remains modular, readable, and easier to
+    test.
+    """
     return purged_walk_forward_split_indices(
         n_samples=n_samples,
         train_size=train_size,
@@ -82,6 +124,11 @@ def purged_walk_forward_split_indices(
     expanding: bool = True,
     max_folds: int | None = None,
 ) -> list[TimeSplit]:
+    """
+    Handle purged walk forward split indices inside the evaluation layer. The helper isolates
+    one focused responsibility so the surrounding code remains modular, readable, and easier to
+    test.
+    """
     if not isinstance(n_samples, int) or n_samples < 2:
         raise ValueError("n_samples must be an integer >= 2.")
     _require_positive_int("train_size", train_size)
@@ -97,6 +144,7 @@ def purged_walk_forward_split_indices(
         raise ValueError("train_size must be < n_samples.")
 
     splits: list[TimeSplit] = []
+    embargoed_train_ranges: list[tuple[int, int]] = []
     fold = 0
     test_start = train_size
 
@@ -120,6 +168,10 @@ def purged_walk_forward_split_indices(
             continue
 
         train_idx = np.arange(train_start, train_end, dtype=int)
+        train_idx = _exclude_blocked_ranges(
+            train_idx,
+            blocked_ranges=embargoed_train_ranges,
+        )
         test_idx = np.arange(test_start, test_end, dtype=int)
 
         if train_idx.size > 0 and test_idx.size > 0:
@@ -137,6 +189,12 @@ def purged_walk_forward_split_indices(
             fold += 1
             if max_folds is not None and fold >= max_folds:
                 break
+
+        if embargo_bars > 0:
+            embargo_start = test_end
+            embargo_end = min(n_samples, test_end + embargo_bars)
+            if embargo_end > embargo_start:
+                embargoed_train_ranges.append((embargo_start, embargo_end))
 
         if test_end >= n_samples:
             break
@@ -204,6 +262,11 @@ def build_time_splits(
     split_cfg: dict,
     target_horizon: int = 1,
 ) -> list[TimeSplit]:
+    """
+    Build time splits as an explicit intermediate object used by the evaluation pipeline.
+    Keeping this assembly step separate makes the orchestration code easier to reason about and
+    test.
+    """
     if method == "time":
         train_frac = float(split_cfg.get("train_frac", 0.7))
         return time_split_indices(n_samples=n_samples, train_frac=train_frac)

@@ -11,6 +11,10 @@ from src.src_data.providers.base import MarketDataProvider
 @dataclass
 class YahooFinanceProvider(MarketDataProvider):
 
+    """
+    Implement the market data provider contract for Yahoo Finance and normalize the downloaded
+    columns into the project OHLCV schema.
+    """
     def get_ohlcv(
         self,
         symbol: str,
@@ -18,6 +22,11 @@ class YahooFinanceProvider(MarketDataProvider):
         end: str | None = None,
         interval: str = "1d",
     ) -> pd.DataFrame:
+        """
+        Implement the get OHLCV step required by the surrounding class. The method keeps
+        class-specific behavior explicit while preserving a predictable contract for callers of
+        the data ingestion and storage layer.
+        """
         df = yf.download(
             symbol,
             start=start,

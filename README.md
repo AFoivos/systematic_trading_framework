@@ -1,6 +1,6 @@
 # systematic-trading-framework
 
-A **research-first, systematic trading framework** for quantitative finance, designed to support the full lifecycle from **hypothesis-driven research** to **robust backtesting** and **machine learning–based strategy evaluation**.
+A **research-first, systematic trading framework** for quantitative finance, designed to support the full lifecycle from **hypothesis-driven research** to **robust backtesting**, **machine learning–based strategy evaluation**, and **multi-asset portfolio construction**.
 
 This repository prioritizes:
 
@@ -41,25 +41,26 @@ This framework is built around those principles.
 * Explicit **risk modeling and control**
 * Modular, extensible architecture suitable for research → production transition
 * **Point-in-time data integrity** (survivorship-bias control, corporate actions, timestamp alignment)
-* **Feature store & provenance** for reproducibility (data/feature versioning)
+* **Persisted data/feature snapshots** for reproducibility (raw + processed dataset versioning)
 * **Signal aggregation layer** (rank/decay/confidence-weighted sizing)
 * **Portfolio optimization with constraints** (market/sector neutrality, turnover caps)
-* **Robustness & stress testing** (regime splits, sensitivity checks)
+* **Robustness & strict OOS evaluation** (walk-forward, purged splits, fold-level diagnostics)
 * **Monitoring & drift detection** for production-grade iteration
+* **Paper execution artifacts** (target weights / rebalance order exports)
 
 ---
 
 ## 🧱 Repository Structure
 
 ```
-quant-research-lab/
+systematic-trading-framework/
 │
 ├── config/                 # YAML configs (models, experiments, backtests)
 │
 ├── data/
-│   ├── raw/                # Immutable raw market data
-│   ├── processed/          # Cleaned & feature-engineered datasets
-│   └── metadata/           # Contracts, calendars, asset info
+│   ├── raw/                # Persisted raw/canonical snapshots
+│   ├── processed/          # Persisted feature snapshots
+│   └── metadata/           # Universe snapshots, asset metadata
 │
 ├── notebooks/              # Exploratory research (EDA, diagnostics)
 │
@@ -71,7 +72,9 @@ quant-research-lab/
 │   ├── evaluation/         # Metrics & performance analysis
 │   ├── signals/            # Signal aggregation (rank/decay/confidence)
 │   ├── portfolio/          # Portfolio construction & optimization
-│   ├── monitoring/         # Drift, data quality, and live diagnostics
+│   ├── monitoring/         # Drift and feature stability diagnostics
+│   ├── execution/          # Paper execution order exports
+│   ├── src_data/           # Market data loading, PIT hardening, snapshot storage
 │   └── utils/              # Shared utilities
 │
 ├── tests/                  # Unit & integration tests
@@ -144,10 +147,20 @@ Define experiments in YAML under `config/` (e.g., `config/experiments/trend_spy.
 ```python
 from src.utils.config import load_experiment_config
 cfg = load_experiment_config("experiments/trend_spy.yaml")
-# then: load_ohlcv(**cfg["data"]), build features per cfg["features"], train model, map signals, run_backtest(...)
+# then: load/persist raw snapshots, build features, train model with time-aware splits,
+# map signals, optionally construct portfolio weights, run backtest, save artifacts
 ```
 
 Keep secrets out of Git: store API keys in env vars and reference them with `data.api_key_env`.
+
+Key config blocks now supported:
+
+* `data.symbol` or `data.symbols` for single-asset vs multi-asset runs
+* `data.storage` for raw/processed dataset snapshots (`live`, `live_or_cached`, `cached_only`)
+* `model.kind` for `lightgbm_clf` and `logistic_regression_clf`
+* `portfolio` for signal-based or mean-variance portfolio construction
+* `monitoring` for feature drift reports
+* `execution` for paper-order export at the latest timestamp
 
 ---
 
@@ -179,7 +192,20 @@ The framework supports and compares multiple modeling paradigms:
 * Risk-aware reward functions
 * Policy evaluation under transaction costs
 
-All models:
+Implemented model path today:
+
+* LightGBM classifier with time-aware OOS predictions
+* Logistic regression classifier with the same anti-leakage split framework
+
+Planned / future model families:
+
+* ARIMA / SARIMAX
+* VAR
+* GARCH-style volatility models
+* LSTM / temporal CNNs
+* RL agents
+
+All implemented models:
 
 * operate on **lagged, causal features**
 * are evaluated **out-of-sample**
@@ -194,10 +220,12 @@ Evaluation follows strict time-series principles:
 
 * ❌ No random train/test splits
 * ✅ Walk-forward / expanding window validation
+* ✅ Purged / embargoed split support
 * ✅ Explicit transaction costs & slippage
 * ✅ Capital-aware performance accounting
 * ✅ **Point-in-time alignment** (avoid lookahead & survivorship leakage)
-* ✅ **Robustness checks** (regime splits, sensitivity analysis)
+* ✅ **Strict OOS reporting** (fold-level diagnostics + primary OOS summary)
+* ✅ Multi-asset portfolio backtests with constraints
 
 ### Key Metrics
 
@@ -231,7 +259,8 @@ Where applicable, the framework includes:
 * regime-conditional performance
 * failure mode diagnostics
 * model vs baseline attribution
-* data quality & drift monitoring hooks
+* data quality & drift monitoring reports
+* latest paper-order export for downstream execution workflows
 
 The goal is not just performance, but **understanding**.
 
@@ -247,14 +276,12 @@ It does **not** constitute financial advice and is **not** designed for live tra
 
 ## 📌 Future Extensions
 
-* Live data ingestion layer
-* Paper trading & execution simulation
-* Portfolio-level optimization
+* Broker / OMS adapters for real live execution
 * Advanced regime detection
 * Model ensemble & meta-learning
 * Alternative data/NLP pipeline (news, filings, embeddings)
-* Feature store with data/feature lineage
-* Production monitoring & alerting (drift, performance decay)
+* Richer feature lineage / catalog metadata
+* Production monitoring dashboards & alerting
 
 ---
 

@@ -1,0 +1,100 @@
+extends: base/daily.yaml
+
+data:
+  symbols: ["SPY", "TLT", "GLD"]
+  start: "2015-01-01"
+  end: null
+  alignment: inner
+  storage:
+    mode: live_or_cached
+    dataset_id: "macro_triad_daily"
+    save_raw: true
+    save_processed: true
+
+features:
+  - step: returns
+    params:
+      log: false
+      col_name: close_ret
+  - step: volatility
+    params:
+      returns_col: close_ret
+      rolling_windows: [20]
+      ewma_spans: [20]
+  - step: trend
+    params:
+      price_col: close
+      sma_windows: [20, 50]
+      ema_spans: [20]
+  - step: lags
+    params:
+      cols: [close_ret]
+      lags: [1, 2, 5]
+
+model:
+  kind: logistic_regression_clf
+  params:
+    max_iter: 1000
+    C: 0.5
+  feature_cols:
+    - lag_close_ret_1
+    - lag_close_ret_2
+    - lag_close_ret_5
+    - vol_rolling_20
+    - vol_ewma_20
+    - close_over_sma_20
+    - close_over_sma_50
+  split:
+    method: walk_forward
+    train_size: 504
+    test_size: 63
+    step_size: 63
+    expanding: true
+  target:
+    kind: forward_return
+    price_col: close
+    horizon: 5
+
+signals:
+  kind: probability_conviction
+  params:
+    prob_col: pred_prob
+    signal_name: signal_prob_size
+    clip: 1.0
+
+portfolio:
+  enabled: true
+  construction: signal_weights
+  gross_target: 1.0
+  long_short: true
+  constraints:
+    min_weight: -0.6
+    max_weight: 0.6
+    max_gross_leverage: 1.0
+    target_net_exposure: 0.0
+    turnover_limit: 0.5
+  asset_groups:
+    SPY: equity
+    TLT: rates
+    GLD: commodities
+
+backtest:
+  returns_col: close_ret
+  signal_col: signal_prob_size
+  periods_per_year: 252
+  returns_type: simple
+
+monitoring:
+  enabled: true
+  psi_threshold: 0.15
+  n_bins: 10
+
+execution:
+  enabled: true
+  mode: paper
+  capital: 1000000
+  price_col: close
+  min_trade_notional: 2500
+
+logging:
+  run_name: portfolio_logreg_macro_v1

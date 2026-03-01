@@ -28,6 +28,11 @@ class AlphaVantageFXProvider(MarketDataProvider):
         end: str | None = None,
         interval: str = "1d",
     ) -> pd.DataFrame:
+        """
+        Implement the get OHLCV step required by the surrounding class. The method keeps
+        class-specific behavior explicit while preserving a predictable contract for callers of
+        the data ingestion and storage layer.
+        """
         if interval != "1d":
             raise ValueError("Alpha Vantage FX_DAILY supports only 1d interval")
 

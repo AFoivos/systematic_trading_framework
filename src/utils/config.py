@@ -31,6 +31,10 @@ def _resolve_config_path(config_path: str | Path) -> Path:
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
+    """
+    Handle YAML inside the infrastructure layer. The helper isolates one focused responsibility
+    so the surrounding code remains modular, readable, and easier to test.
+    """
     with path.open("r") as f:
         data = yaml.safe_load(f) or {}
     if not isinstance(data, dict):
@@ -50,6 +54,10 @@ def _deep_update(base: Mapping[str, Any], updates: Mapping[str, Any]) -> dict[st
 
 
 def _load_with_extends(path: Path, seen: set[Path] | None = None) -> dict[str, Any]:
+    """
+    Handle with extends inside the infrastructure layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     seen = seen or set()
     if path in seen:
         raise ConfigError(f"Cyclic config inheritance detected at {path}")
@@ -67,6 +75,10 @@ def _load_with_extends(path: Path, seen: set[Path] | None = None) -> dict[str, A
 
 
 def _default_risk_block(risk: dict[str, Any]) -> dict[str, Any]:
+    """
+    Handle default risk block inside the infrastructure layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     risk = dict(risk) if risk else {}
     risk.setdefault("cost_per_turnover", 0.0)
     risk.setdefault("slippage_per_turnover", 0.0)
@@ -82,11 +94,16 @@ def _default_risk_block(risk: dict[str, Any]) -> dict[str, Any]:
 
 
 def _default_data_block(data: dict[str, Any]) -> dict[str, Any]:
+    """
+    Handle default data block inside the infrastructure layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     data = dict(data) if data else {}
     data.setdefault("source", "yahoo")
     data.setdefault("interval", "1d")
     data.setdefault("start", None)
     data.setdefault("end", None)
+    data.setdefault("alignment", "inner")
 
     pit = dict(data.get("pit", {}) or {})
     ts = dict(pit.get("timestamp_alignment", {}) or {})
@@ -102,19 +119,96 @@ def _default_data_block(data: dict[str, Any]) -> dict[str, Any]:
     pit["corporate_actions"] = corp
 
     snapshot = dict(pit.get("universe_snapshot", {}) or {})
+    snapshot.setdefault("inactive_policy", "raise")
     pit["universe_snapshot"] = snapshot
     data["pit"] = pit
+
+    storage = dict(data.get("storage", {}) or {})
+    storage.setdefault("mode", "live")
+    storage.setdefault("dataset_id", None)
+    storage.setdefault("load_path", None)
+    storage.setdefault("save_raw", False)
+    storage.setdefault("save_processed", False)
+    raw_dir = storage.get("raw_dir", "data/raw")
+    processed_dir = storage.get("processed_dir", "data/processed")
+    storage["raw_dir"] = str(in_project(raw_dir)) if isinstance(raw_dir, str) else str(raw_dir)
+    storage["processed_dir"] = (
+        str(in_project(processed_dir)) if isinstance(processed_dir, str) else str(processed_dir)
+    )
+    load_path = storage.get("load_path")
+    if isinstance(load_path, str):
+        storage["load_path"] = str(in_project(load_path))
+    data["storage"] = storage
     return data
 
 
 def _default_backtest_block(backtest: dict[str, Any]) -> dict[str, Any]:
+    """
+    Handle default backtest block inside the infrastructure layer. The helper isolates one
+    focused responsibility so the surrounding code remains modular, readable, and easier to
+    test.
+    """
     backtest = dict(backtest) if backtest else {}
     backtest.setdefault("periods_per_year", 252)
     backtest.setdefault("returns_type", "simple")
+    backtest.setdefault("missing_return_policy", "raise_if_exposed")
     return backtest
 
 
+def _default_portfolio_block(portfolio: dict[str, Any]) -> dict[str, Any]:
+    """
+    Handle default portfolio block inside the infrastructure layer. The helper isolates one
+    focused responsibility so the surrounding code remains modular, readable, and easier to
+    test.
+    """
+    portfolio = dict(portfolio) if portfolio else {}
+    portfolio.setdefault("enabled", False)
+    portfolio.setdefault("construction", "signal_weights")
+    portfolio.setdefault("gross_target", 1.0)
+    portfolio.setdefault("long_short", True)
+    portfolio.setdefault("expected_return_col", None)
+    portfolio.setdefault("covariance_window", 60)
+    portfolio.setdefault("risk_aversion", 5.0)
+    portfolio.setdefault("trade_aversion", 0.0)
+    portfolio["constraints"] = dict(portfolio.get("constraints", {}) or {})
+    portfolio["asset_groups"] = dict(portfolio.get("asset_groups", {}) or {})
+    return portfolio
+
+
+def _default_monitoring_block(monitoring: dict[str, Any]) -> dict[str, Any]:
+    """
+    Handle default monitoring block inside the infrastructure layer. The helper isolates one
+    focused responsibility so the surrounding code remains modular, readable, and easier to
+    test.
+    """
+    monitoring = dict(monitoring) if monitoring else {}
+    monitoring.setdefault("enabled", True)
+    monitoring.setdefault("psi_threshold", 0.2)
+    monitoring.setdefault("n_bins", 10)
+    return monitoring
+
+
+def _default_execution_block(execution: dict[str, Any]) -> dict[str, Any]:
+    """
+    Handle default execution block inside the infrastructure layer. The helper isolates one
+    focused responsibility so the surrounding code remains modular, readable, and easier to
+    test.
+    """
+    execution = dict(execution) if execution else {}
+    execution.setdefault("enabled", False)
+    execution.setdefault("mode", "paper")
+    execution.setdefault("capital", 1_000_000.0)
+    execution.setdefault("price_col", "close")
+    execution.setdefault("min_trade_notional", 0.0)
+    execution["current_weights"] = dict(execution.get("current_weights", {}) or {})
+    return execution
+
+
 def _resolve_logging_block(logging_cfg: dict[str, Any], config_path: Path) -> dict[str, Any]:
+    """
+    Handle logging block inside the infrastructure layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     logging_cfg = dict(logging_cfg) if logging_cfg else {}
     logging_cfg.setdefault("run_name", Path(config_path).stem)
     out_dir = logging_cfg.get("output_dir", "logs/experiments")
@@ -124,14 +218,32 @@ def _resolve_logging_block(logging_cfg: dict[str, Any], config_path: Path) -> di
 
 
 def _validate_data_block(data: dict[str, Any]) -> None:
-    if "symbol" not in data or not isinstance(data["symbol"], str):
-        raise ConfigError("data.symbol (str) is required.")
+    """
+    Handle data block inside the infrastructure layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
+    has_symbol = "symbol" in data and data["symbol"] is not None
+    has_symbols = "symbols" in data and data["symbols"] is not None
+    if has_symbol and has_symbols:
+        raise ConfigError("Specify either data.symbol or data.symbols, not both.")
+    if not has_symbol and not has_symbols:
+        raise ConfigError("Either data.symbol (str) or data.symbols (list[str]) is required.")
+    if has_symbol and not isinstance(data["symbol"], str):
+        raise ConfigError("data.symbol must be a string.")
+    if has_symbols:
+        symbols = data["symbols"]
+        if not isinstance(symbols, list) or not symbols or any(not isinstance(s, str) for s in symbols):
+            raise ConfigError("data.symbols must be a non-empty list[str].")
+
     source = data.get("source", "yahoo")
     if source not in {"yahoo", "alpha"}:
         raise ConfigError("data.source must be 'yahoo' or 'alpha'.")
     interval = data.get("interval", "1d")
     if not isinstance(interval, str):
         raise ConfigError("data.interval must be a string (e.g. '1d').")
+    alignment = data.get("alignment", "inner")
+    if alignment not in {"inner", "outer"}:
+        raise ConfigError("data.alignment must be 'inner' or 'outer'.")
     for key in ("start", "end"):
         if key in data and data[key] is not None and not isinstance(data[key], str):
             raise ConfigError(f"data.{key} must be a string date or null.")
@@ -178,15 +290,51 @@ def _validate_data_block(data: dict[str, Any]) -> None:
             raise ConfigError("data.pit.universe_snapshot.path must be a string or null.")
         if "as_of" in snapshot and snapshot["as_of"] is not None and not isinstance(snapshot["as_of"], str):
             raise ConfigError("data.pit.universe_snapshot.as_of must be a string date or null.")
+        inactive_policy = snapshot.get("inactive_policy", "raise")
+        if inactive_policy not in {"raise", "drop_inactive_rows"}:
+            raise ConfigError(
+                "data.pit.universe_snapshot.inactive_policy must be 'raise' or 'drop_inactive_rows'."
+            )
+
+    storage = data.get("storage", {})
+    if storage is not None:
+        if not isinstance(storage, dict):
+            raise ConfigError("data.storage must be a mapping.")
+        mode = storage.get("mode", "live")
+        if mode not in {"live", "live_or_cached", "cached_only"}:
+            raise ConfigError(
+                "data.storage.mode must be one of: live, live_or_cached, cached_only."
+            )
+        dataset_id = storage.get("dataset_id")
+        if dataset_id is not None and not isinstance(dataset_id, str):
+            raise ConfigError("data.storage.dataset_id must be a string or null.")
+        load_path = storage.get("load_path")
+        if load_path is not None and not isinstance(load_path, str):
+            raise ConfigError("data.storage.load_path must be a string or null.")
+        for key in ("raw_dir", "processed_dir"):
+            if key in storage and not isinstance(storage[key], str):
+                raise ConfigError(f"data.storage.{key} must be a string.")
+        for key in ("save_raw", "save_processed"):
+            if key in storage and not isinstance(storage[key], bool):
+                raise ConfigError(f"data.storage.{key} must be boolean.")
 
 
 def _inject_api_key_from_env(data: dict[str, Any]) -> None:
+    """
+    Handle inject API key from env inside the infrastructure layer. The helper isolates one
+    focused responsibility so the surrounding code remains modular, readable, and easier to
+    test.
+    """
     env_name = data.get("api_key_env")
     if env_name and not data.get("api_key"):
         data["api_key"] = os.getenv(env_name)
 
 
 def _validate_features_block(features: Any) -> None:
+    """
+    Handle features block inside the infrastructure layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     if not isinstance(features, list):
         raise ConfigError("features must be a list of steps.")
     for step in features:
@@ -199,6 +347,10 @@ def _validate_features_block(features: Any) -> None:
 
 
 def _validate_model_block(model: dict[str, Any]) -> None:
+    """
+    Handle model block inside the infrastructure layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     if "kind" not in model:
         raise ConfigError("model.kind is required.")
     if not isinstance(model["kind"], str):
@@ -281,6 +433,10 @@ def _validate_model_block(model: dict[str, Any]) -> None:
 
 
 def _validate_signals_block(signals: dict[str, Any]) -> None:
+    """
+    Handle signals block inside the infrastructure layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     if "kind" not in signals:
         raise ConfigError("signals.kind is required.")
     if not isinstance(signals["kind"], str):
@@ -288,6 +444,10 @@ def _validate_signals_block(signals: dict[str, Any]) -> None:
 
 
 def _validate_risk_block(risk: dict[str, Any]) -> None:
+    """
+    Handle risk block inside the infrastructure layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     cpt = risk.get("cost_per_turnover", 0.0)
     if cpt < 0:
         raise ConfigError("risk.cost_per_turnover must be >= 0.")
@@ -310,6 +470,10 @@ def _validate_risk_block(risk: dict[str, Any]) -> None:
 
 
 def _validate_backtest_block(backtest: dict[str, Any]) -> None:
+    """
+    Handle backtest block inside the infrastructure layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     for key in ("returns_col", "signal_col"):
         if key not in backtest or not isinstance(backtest[key], str):
             raise ConfigError(f"backtest.{key} (str) is required.")
@@ -319,6 +483,77 @@ def _validate_backtest_block(backtest: dict[str, Any]) -> None:
     returns_type = backtest.get("returns_type", "simple")
     if returns_type not in {"simple", "log"}:
         raise ConfigError("backtest.returns_type must be 'simple' or 'log'.")
+    missing_return_policy = backtest.get("missing_return_policy", "raise_if_exposed")
+    if missing_return_policy not in {"raise", "raise_if_exposed", "fill_zero"}:
+        raise ConfigError(
+            "backtest.missing_return_policy must be 'raise', 'raise_if_exposed', or 'fill_zero'."
+        )
+
+
+def _validate_portfolio_block(portfolio: dict[str, Any]) -> None:
+    """
+    Handle portfolio block inside the infrastructure layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
+    if not isinstance(portfolio.get("enabled", False), bool):
+        raise ConfigError("portfolio.enabled must be boolean.")
+    construction = portfolio.get("construction", "signal_weights")
+    if construction not in {"signal_weights", "mean_variance"}:
+        raise ConfigError("portfolio.construction must be 'signal_weights' or 'mean_variance'.")
+    if float(portfolio.get("gross_target", 1.0)) <= 0:
+        raise ConfigError("portfolio.gross_target must be > 0.")
+    if not isinstance(portfolio.get("long_short", True), bool):
+        raise ConfigError("portfolio.long_short must be boolean.")
+    expected_return_col = portfolio.get("expected_return_col")
+    if expected_return_col is not None and not isinstance(expected_return_col, str):
+        raise ConfigError("portfolio.expected_return_col must be a string or null.")
+    covariance_window = portfolio.get("covariance_window")
+    if covariance_window is not None and (not isinstance(covariance_window, int) or covariance_window <= 1):
+        raise ConfigError("portfolio.covariance_window must be null or an integer > 1.")
+    if float(portfolio.get("risk_aversion", 0.0)) < 0:
+        raise ConfigError("portfolio.risk_aversion must be >= 0.")
+    if float(portfolio.get("trade_aversion", 0.0)) < 0:
+        raise ConfigError("portfolio.trade_aversion must be >= 0.")
+    if not isinstance(portfolio.get("constraints", {}), dict):
+        raise ConfigError("portfolio.constraints must be a mapping.")
+    if not isinstance(portfolio.get("asset_groups", {}), dict):
+        raise ConfigError("portfolio.asset_groups must be a mapping.")
+    for asset, group in portfolio.get("asset_groups", {}).items():
+        if not isinstance(asset, str) or not isinstance(group, str):
+            raise ConfigError("portfolio.asset_groups must map str -> str.")
+
+
+def _validate_monitoring_block(monitoring: dict[str, Any]) -> None:
+    """
+    Handle monitoring block inside the infrastructure layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
+    if not isinstance(monitoring.get("enabled", False), bool):
+        raise ConfigError("monitoring.enabled must be boolean.")
+    if float(monitoring.get("psi_threshold", 0.2)) < 0:
+        raise ConfigError("monitoring.psi_threshold must be >= 0.")
+    n_bins = monitoring.get("n_bins", 10)
+    if not isinstance(n_bins, int) or n_bins <= 1:
+        raise ConfigError("monitoring.n_bins must be an integer > 1.")
+
+
+def _validate_execution_block(execution: dict[str, Any]) -> None:
+    """
+    Handle execution block inside the infrastructure layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
+    if not isinstance(execution.get("enabled", False), bool):
+        raise ConfigError("execution.enabled must be boolean.")
+    if execution.get("mode", "paper") != "paper":
+        raise ConfigError("execution.mode currently supports only 'paper'.")
+    if float(execution.get("capital", 0.0)) <= 0:
+        raise ConfigError("execution.capital must be > 0.")
+    if not isinstance(execution.get("price_col", "close"), str):
+        raise ConfigError("execution.price_col must be a string.")
+    if float(execution.get("min_trade_notional", 0.0)) < 0:
+        raise ConfigError("execution.min_trade_notional must be >= 0.")
+    if not isinstance(execution.get("current_weights", {}), dict):
+        raise ConfigError("execution.current_weights must be a mapping.")
 
 
 def load_experiment_config(config_path: str | Path) -> dict[str, Any]:
@@ -336,6 +571,9 @@ def load_experiment_config(config_path: str | Path) -> dict[str, Any]:
     cfg.setdefault("runtime", {})
     cfg["risk"] = _default_risk_block(cfg.get("risk", {}))
     cfg["backtest"] = _default_backtest_block(cfg.get("backtest", {}))
+    cfg["portfolio"] = _default_portfolio_block(cfg.get("portfolio", {}))
+    cfg["monitoring"] = _default_monitoring_block(cfg.get("monitoring", {}))
+    cfg["execution"] = _default_execution_block(cfg.get("execution", {}))
     cfg["logging"] = _resolve_logging_block(cfg.get("logging", {}), path)
     try:
         cfg["runtime"] = validate_runtime_config(cfg.get("runtime", {}))
@@ -350,6 +588,9 @@ def load_experiment_config(config_path: str | Path) -> dict[str, Any]:
     _validate_signals_block(cfg["signals"])
     _validate_risk_block(cfg["risk"])
     _validate_backtest_block(cfg["backtest"])
+    _validate_portfolio_block(cfg["portfolio"])
+    _validate_monitoring_block(cfg["monitoring"])
+    _validate_execution_block(cfg["execution"])
 
     return cfg
 

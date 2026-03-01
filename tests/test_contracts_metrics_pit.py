@@ -10,12 +10,18 @@ from src.experiments.models import train_lightgbm_classifier
 from src.src_data.pit import (
     align_ohlcv_timestamps,
     apply_corporate_actions_policy,
+    apply_pit_hardening,
     assert_symbol_in_snapshot,
     load_universe_snapshot,
 )
 
 
 def _synthetic_frame(n: int = 240) -> pd.DataFrame:
+    """
+    Verify that synthetic frame behaves as expected under a representative regression scenario.
+    The test protects the intended contract of the surrounding component and makes failures
+    easier to localize.
+    """
     rng = np.random.default_rng(11)
     base = rng.normal(0.0005, 0.01, size=n)
     close = 100.0 * np.exp(np.cumsum(base))
@@ -28,6 +34,11 @@ def _synthetic_frame(n: int = 240) -> pd.DataFrame:
 
 
 def test_forward_horizon_guard_trims_train_rows_in_time_split() -> None:
+    """
+    Verify that forward horizon guard trims train rows in time split behaves as expected under a
+    representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
     df = _synthetic_frame()
     horizon = 5
 
@@ -49,6 +60,11 @@ def test_forward_horizon_guard_trims_train_rows_in_time_split() -> None:
 
 
 def test_feature_contract_rejects_target_like_feature_columns() -> None:
+    """
+    Verify that feature contract rejects target like feature columns behaves as expected under a
+    representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
     df = pd.DataFrame(
         {
             "f1": [0.1, 0.2, 0.3],
@@ -65,6 +81,11 @@ def test_feature_contract_rejects_target_like_feature_columns() -> None:
 
 
 def test_metrics_suite_includes_risk_and_cost_attribution() -> None:
+    """
+    Verify that metrics suite includes risk and cost attribution behaves as expected under a
+    representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
     idx = pd.date_range("2024-01-01", periods=4, freq="D")
     net_returns = pd.Series([0.03, -0.02, 0.01, -0.01], index=idx)
     gross_returns = pd.Series([0.031, -0.019, 0.011, -0.009], index=idx)
@@ -99,6 +120,11 @@ def test_metrics_suite_includes_risk_and_cost_attribution() -> None:
 
 
 def test_align_ohlcv_timestamps_sorts_and_deduplicates() -> None:
+    """
+    Verify that align OHLCV timestamps sorts and deduplicates behaves as expected under a
+    representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
     idx = pd.to_datetime(
         [
             "2024-01-02 16:00:00",
@@ -132,6 +158,11 @@ def test_align_ohlcv_timestamps_sorts_and_deduplicates() -> None:
 
 
 def test_apply_corporate_actions_policy_adj_close_ratio() -> None:
+    """
+    Verify that corporate actions policy adj close ratio behaves as expected under a
+    representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
     idx = pd.date_range("2024-01-01", periods=2, freq="D")
     df = pd.DataFrame(
         {
@@ -154,6 +185,11 @@ def test_apply_corporate_actions_policy_adj_close_ratio() -> None:
 
 
 def test_universe_snapshot_asof_membership_check(tmp_path) -> None:
+    """
+    Verify that universe snapshot asof membership check behaves as expected under a
+    representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
     snapshot_path = tmp_path / "universe_snapshot.csv"
     pd.DataFrame(
         {
@@ -168,3 +204,79 @@ def test_universe_snapshot_asof_membership_check(tmp_path) -> None:
     with pytest.raises(ValueError):
         assert_symbol_in_snapshot("QQQ", snap, as_of="2020-06-01")
 
+
+def test_apply_pit_hardening_raises_when_symbol_exits_universe_mid_sample(tmp_path) -> None:
+    """
+    Verify that PIT hardening raises when symbol exits universe mid sample behaves as expected
+    under a representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
+    snapshot_path = tmp_path / "universe_snapshot.csv"
+    pd.DataFrame(
+        {
+            "symbol": ["SPY"],
+            "effective_from": ["2020-01-01"],
+            "effective_to": ["2020-01-02"],
+        }
+    ).to_csv(snapshot_path, index=False)
+
+    idx = pd.date_range("2020-01-01", periods=4, freq="D")
+    df = pd.DataFrame(
+        {
+            "open": [1.0, 1.0, 1.0, 1.0],
+            "high": [1.0, 1.0, 1.0, 1.0],
+            "low": [1.0, 1.0, 1.0, 1.0],
+            "close": [1.0, 1.0, 1.0, 1.0],
+            "volume": [1.0, 1.0, 1.0, 1.0],
+        },
+        index=idx,
+    )
+
+    with pytest.raises(ValueError):
+        apply_pit_hardening(
+            df,
+            pit_cfg={"universe_snapshot": {"path": str(snapshot_path)}},
+            symbol="SPY",
+        )
+
+
+def test_apply_pit_hardening_can_drop_rows_outside_universe_snapshot(tmp_path) -> None:
+    """
+    Verify that PIT hardening can drop rows outside universe snapshot behaves as expected under
+    a representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
+    snapshot_path = tmp_path / "universe_snapshot.csv"
+    pd.DataFrame(
+        {
+            "symbol": ["SPY"],
+            "effective_from": ["2020-01-01"],
+            "effective_to": ["2020-01-02"],
+        }
+    ).to_csv(snapshot_path, index=False)
+
+    idx = pd.date_range("2020-01-01", periods=4, freq="D")
+    df = pd.DataFrame(
+        {
+            "open": [1.0, 1.0, 1.0, 1.0],
+            "high": [1.0, 1.0, 1.0, 1.0],
+            "low": [1.0, 1.0, 1.0, 1.0],
+            "close": [1.0, 1.0, 1.0, 1.0],
+            "volume": [1.0, 1.0, 1.0, 1.0],
+        },
+        index=idx,
+    )
+
+    out, meta = apply_pit_hardening(
+        df,
+        pit_cfg={
+            "universe_snapshot": {
+                "path": str(snapshot_path),
+                "inactive_policy": "drop_inactive_rows",
+            }
+        },
+        symbol="SPY",
+    )
+
+    assert len(out) == 2
+    assert meta["universe_snapshot"]["inactive_rows"] == 2

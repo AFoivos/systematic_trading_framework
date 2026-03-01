@@ -15,10 +15,19 @@ LOGS_DIR: Path = PROJECT_ROOT / "logs"
 TESTS_DIR: Path = PROJECT_ROOT / "tests"
 
 def in_project(*parts: str | Path) -> Path:
+    """
+    Handle in project inside the infrastructure layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     return PROJECT_ROOT.joinpath(*parts)
 
 
 def ensure_directories_exist() -> None:
+    """
+    Handle ensure directories exist inside the infrastructure layer. The helper isolates one
+    focused responsibility so the surrounding code remains modular, readable, and easier to
+    test.
+    """
     for p in [
         CONFIG_DIR,
         DATA_DIR,
@@ -33,6 +42,11 @@ def ensure_directories_exist() -> None:
 
 
 def describe_paths() -> None:
+    """
+    Describe paths for quick inspection while working inside the infrastructure layer. The
+    helper keeps diagnostic output localized instead of scattering print logic across the
+    codebase.
+    """
     print(f"PROJECT_ROOT      = {PROJECT_ROOT}")
     print(f"SRC_DIR           = {SRC_DIR}")
     print(f"CONFIG_DIR        = {CONFIG_DIR}")

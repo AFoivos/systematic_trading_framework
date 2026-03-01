@@ -10,6 +10,7 @@ from src.utils.paths import PROJECT_ROOT
 
 _ALLOWED_DUPLICATE_POLICIES = {"first", "last", "raise"}
 _ALLOWED_CORP_ACTION_POLICIES = {"none", "adj_close_ratio", "adj_close_replace_close"}
+_ALLOWED_UNIVERSE_INACTIVE_POLICIES = {"raise", "drop_inactive_rows"}
 
 
 def align_ohlcv_timestamps(
@@ -20,6 +21,11 @@ def align_ohlcv_timestamps(
     normalize_daily: bool = True,
     duplicate_policy: str = "last",
 ) -> pd.DataFrame:
+    """
+    Handle align OHLCV timestamps inside the data ingestion and storage layer. The helper
+    isolates one focused responsibility so the surrounding code remains modular, readable, and
+    easier to test.
+    """
     if duplicate_policy not in _ALLOWED_DUPLICATE_POLICIES:
         raise ValueError(
             f"duplicate_policy must be one of {_ALLOWED_DUPLICATE_POLICIES}, got '{duplicate_policy}'."
@@ -56,6 +62,11 @@ def apply_corporate_actions_policy(
     adj_close_col: str = "adj_close",
     price_cols: Iterable[str] = ("open", "high", "low", "close"),
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """
+    Apply corporate actions policy to the provided inputs in a controlled and reusable way. The
+    helper makes a single transformation step explicit inside the broader data ingestion and
+    storage workflow.
+    """
     if policy not in _ALLOWED_CORP_ACTION_POLICIES:
         raise ValueError(f"policy must be one of {_ALLOWED_CORP_ACTION_POLICIES}.")
     out = df.copy()
@@ -92,6 +103,11 @@ def apply_corporate_actions_policy(
 
 
 def _resolve_snapshot_path(path: str | Path) -> Path:
+    """
+    Handle snapshot path inside the data ingestion and storage layer. The helper isolates one
+    focused responsibility so the surrounding code remains modular, readable, and easier to
+    test.
+    """
     p = Path(path)
     if not p.is_absolute():
         p = (PROJECT_ROOT / p).resolve()
@@ -99,6 +115,11 @@ def _resolve_snapshot_path(path: str | Path) -> Path:
 
 
 def load_universe_snapshot(path: str | Path) -> pd.DataFrame:
+    """
+    Load universe snapshot for the data ingestion and storage layer and normalize it into the
+    shape expected by the rest of the project. The helper centralizes path or provider handling
+    so callers do not duplicate I/O logic.
+    """
     p = _resolve_snapshot_path(path)
     if not p.exists():
         raise FileNotFoundError(f"Universe snapshot file not found: {p}")
@@ -129,6 +150,11 @@ def load_universe_snapshot(path: str | Path) -> pd.DataFrame:
 
 
 def symbols_active_in_snapshot(snapshot_df: pd.DataFrame, as_of: str | pd.Timestamp) -> list[str]:
+    """
+    Handle symbols active in snapshot inside the data ingestion and storage layer. The helper
+    isolates one focused responsibility so the surrounding code remains modular, readable, and
+    easier to test.
+    """
     ts = pd.Timestamp(as_of)
     effective_from = snapshot_df["effective_from"]
     effective_to = snapshot_df["effective_to"]
@@ -146,11 +172,86 @@ def assert_symbol_in_snapshot(
     *,
     as_of: str | pd.Timestamp,
 ) -> None:
+    """
+    Assert symbol in snapshot before the pipeline proceeds. This helper exists to fail loudly
+    when a key assumption of the data ingestion and storage layer has been violated.
+    """
     active = symbols_active_in_snapshot(snapshot_df, as_of=as_of)
     if symbol not in active:
         raise ValueError(
             f"Symbol '{symbol}' is not active in the universe snapshot for as_of={pd.Timestamp(as_of).date()}."
         )
+
+
+def symbol_active_mask_over_time(
+    snapshot_df: pd.DataFrame,
+    *,
+    symbol: str,
+    index: pd.DatetimeIndex,
+) -> pd.Series:
+    """
+    Build a per-timestamp membership mask for one symbol from a universe snapshot so PIT
+    enforcement can validate the whole time series instead of only a single as-of date.
+    """
+    if not isinstance(index, pd.DatetimeIndex):
+        raise TypeError("index must be a pandas DatetimeIndex.")
+
+    idx = pd.DatetimeIndex(pd.to_datetime(index, errors="raise"))
+    symbol_rows = snapshot_df.loc[snapshot_df["symbol"].astype(str) == str(symbol)]
+    mask = pd.Series(False, index=idx, dtype=bool)
+    if symbol_rows.empty or mask.empty:
+        return mask
+
+    for _, row in symbol_rows.iterrows():
+        interval = row["effective_from"] <= idx
+        effective_to = row["effective_to"]
+        if pd.notna(effective_to):
+            interval = interval & (idx <= effective_to)
+        mask.loc[interval] = True
+    return mask
+
+
+def enforce_symbol_membership_over_time(
+    df: pd.DataFrame,
+    *,
+    snapshot_df: pd.DataFrame,
+    symbol: str,
+    inactive_policy: str = "raise",
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """
+    Enforce symbol membership across the entire dataframe index using the universe snapshot.
+    """
+    if inactive_policy not in _ALLOWED_UNIVERSE_INACTIVE_POLICIES:
+        raise ValueError(
+            f"inactive_policy must be one of {_ALLOWED_UNIVERSE_INACTIVE_POLICIES}."
+        )
+
+    active_mask = symbol_active_mask_over_time(
+        snapshot_df,
+        symbol=symbol,
+        index=pd.DatetimeIndex(df.index),
+    )
+    inactive_mask = ~active_mask
+    inactive_rows = int(inactive_mask.sum())
+    meta = {
+        "inactive_policy": inactive_policy,
+        "rows_checked": int(len(df)),
+        "active_rows": int(active_mask.sum()),
+        "inactive_rows": inactive_rows,
+    }
+    if inactive_rows == 0:
+        return df.copy(), meta
+
+    if inactive_policy == "raise":
+        examples = ", ".join(str(ts.date()) for ts in df.index[inactive_mask][:5])
+        raise ValueError(
+            f"Symbol '{symbol}' has {inactive_rows} row(s) outside the universe snapshot. "
+            f"Example timestamps: {examples}"
+        )
+
+    out = df.loc[active_mask].copy()
+    meta["inactive_rows_dropped"] = inactive_rows
+    return out, meta
 
 
 def apply_pit_hardening(
@@ -159,6 +260,11 @@ def apply_pit_hardening(
     pit_cfg: Mapping[str, Any] | None = None,
     symbol: str | None = None,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """
+    Apply point-in-time (PIT) hardening to the provided inputs in a controlled and reusable way.
+    The helper makes a single transformation step explicit inside the broader data ingestion and
+    storage workflow.
+    """
     cfg = dict(pit_cfg or {})
     ts_cfg = dict(cfg.get("timestamp_alignment", {}) or {})
     corp_cfg = dict(cfg.get("corporate_actions", {}) or {})
@@ -182,14 +288,25 @@ def apply_pit_hardening(
     as_of = universe_cfg.get("as_of")
     if snapshot_path and symbol:
         snapshot_df = load_universe_snapshot(snapshot_path)
-        if as_of is None and not out.empty:
-            as_of = str(out.index.min().date())
         if as_of is not None:
             assert_symbol_in_snapshot(symbol, snapshot_df, as_of=as_of)
             universe_meta = {
                 "path": str(_resolve_snapshot_path(snapshot_path)),
+                "mode": "as_of_check",
                 "as_of": str(pd.Timestamp(as_of)),
                 "active_symbols": int(len(symbols_active_in_snapshot(snapshot_df, as_of=as_of))),
+            }
+        elif not out.empty:
+            out, membership_meta = enforce_symbol_membership_over_time(
+                out,
+                snapshot_df=snapshot_df,
+                symbol=symbol,
+                inactive_policy=str(universe_cfg.get("inactive_policy", "raise")),
+            )
+            universe_meta = {
+                "path": str(_resolve_snapshot_path(snapshot_path)),
+                "mode": "full_history",
+                **membership_meta,
             }
 
     meta = {
@@ -211,6 +328,7 @@ __all__ = [
     "load_universe_snapshot",
     "symbols_active_in_snapshot",
     "assert_symbol_in_snapshot",
+    "symbol_active_mask_over_time",
+    "enforce_symbol_membership_over_time",
     "apply_pit_hardening",
 ]
-

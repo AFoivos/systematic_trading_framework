@@ -28,6 +28,10 @@ _KEY_PACKAGES = (
 
 
 def _normalize_path_string(value: str, project_root: Path) -> str:
+    """
+    Handle path string inside the infrastructure layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     candidate = Path(value)
     if not candidate.is_absolute():
         return value
@@ -39,6 +43,10 @@ def _normalize_path_string(value: str, project_root: Path) -> str:
 
 
 def _normalize_for_hash(value: Any, project_root: Path) -> Any:
+    """
+    Handle for hash inside the infrastructure layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     if isinstance(value, Mapping):
         out: dict[str, Any] = {}
         for k in sorted(value.keys(), key=lambda x: str(x)):
@@ -68,6 +76,10 @@ def _normalize_for_hash(value: Any, project_root: Path) -> Any:
 
 
 def _json_default(value: Any) -> Any:
+    """
+    Handle JSON default inside the infrastructure layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     if isinstance(value, Path):
         return str(value)
     if isinstance(value, np.integer):
@@ -82,10 +94,18 @@ def _json_default(value: Any) -> Any:
 
 
 def canonical_json_dumps(payload: Mapping[str, Any]) -> str:
+    """
+    Handle canonical JSON dumps inside the infrastructure layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=_json_default)
 
 
 def compute_config_hash(cfg: Mapping[str, Any], project_root: Path = PROJECT_ROOT) -> tuple[str, dict[str, Any]]:
+    """
+    Compute config hash for the infrastructure layer. The helper keeps the calculation isolated
+    so the calling pipeline can reuse the same logic consistently across experiments.
+    """
     normalized = _normalize_for_hash(deepcopy(dict(cfg)), project_root)
     canonical = canonical_json_dumps(normalized)
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -93,6 +113,10 @@ def compute_config_hash(cfg: Mapping[str, Any], project_root: Path = PROJECT_ROO
 
 
 def compute_dataframe_fingerprint(df: pd.DataFrame) -> dict[str, Any]:
+    """
+    Compute dataframe fingerprint for the infrastructure layer. The helper keeps the calculation
+    isolated so the calling pipeline can reuse the same logic consistently across experiments.
+    """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("df must be a pandas DataFrame")
     if df.columns.duplicated().any():
@@ -133,6 +157,10 @@ def compute_dataframe_fingerprint(df: pd.DataFrame) -> dict[str, Any]:
 
 
 def _safe_git(args: list[str]) -> str | None:
+    """
+    Handle safe Git inside the infrastructure layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     try:
         proc = subprocess.run(
             ["git", *args],
@@ -150,6 +178,11 @@ def _safe_git(args: list[str]) -> str | None:
 
 
 def collect_git_metadata() -> dict[str, Any]:
+    """
+    Collect Git metadata from the local environment and package it into a stable structure for
+    reporting or reproducibility. The helper keeps side-effecting inspection logic out of the
+    higher-level orchestration.
+    """
     commit = _safe_git(["rev-parse", "HEAD"])
     branch = _safe_git(["rev-parse", "--abbrev-ref", "HEAD"])
     status = _safe_git(["status", "--porcelain"])
@@ -161,6 +194,11 @@ def collect_git_metadata() -> dict[str, Any]:
 
 
 def collect_environment_metadata() -> dict[str, Any]:
+    """
+    Collect environment metadata from the local environment and package it into a stable
+    structure for reporting or reproducibility. The helper keeps side-effecting inspection logic
+    out of the higher-level orchestration.
+    """
     package_versions: dict[str, str | None] = {}
     for pkg in _KEY_PACKAGES:
         try:
@@ -186,6 +224,11 @@ def build_run_metadata(
     data_context: Mapping[str, Any],
     model_meta: Mapping[str, Any],
 ) -> dict[str, Any]:
+    """
+    Build run metadata as an explicit intermediate object used by the infrastructure pipeline.
+    Keeping this assembly step separate makes the orchestration code easier to reason about and
+    test.
+    """
     return {
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "cwd": str(Path.cwd()),
@@ -204,6 +247,10 @@ def build_run_metadata(
 
 
 def file_sha256(path: str | Path) -> str:
+    """
+    Handle file sha256 inside the infrastructure layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     p = Path(path)
     h = hashlib.sha256()
     with p.open("rb") as f:
@@ -213,6 +260,11 @@ def file_sha256(path: str | Path) -> str:
 
 
 def build_artifact_manifest(artifacts: Mapping[str, str | Path]) -> dict[str, Any]:
+    """
+    Build artifact manifest as an explicit intermediate object used by the infrastructure
+    pipeline. Keeping this assembly step separate makes the orchestration code easier to reason
+    about and test.
+    """
     files: dict[str, Any] = {}
     for key in sorted(artifacts):
         p = Path(artifacts[key])

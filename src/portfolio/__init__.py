@@ -14,6 +14,7 @@ from .construction import (
     compute_portfolio_performance,
     signal_to_raw_weights,
 )
+from .covariance import build_rolling_covariance_by_date
 from .optimizer import optimize_mean_variance
 
 __all__ = [
@@ -29,6 +30,6 @@ __all__ = [
     "build_optimized_weights_over_time",
     "compute_portfolio_performance",
     "PortfolioPerformance",
+    "build_rolling_covariance_by_date",
     "optimize_mean_variance",
 ]
-

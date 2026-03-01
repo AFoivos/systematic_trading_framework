@@ -7,6 +7,11 @@ import pandas as pd
 
 
 def equity_curve_from_returns(returns: pd.Series) -> pd.Series:
+    """
+    Handle equity curve from returns inside the evaluation layer. The helper isolates one
+    focused responsibility so the surrounding code remains modular, readable, and easier to
+    test.
+    """
     rets = returns.astype(float).fillna(0.0)
     equity = (1.0 + rets).cumprod()
     equity.name = "equity"
@@ -14,6 +19,10 @@ def equity_curve_from_returns(returns: pd.Series) -> pd.Series:
 
 
 def max_drawdown(equity: pd.Series) -> float:
+    """
+    Handle max drawdown inside the evaluation layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     if equity.empty:
         return 0.0
     dd = equity / equity.cummax() - 1.0
@@ -21,6 +30,10 @@ def max_drawdown(equity: pd.Series) -> float:
 
 
 def annualized_return(returns: pd.Series, periods_per_year: int = 252) -> float:
+    """
+    Handle annualized return inside the evaluation layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     rets = returns.dropna().astype(float)
     if rets.empty:
         return 0.0
@@ -31,6 +44,10 @@ def annualized_return(returns: pd.Series, periods_per_year: int = 252) -> float:
 
 
 def annualized_volatility(returns: pd.Series, periods_per_year: int = 252) -> float:
+    """
+    Handle annualized volatility inside the evaluation layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     rets = returns.dropna().astype(float)
     if len(rets) < 2:
         return 0.0
@@ -38,6 +55,10 @@ def annualized_volatility(returns: pd.Series, periods_per_year: int = 252) -> fl
 
 
 def sharpe_ratio(returns: pd.Series, periods_per_year: int = 252) -> float:
+    """
+    Handle sharpe ratio inside the evaluation layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     ann_ret = annualized_return(returns, periods_per_year=periods_per_year)
     ann_vol = annualized_volatility(returns, periods_per_year=periods_per_year)
     return float(ann_ret / ann_vol) if ann_vol > 0 else 0.0
@@ -48,6 +69,10 @@ def downside_volatility(
     periods_per_year: int = 252,
     minimum_acceptable_return: float = 0.0,
 ) -> float:
+    """
+    Handle downside volatility inside the evaluation layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     rets = returns.dropna().astype(float)
     if rets.empty:
         return 0.0
@@ -62,6 +87,10 @@ def sortino_ratio(
     periods_per_year: int = 252,
     minimum_acceptable_return: float = 0.0,
 ) -> float:
+    """
+    Handle sortino ratio inside the evaluation layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     ann_ret = annualized_return(returns, periods_per_year=periods_per_year)
     down_vol = downside_volatility(
         returns,
@@ -72,12 +101,20 @@ def sortino_ratio(
 
 
 def calmar_ratio(returns: pd.Series, periods_per_year: int = 252) -> float:
+    """
+    Handle calmar ratio inside the evaluation layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     ann_ret = annualized_return(returns, periods_per_year=periods_per_year)
     mdd = max_drawdown(equity_curve_from_returns(returns))
     return float(ann_ret / abs(mdd)) if mdd < 0 else 0.0
 
 
 def profit_factor(returns: pd.Series) -> float:
+    """
+    Handle profit factor inside the evaluation layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     rets = returns.dropna().astype(float)
     if rets.empty:
         return 0.0
@@ -89,6 +126,10 @@ def profit_factor(returns: pd.Series) -> float:
 
 
 def hit_rate(returns: pd.Series) -> float:
+    """
+    Handle hit rate inside the evaluation layer. The helper isolates one focused responsibility
+    so the surrounding code remains modular, readable, and easier to test.
+    """
     rets = returns.dropna().astype(float)
     if rets.empty:
         return 0.0
@@ -99,6 +140,10 @@ def hit_rate(returns: pd.Series) -> float:
 
 
 def turnover_stats(turnover: pd.Series | None) -> dict[str, float]:
+    """
+    Handle turnover stats inside the evaluation layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     if turnover is None:
         return {"avg_turnover": 0.0, "total_turnover": 0.0}
     t = turnover.dropna().astype(float)
@@ -116,6 +161,10 @@ def cost_attribution(
     gross_returns: pd.Series | None,
     costs: pd.Series | None,
 ) -> dict[str, float]:
+    """
+    Handle cost attribution inside the evaluation layer. The helper isolates one focused
+    responsibility so the surrounding code remains modular, readable, and easier to test.
+    """
     net = net_returns.dropna().astype(float)
     gross = gross_returns.dropna().astype(float) if gross_returns is not None else None
     c = costs.dropna().astype(float) if costs is not None else None
@@ -147,6 +196,10 @@ def compute_backtest_metrics(
     costs: pd.Series | None = None,
     gross_returns: pd.Series | None = None,
 ) -> dict[str, float]:
+    """
+    Compute backtest metrics for the evaluation layer. The helper keeps the calculation isolated
+    so the calling pipeline can reuse the same logic consistently across experiments.
+    """
     rets = net_returns.dropna().astype(float)
     if rets.empty:
         base = {
@@ -198,6 +251,10 @@ def merge_metric_overrides(
     base_metrics: Mapping[str, float],
     overrides: Mapping[str, float] | None,
 ) -> dict[str, float]:
+    """
+    Merge metric overrides into one consolidated structure for the evaluation layer. The helper
+    keeps reporting logic explicit and prevents ad hoc dictionary assembly across callers.
+    """
     out = dict(base_metrics)
     if overrides:
         out.update({str(k): float(v) for k, v in overrides.items()})

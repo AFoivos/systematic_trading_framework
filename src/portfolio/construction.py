@@ -10,9 +10,15 @@ from src.evaluation.metrics import compute_backtest_metrics
 from src.portfolio.constraints import PortfolioConstraints, apply_constraints
 from src.portfolio.optimizer import optimize_mean_variance
 
+_ALLOWED_MISSING_RETURN_POLICIES = {"raise", "raise_if_exposed", "fill_zero"}
+
 
 @dataclass
 class PortfolioPerformance:
+    """
+    Store the time series and aggregate statistics produced by a portfolio-level backtest,
+    keeping net and gross performance decomposition available for diagnostics.
+    """
     equity_curve: pd.Series
     net_returns: pd.Series
     gross_returns: pd.Series
@@ -21,16 +27,68 @@ class PortfolioPerformance:
     summary: dict[str, float]
 
 
+def _apply_missing_return_policy(
+    asset_returns: pd.DataFrame,
+    *,
+    prev_weights: pd.DataFrame,
+    missing_return_policy: str,
+) -> pd.DataFrame:
+    """
+    Resolve missing-return handling explicitly so live positions cannot inherit synthetic flat
+    PnL from missing panel data.
+    """
+    if missing_return_policy not in _ALLOWED_MISSING_RETURN_POLICIES:
+        raise ValueError(
+            f"missing_return_policy must be one of {_ALLOWED_MISSING_RETURN_POLICIES}."
+        )
+
+    returns = asset_returns.astype(float)
+    missing_mask = returns.isna()
+    if not bool(missing_mask.any().any()):
+        return returns
+
+    if missing_return_policy == "raise":
+        missing_points = missing_mask.stack()
+        examples = ", ".join(
+            f"{ts}/{asset}" for ts, asset in missing_points[missing_points].index[:5]
+        )
+        raise ValueError(f"Missing portfolio returns encountered at: {examples}")
+
+    if missing_return_policy == "raise_if_exposed":
+        exposed_missing = missing_mask & prev_weights.ne(0.0)
+        if bool(exposed_missing.any().any()):
+            flagged = exposed_missing.stack()
+            examples = ", ".join(
+                f"{ts}/{asset}" for ts, asset in flagged[flagged].index[:5]
+            )
+            raise ValueError(
+                "Missing portfolio returns encountered while positions were open at: "
+                f"{examples}"
+            )
+
+    return returns.fillna(0.0)
+
+
 def signal_to_raw_weights(
     signal_t: pd.Series,
     *,
     long_short: bool = True,
     gross_target: float = 1.0,
 ) -> pd.Series:
+    """
+    Handle signal to raw weights inside the portfolio construction layer. The helper isolates
+    one focused responsibility so the surrounding code remains modular, readable, and easier to
+    test.
+    """
     if not isinstance(signal_t, pd.Series):
         raise TypeError("signal_t must be a pandas Series.")
 
-    s = signal_t.astype(float).fillna(0.0)
+    out = pd.Series(0.0, index=signal_t.index, dtype=float)
+    valid_mask = signal_t.notna()
+    if not bool(valid_mask.any()):
+        return out
+
+    s = signal_t.loc[valid_mask].astype(float)
     if long_short:
         s = s - float(s.mean())
     else:
@@ -38,8 +96,10 @@ def signal_to_raw_weights(
 
     denom = float(np.abs(s).sum())
     if denom <= 0:
-        return pd.Series(0.0, index=s.index, dtype=float)
-    return s / denom * float(gross_target)
+        return out
+
+    out.loc[valid_mask] = s / denom * float(gross_target)
+    return out
 
 
 def build_weights_from_signals_over_time(
@@ -50,6 +110,11 @@ def build_weights_from_signals_over_time(
     long_short: bool = True,
     gross_target: float = 1.0,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Build weights from signals over time as an explicit intermediate object used by the
+    portfolio construction pipeline. Keeping this assembly step separate makes the orchestration
+    code easier to reason about and test.
+    """
     if not isinstance(signals, pd.DataFrame):
         raise TypeError("signals must be a pandas DataFrame.")
 
@@ -96,6 +161,11 @@ def build_optimized_weights_over_time(
     risk_aversion: float = 5.0,
     trade_aversion: float = 0.0,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Build optimized weights over time as an explicit intermediate object used by the portfolio
+    construction pipeline. Keeping this assembly step separate makes the orchestration code
+    easier to reason about and test.
+    """
     if not isinstance(expected_returns, pd.DataFrame):
         raise TypeError("expected_returns must be a pandas DataFrame.")
 
@@ -140,10 +210,16 @@ def compute_portfolio_performance(
     weights: pd.DataFrame,
     asset_returns: pd.DataFrame,
     *,
+    missing_return_policy: str = "raise_if_exposed",
     cost_per_turnover: float = 0.0,
     slippage_per_turnover: float = 0.0,
     periods_per_year: int = 252,
 ) -> PortfolioPerformance:
+    """
+    Compute portfolio performance for the portfolio construction layer. The helper keeps the
+    calculation isolated so the calling pipeline can reuse the same logic consistently across
+    experiments.
+    """
     if not isinstance(weights, pd.DataFrame):
         raise TypeError("weights must be a pandas DataFrame.")
     if not isinstance(asset_returns, pd.DataFrame):
@@ -155,9 +231,14 @@ def compute_portfolio_performance(
         raise ValueError("weights and asset_returns have no common index/columns.")
 
     w = weights.reindex(index=common_index, columns=common_cols).fillna(0.0).astype(float)
-    r = asset_returns.reindex(index=common_index, columns=common_cols).fillna(0.0).astype(float)
+    r = asset_returns.reindex(index=common_index, columns=common_cols).astype(float)
 
     prev_w = w.shift(1).fillna(0.0)
+    r = _apply_missing_return_policy(
+        r,
+        prev_weights=prev_w,
+        missing_return_policy=missing_return_policy,
+    )
     turnover = (w - prev_w).abs().sum(axis=1)
     gross_returns = (w.shift(1).fillna(0.0) * r).sum(axis=1)
     costs = (cost_per_turnover + slippage_per_turnover) * turnover

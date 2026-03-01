@@ -42,6 +42,10 @@ def default_feature_columns(df: pd.DataFrame) -> list[str]:
 
 @dataclass
 class LGBMBaselineConfig:
+    """
+    Store the default hyperparameters used by the lightweight LightGBM baseline so notebooks and
+    helper utilities can share one explicit parameter bundle.
+    """
     n_estimators: int = 400
     learning_rate: float = 0.03
     max_depth: int = 4
