@@ -7,6 +7,8 @@ import pytest
 from src.evaluation.metrics import compute_backtest_metrics
 from src.experiments.contracts import TargetContract, validate_feature_target_contract
 from src.experiments.models import train_lightgbm_classifier
+from src.features.technical.indicators import compute_mfi
+from src.features.technical.oscillators import compute_rsi
 from src.src_data.pit import (
     align_ohlcv_timestamps,
     apply_corporate_actions_policy,
@@ -14,6 +16,7 @@ from src.src_data.pit import (
     assert_symbol_in_snapshot,
     load_universe_snapshot,
 )
+from src.utils.config import load_experiment_config
 
 
 def _synthetic_frame(n: int = 240) -> pd.DataFrame:
@@ -119,6 +122,33 @@ def test_metrics_suite_includes_risk_and_cost_attribution() -> None:
     assert np.isclose(metrics["cost_drag"], 0.004)
 
 
+def test_rsi_saturates_to_100_in_monotonic_uptrend() -> None:
+    """
+    Verify that RSI saturates to 100 in monotonic uptrend behaves as expected under a
+    representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
+    prices = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], dtype=float)
+    rsi = compute_rsi(prices, window=3)
+
+    assert np.isclose(float(rsi.iloc[-1]), 100.0)
+
+
+def test_mfi_saturates_to_100_when_negative_flow_is_zero() -> None:
+    """
+    Verify that MFI saturates to 100 when negative flow is zero behaves as expected under a
+    representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
+    high = pd.Series([2, 3, 4, 5, 6, 7, 8], dtype=float)
+    low = pd.Series([1, 2, 3, 4, 5, 6, 7], dtype=float)
+    close = pd.Series([1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5], dtype=float)
+    volume = pd.Series([100.0] * len(high), dtype=float)
+    mfi = compute_mfi(high, low, close, volume, window=3)
+
+    assert np.isclose(float(mfi.iloc[-1]), 100.0)
+
+
 def test_align_ohlcv_timestamps_sorts_and_deduplicates() -> None:
     """
     Verify that align OHLCV timestamps sorts and deduplicates behaves as expected under a
@@ -155,6 +185,45 @@ def test_align_ohlcv_timestamps_sorts_and_deduplicates() -> None:
     assert not out.index.has_duplicates
     assert len(out) == 2
     assert np.isclose(out.loc[pd.Timestamp("2024-01-01"), "close"], 10.7)
+
+
+def test_intraday_configs_do_not_normalize_timestamps_by_default(tmp_path) -> None:
+    """
+    Verify that intraday configs do not normalize timestamps by default behaves as expected
+    under a representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
+    intraday_cfg = tmp_path / "intraday.yaml"
+    intraday_cfg.write_text(
+        """
+data:
+  symbol: "SPY"
+  interval: "1h"
+backtest:
+  returns_col: "close_ret"
+  signal_col: "signal"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    daily_cfg = tmp_path / "daily.yaml"
+    daily_cfg.write_text(
+        """
+data:
+  symbol: "SPY"
+  interval: "1d"
+backtest:
+  returns_col: "close_ret"
+  signal_col: "signal"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    intraday = load_experiment_config(intraday_cfg)
+    daily = load_experiment_config(daily_cfg)
+
+    assert intraday["data"]["pit"]["timestamp_alignment"]["normalize_daily"] is False
+    assert daily["data"]["pit"]["timestamp_alignment"]["normalize_daily"] is True
 
 
 def test_apply_corporate_actions_policy_adj_close_ratio() -> None:

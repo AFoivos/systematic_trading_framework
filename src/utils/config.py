@@ -14,6 +14,14 @@ class ConfigError(ValueError):
     """Raised for invalid or inconsistent experiment configs."""
 
 
+def _default_normalize_daily_for_interval(interval: str) -> bool:
+    """Infer a safe timestamp-normalization default from the configured data interval."""
+    value = str(interval).strip().lower()
+    if value.endswith(("d", "wk", "mo")):
+        return True
+    return False
+
+
 def _resolve_config_path(config_path: str | Path) -> Path:
     """Resolve a config path relative to CONFIG_DIR and verify it exists."""
     path = Path(config_path)
@@ -109,7 +117,10 @@ def _default_data_block(data: dict[str, Any]) -> dict[str, Any]:
     ts = dict(pit.get("timestamp_alignment", {}) or {})
     ts.setdefault("source_timezone", "UTC")
     ts.setdefault("output_timezone", "UTC")
-    ts.setdefault("normalize_daily", True)
+    ts.setdefault(
+        "normalize_daily",
+        _default_normalize_daily_for_interval(str(data.get("interval", "1d"))),
+    )
     ts.setdefault("duplicate_policy", "last")
     pit["timestamp_alignment"] = ts
 

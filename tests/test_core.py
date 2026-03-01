@@ -60,6 +60,28 @@ def test_validate_ohlcv_flags_invalid_high_low() -> None:
         validate_ohlcv(df)
 
 
+def test_validate_ohlcv_rejects_missing_core_prices() -> None:
+    """
+    Verify that OHLCV rejects missing core prices behaves as expected under a representative
+    regression scenario. The test protects the intended contract of the surrounding component
+    and makes failures easier to localize.
+    """
+    idx = pd.date_range("2020-01-01", periods=2, freq="D")
+    df = pd.DataFrame(
+        {
+            "open": [10.0, np.nan],
+            "high": [11.0, 12.0],
+            "low": [9.0, 10.0],
+            "close": [10.5, 11.5],
+            "volume": [100.0, 200.0],
+        },
+        index=idx,
+    )
+
+    with pytest.raises(ValueError):
+        validate_ohlcv(df)
+
+
 def test_run_backtest_costs_and_slippage_reduce_returns() -> None:
     """
     Verify that backtest costs and slippage reduce returns behaves as expected under a
@@ -174,6 +196,37 @@ def test_run_backtest_raises_on_missing_return_while_exposed() -> None:
             returns_col="returns",
             dd_guard=False,
         )
+
+
+def test_run_backtest_vol_targeting_flattens_missing_vol_warmup() -> None:
+    """
+    Verify that backtest vol targeting flattens missing vol warmup behaves as expected under a
+    representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
+    idx = pd.date_range("2020-01-01", periods=5, freq="D")
+    df = pd.DataFrame(
+        {
+            "signal": [1.0, 1.0, 1.0, 1.0, 1.0],
+            "returns": [0.01, 0.01, 0.01, 0.01, 0.01],
+            "vol": [np.nan, np.nan, 0.2, 0.2, 0.2],
+        },
+        index=idx,
+    )
+
+    bt = run_backtest(
+        df,
+        signal_col="signal",
+        returns_col="returns",
+        target_vol=0.1,
+        vol_col="vol",
+        dd_guard=False,
+    )
+
+    assert bt.positions.iloc[:2].eq(0.0).all()
+    assert bt.turnover.iloc[:2].eq(0.0).all()
+    assert bt.costs.iloc[:2].eq(0.0).all()
+    assert bt.equity_curve.notna().all()
 
 
 def test_volatility_regime_signal_is_causal_by_default() -> None:

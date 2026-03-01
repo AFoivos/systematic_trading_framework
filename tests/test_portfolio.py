@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pandas as pd
 
@@ -240,13 +242,16 @@ def test_optimize_mean_variance_fallback_respects_max_gross_leverage() -> None:
         target_net_exposure=0.0,
     )
 
-    weights, meta = optimize_mean_variance(
-        mu,
-        covariance=cov,
-        constraints=constraints,
-        allow_fallback=True,
-    )
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        weights, meta = optimize_mean_variance(
+            mu,
+            covariance=cov,
+            constraints=constraints,
+            allow_fallback=True,
+        )
 
     assert bool(meta["used_fallback"]) is True
     assert float(np.abs(weights).sum()) > 1.0
     assert float(np.abs(weights).sum()) <= 2.0 + 1e-8
+    assert not [w for w in caught if issubclass(w.category, RuntimeWarning)]

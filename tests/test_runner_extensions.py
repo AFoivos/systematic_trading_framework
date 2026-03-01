@@ -126,6 +126,42 @@ def test_build_rebalance_orders_reports_share_deltas() -> None:
     assert orders.loc["BBB", "delta_shares"] < 0
 
 
+def test_build_rebalance_orders_ignores_flat_assets_with_missing_prices() -> None:
+    """
+    Verify that rebalance orders ignores flat assets with missing prices behaves as expected
+    under a representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
+    orders = build_rebalance_orders(
+        pd.Series({"AAA": 0.6, "BBB": 0.0}, dtype=float),
+        prices=pd.Series({"AAA": 50.0, "BBB": np.nan}, dtype=float),
+        capital=100_000.0,
+        current_weights=pd.Series({"AAA": 0.1, "BBB": 0.0}, dtype=float),
+    )
+
+    assert list(orders.index) == ["AAA"]
+    assert "BBB" not in orders.index
+
+
+def test_build_rebalance_orders_emits_liquidation_for_current_only_asset() -> None:
+    """
+    Verify that rebalance orders emits liquidation for current only asset behaves as expected
+    under a representative regression scenario. The test protects the intended contract of the
+    surrounding component and makes failures easier to localize.
+    """
+    orders = build_rebalance_orders(
+        pd.Series({"AAA": 0.5}, dtype=float),
+        prices=pd.Series({"AAA": 100.0, "BBB": 50.0}, dtype=float),
+        capital=100_000.0,
+        current_weights=pd.Series({"AAA": 0.0, "BBB": 0.2}, dtype=float),
+    )
+
+    assert {"AAA", "BBB"} == set(orders.index)
+    assert np.isclose(orders.loc["BBB", "target_weight"], 0.0)
+    assert orders.loc["BBB", "delta_notional"] < 0
+    assert orders.loc["BBB", "delta_shares"] < 0
+
+
 def test_logistic_regression_model_registry_outputs_oos_metrics() -> None:
     """
     Verify that logistic regression model registry outputs out-of-sample metrics behaves as

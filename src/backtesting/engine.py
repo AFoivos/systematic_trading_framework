@@ -109,7 +109,7 @@ def run_backtest(
             vol=df[vol_col].astype(float),
             target_vol=target_vol,
             max_leverage=max_leverage,
-        )
+        ).fillna(0.0)
 
     prev_positions = positions.shift(1).fillna(0.0)
     returns = _apply_missing_return_policy(

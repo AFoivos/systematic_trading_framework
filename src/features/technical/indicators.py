@@ -178,6 +178,8 @@ def compute_mfi(
 
     mfr = pos_sum / neg_sum.replace(0, np.nan)
     mfi = 100 - (100 / (1 + mfr))
+    mfi = mfi.where(~((neg_sum == 0.0) & (pos_sum > 0.0)), other=100.0)
+    mfi = mfi.where(~((pos_sum == 0.0) & (neg_sum > 0.0)), other=0.0)
     mfi.name = f"mfi_{window}"
     return mfi
 

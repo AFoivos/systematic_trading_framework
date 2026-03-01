@@ -36,8 +36,9 @@ def compute_rsi(
         raise ValueError("method must be 'wilder' or 'simple'")
 
     rs = avg_gain / avg_loss.replace(0.0, np.nan)
-
     rsi = 100.0 - (100.0 / (1.0 + rs))
+    rsi = rsi.where(~((avg_loss == 0.0) & (avg_gain > 0.0)), other=100.0)
+    rsi = rsi.where(~((avg_gain == 0.0) & (avg_loss > 0.0)), other=0.0)
     rsi = rsi.clip(lower=0.0, upper=100.0)
     rsi.name = f"{prices.name}_rsi_{window}"
     return rsi

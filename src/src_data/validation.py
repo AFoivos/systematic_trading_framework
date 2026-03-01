@@ -41,6 +41,9 @@ def validate_ohlcv(
         l = df["low"].to_numpy(dtype=float)
         c = df["close"].to_numpy(dtype=float)
 
+        if np.isnan(o).any() or np.isnan(h).any() or np.isnan(l).any() or np.isnan(c).any():
+            problems.append("Found NaNs in open/high/low/close.")
+
         if np.any(l > h):
             problems.append("Found rows with low > high.")
         if np.any(o < l) or np.any(o > h):

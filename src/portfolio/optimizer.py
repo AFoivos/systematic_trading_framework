@@ -51,6 +51,24 @@ def _initial_weights(
     return w0
 
 
+def _fallback_weights(
+    expected_returns: pd.Series,
+    *,
+    constraints: PortfolioConstraints,
+) -> pd.Series:
+    """
+    Build a deterministic fallback portfolio from centered expected returns when optimization is
+    unavailable or infeasible.
+    """
+    centered = expected_returns.astype(float) - float(expected_returns.astype(float).mean())
+    denom = float(np.abs(centered).sum())
+    if denom > 0:
+        raw = centered / denom
+    else:
+        raw = pd.Series(0.0, index=expected_returns.index, dtype=float)
+    return raw * float(constraints.max_gross_leverage)
+
+
 def optimize_mean_variance(
     expected_returns: pd.Series,
     *,
@@ -133,6 +151,27 @@ def optimize_mean_variance(
 
     bounds = [(constraints.min_weight, constraints.max_weight) for _ in assets]
     x0 = _initial_weights(assets, constraints=constraints, prev_weights=prev_weights)
+    if not bool(np.isfinite(cov_np).all()):
+        if not allow_fallback:
+            raise ValueError("Covariance contains non-finite values.")
+
+        w = _fallback_weights(mu, constraints=constraints)
+        w, diag = apply_constraints(
+            w,
+            constraints=constraints,
+            prev_weights=prev_weights,
+            asset_to_group=asset_to_group,
+        )
+
+        meta: dict[str, float | str | bool | dict[str, float]] = {
+            "solver_success": False,
+            "solver_status": -1.0,
+            "solver_message": "Skipped optimizer because covariance contains non-finite values.",
+            "used_fallback": True,
+            "objective_value": float("nan"),
+        }
+        meta.update(diag)
+        return w, meta
 
     result = minimize(
         objective,
@@ -150,13 +189,7 @@ def optimize_mean_variance(
         if not allow_fallback:
             raise ValueError(f"Optimizer failed: {result.message}")
         used_fallback = True
-        centered = mu - float(mu.mean())
-        denom = float(np.abs(centered).sum())
-        if denom > 0:
-            raw = centered / denom
-        else:
-            raw = pd.Series(0.0, index=assets, dtype=float)
-        w = raw * float(constraints.max_gross_leverage)
+        w = _fallback_weights(mu, constraints=constraints)
 
     w, diag = apply_constraints(
         w,
