@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Sequence
 
 import numpy as np
 import pandas as pd
 from lightgbm import LGBMClassifier
+from scipy.optimize import minimize
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, brier_score_loss, log_loss, roc_auc_score
+from statsmodels.tsa.statespace.sarimax import SARIMAX
 
 from src.evaluation.time_splits import (
     assert_no_forward_label_leakage,
@@ -17,6 +20,10 @@ from src.experiments.contracts import TargetContract, validate_feature_target_co
 from src.models.lightgbm_baseline import default_feature_columns
 
 EstimatorFactory = Callable[[dict[str, Any]], object]
+ForecasterFoldPredictor = Callable[
+    [pd.DataFrame, np.ndarray, np.ndarray, list[str], str, dict[str, Any], dict[str, Any]],
+    tuple[pd.Series, dict[str, pd.Series], object, dict[str, Any]],
+]
 
 
 def _resolve_runtime_for_model(
@@ -172,6 +179,51 @@ def _assign_quantile_labels(
     return labels
 
 
+def _empty_classification_metrics() -> dict[str, float | int | None]:
+    """
+    Build an empty binary-classification summary payload.
+    """
+    return {
+        "evaluation_rows": 0,
+        "positive_rate": None,
+        "accuracy": None,
+        "brier": None,
+        "roc_auc": None,
+        "log_loss": None,
+    }
+
+
+def _empty_regression_metrics() -> dict[str, float | int | None]:
+    """
+    Build an empty regression summary payload.
+    """
+    return {
+        "evaluation_rows": 0,
+        "mae": None,
+        "rmse": None,
+        "mse": None,
+        "r2": None,
+        "correlation": None,
+        "directional_accuracy": None,
+        "mean_prediction": None,
+        "mean_target": None,
+    }
+
+
+def _empty_volatility_metrics() -> dict[str, float | int | None]:
+    """
+    Build an empty volatility-forecast summary payload.
+    """
+    return {
+        "evaluation_rows": 0,
+        "mae": None,
+        "rmse": None,
+        "correlation": None,
+        "mean_prediction": None,
+        "mean_target": None,
+    }
+
+
 def _binary_classification_metrics(
     y_true: pd.Series,
     pred_prob: pd.Series,
@@ -182,14 +234,7 @@ def _binary_classification_metrics(
     easier to test.
     """
     if y_true.empty or pred_prob.empty:
-        return {
-            "evaluation_rows": 0,
-            "positive_rate": None,
-            "accuracy": None,
-            "brier": None,
-            "roc_auc": None,
-            "log_loss": None,
-        }
+        return _empty_classification_metrics()
 
     y = y_true.astype(int).to_numpy(dtype=int, copy=False)
     prob = pred_prob.astype(float).to_numpy(dtype=float, copy=False)
@@ -207,6 +252,115 @@ def _binary_classification_metrics(
         metrics["roc_auc"] = float(roc_auc_score(y, prob))
         metrics["log_loss"] = float(log_loss(y, prob, labels=[0, 1]))
     return metrics
+
+
+def _regression_metrics(
+    y_true: pd.Series,
+    y_pred: pd.Series,
+) -> dict[str, float | int | None]:
+    """
+    Compute regression diagnostics for out-of-sample predictions.
+    """
+    if y_true.empty or y_pred.empty:
+        return _empty_regression_metrics()
+
+    yt = y_true.astype(float)
+    yp = y_pred.astype(float).reindex(yt.index)
+    valid = yt.notna() & yp.notna()
+    if not bool(valid.any()):
+        return _empty_regression_metrics()
+
+    yt = yt.loc[valid]
+    yp = yp.loc[valid]
+    err = yp - yt
+    mse = float(np.mean(np.square(err)))
+    rmse = float(np.sqrt(mse))
+    mae = float(np.mean(np.abs(err)))
+
+    sst = float(np.sum(np.square(yt - yt.mean())))
+    sse = float(np.sum(np.square(err)))
+    r2 = float(1.0 - (sse / sst)) if sst > 1e-12 else None
+    corr = None
+    if len(yt) >= 2 and float(yt.std(ddof=1)) > 0 and float(yp.std(ddof=1)) > 0:
+        corr = float(np.corrcoef(yt.to_numpy(dtype=float), yp.to_numpy(dtype=float))[0, 1])
+
+    directional_accuracy = float((np.sign(yt) == np.sign(yp)).mean())
+    return {
+        "evaluation_rows": int(len(yt)),
+        "mae": mae,
+        "rmse": rmse,
+        "mse": mse,
+        "r2": r2,
+        "correlation": corr,
+        "directional_accuracy": directional_accuracy,
+        "mean_prediction": float(yp.mean()),
+        "mean_target": float(yt.mean()),
+    }
+
+
+def _volatility_metrics(
+    realized: pd.Series,
+    predicted: pd.Series,
+) -> dict[str, float | int | None]:
+    """
+    Compute volatility forecast diagnostics against a realized magnitude proxy.
+    """
+    if realized.empty or predicted.empty:
+        return _empty_volatility_metrics()
+
+    y_true = realized.astype(float)
+    y_pred = predicted.astype(float).reindex(y_true.index)
+    valid = y_true.notna() & y_pred.notna()
+    if not bool(valid.any()):
+        return _empty_volatility_metrics()
+
+    y_true = y_true.loc[valid]
+    y_pred = y_pred.loc[valid]
+    err = y_pred - y_true
+    mse = float(np.mean(np.square(err)))
+    rmse = float(np.sqrt(mse))
+    mae = float(np.mean(np.abs(err)))
+
+    corr = None
+    if len(y_true) >= 2 and float(y_true.std(ddof=1)) > 0 and float(y_pred.std(ddof=1)) > 0:
+        corr = float(np.corrcoef(y_true.to_numpy(dtype=float), y_pred.to_numpy(dtype=float))[0, 1])
+
+    return {
+        "evaluation_rows": int(len(y_true)),
+        "mae": mae,
+        "rmse": rmse,
+        "correlation": corr,
+        "mean_prediction": float(y_pred.mean()),
+        "mean_target": float(y_true.mean()),
+    }
+
+
+def _forecast_to_probability(prediction: pd.Series, *, scale: float | None) -> pd.Series:
+    """
+    Map return forecasts to a [0, 1] directional confidence using a logistic link.
+    """
+    if prediction.empty:
+        return pd.Series(dtype="float32", index=prediction.index)
+    denom = float(abs(scale)) if scale is not None else 0.0
+    if not np.isfinite(denom) or denom <= 1e-8:
+        denom = float(np.nanstd(prediction.to_numpy(dtype=float), ddof=1))
+    if not np.isfinite(denom) or denom <= 1e-8:
+        denom = 1.0
+    logits = np.clip(prediction.astype(float).to_numpy(dtype=float) / denom, -25.0, 25.0)
+    probs = 1.0 / (1.0 + np.exp(-logits))
+    return pd.Series(probs.astype("float32"), index=prediction.index, dtype="float32")
+
+
+def _normalized_order(value: Any, *, expected_len: int, name: str) -> tuple[int, ...]:
+    """
+    Normalize ARIMA/GARCH order-like parameters to fixed-length integer tuples.
+    """
+    if not isinstance(value, (list, tuple)) or len(value) != expected_len:
+        raise ValueError(f"{name} must be a list/tuple with length={expected_len}.")
+    out = tuple(int(v) for v in value)
+    if any(v < 0 for v in out):
+        raise ValueError(f"{name} values must be >= 0.")
+    return out
 
 
 def _train_forward_classifier(
@@ -339,14 +493,7 @@ def _train_forward_classifier(
         valid_mask = test_features.notna().all(axis=1)
         pred_rows = int(valid_mask.sum())
         pred_index = test_features.loc[valid_mask].index
-        fold_eval_metrics = {
-            "evaluation_rows": 0,
-            "positive_rate": None,
-            "accuracy": None,
-            "brier": None,
-            "roc_auc": None,
-            "log_loss": None,
-        }
+        fold_eval_metrics = _empty_classification_metrics()
 
         if pred_rows > 0:
             proba = model.predict_proba(test_features.loc[valid_mask])[:, 1].astype("float32")
@@ -393,6 +540,8 @@ def _train_forward_classifier(
                 "quantile_low_value": quantile_low_value,
                 "quantile_high_value": quantile_high_value,
                 "classification_metrics": fold_eval_metrics,
+                "regression_metrics": _empty_regression_metrics(),
+                "volatility_metrics": _empty_volatility_metrics(),
             }
         )
 
@@ -402,14 +551,7 @@ def _train_forward_classifier(
     if (oos_assignment_count > 1).any():
         raise ValueError("Overlapping test windows detected. Use non-overlapping split configuration.")
 
-    oos_classification_summary = {
-        "evaluation_rows": 0,
-        "positive_rate": None,
-        "accuracy": None,
-        "brier": None,
-        "roc_auc": None,
-        "log_loss": None,
-    }
+    oos_classification_summary = _empty_classification_metrics()
     if all_eval_labels and all_eval_probs:
         y_all = pd.Series(np.concatenate(all_eval_labels), dtype=int)
         p_all = pd.Series(np.concatenate(all_eval_probs), dtype=float)
@@ -434,6 +576,8 @@ def _train_forward_classifier(
         "oos_rows": int(oos_mask.sum()),
         "oos_prediction_coverage": float(total_test_pred_rows / max(int(oos_mask.sum()), 1)),
         "oos_classification_summary": oos_classification_summary,
+        "oos_regression_summary": _empty_regression_metrics(),
+        "oos_volatility_summary": _empty_volatility_metrics(),
         "target": target_meta,
         "returns_col": returns_col,
         "contracts": contract_meta,
@@ -443,6 +587,842 @@ def _train_forward_classifier(
         },
     }
     return out, model, meta
+
+
+def _prepare_forecaster_inputs(
+    *,
+    df: pd.DataFrame,
+    model_cfg: dict[str, Any],
+    model_params: dict[str, Any],
+    pred_ret_col: str,
+    pred_prob_col: str,
+    required_features: bool,
+    runtime_estimator_family: str,
+) -> tuple[
+    pd.DataFrame,
+    list[str],
+    str,
+    dict[str, Any],
+    list[Any],
+    dict[str, Any],
+    dict[str, Any],
+    dict[str, Any],
+]:
+    """
+    Resolve and validate shared inputs for forecasting model families.
+    """
+    runtime_meta = _resolve_runtime_for_model(
+        model_cfg=model_cfg,
+        model_params=model_params,
+        estimator_family=runtime_estimator_family,
+    )
+    target_cfg = dict(model_cfg.get("target", {}) or {})
+    target_kind = target_cfg.get("kind", "forward_return")
+    if target_kind != "forward_return":
+        raise ValueError(f"Unsupported target.kind: {target_kind}")
+
+    out, label_col, fwd_col, target_meta = _build_forward_return_target(df=df, target_cfg=target_cfg)
+    split_cfg = dict(model_cfg.get("split", {}) or {})
+    split_method = split_cfg.get("method", "time")
+    if split_method not in {"time", "walk_forward", "purged"}:
+        raise ValueError(f"Unsupported split.method: {split_method}")
+
+    feature_cols = infer_feature_columns(
+        out,
+        explicit_cols=model_cfg.get("feature_cols"),
+        exclude={label_col, fwd_col, pred_ret_col, pred_prob_col},
+    )
+    use_exogenous_features = bool(model_cfg.get("use_features", True))
+    active_feature_cols = feature_cols if use_exogenous_features else []
+    if required_features and not active_feature_cols:
+        raise ValueError("No feature columns resolved for model training.")
+    contract_meta: dict[str, Any] = {}
+    if active_feature_cols:
+        contract_meta = validate_feature_target_contract(
+            out,
+            feature_cols=active_feature_cols,
+            target=TargetContract(target_col=fwd_col, horizon=int(target_meta["horizon"])),
+        )
+
+    splits = build_time_splits(
+        method=split_method,
+        n_samples=len(out),
+        split_cfg=split_cfg,
+        target_horizon=int(target_meta.get("horizon", 1)),
+    )
+    return (
+        out,
+        active_feature_cols,
+        fwd_col,
+        target_meta,
+        splits,
+        runtime_meta,
+        contract_meta,
+        {"split_method": split_method},
+    )
+
+
+def _train_forward_forecaster(
+    df: pd.DataFrame,
+    model_cfg: dict[str, Any],
+    *,
+    model_kind: str,
+    fold_predictor: ForecasterFoldPredictor,
+    returns_col: str | None = None,
+    required_features: bool = False,
+    runtime_estimator_family: str = "statsmodels",
+) -> tuple[pd.DataFrame, object, dict[str, Any]]:
+    """
+    Train one-step forward forecasters with a shared anti-leakage split loop.
+    """
+    model_cfg = dict(model_cfg or {})
+    model_params = dict(model_cfg.get("params", {}) or {})
+    pred_ret_col = str(model_cfg.get("pred_ret_col", "pred_ret"))
+    pred_prob_col = str(model_cfg.get("pred_prob_col", "pred_prob"))
+
+    (
+        out,
+        feature_cols,
+        fwd_col,
+        target_meta,
+        splits,
+        runtime_meta,
+        contract_meta,
+        split_meta,
+    ) = _prepare_forecaster_inputs(
+        df=df,
+        model_cfg=model_cfg,
+        model_params=model_params,
+        pred_ret_col=pred_ret_col,
+        pred_prob_col=pred_prob_col,
+        required_features=required_features,
+        runtime_estimator_family=runtime_estimator_family,
+    )
+
+    pred_ret = pd.Series(np.nan, index=out.index, name=pred_ret_col, dtype="float32")
+    pred_prob = pd.Series(np.nan, index=out.index, name=pred_prob_col, dtype="float32")
+    oos_mask = pd.Series(False, index=out.index, name="pred_is_oos")
+    oos_assignment_count = pd.Series(0, index=out.index, dtype="int32")
+    extra_prediction_cols: dict[str, pd.Series] = {}
+
+    fold_meta: list[dict[str, Any]] = []
+    model: object | None = None
+    total_train_rows = 0
+    total_test_pred_rows = 0
+    total_trimmed_rows = 0
+    target_horizon = int(target_meta["horizon"])
+    threshold = float(target_meta.get("threshold", 0.0))
+
+    y_eval_all: list[np.ndarray] = []
+    y_pred_all: list[np.ndarray] = []
+    y_prob_all: list[np.ndarray] = []
+    y_vol_pred_all: list[np.ndarray] = []
+    y_vol_true_all: list[np.ndarray] = []
+
+    for split in splits:
+        raw_train_idx = np.asarray(split.train_idx, dtype=int)
+        safe_train_idx = trim_train_indices_for_horizon(
+            raw_train_idx,
+            test_start=int(split.test_start),
+            target_horizon=target_horizon,
+        )
+        assert_no_forward_label_leakage(
+            safe_train_idx,
+            test_start=int(split.test_start),
+            target_horizon=target_horizon,
+        )
+        trimmed_rows = int(len(raw_train_idx) - len(safe_train_idx))
+        total_trimmed_rows += trimmed_rows
+
+        pred_ret_fold, extra_cols_fold, fitted_model, fold_extra_meta = fold_predictor(
+            out,
+            safe_train_idx,
+            np.asarray(split.test_idx, dtype=int),
+            feature_cols,
+            fwd_col,
+            model_params,
+            runtime_meta,
+        )
+        model = fitted_model
+
+        test_index = out.index[np.asarray(split.test_idx, dtype=int)]
+        pred_ret_fold = pd.Series(pred_ret_fold, copy=False).astype(float)
+        pred_ret_fold = pred_ret_fold.loc[pred_ret_fold.index.intersection(test_index)]
+        pred_ret.loc[pred_ret_fold.index] = pred_ret_fold.astype("float32")
+
+        for col_name, values in dict(extra_cols_fold or {}).items():
+            if col_name not in extra_prediction_cols:
+                extra_prediction_cols[col_name] = pd.Series(
+                    np.nan, index=out.index, name=col_name, dtype="float32"
+                )
+            series = pd.Series(values, copy=False).astype(float)
+            series = series.loc[series.index.intersection(test_index)]
+            extra_prediction_cols[col_name].loc[series.index] = series.astype("float32")
+
+        fold_scale = fold_extra_meta.get("prob_scale")
+        fold_prob = _forecast_to_probability(pred_ret_fold, scale=fold_scale)
+        pred_prob.loc[fold_prob.index] = fold_prob
+
+        eval_true = out.loc[pred_ret_fold.index, fwd_col].astype(float)
+        eval_true = eval_true.loc[eval_true.notna()]
+        eval_pred = pred_ret_fold.reindex(eval_true.index).astype(float)
+        eval_prob = fold_prob.reindex(eval_true.index).astype(float)
+
+        regression_metrics = _regression_metrics(eval_true, eval_pred)
+        classification_metrics = _binary_classification_metrics((eval_true > threshold).astype(int), eval_prob)
+        volatility_metrics = _empty_volatility_metrics()
+        pred_vol_col_name: str | None = None
+        if "pred_vol" in extra_cols_fold:
+            pred_vol_col_name = "pred_vol"
+        else:
+            for key in extra_cols_fold:
+                if str(key).startswith("pred_vol"):
+                    pred_vol_col_name = str(key)
+                    break
+        if pred_vol_col_name is not None:
+            pred_vol = pd.Series(extra_cols_fold[pred_vol_col_name], copy=False).astype(float)
+            pred_vol_eval = pred_vol.reindex(eval_true.index)
+            realized_vol = eval_true.abs()
+            volatility_metrics = _volatility_metrics(realized_vol, pred_vol_eval)
+            if volatility_metrics["evaluation_rows"] and volatility_metrics["evaluation_rows"] > 0:
+                y_vol_pred_all.append(pred_vol_eval.to_numpy(dtype=float))
+                y_vol_true_all.append(realized_vol.to_numpy(dtype=float))
+
+        if regression_metrics["evaluation_rows"] and regression_metrics["evaluation_rows"] > 0:
+            y_eval_all.append(eval_true.to_numpy(dtype=float))
+            y_pred_all.append(eval_pred.to_numpy(dtype=float))
+        if classification_metrics["evaluation_rows"] and classification_metrics["evaluation_rows"] > 0:
+            y_prob_all.append(eval_prob.to_numpy(dtype=float))
+
+        fold_test_idx = out.index[np.asarray(split.test_idx, dtype=int)]
+        oos_mask.loc[fold_test_idx] = True
+        oos_assignment_count.loc[fold_test_idx] += 1
+
+        train_target_rows = int(out.iloc[safe_train_idx][fwd_col].notna().sum())
+        total_train_rows += train_target_rows
+        total_test_pred_rows += int(len(pred_ret_fold))
+
+        fold_record = {
+            "fold": int(split.fold),
+            "train_start": int(split.train_start),
+            "train_end": int(split.train_end),
+            "effective_train_start": int(safe_train_idx.min()) if len(safe_train_idx) else None,
+            "effective_train_end": int(safe_train_idx.max() + 1) if len(safe_train_idx) else None,
+            "trimmed_for_horizon_rows": trimmed_rows,
+            "test_start": int(split.test_start),
+            "test_end": int(split.test_end),
+            "train_rows": train_target_rows,
+            "test_rows": int(len(split.test_idx)),
+            "test_pred_rows": int(len(pred_ret_fold)),
+            "classification_metrics": classification_metrics,
+            "regression_metrics": regression_metrics,
+            "volatility_metrics": volatility_metrics,
+        }
+        fold_record.update(dict(fold_extra_meta or {}))
+        fold_meta.append(fold_record)
+
+    if model is None:
+        raise ValueError("Model training failed: no valid folds were trained.")
+    if (oos_assignment_count > 1).any():
+        raise ValueError("Overlapping test windows detected. Use non-overlapping split configuration.")
+
+    oos_regression_summary = _empty_regression_metrics()
+    if y_eval_all and y_pred_all:
+        y_true_series = pd.Series(np.concatenate(y_eval_all), dtype=float)
+        y_pred_series = pd.Series(np.concatenate(y_pred_all), dtype=float)
+        oos_regression_summary = _regression_metrics(y_true_series, y_pred_series)
+
+    oos_classification_summary = _empty_classification_metrics()
+    if y_eval_all and y_prob_all:
+        y_bin_series = pd.Series(np.concatenate(y_eval_all) > threshold, dtype=int)
+        y_prob_series = pd.Series(np.concatenate(y_prob_all), dtype=float)
+        oos_classification_summary = _binary_classification_metrics(y_bin_series, y_prob_series)
+
+    oos_volatility_summary = _empty_volatility_metrics()
+    if y_vol_true_all and y_vol_pred_all:
+        y_vol_true_series = pd.Series(np.concatenate(y_vol_true_all), dtype=float)
+        y_vol_pred_series = pd.Series(np.concatenate(y_vol_pred_all), dtype=float)
+        oos_volatility_summary = _volatility_metrics(y_vol_true_series, y_vol_pred_series)
+
+    out[pred_ret_col] = pred_ret
+    out[pred_prob_col] = pred_prob
+    out["pred_is_oos"] = oos_mask
+    for col_name, series in sorted(extra_prediction_cols.items(), key=lambda kv: str(kv[0])):
+        out[col_name] = series
+
+    meta = {
+        "model_kind": model_kind,
+        "runtime": runtime_meta,
+        "feature_cols": feature_cols,
+        "pred_ret_col": pred_ret_col,
+        "pred_prob_col": pred_prob_col,
+        "fwd_col": fwd_col,
+        "split_method": split_meta["split_method"],
+        "split_index": int(splits[0].test_start),
+        "n_folds": int(len(splits)),
+        "folds": fold_meta,
+        "train_rows": int(total_train_rows),
+        "test_pred_rows": int(total_test_pred_rows),
+        "oos_rows": int(oos_mask.sum()),
+        "oos_prediction_coverage": float(total_test_pred_rows / max(int(oos_mask.sum()), 1)),
+        "oos_classification_summary": oos_classification_summary,
+        "oos_regression_summary": oos_regression_summary,
+        "oos_volatility_summary": oos_volatility_summary,
+        "target": target_meta,
+        "returns_col": returns_col,
+        "contracts": contract_meta,
+        "anti_leakage": {
+            "target_horizon": target_horizon,
+            "total_trimmed_train_rows": int(total_trimmed_rows),
+        },
+    }
+    return out, model, meta
+
+
+def _train_sarimax_fold(
+    full_df: pd.DataFrame,
+    train_idx: np.ndarray,
+    test_idx: np.ndarray,
+    feature_cols: list[str],
+    fwd_col: str,
+    model_params: dict[str, Any],
+    runtime_meta: dict[str, Any],
+) -> tuple[pd.Series, dict[str, pd.Series], object, dict[str, Any]]:
+    """
+    Fit SARIMAX on one fold and generate causal test forecasts.
+    """
+    train_df = full_df.iloc[train_idx]
+    test_df = full_df.iloc[test_idx]
+
+    params = dict(model_params or {})
+    order = _normalized_order(params.get("order", (1, 0, 1)), expected_len=3, name="model.params.order")
+    seasonal_order = _normalized_order(
+        params.get("seasonal_order", (0, 0, 0, 0)),
+        expected_len=4,
+        name="model.params.seasonal_order",
+    )
+    trend = params.get("trend", "c")
+    enforce_stationarity = bool(params.get("enforce_stationarity", False))
+    enforce_invertibility = bool(params.get("enforce_invertibility", False))
+    maxiter = int(params.get("maxiter", 200))
+    use_exog = bool(params.get("use_exog", True))
+    allow_fallback = bool(params.get("allow_fallback", True))
+
+    active_features = feature_cols if use_exog else []
+    y_train = train_df[fwd_col].astype(float).dropna()
+    if active_features:
+        exog_train = train_df.loc[y_train.index, active_features].astype(float)
+        valid_train = exog_train.notna().all(axis=1)
+        y_train = y_train.loc[valid_train]
+        exog_train = exog_train.loc[valid_train]
+    else:
+        exog_train = None
+
+    min_rows = max(24, int(sum(order)) + 2)
+    if len(y_train) < min_rows:
+        raise ValueError(f"SARIMAX fold has only {len(y_train)} train rows; need at least {min_rows}.")
+
+    test_index = test_df.index
+    pred_index = test_index
+    exog_test = None
+    if active_features:
+        exog_test_all = test_df[active_features].astype(float)
+        valid_test = exog_test_all.notna().all(axis=1)
+        pred_index = exog_test_all.index[valid_test]
+        exog_test = exog_test_all.loc[pred_index]
+
+    if len(pred_index) == 0:
+        return (
+            pd.Series(dtype="float32", index=pred_index),
+            {"pred_vol": pd.Series(dtype="float32", index=pred_index)},
+            {"model": "sarimax", "status": "empty_prediction_index"},
+            {"prob_scale": float(y_train.std(ddof=1)) if len(y_train) >= 2 else None},
+        )
+
+    used_fallback = False
+    fallback_reason = None
+    fit_result: object | dict[str, Any]
+    try:
+        model = SARIMAX(
+            endog=y_train.to_numpy(dtype=float),
+            exog=exog_train.to_numpy(dtype=float) if exog_train is not None else None,
+            order=order,
+            seasonal_order=seasonal_order,
+            trend=trend,
+            enforce_stationarity=enforce_stationarity,
+            enforce_invertibility=enforce_invertibility,
+        )
+        fit_result = model.fit(disp=False, maxiter=maxiter)
+        forecast_res = fit_result.get_forecast(
+            steps=len(pred_index),
+            exog=exog_test.to_numpy(dtype=float) if exog_test is not None else None,
+        )
+        pred_mean_arr = np.asarray(forecast_res.predicted_mean, dtype=float)
+        pred_var_attr = getattr(forecast_res, "var_pred_mean", None)
+        if pred_var_attr is None:
+            pred_var_arr = np.full(len(pred_mean_arr), np.var(y_train.to_numpy(dtype=float)), dtype=float)
+        else:
+            pred_var_arr = np.asarray(pred_var_attr, dtype=float)
+    except Exception as exc:
+        if not allow_fallback:
+            raise
+        used_fallback = True
+        fallback_reason = f"{type(exc).__name__}: {exc}"
+        fit_result = {"model": "sarimax", "fallback": True, "error": fallback_reason}
+        fallback_mean = float(y_train.mean())
+        fallback_var = float(np.var(y_train.to_numpy(dtype=float), ddof=1)) if len(y_train) >= 2 else 1e-6
+        pred_mean_arr = np.full(len(pred_index), fallback_mean, dtype=float)
+        pred_var_arr = np.full(len(pred_index), max(fallback_var, 1e-8), dtype=float)
+
+    pred_mean = pd.Series(pred_mean_arr, index=pred_index, dtype="float32")
+    pred_vol = pd.Series(np.sqrt(np.clip(pred_var_arr, 1e-12, None)), index=pred_index, dtype="float32")
+    prob_scale = float(y_train.std(ddof=1)) if len(y_train) >= 2 else None
+    fold_meta = {
+        "order": list(order),
+        "seasonal_order": list(seasonal_order),
+        "trend": trend,
+        "used_exog": bool(active_features),
+        "used_fallback": used_fallback,
+        "fallback_reason": fallback_reason,
+        "prob_scale": prob_scale,
+        "train_target_std": prob_scale,
+        "runtime_threads": runtime_meta.get("threads"),
+    }
+    return pred_mean, {"pred_vol": pred_vol}, fit_result, fold_meta
+
+
+@dataclass(frozen=True)
+class _GarchState:
+    """
+    Carry fitted GARCH(1,1) parameters and the latest latent state for recursive forecasts.
+    """
+    mu: float
+    omega: float
+    alpha: float
+    beta: float
+    phi: float
+    last_eps: float
+    last_h: float
+    used_fallback: bool
+    optimizer_message: str
+
+
+def _fit_garch11_state(
+    returns: pd.Series,
+    *,
+    mean_model: str = "constant",
+) -> _GarchState:
+    """
+    Fit a simple Gaussian GARCH(1,1) with optional AR(1) mean term.
+    """
+    x = returns.astype(float).dropna().to_numpy(dtype=float)
+    if len(x) < 30:
+        raise ValueError("GARCH requires at least 30 non-null training returns.")
+
+    mu = float(np.mean(x))
+    eps = x - mu
+    variance = float(np.var(eps, ddof=1))
+    variance = max(variance, 1e-8)
+
+    def objective(theta: np.ndarray) -> float:
+        omega, alpha, beta = float(theta[0]), float(theta[1]), float(theta[2])
+        if omega <= 0.0 or alpha < 0.0 or beta < 0.0 or (alpha + beta) >= 0.999:
+            return 1e12
+        h = np.empty_like(eps, dtype=float)
+        h[0] = variance
+        for t in range(1, len(eps)):
+            h[t] = omega + alpha * (eps[t - 1] ** 2) + beta * h[t - 1]
+            if h[t] <= 1e-12:
+                h[t] = 1e-12
+        ll = 0.5 * np.sum(np.log(2.0 * np.pi) + np.log(h) + (eps**2) / h)
+        if not np.isfinite(ll):
+            return 1e12
+        return float(ll)
+
+    x0 = np.array([variance * 0.05, 0.05, 0.90], dtype=float)
+    bounds = [(1e-10, None), (1e-6, 0.999), (1e-6, 0.999)]
+    res = minimize(objective, x0=x0, method="L-BFGS-B", bounds=bounds, options={"maxiter": 400})
+
+    used_fallback = False
+    if not res.success or not np.isfinite(res.fun):
+        used_fallback = True
+        omega, alpha, beta = variance * 0.05, 0.05, 0.90
+        optimizer_message = f"fallback_after_optimizer_failure: {res.message}"
+    else:
+        omega, alpha, beta = map(float, res.x)
+        if alpha + beta >= 0.999:
+            used_fallback = True
+            omega, alpha, beta = variance * 0.05, 0.05, 0.90
+            optimizer_message = "fallback_after_nonstationary_solution"
+        else:
+            optimizer_message = str(res.message)
+
+    h = np.empty_like(eps, dtype=float)
+    h[0] = variance
+    for t in range(1, len(eps)):
+        h[t] = omega + alpha * (eps[t - 1] ** 2) + beta * h[t - 1]
+        if h[t] <= 1e-12:
+            h[t] = 1e-12
+
+    phi = 0.0
+    if mean_model == "ar1" and len(x) >= 4:
+        lagged = x[:-1] - mu
+        forward = x[1:] - mu
+        denom = float(np.dot(lagged, lagged))
+        if denom > 1e-12:
+            phi = float(np.dot(lagged, forward) / denom)
+            phi = float(np.clip(phi, -0.99, 0.99))
+
+    return _GarchState(
+        mu=mu,
+        omega=float(omega),
+        alpha=float(alpha),
+        beta=float(beta),
+        phi=phi,
+        last_eps=float(eps[-1]),
+        last_h=float(max(h[-1], 1e-12)),
+        used_fallback=used_fallback,
+        optimizer_message=optimizer_message,
+    )
+
+
+def _make_garch_fold_predictor(
+    *,
+    returns_input_col: str,
+) -> ForecasterFoldPredictor:
+    """
+    Build the fold predictor closure used by the GARCH model family.
+    """
+    def _predictor(
+        full_df: pd.DataFrame,
+        train_idx: np.ndarray,
+        test_idx: np.ndarray,
+        feature_cols: list[str],
+        fwd_col: str,
+        model_params: dict[str, Any],
+        runtime_meta: dict[str, Any],
+    ) -> tuple[pd.Series, dict[str, pd.Series], object, dict[str, Any]]:
+        train_df = full_df.iloc[train_idx]
+        test_df = full_df.iloc[test_idx]
+        mean_model = str(model_params.get("mean_model", "constant"))
+        if mean_model not in {"constant", "ar1"}:
+            raise ValueError("model.params.mean_model for GARCH must be 'constant' or 'ar1'.")
+        if returns_input_col not in train_df.columns:
+            raise KeyError(f"GARCH returns input column '{returns_input_col}' not found.")
+
+        garch_state = _fit_garch11_state(train_df[returns_input_col], mean_model=mean_model)
+        test_index = test_df.index
+        if len(test_index) == 0:
+            empty = pd.Series(dtype="float32", index=test_index)
+            return (
+                empty,
+                {"pred_vol": empty},
+                {"model": "garch", "status": "empty_test_index"},
+                {
+                    "mean_model": mean_model,
+                    "returns_input_col": returns_input_col,
+                    "prob_scale": None,
+                    "used_fallback": garch_state.used_fallback,
+                    "optimizer_message": garch_state.optimizer_message,
+                },
+            )
+
+        observed_test_returns = test_df[returns_input_col].astype(float)
+        prev_r = float(train_df[returns_input_col].dropna().iloc[-1])
+        prev_eps = float(garch_state.last_eps)
+        prev_h = float(garch_state.last_h)
+
+        pred_ret_values: list[float] = []
+        pred_vol_values: list[float] = []
+        for ts in test_index:
+            next_h = garch_state.omega + garch_state.alpha * (prev_eps**2) + garch_state.beta * prev_h
+            next_h = float(max(next_h, 1e-12))
+            if mean_model == "ar1":
+                pred_r = garch_state.mu + garch_state.phi * (prev_r - garch_state.mu)
+            else:
+                pred_r = garch_state.mu
+            pred_ret_values.append(float(pred_r))
+            pred_vol_values.append(float(np.sqrt(next_h)))
+
+            realized = observed_test_returns.loc[ts]
+            if not np.isfinite(realized):
+                realized = pred_r
+            prev_eps = float(realized - garch_state.mu)
+            prev_r = float(realized)
+            prev_h = float(next_h)
+
+        pred_ret = pd.Series(pred_ret_values, index=test_index, dtype="float32")
+        pred_vol = pd.Series(pred_vol_values, index=test_index, dtype="float32")
+        prob_scale = float(np.nanmean(pred_vol_values)) if pred_vol_values else None
+        fold_meta = {
+            "mean_model": mean_model,
+            "returns_input_col": returns_input_col,
+            "garch_params": {
+                "mu": garch_state.mu,
+                "omega": garch_state.omega,
+                "alpha": garch_state.alpha,
+                "beta": garch_state.beta,
+                "phi": garch_state.phi,
+            },
+            "used_fallback": bool(garch_state.used_fallback),
+            "optimizer_message": garch_state.optimizer_message,
+            "prob_scale": prob_scale,
+            "runtime_threads": runtime_meta.get("threads"),
+        }
+        return pred_ret, {"pred_vol": pred_vol}, garch_state, fold_meta
+
+    return _predictor
+
+
+def _build_sequence_samples(
+    *,
+    full_df: pd.DataFrame,
+    indices: np.ndarray,
+    feature_cols: list[str],
+    target_col: str,
+    lookback: int,
+    require_target: bool,
+    allowed_window_indices: set[int] | None = None,
+) -> tuple[np.ndarray, np.ndarray, pd.Index]:
+    """
+    Build rolling supervised windows for sequence models such as TFT.
+    """
+    if lookback <= 1:
+        raise ValueError("lookback must be > 1 for sequence models.")
+    if not feature_cols:
+        raise ValueError("TFT requires at least one feature column.")
+
+    x_raw = full_df[feature_cols].to_numpy(dtype=float)
+    y_raw = full_df[target_col].to_numpy(dtype=float)
+    index_values = full_df.index
+
+    x_rows: list[np.ndarray] = []
+    y_rows: list[float] = []
+    out_index: list[pd.Timestamp] = []
+    for idx in np.asarray(indices, dtype=int):
+        start = int(idx - lookback + 1)
+        if start < 0:
+            continue
+        window = np.arange(start, int(idx) + 1, dtype=int)
+        if allowed_window_indices is not None:
+            if any(int(w) not in allowed_window_indices for w in window):
+                continue
+        x_win = x_raw[window]
+        if not np.isfinite(x_win).all():
+            continue
+        if require_target:
+            y_val = float(y_raw[int(idx)])
+            if not np.isfinite(y_val):
+                continue
+            y_rows.append(y_val)
+        x_rows.append(x_win.astype("float32"))
+        out_index.append(index_values[int(idx)])
+
+    if not x_rows:
+        return (
+            np.empty((0, lookback, len(feature_cols)), dtype="float32"),
+            np.empty((0,), dtype="float32"),
+            pd.Index([], dtype="datetime64[ns]"),
+        )
+    x_arr = np.stack(x_rows, axis=0).astype("float32")
+    if require_target:
+        y_arr = np.asarray(y_rows, dtype="float32")
+    else:
+        y_arr = np.empty((len(x_rows),), dtype="float32")
+    return x_arr, y_arr, pd.Index(out_index)
+
+
+def _make_tft_fold_predictor() -> ForecasterFoldPredictor:
+    """
+    Build the fold predictor closure used by the TFT model family.
+    """
+    def _predictor(
+        full_df: pd.DataFrame,
+        train_idx: np.ndarray,
+        test_idx: np.ndarray,
+        feature_cols: list[str],
+        fwd_col: str,
+        model_params: dict[str, Any],
+        runtime_meta: dict[str, Any],
+    ) -> tuple[pd.Series, dict[str, pd.Series], object, dict[str, Any]]:
+        try:
+            import torch
+            import torch.nn as nn
+            from torch.utils.data import DataLoader, TensorDataset
+        except Exception as exc:
+            raise ImportError(
+                "TFT model requires torch. Install torch to use model.kind='tft_forecaster'."
+            ) from exc
+
+        lookback = int(model_params.get("lookback", 32))
+        hidden_dim = int(model_params.get("hidden_dim", 32))
+        n_heads = int(model_params.get("num_heads", 4))
+        n_layers = int(model_params.get("num_layers", 2))
+        dropout = float(model_params.get("dropout", 0.1))
+        epochs = int(model_params.get("epochs", 20))
+        batch_size = int(model_params.get("batch_size", 64))
+        learning_rate = float(model_params.get("learning_rate", 1e-3))
+        weight_decay = float(model_params.get("weight_decay", 1e-4))
+        quantiles_cfg = model_params.get("quantiles", [0.1, 0.5, 0.9])
+        quantiles = tuple(float(q) for q in quantiles_cfg)
+
+        if len(quantiles) < 2:
+            raise ValueError("model.params.quantiles for TFT must contain at least two values.")
+        if any(not (0.0 < q < 1.0) for q in quantiles):
+            raise ValueError("TFT quantiles must be within (0, 1).")
+        if hidden_dim <= 0 or n_heads <= 0 or n_layers <= 0:
+            raise ValueError("TFT hidden_dim/num_heads/num_layers must be positive.")
+        if hidden_dim % n_heads != 0:
+            raise ValueError("TFT hidden_dim must be divisible by num_heads.")
+
+        seed = int(runtime_meta.get("seed", 7))
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+        threads = runtime_meta.get("threads")
+        if isinstance(threads, int) and threads > 0:
+            torch.set_num_threads(threads)
+
+        allowed_train = set(int(i) for i in np.asarray(train_idx, dtype=int))
+        x_train, y_train, _ = _build_sequence_samples(
+            full_df=full_df,
+            indices=np.asarray(train_idx, dtype=int),
+            feature_cols=feature_cols,
+            target_col=fwd_col,
+            lookback=lookback,
+            require_target=True,
+            allowed_window_indices=allowed_train,
+        )
+        if x_train.shape[0] < 32:
+            raise ValueError(
+                f"TFT fold has only {x_train.shape[0]} train samples after sequence construction."
+            )
+
+        x_test, _, test_prediction_index = _build_sequence_samples(
+            full_df=full_df,
+            indices=np.asarray(test_idx, dtype=int),
+            feature_cols=feature_cols,
+            target_col=fwd_col,
+            lookback=lookback,
+            require_target=False,
+            allowed_window_indices=None,
+        )
+
+        class _MiniTFT(nn.Module):
+            """
+            Compact transformer-based forecaster that follows TFT-like temporal encoding.
+            """
+
+            def __init__(self, *, input_dim: int, hidden: int, heads: int, layers: int, p: float, out_dim: int):
+                super().__init__()
+                self.input_proj = nn.Linear(input_dim, hidden)
+                enc_layer = nn.TransformerEncoderLayer(
+                    d_model=hidden,
+                    nhead=heads,
+                    dim_feedforward=max(hidden * 2, 32),
+                    dropout=p,
+                    batch_first=True,
+                    activation="gelu",
+                )
+                self.encoder = nn.TransformerEncoder(enc_layer, num_layers=layers)
+                self.gate = nn.Sequential(nn.Linear(hidden, hidden), nn.Sigmoid())
+                self.head = nn.Linear(hidden, out_dim)
+
+            def forward(self, x: torch.Tensor) -> torch.Tensor:
+                h = self.input_proj(x)
+                h = self.encoder(h)
+                h_last = h[:, -1, :]
+                h_last = h_last * self.gate(h_last)
+                return self.head(h_last)
+
+        def _quantile_loss(
+            pred: torch.Tensor,
+            target: torch.Tensor,
+            quantile_tensor: torch.Tensor,
+        ) -> torch.Tensor:
+            err = target.unsqueeze(1) - pred
+            loss = torch.maximum(quantile_tensor * err, (quantile_tensor - 1.0) * err)
+            return loss.mean()
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = _MiniTFT(
+            input_dim=x_train.shape[2],
+            hidden=hidden_dim,
+            heads=n_heads,
+            layers=n_layers,
+            p=dropout,
+            out_dim=len(quantiles),
+        ).to(device)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+        quantile_tensor = torch.tensor(quantiles, dtype=torch.float32, device=device)
+
+        ds = TensorDataset(torch.tensor(x_train, dtype=torch.float32), torch.tensor(y_train, dtype=torch.float32))
+        loader = DataLoader(ds, batch_size=max(8, min(batch_size, len(ds))), shuffle=True, drop_last=False)
+        model.train()
+        for _ in range(max(1, epochs)):
+            for xb, yb in loader:
+                xb = xb.to(device)
+                yb = yb.to(device)
+                optimizer.zero_grad(set_to_none=True)
+                pred = model(xb)
+                loss = _quantile_loss(pred, yb, quantile_tensor)
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                optimizer.step()
+
+        if x_test.shape[0] == 0:
+            empty = pd.Series(dtype="float32", index=test_prediction_index)
+            return (
+                empty,
+                {},
+                model,
+                {
+                    "lookback": lookback,
+                    "quantiles": list(quantiles),
+                    "prob_scale": float(np.std(y_train, ddof=1)) if len(y_train) >= 2 else None,
+                    "tft_train_samples": int(x_train.shape[0]),
+                    "tft_test_samples": 0,
+                },
+            )
+
+        model.eval()
+        with torch.no_grad():
+            pred_tensor = model(torch.tensor(x_test, dtype=torch.float32, device=device))
+            pred_np = pred_tensor.detach().cpu().numpy().astype(float)
+
+        quantile_to_col: dict[float, str] = {}
+        extra_cols: dict[str, pd.Series] = {}
+        for i, q in enumerate(quantiles):
+            col = f"pred_q{int(round(q * 100)):02d}"
+            quantile_to_col[q] = col
+            extra_cols[col] = pd.Series(pred_np[:, i], index=test_prediction_index, dtype="float32")
+
+        median_q = min(quantiles, key=lambda q: abs(q - 0.5))
+        pred_ret = pd.Series(extra_cols[quantile_to_col[median_q]], copy=False).astype("float32")
+        low_q = min(quantiles)
+        high_q = max(quantiles)
+        if low_q != high_q:
+            q_low = extra_cols[quantile_to_col[low_q]].astype(float)
+            q_high = extra_cols[quantile_to_col[high_q]].astype(float)
+            pred_vol = ((q_high - q_low).abs() / 2.0).astype("float32")
+            extra_cols["pred_vol"] = pred_vol
+
+        prob_scale = float(np.std(y_train, ddof=1)) if len(y_train) >= 2 else None
+        fold_meta = {
+            "lookback": lookback,
+            "quantiles": list(quantiles),
+            "median_quantile": float(median_q),
+            "lower_quantile": float(low_q),
+            "upper_quantile": float(high_q),
+            "prob_scale": prob_scale,
+            "tft_train_samples": int(x_train.shape[0]),
+            "tft_test_samples": int(x_test.shape[0]),
+            "tft_epochs": int(max(1, epochs)),
+            "runtime_threads": runtime_meta.get("threads"),
+        }
+        return pred_ret, extra_cols, model, fold_meta
+
+    return _predictor
 
 
 def train_lightgbm_classifier(
@@ -492,8 +1472,89 @@ def train_logistic_regression_classifier(
     return out, model, meta
 
 
+def train_sarimax_forecaster(
+    df: pd.DataFrame,
+    model_cfg: dict[str, Any],
+    returns_col: str | None = None,
+) -> tuple[pd.DataFrame, object, dict[str, Any]]:
+    """
+    Train SARIMAX forecaster with walk-forward or purged split logic.
+    """
+    out, model, meta = _train_forward_forecaster(
+        df=df,
+        model_cfg=model_cfg,
+        model_kind="sarimax_forecaster",
+        fold_predictor=_train_sarimax_fold,
+        returns_col=returns_col,
+        required_features=False,
+        runtime_estimator_family="statsmodels",
+    )
+    return out, model, meta
+
+
+def train_garch_forecaster(
+    df: pd.DataFrame,
+    model_cfg: dict[str, Any],
+    returns_col: str | None = None,
+) -> tuple[pd.DataFrame, object, dict[str, Any]]:
+    """
+    Train GARCH(1,1) volatility forecaster and attach causal return/volatility forecasts.
+    """
+    cfg = dict(model_cfg or {})
+    target_cfg = dict(cfg.get("target", {}) or {})
+    params = dict(cfg.get("params", {}) or {})
+    returns_input_col = str(params.get("returns_input_col") or cfg.get("returns_input_col") or returns_col or "close_ret")
+    if returns_input_col not in df.columns:
+        price_col = str(target_cfg.get("price_col", "close"))
+        if price_col not in df.columns:
+            raise KeyError(
+                f"GARCH returns_input_col '{returns_input_col}' not found and price_col '{price_col}' is missing."
+            )
+        work_df = df.copy()
+        work_df[returns_input_col] = work_df[price_col].pct_change()
+    else:
+        work_df = df
+
+    params["returns_input_col"] = returns_input_col
+    cfg["params"] = params
+    out, model, meta = _train_forward_forecaster(
+        df=work_df,
+        model_cfg=cfg,
+        model_kind="garch_forecaster",
+        fold_predictor=_make_garch_fold_predictor(returns_input_col=returns_input_col),
+        returns_col=returns_col,
+        required_features=False,
+        runtime_estimator_family="statsmodels",
+    )
+    meta["returns_input_col"] = returns_input_col
+    return out, model, meta
+
+
+def train_tft_forecaster(
+    df: pd.DataFrame,
+    model_cfg: dict[str, Any],
+    returns_col: str | None = None,
+) -> tuple[pd.DataFrame, object, dict[str, Any]]:
+    """
+    Train a compact TFT-style transformer forecaster under the shared anti-leakage split loop.
+    """
+    out, model, meta = _train_forward_forecaster(
+        df=df,
+        model_cfg=model_cfg,
+        model_kind="tft_forecaster",
+        fold_predictor=_make_tft_fold_predictor(),
+        returns_col=returns_col,
+        required_features=True,
+        runtime_estimator_family="torch",
+    )
+    return out, model, meta
+
+
 __all__ = [
     "infer_feature_columns",
     "train_lightgbm_classifier",
     "train_logistic_regression_classifier",
+    "train_sarimax_forecaster",
+    "train_garch_forecaster",
+    "train_tft_forecaster",
 ]

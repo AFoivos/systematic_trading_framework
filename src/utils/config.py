@@ -6,6 +6,7 @@ from typing import Any, Mapping
 
 import yaml
 
+from src.experiments.registry import FEATURE_REGISTRY, MODEL_REGISTRY, SIGNAL_REGISTRY
 from src.utils.paths import CONFIG_DIR, PROJECT_ROOT, in_project
 from src.utils.repro import RuntimeConfigError, validate_runtime_config
 
@@ -35,6 +36,9 @@ def _resolve_config_path(config_path: str | Path) -> Path:
         raise FileNotFoundError(f"Config file not found: {path}")
     if not path.is_file():
         raise ConfigError(f"Config path is not a file: {path}")
+    from src.utils.paths import enforce_safe_absolute_path
+
+    path = enforce_safe_absolute_path(path)
     return path
 
 
@@ -353,6 +357,8 @@ def _validate_features_block(features: Any) -> None:
             raise ConfigError("Each feature entry must be a mapping with a 'step' key.")
         if not isinstance(step["step"], str):
             raise ConfigError("features[].step must be a string.")
+        if step["step"] not in FEATURE_REGISTRY:
+            raise ConfigError(f"Unknown feature step: {step['step']}")
         if "params" in step and step["params"] is not None and not isinstance(step["params"], dict):
             raise ConfigError("features[].params must be a mapping when provided.")
 
@@ -366,6 +372,8 @@ def _validate_model_block(model: dict[str, Any]) -> None:
         raise ConfigError("model.kind is required.")
     if not isinstance(model["kind"], str):
         raise ConfigError("model.kind must be a string.")
+    if model["kind"] != "none" and model["kind"] not in MODEL_REGISTRY:
+        raise ConfigError(f"Unknown model kind: {model['kind']}")
 
     if model["kind"] != "none":
         target = model.get("target", {}) or {}
@@ -452,6 +460,8 @@ def _validate_signals_block(signals: dict[str, Any]) -> None:
         raise ConfigError("signals.kind is required.")
     if not isinstance(signals["kind"], str):
         raise ConfigError("signals.kind must be a string.")
+    if signals["kind"] != "none" and signals["kind"] not in SIGNAL_REGISTRY:
+        raise ConfigError(f"Unknown signals kind: {signals['kind']}")
 
 
 def _validate_risk_block(risk: dict[str, Any]) -> None:

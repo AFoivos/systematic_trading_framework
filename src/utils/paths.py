@@ -1,5 +1,20 @@
 from __future__ import annotations
+import os
+import tempfile
 from pathlib import Path
+
+_ALLOW_EXTERNAL_PATHS_ENV = "STF_ALLOW_EXTERNAL_PATHS"
+_BLOCKED_ABSOLUTE_PREFIXES = (
+    Path("/etc"),
+    Path("/bin"),
+    Path("/sbin"),
+    Path("/usr"),
+    Path("/System"),
+    Path("/Library"),
+    Path("/dev"),
+    Path("/proc"),
+    Path("/sys"),
+)
 
 _THIS_FILE = Path(__file__).resolve()
 PROJECT_ROOT: Path = _THIS_FILE.parents[2]
@@ -13,6 +28,50 @@ METADATA_DIR: Path = DATA_DIR / "metadata"
 NOTEBOOKS_DIR: Path = PROJECT_ROOT / "notebooks"
 LOGS_DIR: Path = PROJECT_ROOT / "logs"
 TESTS_DIR: Path = PROJECT_ROOT / "tests"
+
+
+def _is_within(path: Path, root: Path) -> bool:
+    """
+    Return True when path is inside root.
+    """
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
+
+
+def enforce_safe_absolute_path(path: str | Path) -> Path:
+    """
+    Enforce a conservative absolute-path policy for config-driven file I/O.
+
+    By default only project-root and system temp paths are allowed. Set
+    STF_ALLOW_EXTERNAL_PATHS=1 to allow any external path except blocked
+    system directories.
+    """
+    p = Path(path).resolve()
+    if not p.is_absolute():
+        return p
+
+    for blocked in _BLOCKED_ABSOLUTE_PREFIXES:
+        if _is_within(p, blocked):
+            raise ValueError(f"Access to protected path is not allowed: {p}")
+
+    allow_external = os.getenv(_ALLOW_EXTERNAL_PATHS_ENV, "0") == "1"
+    if allow_external:
+        return p
+
+    allowed_roots = (
+        PROJECT_ROOT.resolve(),
+        Path(tempfile.gettempdir()).resolve(),
+    )
+    if any(_is_within(p, root) for root in allowed_roots):
+        return p
+
+    raise ValueError(
+        f"Absolute path outside allowed roots is not allowed: {p}. "
+        f"Set {_ALLOW_EXTERNAL_PATHS_ENV}=1 to override."
+    )
 
 def in_project(*parts: str | Path) -> Path:
     """

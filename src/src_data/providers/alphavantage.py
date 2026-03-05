@@ -6,8 +6,29 @@ from typing import Literal, Optional
 
 import pandas as pd
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from src.src_data.providers.base import MarketDataProvider
+
+
+def _build_retry_session() -> requests.Session:
+    """
+    Build a requests session with conservative retries for transient API failures.
+    """
+    session = requests.Session()
+    retry = Retry(
+        total=4,
+        read=4,
+        connect=4,
+        backoff_factor=0.5,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET"],
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
 
 
 @dataclass
@@ -55,7 +76,8 @@ class AlphaVantageFXProvider(MarketDataProvider):
             "outputsize": self.outputsize,
             "datatype": "json",
         }
-        resp = requests.get(url, params=params, timeout=30)
+        session = _build_retry_session()
+        resp = session.get(url, params=params, timeout=30)
         resp.raise_for_status()
         data = resp.json()
         if "Time Series FX (Daily)" not in data:

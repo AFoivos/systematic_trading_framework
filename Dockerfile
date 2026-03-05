@@ -18,5 +18,8 @@ RUN pip install --upgrade pip \
     && pip install -r /tmp/requirements.txt
 
 COPY . /workspace
+RUN useradd --create-home --uid 10001 appuser \
+    && chown -R appuser:appuser /workspace
+USER appuser
 
 CMD ["bash"]

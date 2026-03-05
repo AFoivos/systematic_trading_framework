@@ -27,6 +27,36 @@ _KEY_PACKAGES = (
 )
 
 
+def _is_sensitive_key(key: str) -> bool:
+    """
+    Detect likely sensitive keys for metadata redaction.
+    """
+    k = str(key).lower()
+    if k in {"api_key", "token", "secret", "password", "access_key"}:
+        return True
+    return k.endswith("_key") or k.endswith("_token") or k.endswith("_secret")
+
+
+def _redact_sensitive(value: Any) -> Any:
+    """
+    Recursively redact secrets before persisting metadata payloads.
+    """
+    if isinstance(value, Mapping):
+        out: dict[str, Any] = {}
+        for k, v in value.items():
+            key = str(k)
+            if _is_sensitive_key(key):
+                out[key] = "***REDACTED***" if v is not None else None
+            else:
+                out[key] = _redact_sensitive(v)
+        return out
+    if isinstance(value, list):
+        return [_redact_sensitive(v) for v in value]
+    if isinstance(value, tuple):
+        return tuple(_redact_sensitive(v) for v in value)
+    return value
+
+
 def _normalize_path_string(value: str, project_root: Path) -> str:
     """
     Handle path string inside the infrastructure layer. The helper isolates one focused
@@ -234,7 +264,7 @@ def build_run_metadata(
         "cwd": str(Path.cwd()),
         "config_path": str(config_path),
         "config_hash_sha256": config_hash_sha256,
-        "config_hash_input": dict(config_hash_input),
+        "config_hash_input": _redact_sensitive(dict(config_hash_input)),
         "runtime": dict(runtime_applied),
         "data": {
             "context": dict(data_context),

@@ -6,7 +6,7 @@ from typing import Any, Iterable, Mapping
 import numpy as np
 import pandas as pd
 
-from src.utils.paths import PROJECT_ROOT
+from src.utils.paths import PROJECT_ROOT, enforce_safe_absolute_path
 
 _ALLOWED_DUPLICATE_POLICIES = {"first", "last", "raise"}
 _ALLOWED_CORP_ACTION_POLICIES = {"none", "adj_close_ratio", "adj_close_replace_close"}
@@ -111,7 +111,7 @@ def _resolve_snapshot_path(path: str | Path) -> Path:
     p = Path(path)
     if not p.is_absolute():
         p = (PROJECT_ROOT / p).resolve()
-    return p
+    return enforce_safe_absolute_path(p)
 
 
 def load_universe_snapshot(path: str | Path) -> pd.DataFrame:

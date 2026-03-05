@@ -38,9 +38,16 @@ def compute_volatility_regime_signal(
     long_mask = ready & (vol <= threshold)
     short_mask = ready & (vol > threshold)
 
-    if mode in {"long_only", "long_short", "long_short_hold"}:
+    if mode == "long_short_hold":
+        hold = pd.Series(pd.NA, index=out.index, dtype="Float64")
+        hold.loc[long_mask] = 1.0
+        hold.loc[short_mask] = -1.0
+        out[signal_col] = hold.ffill().fillna(0.0).astype(float)
+        return out
+
+    if mode in {"long_only", "long_short"}:
         out.loc[long_mask, signal_col] = 1.0
-    if mode in {"short_only", "long_short", "long_short_hold"}:
+    if mode in {"short_only", "long_short"}:
         out.loc[short_mask, signal_col] = -1.0
 
     return out

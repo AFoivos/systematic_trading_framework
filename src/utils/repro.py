@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import random
+import threading
 from typing import Any, Mapping
 
 import numpy as np
@@ -14,6 +15,7 @@ _THREAD_ENV_VARS = (
     "VECLIB_MAXIMUM_THREADS",
     "NUMEXPR_NUM_THREADS",
 )
+_REPRO_LOCK = threading.RLock()
 
 
 class RuntimeConfigError(ValueError):
@@ -82,50 +84,51 @@ def apply_runtime_reproducibility(runtime_cfg: Mapping[str, Any] | None) -> dict
     repro_mode = runtime["repro_mode"]
     seed_torch = bool(runtime.get("seed_torch", False))
 
-    pyhash_before = os.getenv("PYTHONHASHSEED")
-    os.environ["PYTHONHASHSEED"] = str(seed)
-    pyhash_after = os.getenv("PYTHONHASHSEED")
+    with _REPRO_LOCK:
+        pyhash_before = os.getenv("PYTHONHASHSEED")
+        os.environ["PYTHONHASHSEED"] = str(seed)
+        pyhash_after = os.getenv("PYTHONHASHSEED")
 
-    random.seed(seed)
-    np.random.seed(seed)
+        random.seed(seed)
+        np.random.seed(seed)
 
-    thread_env: dict[str, str] = {}
-    if threads is not None:
-        for var_name in _THREAD_ENV_VARS:
-            os.environ[var_name] = str(threads)
-            thread_env[var_name] = os.environ[var_name]
+        thread_env: dict[str, str] = {}
+        if threads is not None:
+            for var_name in _THREAD_ENV_VARS:
+                os.environ[var_name] = str(threads)
+                thread_env[var_name] = os.environ[var_name]
 
-    torch_info: dict[str, Any] = {"available": False}
-    if deterministic and seed_torch:
-        try:
-            import torch
-        except Exception as exc:  # pragma: no cover - environment dependent
-            torch_info = {
-                "available": False,
-                "error": f"{type(exc).__name__}: {exc}",
-            }
-        else:
-            torch.manual_seed(seed)
-            cuda_available = bool(torch.cuda.is_available())
-            if cuda_available:
-                torch.cuda.manual_seed_all(seed)
-
-            det_algorithms_enabled = False
+        torch_info: dict[str, Any] = {"available": False}
+        if deterministic and seed_torch:
             try:
-                torch.use_deterministic_algorithms(True)
-                det_algorithms_enabled = True
-            except Exception:
+                import torch
+            except Exception as exc:  # pragma: no cover - environment dependent
+                torch_info = {
+                    "available": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            else:
+                torch.manual_seed(seed)
+                cuda_available = bool(torch.cuda.is_available())
+                if cuda_available:
+                    torch.cuda.manual_seed_all(seed)
+
                 det_algorithms_enabled = False
+                try:
+                    torch.use_deterministic_algorithms(True)
+                    det_algorithms_enabled = True
+                except Exception:
+                    det_algorithms_enabled = False
 
-            if hasattr(torch.backends, "cudnn"):
-                torch.backends.cudnn.deterministic = True
-                torch.backends.cudnn.benchmark = False
+                if hasattr(torch.backends, "cudnn"):
+                    torch.backends.cudnn.deterministic = True
+                    torch.backends.cudnn.benchmark = False
 
-            torch_info = {
-                "available": True,
-                "cuda_available": cuda_available,
-                "deterministic_algorithms": det_algorithms_enabled,
-            }
+                torch_info = {
+                    "available": True,
+                    "cuda_available": cuda_available,
+                    "deterministic_algorithms": det_algorithms_enabled,
+                }
 
     return {
         "seed": seed,
@@ -136,6 +139,10 @@ def apply_runtime_reproducibility(runtime_cfg: Mapping[str, Any] | None) -> dict
         "pythonhashseed_before": pyhash_before,
         "pythonhashseed_after": pyhash_after,
         "pythonhashseed_matches_seed": pyhash_after == str(seed),
+        "pythonhashseed_effective_in_process": False,
+        "pythonhashseed_note": (
+            "PYTHONHASHSEED set at runtime affects child processes, not hash seeding of current process."
+        ),
         "thread_env": thread_env,
         "torch": torch_info,
     }

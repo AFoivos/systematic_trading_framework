@@ -11,6 +11,8 @@ from src.features.technical.oscillators import add_oscillator_features
 from src.features.technical.trend import add_trend_features, add_trend_regime_features
 from src.backtesting.strategies import (
     conviction_sizing_signal,
+    forecast_threshold_signal,
+    forecast_vol_adjusted_signal,
     momentum_strategy,
     probabilistic_signal,
     rsi_strategy,
@@ -19,8 +21,11 @@ from src.backtesting.strategies import (
     volatility_regime_strategy,
 )
 from src.experiments.models import (
+    train_garch_forecaster,
     train_lightgbm_classifier,
     train_logistic_regression_classifier,
+    train_sarimax_forecaster,
+    train_tft_forecaster,
 )
 
 FeatureFn = Callable[..., pd.DataFrame]
@@ -43,6 +48,8 @@ SIGNAL_REGISTRY: Mapping[str, SignalFn] = {
     "trend_state": trend_state_signal,
     "probability_threshold": probabilistic_signal,
     "probability_conviction": conviction_sizing_signal,
+    "forecast_threshold": forecast_threshold_signal,
+    "forecast_vol_adjusted": forecast_vol_adjusted_signal,
     "rsi": rsi_strategy,
     "momentum": momentum_strategy,
     "stochastic": stochastic_strategy,
@@ -52,6 +59,9 @@ SIGNAL_REGISTRY: Mapping[str, SignalFn] = {
 MODEL_REGISTRY: Mapping[str, ModelFn] = {
     "lightgbm_clf": train_lightgbm_classifier,
     "logistic_regression_clf": train_logistic_regression_classifier,
+    "sarimax_forecaster": train_sarimax_forecaster,
+    "garch_forecaster": train_garch_forecaster,
+    "tft_forecaster": train_tft_forecaster,
 }
 
 

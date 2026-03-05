@@ -75,6 +75,9 @@ def add_momentum_features(
     - volatility-normalized momentum (αν υπάρχει vol_col)
     """
     out = df if inplace else df.copy()
+    missing = [c for c in (price_col, returns_col) if c not in out.columns]
+    if missing:
+        raise KeyError(f"Missing columns for momentum features: {missing}")
 
     prices = out[price_col].astype(float)
     returns = out[returns_col].astype(float)

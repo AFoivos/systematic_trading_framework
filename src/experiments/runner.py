@@ -90,6 +90,35 @@ def _pit_config_hash(pit_cfg: dict[str, Any] | None) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+def _is_sensitive_key(key: str) -> bool:
+    """
+    Detect likely sensitive keys for artifact redaction.
+    """
+    k = str(key).lower()
+    if k in {"api_key", "token", "secret", "password", "access_key"}:
+        return True
+    return k.endswith("_key") or k.endswith("_token") or k.endswith("_secret")
+
+
+def _redact_sensitive_values(value: Any) -> Any:
+    """
+    Recursively redact sensitive values before writing artifacts to disk.
+    """
+    if isinstance(value, dict):
+        out: dict[str, Any] = {}
+        for k, v in value.items():
+            if _is_sensitive_key(str(k)):
+                out[str(k)] = "***REDACTED***" if v is not None else None
+            else:
+                out[str(k)] = _redact_sensitive_values(v)
+        return out
+    if isinstance(value, list):
+        return [_redact_sensitive_values(v) for v in value]
+    if isinstance(value, tuple):
+        return tuple(_redact_sensitive_values(v) for v in value)
+    return value
+
+
 def _resolve_symbols(data_cfg: dict[str, Any]) -> list[str]:
     """
     Handle symbols inside the experiment orchestration layer. The helper isolates one focused
@@ -202,26 +231,26 @@ def _aggregate_model_meta(per_asset_meta: dict[str, dict[str, Any]]) -> dict[str
     if not per_asset_meta:
         return {}
 
-    first = next(iter(per_asset_meta.values()))
-    total_eval_rows = sum(
-        int(meta.get("oos_classification_summary", {}).get("evaluation_rows") or 0)
-        for meta in per_asset_meta.values()
-    )
+    def _weighted_summary(
+        *,
+        summary_key: str,
+        metric_keys: tuple[str, ...],
+    ) -> dict[str, float | int | None]:
+        total_eval_rows = sum(
+            int(meta.get(summary_key, {}).get("evaluation_rows") or 0)
+            for meta in per_asset_meta.values()
+        )
+        out: dict[str, float | int | None] = {"evaluation_rows": int(total_eval_rows)}
+        for key in metric_keys:
+            out[key] = None
+        if total_eval_rows <= 0:
+            return out
 
-    weighted_summary: dict[str, float | int | None] = {
-        "evaluation_rows": int(total_eval_rows),
-        "positive_rate": None,
-        "accuracy": None,
-        "brier": None,
-        "roc_auc": None,
-        "log_loss": None,
-    }
-    if total_eval_rows > 0:
-        for key in ("positive_rate", "accuracy", "brier", "roc_auc", "log_loss"):
+        for key in metric_keys:
             weighted_value = 0.0
             weight_total = 0
             for meta in per_asset_meta.values():
-                summary = dict(meta.get("oos_classification_summary", {}) or {})
+                summary = dict(meta.get(summary_key, {}) or {})
                 value = summary.get(key)
                 rows = int(summary.get("evaluation_rows") or 0)
                 if value is None or rows <= 0:
@@ -229,7 +258,31 @@ def _aggregate_model_meta(per_asset_meta: dict[str, dict[str, Any]]) -> dict[str
                 weighted_value += float(value) * rows
                 weight_total += rows
             if weight_total > 0:
-                weighted_summary[key] = float(weighted_value / weight_total)
+                out[key] = float(weighted_value / weight_total)
+        return out
+
+    first = next(iter(per_asset_meta.values()))
+    weighted_classification_summary = _weighted_summary(
+        summary_key="oos_classification_summary",
+        metric_keys=("positive_rate", "accuracy", "brier", "roc_auc", "log_loss"),
+    )
+    weighted_regression_summary = _weighted_summary(
+        summary_key="oos_regression_summary",
+        metric_keys=(
+            "mae",
+            "rmse",
+            "mse",
+            "r2",
+            "correlation",
+            "directional_accuracy",
+            "mean_prediction",
+            "mean_target",
+        ),
+    )
+    weighted_volatility_summary = _weighted_summary(
+        summary_key="oos_volatility_summary",
+        metric_keys=("mae", "rmse", "correlation", "mean_prediction", "mean_target"),
+    )
 
     return {
         "model_kind": first.get("model_kind"),
@@ -238,7 +291,9 @@ def _aggregate_model_meta(per_asset_meta: dict[str, dict[str, Any]]) -> dict[str
         "train_rows": int(sum(int(meta.get("train_rows", 0)) for meta in per_asset_meta.values())),
         "test_pred_rows": int(sum(int(meta.get("test_pred_rows", 0)) for meta in per_asset_meta.values())),
         "oos_rows": int(sum(int(meta.get("oos_rows", 0)) for meta in per_asset_meta.values())),
-        "oos_classification_summary": weighted_summary,
+        "oos_classification_summary": weighted_classification_summary,
+        "oos_regression_summary": weighted_regression_summary,
+        "oos_volatility_summary": weighted_volatility_summary,
     }
 
 
@@ -605,6 +660,7 @@ def _run_portfolio_backtest(
         covariance_by_date = build_rolling_covariance_by_date(
             asset_returns,
             window=int(portfolio_cfg.get("covariance_window", 60)),
+            rebalance_step=int(portfolio_cfg.get("covariance_rebalance_step", 1)),
         )
         weights, diagnostics = build_optimized_weights_over_time(
             expected_returns,
@@ -760,6 +816,8 @@ def _build_single_asset_evaluation(
             "oos_coverage": float(oos_mask.mean()) if len(oos_mask) > 0 else 0.0,
             "fold_backtest_summaries": fold_summaries,
             "model_oos_summary": dict(model_meta.get("oos_classification_summary", {}) or {}),
+            "model_oos_regression_summary": dict(model_meta.get("oos_regression_summary", {}) or {}),
+            "model_oos_volatility_summary": dict(model_meta.get("oos_volatility_summary", {}) or {}),
             "asset": asset,
         }
     )
@@ -804,7 +862,8 @@ def _build_portfolio_evaluation(
     oos_df = pd.concat(oos_by_asset, axis=1, join=alignment).sort_index()
     if isinstance(oos_df.columns, pd.MultiIndex):
         oos_df.columns = oos_df.columns.get_level_values(0)
-    oos_mask = oos_df.reindex(performance.net_returns.index).fillna(0.0).astype(bool).any(axis=1)
+    # Date is strict OOS only if all participating assets are OOS on that date.
+    oos_mask = oos_df.reindex(performance.net_returns.index).fillna(0.0).astype(bool).all(axis=1)
     oos_summary = _compute_subset_metrics(
         net_returns=performance.net_returns,
         turnover=performance.turnover,
@@ -821,6 +880,8 @@ def _build_portfolio_evaluation(
             "oos_active_dates": int(oos_mask.sum()),
             "oos_date_coverage": float(oos_mask.mean()) if len(oos_mask) > 0 else 0.0,
             "model_oos_summary": dict(model_meta.get("oos_classification_summary", {}) or {}),
+            "model_oos_regression_summary": dict(model_meta.get("oos_regression_summary", {}) or {}),
+            "model_oos_volatility_summary": dict(model_meta.get("oos_volatility_summary", {}) or {}),
             "folds_by_asset": {
                 asset: list(meta.get("folds", []) or [])
                 for asset, meta in dict(model_meta.get("per_asset", {}) or {}).items()
@@ -928,6 +989,19 @@ def _build_execution_output(
     current_weights_cfg = dict(execution_cfg.get("current_weights", {}) or {})
     current_weights = pd.Series(current_weights_cfg, dtype=float) if current_weights_cfg else None
 
+    if portfolio_weights is not None and (portfolio_weights.empty or len(portfolio_weights.columns) == 0):
+        empty_orders = pd.DataFrame(columns=["target_weight", "current_weight", "delta_weight", "price"])
+        return (
+            {
+                "mode": "paper",
+                "capital": capital,
+                "as_of": None,
+                "order_count": 0,
+                "gross_target": 0.0,
+            },
+            empty_orders,
+        )
+
     if portfolio_weights is not None:
         target_weights = portfolio_weights.iloc[-1].astype(float)
         prices = _align_asset_column(asset_frames, column=price_col, how=alignment).reindex(
@@ -939,6 +1013,18 @@ def _build_execution_output(
         asset = next(iter(sorted(asset_frames)))
         bt = performance
         assert isinstance(bt, BacktestResult)
+        if bt.positions.empty or bt.returns.empty:
+            empty_orders = pd.DataFrame(columns=["target_weight", "current_weight", "delta_weight", "price"])
+            return (
+                {
+                    "mode": "paper",
+                    "capital": capital,
+                    "as_of": None,
+                    "order_count": 0,
+                    "gross_target": 0.0,
+                },
+                empty_orders,
+            )
         target_weights = pd.Series({asset: float(bt.positions.iloc[-1])}, dtype=float)
         latest_price = float(asset_frames[asset][price_col].reindex(bt.returns.index).iloc[-1])
         latest_prices = pd.Series({asset: latest_price}, dtype=float)
@@ -1032,8 +1118,9 @@ def _save_artifacts(
     run_dir.mkdir(parents=True, exist_ok=True)
 
     cfg_path = run_dir / "config_used.yaml"
+    safe_cfg = _redact_sensitive_values(cfg)
     with cfg_path.open("w", encoding="utf-8") as f:
-        yaml.safe_dump(cfg, f, sort_keys=False)
+        yaml.safe_dump(safe_cfg, f, sort_keys=False)
 
     summary_path = run_dir / "summary.json"
     payload = {

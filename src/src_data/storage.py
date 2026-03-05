@@ -7,7 +7,7 @@ from typing import Any, Mapping
 
 import pandas as pd
 
-from src.utils.paths import PROJECT_ROOT
+from src.utils.paths import PROJECT_ROOT, enforce_safe_absolute_path
 from src.utils.run_metadata import compute_dataframe_fingerprint
 
 
@@ -19,7 +19,7 @@ def _resolve_path(path: str | Path) -> Path:
     p = Path(path)
     if not p.is_absolute():
         p = (PROJECT_ROOT / p).resolve()
-    return p
+    return enforce_safe_absolute_path(p)
 
 
 def _resolve_snapshot_dir(
@@ -133,9 +133,11 @@ def save_dataset_snapshot(
 
     data_path = snapshot_dir / "dataset.csv"
     metadata_path = snapshot_dir / "metadata.json"
+    data_tmp_path = snapshot_dir / "dataset.csv.tmp"
+    metadata_tmp_path = snapshot_dir / "metadata.json.tmp"
 
     long_frame = asset_frames_to_long_frame(asset_frames)
-    long_frame.to_csv(data_path, index=False)
+    long_frame.to_csv(data_tmp_path, index=False)
 
     metadata = build_dataset_snapshot_metadata(
         asset_frames,
@@ -145,8 +147,11 @@ def save_dataset_snapshot(
     )
     metadata["data_path"] = str(data_path)
 
-    with metadata_path.open("w", encoding="utf-8") as f:
+    with metadata_tmp_path.open("w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2, default=str)
+
+    data_tmp_path.replace(data_path)
+    metadata_tmp_path.replace(metadata_path)
 
     return {
         "dataset_id": dataset_id,

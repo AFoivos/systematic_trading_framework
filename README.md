@@ -157,7 +157,7 @@ Key config blocks now supported:
 
 * `data.symbol` or `data.symbols` for single-asset vs multi-asset runs
 * `data.storage` for raw/processed dataset snapshots (`live`, `live_or_cached`, `cached_only`)
-* `model.kind` for `lightgbm_clf` and `logistic_regression_clf`
+* `model.kind` for `lightgbm_clf`, `logistic_regression_clf`, `sarimax_forecaster`, `garch_forecaster`, and `tft_forecaster`
 * `portfolio` for signal-based or mean-variance portfolio construction
 * `monitoring` for feature drift reports
 * `execution` for paper-order export at the latest timestamp
@@ -196,12 +196,13 @@ Implemented model path today:
 
 * LightGBM classifier with time-aware OOS predictions
 * Logistic regression classifier with the same anti-leakage split framework
+* SARIMAX forecaster with walk-forward / purged OOS predictions
+* GARCH(1,1) volatility-aware forecaster with causal roll-forward updates
+* TFT-style transformer forecaster with quantile outputs
 
 Planned / future model families:
 
-* ARIMA / SARIMAX
 * VAR
-* GARCH-style volatility models
 * LSTM / temporal CNNs
 * RL agents
 

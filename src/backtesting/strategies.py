@@ -3,6 +3,8 @@ from __future__ import annotations
 import pandas as pd
 
 from src.signals import (
+    compute_forecast_threshold_signal,
+    compute_forecast_vol_adjusted_signal,
     compute_momentum_signal,
     compute_rsi_signal,
     compute_stochastic_signal,
@@ -177,6 +179,50 @@ def conviction_sizing_signal(
     exp = exp.clip(-clip, clip)
     exp.name = signal_name
     return exp
+
+
+def forecast_threshold_signal(
+    df: pd.DataFrame,
+    forecast_col: str = "pred_ret",
+    signal_name: str = "signal_forecast",
+    upper: float = 0.0,
+    lower: float | None = None,
+    mode: str = "long_short_hold",
+) -> pd.Series:
+    """
+    Map return forecasts to a thresholded directional signal.
+    """
+    out = compute_forecast_threshold_signal(
+        df,
+        forecast_col=forecast_col,
+        upper=upper,
+        lower=lower,
+        signal_col=signal_name,
+        mode=mode,
+    )
+    return out[signal_name]
+
+
+def forecast_vol_adjusted_signal(
+    df: pd.DataFrame,
+    forecast_col: str = "pred_ret",
+    vol_col: str = "pred_vol",
+    signal_name: str = "signal_forecast_vol_adj",
+    clip: float = 1.0,
+    vol_floor: float = 1e-6,
+) -> pd.Series:
+    """
+    Build a continuous forecast conviction signal scaled by predicted volatility.
+    """
+    out = compute_forecast_vol_adjusted_signal(
+        df,
+        forecast_col=forecast_col,
+        vol_col=vol_col,
+        signal_col=signal_name,
+        clip=clip,
+        vol_floor=vol_floor,
+    )
+    return out[signal_name]
 
 
 def regime_filtered_signal(

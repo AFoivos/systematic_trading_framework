@@ -29,8 +29,15 @@ def compute_trend_state_signal(
     long_mask = state > 0.0
     short_mask = state < 0.0
 
-    if mode in {"long_only", "long_short", "long_short_hold"}:
+    if mode == "long_short_hold":
+        hold = pd.Series(pd.NA, index=out.index, dtype="Float64")
+        hold.loc[long_mask] = float(long_value)
+        hold.loc[short_mask] = float(short_value)
+        out[signal_col] = hold.ffill().fillna(float(flat_value)).astype(float)
+        return out
+
+    if mode in {"long_only", "long_short"}:
         out.loc[long_mask, signal_col] = long_value
-    if mode in {"short_only", "long_short", "long_short_hold"}:
+    if mode in {"short_only", "long_short"}:
         out.loc[short_mask, signal_col] = short_value
     return out

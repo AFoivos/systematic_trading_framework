@@ -10,6 +10,7 @@ def build_rolling_covariance_by_date(
     *,
     window: int = 60,
     min_periods: int | None = None,
+    rebalance_step: int = 1,
 ) -> dict[pd.Timestamp, pd.DataFrame]:
     """
     Build rolling covariance by date as an explicit intermediate object used by the portfolio
@@ -20,6 +21,8 @@ def build_rolling_covariance_by_date(
         raise TypeError("asset_returns must be a pandas DataFrame.")
     if window <= 1:
         raise ValueError("window must be > 1.")
+    if rebalance_step <= 0:
+        raise ValueError("rebalance_step must be > 0.")
 
     min_periods = int(min_periods or max(5, min(window, 20)))
     if min_periods <= 1:
@@ -32,6 +35,8 @@ def build_rolling_covariance_by_date(
         start = max(0, i - window + 1)
         hist = returns.iloc[start : i + 1]
         if len(hist) < min_periods:
+            continue
+        if (i - (min_periods - 1)) % rebalance_step != 0:
             continue
         cov = hist.cov().fillna(0.0)
         covariances[pd.Timestamp(ts)] = cov

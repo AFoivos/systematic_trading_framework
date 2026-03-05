@@ -3,6 +3,10 @@ from .trend_signal import compute_trend_state_signal
 from .momentum_signal import compute_momentum_signal
 from .stochastic_signal import compute_stochastic_signal
 from .volatility_signal import compute_volatility_regime_signal
+from .forecast_signal import (
+    compute_forecast_threshold_signal,
+    compute_forecast_vol_adjusted_signal,
+)
 
 __all__ = [
     "compute_rsi_signal",
@@ -10,4 +14,6 @@ __all__ = [
     "compute_momentum_signal",
     "compute_stochastic_signal",
     "compute_volatility_regime_signal",
+    "compute_forecast_threshold_signal",
+    "compute_forecast_vol_adjusted_signal",
 ]
