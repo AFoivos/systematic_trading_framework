@@ -1119,11 +1119,11 @@ src.src_data.pit:apply_pit_hardening <- src.experiments.runner:_load_asset_frame
 #### Module `src/experiments/models.py`
 
 - Python module: `src.experiments.models`
-- Ρόλος: Experiment orchestration
-- LOC: `499`
-- Imports: `__future__`, `lightgbm`, `numpy`, `pandas`, `sklearn.linear_model`, `sklearn.metrics`, `src.evaluation.time_splits`, `src.experiments.contracts`, `src.models.lightgbm_baseline`, `typing`
+- Ρόλος: Experiment-model adapters
+- LOC: `~1k`
+- Imports: `__future__`, `lightgbm`, `numpy`, `pandas`, `sklearn.linear_model`, `sklearn.metrics`, `src.evaluation.time_splits`, `src.experiments.contracts`, `src.models.garch`, `src.models.lightgbm_baseline`, `src.models.sarimax`, `src.models.tft`, `typing`
 - Global constants / exported symbols:
-  - `__all__` = `['infer_feature_columns', 'train_lightgbm_classifier', 'train_logistic_regression_classifier']`
+  - `__all__` = `['infer_feature_columns', 'train_lightgbm_classifier', 'train_logistic_regression_classifier', 'train_sarimax_forecaster', 'train_garch_forecaster', 'train_tft_forecaster']`
 - ASCII dependency sketch:
 ```text
 [imports] __future__, lightgbm, numpy, pandas

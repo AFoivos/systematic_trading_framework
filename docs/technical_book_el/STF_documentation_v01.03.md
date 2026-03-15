@@ -7,10 +7,10 @@
 signal-to-portfolio mapping, portfolio constraints, drift diagnostics και paper execution artifacts.
 Η παρούσα τεκμηρίωση βασίζεται στην πραγματική κατάσταση του κώδικα την 2 Μαρτίου 2026, σε ανάγνωση όλου
 του repository, καθώς και σε εκτέλεση του test suite (`51 passed, 2 warnings`). Το framework σήμερα
-υλοποιεί πλήρως data ingestion, feature engineering, classification-based signal generation, single-asset και
-multi-asset portfolio backtesting, reproducibility metadata και artifact persistence. Αντίθετα, deep
-learning, reinforcement learning και live broker execution αναφέρονται στο README ως roadmap και όχι ως
-ενεργές υλοποιήσεις στον παρόντα κώδικα.
+υλοποιεί πλήρως data ingestion, feature engineering, classification-based signal generation, SARIMAX/GARCH/TFT
+forecasting paths, single-asset και multi-asset portfolio backtesting, reproducibility metadata και artifact
+persistence. Αντίθετα, reinforcement learning και live broker execution αναφέρονται στο README ως roadmap και
+όχι ως ενεργές υλοποιήσεις στον παρόντα κώδικα.
 
 Βασικά μετρήσιμα μεγέθη του codebase:
 
@@ -63,6 +63,9 @@ backtesting, reproducibility metadata και παραγωγή execution-ready pa
 - PIT timestamp alignment και corporate action handling.
 - Feature engineering για returns, lags, volatility, trend, momentum, oscillators, indicators.
 - LightGBM και Logistic Regression classification με OOS predictions.
+- SARIMAX forecaster με walk-forward / purged OOS assembly.
+- GARCH(1,1) volatility-aware forecaster με causal roll-forward updates.
+- TFT-style transformer forecaster με quantile outputs.
 - Single-asset και multi-asset portfolio backtesting.
 - Monitoring PSI drift reports.
 - Paper rebalancing order generation.
@@ -70,7 +73,7 @@ backtesting, reproducibility metadata και παραγωγή execution-ready pa
 
 Δεν υλοποιούνται ακόμη στον παρόντα κώδικα, παρότι αναφέρονται στο README ως κατευθύνσεις:
 
-- ARIMA/SARIMAX/VAR/GARCH production models.
+- VAR production model.
 - LSTM/temporal CNN training loops.
 - RL environments, policies και reward functions σε executable form.
 - Live broker adapters / OMS integration.
@@ -97,7 +100,8 @@ backtesting, reproducibility metadata και παραγωγή execution-ready pa
 - `Infrastructure/repro layer`: `src/utils/repro.py`, `src/utils/run_metadata.py`, `src/utils/paths.py`.
 - `Data layer`: `src/src_data/*`.
 - `Feature layer`: `src/features/*`.
-- `Model layer`: `src/experiments/models.py`, `src/models/lightgbm_baseline.py`.
+- `Model layer`: `src/models/*`, `src/models/lightgbm_baseline.py`.
+- `Experiment-model adapter layer`: `src/experiments/models.py`, `src/experiments/registry.py`.
 - `Signal layer`: `src/signals/*`, `src/backtesting/strategies.py`.
 - `Backtesting/evaluation layer`: `src/backtesting/engine.py`, `src/evaluation/*`.
 - `Portfolio layer`: `src/portfolio/*`.
@@ -123,6 +127,8 @@ backtesting, reproducibility metadata και παραγωγή execution-ready pa
                           [features] ---> [experiments.models] ---> [signals]
                              |                   |                    |
                              |                   v                    |
+                             |              [src.models]              |
+                             |                   |                    |
                              |            [time_splits]               |
                              |                   |                    |
                              +---------> [backtesting.engine] <-------+
@@ -143,11 +149,12 @@ backtesting, reproducibility metadata και παραγωγή execution-ready pa
 
 ### 2.4 Σχόλιο για την Κατεύθυνση των Εξαρτήσεων
 
-Οι χαμηλότεροι layers (`src_data`, `features`, `risk`, `evaluation`, `portfolio`) δεν γνωρίζουν τίποτε για
-τον orchestrator. Αντίθετα, ο orchestrator εξαρτάται από όλους. Αυτή είναι υγιής κατεύθυνση σύζευξης. Το
-μοναδικό σημείο που εμφανίζεται πιο κεντρικό από όσο ιδανικά θα θέλαμε είναι το `runner.py`, το οποίο
-συγκεντρώνει orchestration, artifact persistence και μέρος της evaluation/reporting assembly. Αυτό δεν είναι
-σφάλμα, αλλά αποτελεί τον κύριο υποψήφιο μελλοντικού decomposition.
+Οι χαμηλότεροι layers (`src_data`, `features`, `risk`, `evaluation`, `portfolio`, `models`) δεν γνωρίζουν
+τίποτε για τον orchestrator. Το `src/experiments/models.py` λειτουργεί πλέον ως λεπτό experiment adapter:
+χτίζει targets, ορίζει split policy, καλεί τα estimator/fold engines του `src/models/` και συναρμολογεί strict
+OOS outputs και metadata. Αντίθετα, ο orchestrator εξαρτάται από όλους. Αυτή είναι υγιής κατεύθυνση
+σύζευξης. Το βασικό architectural hotspot παραμένει το `runner.py`, επειδή εξακολουθεί να συγκεντρώνει
+orchestration, artifact persistence και μέρος της evaluation/reporting assembly.
 
 ### 2.5 ASCII Class Diagram
 
@@ -214,7 +221,8 @@ backtesting, reproducibility metadata και παραγωγή execution-ready pa
 - `src/portfolio`: Portfolio constraints, optimization, signal-to-weight mapping και portfolio-level accounting.
 - `src/monitoring`: Production-style drift diagnostics για features.
 - `src/execution`: Paper execution export layer.
-- `src/experiments`: Top-level orchestration domain: contracts, registries, model training routines, end-to-end run coordination.
+- `src/models`: Καθαρά estimator/fold engines για SARIMAX, GARCH, TFT και lightweight notebook baselines.
+- `src/experiments`: Experiment-facing orchestration domain: contracts, registries, config adapters, target construction, split policy, strict OOS assembly και end-to-end run coordination.
 - `src/utils`: Infrastructure utilities για paths, config normalization, reproducibility και run metadata.
 - `tests`: Regression suite που κωδικοποιεί τις θεμελιώδεις υποθέσεις correctness, anti-leakage και reproducibility.
 
@@ -241,9 +249,9 @@ equity curves, costs, orders και metadata manifests.
 | `src/evaluation/time_splits.py` | 293 | Time-aware split generator με support για simple time split, walk-forward και purged walk-forward. |
 | `src/execution/__init__.py` | 3 | Public API surface που επανεξάγει symbols του package ώστε τα imports ανώτερου layer να μένουν σταθερά. |
 | `src/execution/paper.py` | 66 | Paper execution artifact builder που μετατρέπει target weights σε notional/share deltas. |
-| `src/experiments/__init__.py` | 16 | Public API surface που επανεξάγει symbols του package ώστε τα imports ανώτερου layer να μένουν σταθερά. |
+| `src/experiments/__init__.py` | 38 | Public API surface με lazy exports του runner ώστε τα package imports να μένουν σταθερά χωρίς circular-import side effects. |
 | `src/experiments/contracts.py` | 130 | Υλοποίηση του module `contracts.py` μέσα στο package `experiments`, με ρόλο συμβατό με τη συνολική layered αρχιτεκτονική του repository. |
-| `src/experiments/models.py` | 499 | Modeling layer για classification πάνω σε forward-return targets με leakage-safe chronological splits. |
+| `src/experiments/models.py` | 1002 | Experiment-model adapter layer: target construction, split policy, OOS assembly και thin wrappers προς τα estimator engines του `src/models/`. |
 | `src/experiments/registry.py` | 88 | Υλοποίηση του module `registry.py` μέσα στο package `experiments`, με ρόλο συμβατό με τη συνολική layered αρχιτεκτονική του repository. |
 | `src/experiments/runner.py` | 1264 | Κεντρικός orchestrator. Συνδέει config loading, data ingestion, PIT hardening, features, model fitting, signal generation, single-asset ή portfolio backtest, monitoring, execution και artifact persistence. |
 | `src/features/__init__.py` | 20 | Public API surface που επανεξάγει symbols του package ώστε τα imports ανώτερου layer να μένουν σταθερά. |
@@ -255,8 +263,11 @@ equity curves, costs, orders και metadata manifests.
 | `src/features/technical/oscillators.py` | 122 | Υλοποίηση του module `oscillators.py` μέσα στο package `technical`, με ρόλο συμβατό με τη συνολική layered αρχιτεκτονική του repository. |
 | `src/features/technical/trend.py` | 190 | Υλοποίηση του module `trend.py` μέσα στο package `technical`, με ρόλο συμβατό με τη συνολική layered αρχιτεκτονική του repository. |
 | `src/features/volatility.py` | 100 | Υλοποίηση του module `volatility.py` μέσα στο package `features`, με ρόλο συμβατό με τη συνολική layered αρχιτεκτονική του repository. |
-| `src/models/__init__.py` | 0 | Public API surface που επανεξάγει symbols του package ώστε τα imports ανώτερου layer να μένουν σταθερά. |
-| `src/models/lightgbm_baseline.py` | 128 | Legacy/baseline modeling helpers για notebooks ή lightweight experiments, όχι ο βασικός production orchestrator. |
+| `src/models/__init__.py` | 25 | Public API surface που επανεξάγει estimator/fold engines και baseline helpers από το model layer. |
+| `src/models/garch.py` | 198 | Καθαρό GARCH engine module με parameter fitting και fold predictor factory ανεξάρτητα από το experiment layer. |
+| `src/models/lightgbm_baseline.py` | 128 | Lightweight baseline/model helper layer για notebooks και shared feature defaults. |
+| `src/models/sarimax.py` | 139 | Καθαρό SARIMAX fold engine με local fallback policy και exogenous-feature handling. |
+| `src/models/tft.py` | 262 | Καθαρό TFT-style sequence engine με sample construction και fold predictor factory. |
 | `src/monitoring/__init__.py` | 6 | Public API surface που επανεξάγει symbols του package ώστε τα imports ανώτερου layer να μένουν σταθερά. |
 | `src/monitoring/drift.py` | 113 | Monitoring layer για PSI-based feature drift και summary diagnostics. |
 | `src/portfolio/__init__.py` | 35 | Public API surface που επανεξάγει symbols του package ώστε τα imports ανώτερου layer να μένουν σταθερά. |
@@ -5336,14 +5347,16 @@ Top-level orchestration domain: contracts, registries, model training routines, 
 
 #### Αρχείο `src/experiments/__init__.py`
 
-**Σκοπός**: Public API surface που επανεξάγει symbols του package ώστε τα imports ανώτερου layer να μένουν σταθερά.
+**Σκοπός**: Public API surface με lazy exports του runner ώστε τα package imports να μένουν σταθερά χωρίς
+circular-import side effects.
 
-**Βασικά Μεγέθη**: 16 LOC, 2 import blocks, 0 global constants, 0 classes, 0 functions.
+**Βασικά Μεγέθη**: 38 LOC, 3 import blocks, 0 global constants, 0 classes, 1 function.
 
 **Ανάλυση Imports**
 
-- Από `.runner` εισάγονται `ExperimentResult`, `run_experiment`. Ρόλος: Εσωτερική εξάρτηση του framework για composition ανά layer.
+- Από `typing` εισάγονται `TYPE_CHECKING`, `Any`. Ρόλος: Γλωσσικό/infrastructure support για types και lazy export machinery.
 - Από `.contracts` εισάγονται `DataContract`, `TargetContract`, `validate_data_contract`, `validate_feature_target_contract`. Ρόλος: Εσωτερική εξάρτηση του framework για composition ανά layer.
+- Η εξάρτηση από `.runner` γίνεται πλέον lazy μέσα από `__getattr__`, όχι ως eager top-level import.
 
 **Global Constants / Module State**
 
@@ -5355,7 +5368,8 @@ Top-level orchestration domain: contracts, registries, model training routines, 
 
 **Functions**
 
-- Δεν υπάρχουν top-level functions. Ο ρόλος του αρχείου είναι κυρίως export surface ή abstract interface.
+- Υπάρχει το `__getattr__`, το οποίο φορτώνει lazy τα `ExperimentResult` και `run_experiment` μόνο όταν
+  ζητηθούν από external callers.
 
 #### Αρχείο `src/experiments/contracts.py`
 
@@ -5464,9 +5478,10 @@ Validate feature target contract before downstream logic depends on it. The func
 
 #### Αρχείο `src/experiments/models.py`
 
-**Σκοπός**: Modeling layer για classification πάνω σε forward-return targets με leakage-safe chronological splits.
+**Σκοπός**: Experiment-model adapter layer που χτίζει forward targets, εφαρμόζει leakage-safe splits και
+συναρμολογεί strict OOS outputs, ενώ τα estimator-specific fold engines ζουν πλέον στο `src/models/`.
 
-**Βασικά Μεγέθη**: 499 LOC, 10 import blocks, 0 global constants, 0 classes, 8 functions.
+**Βασικά Μεγέθη**: Μεσαίου μεγέθους orchestration module, με έμφαση σε adapters και όχι σε estimator internals.
 
 **Ανάλυση Imports**
 
@@ -10937,17 +10952,30 @@ logging:
 
 - `lightgbm_clf`: gradient boosted decision trees με probabilistic output.
 - `logistic_regression_clf`: γραμμικό probabilistic baseline/classifier με σαφή interpretability.
+- `sarimax_forecaster`: κλασικό state-space forecaster με optional exogenous features.
+- `garch_forecaster`: GARCH(1,1) engine με conditional-volatility forecast και optional AR(1) mean.
+- `tft_forecaster`: compact transformer/TFT-style sequence forecaster με quantile outputs.
 
-### 8.2 Μηχανική του Target
+### 8.2 Layer Boundary
+
+Ο model layer έχει πλέον δύο σαφή υποεπίπεδα:
+
+- `src/models/`: estimator-specific fold engines. Εδώ ζει η καθαρή αριθμητική λογική των SARIMAX, GARCH και TFT folds.
+- `src/experiments/models.py`: experiment adapters. Εδώ χτίζονται forward targets, επιβάλλονται time splits, γίνεται anti-leakage trimming και assembled strict OOS outputs.
+
+Αυτό σημαίνει ότι ο estimator code δεν γνωρίζει τίποτε για YAML configs, registries, artifacts ή reporting, ενώ το
+experiment layer δεν κρατά πια την εσωτερική αριθμητική υλοποίηση κάθε model family.
+
+### 8.3 Μηχανική του Target
 
 Ο model layer δεν εκπαιδεύεται απευθείας σε raw returns του ίδιου bar αλλά σε future returns ορίζοντα `h`. Αυτό
 είναι κρίσιμο επειδή κάθε row στο training set αντιπροσωπεύει “τι γνώριζα μέχρι το `t`” και label “τι συνέβη
 από `t+1` έως `t+h`”. Η μέθοδος `trim_train_indices_for_horizon()` κόβει ακριβώς τα training rows που θα
 δημιουργούσαν leakage στο test boundary.
 
-### 8.3 Quant / ML Pro Tip Section
+### 8.4 Quant / ML Pro Tip Section
 
-#### 8.3.1 Μαθηματική Ανάλυση Feature Engineering
+#### 8.4.1 Μαθηματική Ανάλυση Feature Engineering
 
 Βασικές οικογένειες features:
 
@@ -10964,20 +10992,26 @@ logging:
 ποτέ μελλοντικές παρατηρήσεις. Ακόμη και όταν downstream label είναι forward-looking, το feature space παραμένει
 causal.
 
-#### 8.3.2 Στατιστικές Παραδοχές Μοντέλων
+#### 8.4.2 Στατιστικές Παραδοχές Μοντέλων
 
 - Η logistic regression υποθέτει γραμμική σχέση στο logit space: $$\Pr(y=1\mid x)=\sigma(w^Tx+b)$$.
 - Η LightGBM δεν απαιτεί γραμμικότητα, αλλά παραμένει ευαίσθητη σε regime shifts και train/test distribution drift.
-- Και τα δύο μοντέλα υποθέτουν ότι τα labels και features ακολουθούν χρονική σειρά χωρίς sample shuffling.
+- Το SARIMAX υποθέτει state-space δυναμική και σταθερή order structure ανά fold.
+- Το GARCH υποθέτει conditional heteroskedasticity με θετικούς και stationarity-consistent parameters.
+- Το TFT path υποθέτει ότι η sequence πληροφορία συμπυκνώνεται σε fixed lookback windows.
+- Όλα τα μοντέλα υποθέτουν ότι τα labels και features ακολουθούν χρονική σειρά χωρίς sample shuffling.
 - Το repository αποφεύγει την ψευδή υπόθεση IID μέσω walk-forward/purged evaluation.
 
-#### 8.3.3 Rationale Επιλογής Μοντέλων
+#### 8.4.3 Rationale Επιλογής Μοντέλων
 
 - Η logistic regression προσφέρει baseline με χαμηλή πολυπλοκότητα, υψηλή ερμηνευσιμότητα και σταθερότητα.
 - Η LightGBM προσφέρει μη γραμμικές αλληλεπιδράσεις features και καλύτερη ικανότητα αποτύπωσης threshold effects.
-- Και τα δύο μοντέλα επιστρέφουν probabilities, επιτρέποντας separate signal layer και calibration-aware usage.
+- Το SARIMAX παρέχει interpretable parametric forecasting baseline με exogenous support.
+- Το GARCH διαχωρίζει την εκτίμηση mean/volatility και είναι χρήσιμος για risk-aware signal sizing.
+- Το TFT path επιτρέπει nonlinear sequence modeling με quantile-aware outputs.
+- Τα classification models επιστρέφουν probabilities, ενώ τα forecasting models χαρτογραφούνται σε probability-like conviction στο experiment layer.
 
-#### 8.3.4 Loss Functions
+#### 8.4.4 Loss Functions
 
 - Logistic regression / binary classification loss:
 
@@ -10991,21 +11025,27 @@ $$
 \text{Brier} = \frac{1}{N}\sum_{i=1}^N (p_i - y_i)^2
 $$
 
-Το repository δεν υλοποιεί custom loss, αλλά μετρά `log_loss`, `brier`, `roc_auc` και `accuracy` fold-by-fold.
+Το repository δεν υλοποιεί custom loss για τα classical models, αλλά μετρά `log_loss`, `brier`, `roc_auc`,
+`accuracy`, regression diagnostics και volatility diagnostics fold-by-fold. Ο TFT path χρησιμοποιεί quantile loss
+ανά output quantile.
 
-#### 8.3.5 Optimization Strategy
+#### 8.4.5 Optimization Strategy
 
 - Logistic regression: iterative convex optimization μέσω solver `lbfgs` by default.
 - LightGBM: boosted tree ensemble με learning rate, number of estimators, tree depth και leaf constraints.
+- SARIMAX: state-space maximum likelihood fitting ανά fold με controlled fallback path.
+- GARCH: constrained numerical fit των `(omega, alpha, beta)` με recursive out-of-sample update.
+- TFT: mini-batch training με AdamW πάνω σε fixed lookback windows.
 - Portfolio mean-variance: numerical constrained optimization με SLSQP.
 
-#### 8.3.6 Regularization Analysis
+#### 8.4.6 Regularization Analysis
 
 - Στο logistic regression, η παράμετρος `C` ελέγχει έμμεσα το regularization strength.
 - Στο LightGBM, regularization προκύπτει κυρίως από `max_depth`, `num_leaves`, `subsample`, `colsample_bytree`, `min_child_samples` και lower learning rate.
-- Σε time-series settings, το πιο κρίσιμο regularizer είναι η σωστή evaluation protocol και όχι μόνο οι hyperparameters.
+- Στο TFT path, regularization προκύπτει από dropout, hidden size, weight decay και το finite lookback.
+- Σε time-series settings, το πιο κρίσιμο regularizer παραμένει η σωστή evaluation protocol και όχι μόνο οι hyperparameters.
 
-#### 8.3.7 Validation Logic και Overfitting Control
+#### 8.4.7 Validation Logic και Overfitting Control
 
 - Χρησιμοποιούνται only chronological splits.
 - Το `pred_is_oos` ορίζει με ακρίβεια ποιες γραμμές είναι πραγματικά out-of-sample.
@@ -11013,14 +11053,14 @@ $$
 - Για quantile labeling, τα thresholds υπολογίζονται από train fold distribution και όχι από global sample distribution.
 - Τα fold-level backtest summaries επιτρέπουν ανίχνευση temporal instability και όχι μόνο aggregate score chasing.
 
-#### 8.3.8 Backtesting Assumptions
+#### 8.4.8 Backtesting Assumptions
 
 - Το PnL χρησιμοποιεί lagged position, άρα δεν υπάρχει same-bar execution leakage.
 - Η initial entry turnover χρεώνεται ρητά.
 - Τα transaction costs είναι linear in turnover, όχι nonlinear market impact model.
 - Το drawdown guard είναι deterministic exposure gating mechanism και όχι stochastic risk model.
 
-#### 8.3.9 Risk-Adjusted Return Analysis
+#### 8.4.9 Risk-Adjusted Return Analysis
 
 - Sharpe ratio: $$\text{Sharpe} = \frac{\mu_a}{\sigma_a}$$ όπου $\mu_a$ η annualized return και $\sigma_a$ η annualized volatility.
 - Sortino ratio: $$\text{Sortino} = \frac{\mu_a}{\sigma^-_a}$$ όπου $\sigma^-_a$ η annualized downside volatility.
@@ -11028,7 +11068,7 @@ $$
 - Calmar ratio: $$\text{Calmar} = \frac{\mu_a}{|\text{MDD}|}$$
 - Profit Factor: $$\text{PF} = \frac{\sum r_t^+}{\sum |r_t^-|}$$
 
-#### 8.3.10 RL / Reward Function Σχόλιο
+#### 8.4.10 RL / Reward Function Σχόλιο
 
 Το README αναφέρει RL ως μελλοντική οικογένεια μοντέλων, αλλά δεν υπάρχει executable RL policy logic ή reward
 function στον τρέχοντα κώδικα. Συνεπώς κάθε σχετική αρχιτεκτονική συζήτηση παραμένει roadmap-level και όχι
@@ -12446,9 +12486,9 @@ src.src_data.pit:apply_pit_hardening <- src.experiments.runner:_load_asset_frame
 #### Module `src/experiments/__init__.py`
 
 - Python module: `src.experiments`
-- Ρόλος: Experiment orchestration
-- LOC: `16`
-- Imports: `.contracts`, `.runner`
+- Ρόλος: Lazy package export surface
+- LOC: `38`
+- Imports: `.contracts`, `typing`
 - Global constants / exported symbols:
   - `__all__` = `['ExperimentResult', 'run_experiment', 'DataContract', 'TargetContract', 'validate_data_contract'...`
 - ASCII dependency sketch:
@@ -12550,11 +12590,11 @@ src.src_data.pit:apply_pit_hardening <- src.experiments.runner:_load_asset_frame
 #### Module `src/experiments/models.py`
 
 - Python module: `src.experiments.models`
-- Ρόλος: Experiment orchestration
-- LOC: `499`
-- Imports: `__future__`, `lightgbm`, `numpy`, `pandas`, `sklearn.linear_model`, `sklearn.metrics`, `src.evaluation.time_splits`, `src.experiments.contracts`, `src.models.lightgbm_baseline`, `typing`
+- Ρόλος: Experiment-model adapters
+- LOC: `~1k`
+- Imports: `__future__`, `lightgbm`, `numpy`, `pandas`, `sklearn.linear_model`, `sklearn.metrics`, `src.evaluation.time_splits`, `src.experiments.contracts`, `src.models.garch`, `src.models.lightgbm_baseline`, `src.models.sarimax`, `src.models.tft`, `typing`
 - Global constants / exported symbols:
-  - `__all__` = `['infer_feature_columns', 'train_lightgbm_classifier', 'train_logistic_regression_classifier']`
+  - `__all__` = `['infer_feature_columns', 'train_lightgbm_classifier', 'train_logistic_regression_classifier', 'train_sarimax_forecaster', 'train_garch_forecaster', 'train_tft_forecaster']`
 - ASCII dependency sketch:
 ```text
 [imports] __future__, lightgbm, numpy, pandas

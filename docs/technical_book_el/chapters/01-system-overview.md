@@ -35,6 +35,9 @@ backtesting, reproducibility metadata και παραγωγή execution-ready pa
 - PIT timestamp alignment και corporate action handling.
 - Feature engineering για returns, lags, volatility, trend, momentum, oscillators, indicators.
 - LightGBM και Logistic Regression classification με OOS predictions.
+- SARIMAX forecaster με walk-forward / purged OOS assembly.
+- GARCH(1,1) volatility-aware forecaster με causal roll-forward updates.
+- TFT-style transformer forecaster με quantile outputs.
 - Single-asset και multi-asset portfolio backtesting.
 - Monitoring PSI drift reports.
 - Paper rebalancing order generation.
@@ -42,7 +45,7 @@ backtesting, reproducibility metadata και παραγωγή execution-ready pa
 
 Δεν υλοποιούνται ακόμη στον παρόντα κώδικα, παρότι αναφέρονται στο README ως κατευθύνσεις:
 
-- ARIMA/SARIMAX/VAR/GARCH production models.
+- VAR production model.
 - LSTM/temporal CNN training loops.
 - RL environments, policies και reward functions σε executable form.
 - Live broker adapters / OMS integration.

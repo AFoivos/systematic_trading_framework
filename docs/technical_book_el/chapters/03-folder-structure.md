@@ -34,7 +34,8 @@
 - `src/portfolio`: Portfolio constraints, optimization, signal-to-weight mapping και portfolio-level accounting.
 - `src/monitoring`: Production-style drift diagnostics για features.
 - `src/execution`: Paper execution export layer.
-- `src/experiments`: Top-level orchestration domain: contracts, registries, model training routines, end-to-end run coordination.
+- `src/models`: Καθαρά estimator/fold engines για SARIMAX, GARCH, TFT και lightweight notebook baselines.
+- `src/experiments`: Experiment-facing orchestration domain: contracts, registries, config adapters, target construction, split policy, strict OOS assembly και end-to-end run coordination.
 - `src/utils`: Infrastructure utilities για paths, config normalization, reproducibility και run metadata.
 - `tests`: Regression suite που κωδικοποιεί τις θεμελιώδεις υποθέσεις correctness, anti-leakage και reproducibility.
 
@@ -61,9 +62,9 @@ equity curves, costs, orders και metadata manifests.
 | `src/evaluation/time_splits.py` | 293 | Time-aware split generator με support για simple time split, walk-forward και purged walk-forward. |
 | `src/execution/__init__.py` | 3 | Public API surface που επανεξάγει symbols του package ώστε τα imports ανώτερου layer να μένουν σταθερά. |
 | `src/execution/paper.py` | 66 | Paper execution artifact builder που μετατρέπει target weights σε notional/share deltas. |
-| `src/experiments/__init__.py` | 16 | Public API surface που επανεξάγει symbols του package ώστε τα imports ανώτερου layer να μένουν σταθερά. |
+| `src/experiments/__init__.py` | 38 | Public API surface με lazy exports του runner ώστε τα package imports να μένουν σταθερά χωρίς circular-import side effects. |
 | `src/experiments/contracts.py` | 130 | Υλοποίηση του module `contracts.py` μέσα στο package `experiments`, με ρόλο συμβατό με τη συνολική layered αρχιτεκτονική του repository. |
-| `src/experiments/models.py` | 499 | Modeling layer για classification πάνω σε forward-return targets με leakage-safe chronological splits. |
+| `src/experiments/models.py` | 1002 | Experiment-model adapter layer: target construction, split policy, OOS assembly και thin wrappers προς τα estimator engines του `src/models/`. |
 | `src/experiments/registry.py` | 88 | Υλοποίηση του module `registry.py` μέσα στο package `experiments`, με ρόλο συμβατό με τη συνολική layered αρχιτεκτονική του repository. |
 | `src/experiments/runner.py` | 1264 | Κεντρικός orchestrator. Συνδέει config loading, data ingestion, PIT hardening, features, model fitting, signal generation, single-asset ή portfolio backtest, monitoring, execution και artifact persistence. |
 | `src/features/__init__.py` | 20 | Public API surface που επανεξάγει symbols του package ώστε τα imports ανώτερου layer να μένουν σταθερά. |
@@ -75,8 +76,11 @@ equity curves, costs, orders και metadata manifests.
 | `src/features/technical/oscillators.py` | 122 | Υλοποίηση του module `oscillators.py` μέσα στο package `technical`, με ρόλο συμβατό με τη συνολική layered αρχιτεκτονική του repository. |
 | `src/features/technical/trend.py` | 190 | Υλοποίηση του module `trend.py` μέσα στο package `technical`, με ρόλο συμβατό με τη συνολική layered αρχιτεκτονική του repository. |
 | `src/features/volatility.py` | 100 | Υλοποίηση του module `volatility.py` μέσα στο package `features`, με ρόλο συμβατό με τη συνολική layered αρχιτεκτονική του repository. |
-| `src/models/__init__.py` | 0 | Public API surface που επανεξάγει symbols του package ώστε τα imports ανώτερου layer να μένουν σταθερά. |
-| `src/models/lightgbm_baseline.py` | 128 | Legacy/baseline modeling helpers για notebooks ή lightweight experiments, όχι ο βασικός production orchestrator. |
+| `src/models/__init__.py` | 25 | Public API surface που επανεξάγει estimator/fold engines και baseline helpers από το model layer. |
+| `src/models/garch.py` | 198 | Καθαρό GARCH engine module με parameter fitting και fold predictor factory ανεξάρτητα από το experiment layer. |
+| `src/models/lightgbm_baseline.py` | 128 | Lightweight baseline/model helper layer για notebooks και shared feature defaults. |
+| `src/models/sarimax.py` | 139 | Καθαρό SARIMAX fold engine με local fallback policy και exogenous-feature handling. |
+| `src/models/tft.py` | 262 | Καθαρό TFT-style sequence engine με sample construction και fold predictor factory. |
 | `src/monitoring/__init__.py` | 6 | Public API surface που επανεξάγει symbols του package ώστε τα imports ανώτερου layer να μένουν σταθερά. |
 | `src/monitoring/drift.py` | 113 | Monitoring layer για PSI-based feature drift και summary diagnostics. |
 | `src/portfolio/__init__.py` | 35 | Public API surface που επανεξάγει symbols του package ώστε τα imports ανώτερου layer να μένουν σταθερά. |

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from pathlib import Path
+import subprocess
+import sys
 
 import numpy as np
 import pandas as pd
@@ -9,6 +12,8 @@ import pytest
 from src.utils.config import load_experiment_config
 from src.utils.repro import RuntimeConfigError, apply_runtime_reproducibility, validate_runtime_config
 from src.utils.run_metadata import build_artifact_manifest, compute_config_hash, compute_dataframe_fingerprint
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_runtime_defaults_are_loaded_from_config() -> None:
@@ -24,6 +29,31 @@ def test_runtime_defaults_are_loaded_from_config() -> None:
     assert runtime["deterministic"] is True
     assert runtime["repro_mode"] == "strict"
     assert runtime["threads"] == 1
+
+
+def test_config_module_imports_cleanly_in_isolation() -> None:
+    """
+    Verify that config loading works in a fresh Python process without depending on prior import
+    order.
+    """
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "from src.utils.config import load_experiment_config; "
+                "cfg = load_experiment_config('experiments/lgbm_spy.yaml'); "
+                "print(cfg['data']['interval'])"
+            ),
+        ],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip().endswith("1d")
 
 
 def test_validate_runtime_config_rejects_invalid_threads() -> None:

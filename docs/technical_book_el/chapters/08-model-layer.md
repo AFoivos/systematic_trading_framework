@@ -4,17 +4,30 @@
 
 - `lightgbm_clf`: gradient boosted decision trees με probabilistic output.
 - `logistic_regression_clf`: γραμμικό probabilistic baseline/classifier με σαφή interpretability.
+- `sarimax_forecaster`: κλασικό state-space forecaster με optional exogenous features.
+- `garch_forecaster`: GARCH(1,1) engine με conditional-volatility forecast και optional AR(1) mean.
+- `tft_forecaster`: compact transformer/TFT-style sequence forecaster με quantile outputs.
 
-### 8.2 Μηχανική του Target
+### 8.2 Layer Boundary
+
+Ο model layer έχει πλέον δύο σαφή υποεπίπεδα:
+
+- `src/models/`: estimator-specific fold engines. Εδώ ζει η καθαρή αριθμητική λογική των SARIMAX, GARCH και TFT folds.
+- `src/experiments/models.py`: experiment adapters. Εδώ χτίζονται forward targets, επιβάλλονται time splits, γίνεται anti-leakage trimming και assembled strict OOS outputs.
+
+Αυτό σημαίνει ότι ο estimator code δεν γνωρίζει τίποτε για YAML configs, registries, artifacts ή reporting, ενώ το
+experiment layer δεν κρατά πια την εσωτερική αριθμητική υλοποίηση κάθε model family.
+
+### 8.3 Μηχανική του Target
 
 Ο model layer δεν εκπαιδεύεται απευθείας σε raw returns του ίδιου bar αλλά σε future returns ορίζοντα `h`. Αυτό
 είναι κρίσιμο επειδή κάθε row στο training set αντιπροσωπεύει “τι γνώριζα μέχρι το `t`” και label “τι συνέβη
 από `t+1` έως `t+h`”. Η μέθοδος `trim_train_indices_for_horizon()` κόβει ακριβώς τα training rows που θα
 δημιουργούσαν leakage στο test boundary.
 
-### 8.3 Quant / ML Pro Tip Section
+### 8.4 Quant / ML Pro Tip Section
 
-#### 8.3.1 Μαθηματική Ανάλυση Feature Engineering
+#### 8.4.1 Μαθηματική Ανάλυση Feature Engineering
 
 Βασικές οικογένειες features:
 
@@ -31,20 +44,26 @@
 ποτέ μελλοντικές παρατηρήσεις. Ακόμη και όταν downstream label είναι forward-looking, το feature space παραμένει
 causal.
 
-#### 8.3.2 Στατιστικές Παραδοχές Μοντέλων
+#### 8.4.2 Στατιστικές Παραδοχές Μοντέλων
 
 - Η logistic regression υποθέτει γραμμική σχέση στο logit space: $$\Pr(y=1\mid x)=\sigma(w^Tx+b)$$.
 - Η LightGBM δεν απαιτεί γραμμικότητα, αλλά παραμένει ευαίσθητη σε regime shifts και train/test distribution drift.
-- Και τα δύο μοντέλα υποθέτουν ότι τα labels και features ακολουθούν χρονική σειρά χωρίς sample shuffling.
+- Το SARIMAX υποθέτει state-space δυναμική και σταθερή order structure ανά fold.
+- Το GARCH υποθέτει conditional heteroskedasticity με θετικούς και stationarity-consistent parameters.
+- Το TFT path υποθέτει ότι η sequence πληροφορία συμπυκνώνεται σε fixed lookback windows.
+- Όλα τα μοντέλα υποθέτουν ότι τα labels και features ακολουθούν χρονική σειρά χωρίς sample shuffling.
 - Το repository αποφεύγει την ψευδή υπόθεση IID μέσω walk-forward/purged evaluation.
 
-#### 8.3.3 Rationale Επιλογής Μοντέλων
+#### 8.4.3 Rationale Επιλογής Μοντέλων
 
 - Η logistic regression προσφέρει baseline με χαμηλή πολυπλοκότητα, υψηλή ερμηνευσιμότητα και σταθερότητα.
 - Η LightGBM προσφέρει μη γραμμικές αλληλεπιδράσεις features και καλύτερη ικανότητα αποτύπωσης threshold effects.
-- Και τα δύο μοντέλα επιστρέφουν probabilities, επιτρέποντας separate signal layer και calibration-aware usage.
+- Το SARIMAX παρέχει interpretable parametric forecasting baseline με exogenous support.
+- Το GARCH διαχωρίζει την εκτίμηση mean/volatility και είναι χρήσιμος για risk-aware signal sizing.
+- Το TFT path επιτρέπει nonlinear sequence modeling με quantile-aware outputs.
+- Τα classification models επιστρέφουν probabilities, ενώ τα forecasting models χαρτογραφούνται σε probability-like conviction στο experiment layer.
 
-#### 8.3.4 Loss Functions
+#### 8.4.4 Loss Functions
 
 - Logistic regression / binary classification loss:
 
@@ -58,21 +77,27 @@ $$
 \text{Brier} = \frac{1}{N}\sum_{i=1}^N (p_i - y_i)^2
 $$
 
-Το repository δεν υλοποιεί custom loss, αλλά μετρά `log_loss`, `brier`, `roc_auc` και `accuracy` fold-by-fold.
+Το repository δεν υλοποιεί custom loss για τα classical models, αλλά μετρά `log_loss`, `brier`, `roc_auc`,
+`accuracy`, regression diagnostics και volatility diagnostics fold-by-fold. Ο TFT path χρησιμοποιεί quantile loss
+ανά output quantile.
 
-#### 8.3.5 Optimization Strategy
+#### 8.4.5 Optimization Strategy
 
 - Logistic regression: iterative convex optimization μέσω solver `lbfgs` by default.
 - LightGBM: boosted tree ensemble με learning rate, number of estimators, tree depth και leaf constraints.
+- SARIMAX: state-space maximum likelihood fitting ανά fold με controlled fallback path.
+- GARCH: constrained numerical fit των `(omega, alpha, beta)` με recursive out-of-sample update.
+- TFT: mini-batch training με AdamW πάνω σε fixed lookback windows.
 - Portfolio mean-variance: numerical constrained optimization με SLSQP.
 
-#### 8.3.6 Regularization Analysis
+#### 8.4.6 Regularization Analysis
 
 - Στο logistic regression, η παράμετρος `C` ελέγχει έμμεσα το regularization strength.
 - Στο LightGBM, regularization προκύπτει κυρίως από `max_depth`, `num_leaves`, `subsample`, `colsample_bytree`, `min_child_samples` και lower learning rate.
-- Σε time-series settings, το πιο κρίσιμο regularizer είναι η σωστή evaluation protocol και όχι μόνο οι hyperparameters.
+- Στο TFT path, regularization προκύπτει από dropout, hidden size, weight decay και το finite lookback.
+- Σε time-series settings, το πιο κρίσιμο regularizer παραμένει η σωστή evaluation protocol και όχι μόνο οι hyperparameters.
 
-#### 8.3.7 Validation Logic και Overfitting Control
+#### 8.4.7 Validation Logic και Overfitting Control
 
 - Χρησιμοποιούνται only chronological splits.
 - Το `pred_is_oos` ορίζει με ακρίβεια ποιες γραμμές είναι πραγματικά out-of-sample.
@@ -80,14 +105,14 @@ $$
 - Για quantile labeling, τα thresholds υπολογίζονται από train fold distribution και όχι από global sample distribution.
 - Τα fold-level backtest summaries επιτρέπουν ανίχνευση temporal instability και όχι μόνο aggregate score chasing.
 
-#### 8.3.8 Backtesting Assumptions
+#### 8.4.8 Backtesting Assumptions
 
 - Το PnL χρησιμοποιεί lagged position, άρα δεν υπάρχει same-bar execution leakage.
 - Η initial entry turnover χρεώνεται ρητά.
 - Τα transaction costs είναι linear in turnover, όχι nonlinear market impact model.
 - Το drawdown guard είναι deterministic exposure gating mechanism και όχι stochastic risk model.
 
-#### 8.3.9 Risk-Adjusted Return Analysis
+#### 8.4.9 Risk-Adjusted Return Analysis
 
 - Sharpe ratio: $$\text{Sharpe} = \frac{\mu_a}{\sigma_a}$$ όπου $\mu_a$ η annualized return και $\sigma_a$ η annualized volatility.
 - Sortino ratio: $$\text{Sortino} = \frac{\mu_a}{\sigma^-_a}$$ όπου $\sigma^-_a$ η annualized downside volatility.
@@ -95,7 +120,7 @@ $$
 - Calmar ratio: $$\text{Calmar} = \frac{\mu_a}{|\text{MDD}|}$$
 - Profit Factor: $$\text{PF} = \frac{\sum r_t^+}{\sum |r_t^-|}$$
 
-#### 8.3.10 RL / Reward Function Σχόλιο
+#### 8.4.10 RL / Reward Function Σχόλιο
 
 Το README αναφέρει RL ως μελλοντική οικογένεια μοντέλων, αλλά δεν υπάρχει executable RL policy logic ή reward
 function στον τρέχοντα κώδικα. Συνεπώς κάθε σχετική αρχιτεκτονική συζήτηση παραμένει roadmap-level και όχι

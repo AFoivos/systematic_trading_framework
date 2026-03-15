@@ -5166,9 +5166,10 @@ Validate feature target contract before downstream logic depends on it. The func
 
 #### Αρχείο `src/experiments/models.py`
 
-**Σκοπός**: Modeling layer για classification πάνω σε forward-return targets με leakage-safe chronological splits.
+**Σκοπός**: Experiment-model adapter layer που χτίζει forward targets, επιβάλλει split policy και
+συναρμολογεί strict OOS outputs, ενώ τα estimator-specific fold engines ζουν στο `src/models/`.
 
-**Βασικά Μεγέθη**: 499 LOC, 10 import blocks, 0 global constants, 0 classes, 8 functions.
+**Βασικά Μεγέθη**: Μεσαίου μεγέθους orchestration module με adapters και evaluation assembly, όχι estimator internals.
 
 **Ανάλυση Imports**
 

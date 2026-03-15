@@ -20,7 +20,8 @@
 - `Infrastructure/repro layer`: `src/utils/repro.py`, `src/utils/run_metadata.py`, `src/utils/paths.py`.
 - `Data layer`: `src/src_data/*`.
 - `Feature layer`: `src/features/*`.
-- `Model layer`: `src/experiments/models.py`, `src/models/lightgbm_baseline.py`.
+- `Model layer`: `src/models/*`, `src/models/lightgbm_baseline.py`.
+- `Experiment-model adapter layer`: `src/experiments/models.py`, `src/experiments/registry.py`.
 - `Signal layer`: `src/signals/*`, `src/backtesting/strategies.py`.
 - `Backtesting/evaluation layer`: `src/backtesting/engine.py`, `src/evaluation/*`.
 - `Portfolio layer`: `src/portfolio/*`.
@@ -46,6 +47,8 @@
                           [features] ---> [experiments.models] ---> [signals]
                              |                   |                    |
                              |                   v                    |
+                             |              [src.models]              |
+                             |                   |                    |
                              |            [time_splits]               |
                              |                   |                    |
                              +---------> [backtesting.engine] <-------+
@@ -66,11 +69,12 @@
 
 ### 2.4 Σχόλιο για την Κατεύθυνση των Εξαρτήσεων
 
-Οι χαμηλότεροι layers (`src_data`, `features`, `risk`, `evaluation`, `portfolio`) δεν γνωρίζουν τίποτε για
-τον orchestrator. Αντίθετα, ο orchestrator εξαρτάται από όλους. Αυτή είναι υγιής κατεύθυνση σύζευξης. Το
-μοναδικό σημείο που εμφανίζεται πιο κεντρικό από όσο ιδανικά θα θέλαμε είναι το `runner.py`, το οποίο
-συγκεντρώνει orchestration, artifact persistence και μέρος της evaluation/reporting assembly. Αυτό δεν είναι
-σφάλμα, αλλά αποτελεί τον κύριο υποψήφιο μελλοντικού decomposition.
+Οι χαμηλότεροι layers (`src_data`, `features`, `risk`, `evaluation`, `portfolio`, `models`) δεν γνωρίζουν
+τίποτε για τον orchestrator. Το `src/experiments/models.py` λειτουργεί πλέον ως λεπτό experiment adapter:
+χτίζει targets, ορίζει split policy, καλεί τα estimator/fold engines του `src/models/` και συναρμολογεί strict
+OOS outputs και metadata. Αντίθετα, ο orchestrator εξαρτάται από όλους. Αυτή είναι υγιής κατεύθυνση
+σύζευξης. Το βασικό architectural hotspot παραμένει το `runner.py`, επειδή εξακολουθεί να συγκεντρώνει
+orchestration, artifact persistence και μέρος της evaluation/reporting assembly.
 
 ### 2.5 ASCII Class Diagram
 

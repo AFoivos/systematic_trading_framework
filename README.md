@@ -66,7 +66,8 @@ systematic-trading-framework/
 │
 ├── src/
 │   ├── features/           # Feature engineering (lags, rolling stats, regimes)
-│   ├── models/             # Statistical, ML, DL, RL models
+│   ├── models/             # Estimator/fold engines and notebook baselines
+│   ├── experiments/        # Config adapters, target construction, OOS assembly
 │   ├── backtesting/        # Time-aware backtesting engine
 │   ├── risk/               # Position sizing, exposure control, costs
 │   ├── evaluation/         # Metrics & performance analysis
@@ -162,6 +163,11 @@ Key config blocks now supported:
 * `monitoring` for feature drift reports
 * `execution` for paper-order export at the latest timestamp
 
+Architecture boundary:
+
+* `src/models/` contains estimator-specific fold engines such as SARIMAX, GARCH and TFT.
+* `src/experiments/` contains the experiment-facing adapters that build targets, apply split policy, collect strict OOS predictions and assemble evaluation metadata.
+
 ---
 
 ## 📐 Modeling Approach
@@ -196,9 +202,9 @@ Implemented model path today:
 
 * LightGBM classifier with time-aware OOS predictions
 * Logistic regression classifier with the same anti-leakage split framework
-* SARIMAX forecaster with walk-forward / purged OOS predictions
-* GARCH(1,1) volatility-aware forecaster with causal roll-forward updates
-* TFT-style transformer forecaster with quantile outputs
+* SARIMAX fold engine under `src/models/` with experiment-layer walk-forward / purged OOS assembly
+* GARCH(1,1) fold engine under `src/models/` with causal roll-forward volatility updates
+* TFT-style transformer fold engine under `src/models/` with quantile outputs and experiment-layer OOS assembly
 
 Planned / future model families:
 
