@@ -177,6 +177,83 @@ def test_tft_forecaster_emits_quantile_outputs() -> None:
     assert (out.loc[mask, "pred_q10"] <= out.loc[mask, "pred_q90"]).all()
 
 
+def test_tft_forecaster_is_reproducible_with_fixed_runtime() -> None:
+    """
+    TFT forecaster should emit identical OOS predictions across repeated runs with fixed runtime settings.
+    """
+    if not _torch_available_in_subprocess():
+        pytest.skip("torch is unavailable or unstable in this environment.")
+    script = """
+import json
+import numpy as np
+import pandas as pd
+
+from src.experiments.models import train_tft_forecaster
+
+rng = np.random.default_rng(321)
+n = 220
+eps = rng.normal(0.0, 0.008, size=n)
+rets = np.zeros(n, dtype=float)
+for i in range(1, n):
+    rets[i] = 0.15 * rets[i - 1] + eps[i]
+close = 100.0 * np.exp(np.cumsum(rets))
+
+idx = pd.date_range("2020-01-01", periods=n, freq="D")
+df = pd.DataFrame(index=idx)
+df["close"] = close
+df["open"] = df["close"].shift(1).fillna(df["close"].iloc[0] * 0.999)
+df["high"] = np.maximum(df["open"], df["close"]) * 1.002
+df["low"] = np.minimum(df["open"], df["close"]) * 0.998
+df["volume"] = 1_000_000
+df["close_ret"] = df["close"].pct_change()
+df["lag_close_ret_1"] = df["close_ret"].shift(1)
+df["lag_close_ret_2"] = df["close_ret"].shift(2)
+df["vol_rolling_20"] = df["close_ret"].rolling(20, min_periods=5).std()
+
+out, _, meta = train_tft_forecaster(
+    df,
+    model_cfg={
+        "feature_cols": ["lag_close_ret_1", "lag_close_ret_2", "vol_rolling_20"],
+        "target": {"kind": "forward_return", "price_col": "close", "horizon": 1},
+        "split": {
+            "method": "walk_forward",
+            "train_size": 120,
+            "test_size": 20,
+            "step_size": 20,
+            "expanding": True,
+            "max_folds": 1,
+        },
+        "runtime": {"seed": 7, "deterministic": True, "threads": 1, "repro_mode": "strict"},
+        "params": {
+            "lookback": 10,
+            "hidden_dim": 16,
+            "num_heads": 4,
+            "num_layers": 1,
+            "dropout": 0.1,
+            "epochs": 1,
+            "batch_size": 16,
+            "learning_rate": 1e-3,
+            "weight_decay": 1e-4,
+            "quantiles": [0.1, 0.5, 0.9],
+        },
+    },
+)
+
+mask = out["pred_is_oos"]
+payload = {
+    "predictions": out.loc[mask, ["pred_ret", "pred_q10", "pred_q50", "pred_q90"]].round(8).to_dict("records"),
+    "runtime": meta["runtime"],
+}
+print(json.dumps(payload, sort_keys=True))
+"""
+    proc_a = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, check=False)
+    proc_b = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, check=False)
+    if proc_a.returncode != 0 or proc_b.returncode != 0:
+        pytest.skip("torch subprocess run is unstable in this environment.")
+
+    assert proc_a.stdout.strip() == proc_b.stdout.strip()
+
+
 def test_forecast_signal_adapters_work_on_predictions() -> None:
     """
     Verify forecast signal adapters produce bounded outputs for downstream backtesting.

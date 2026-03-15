@@ -32,7 +32,7 @@ def save_artifacts(
     config_hash_sha256: str,
     data_fingerprint: dict[str, Any],
 ) -> dict[str, str]:
-    run_dir.mkdir(parents=True, exist_ok=True)
+    run_dir.mkdir(parents=True, exist_ok=False)
 
     cfg_path = run_dir / "config_used.yaml"
     safe_cfg = redact_sensitive_values(cfg)

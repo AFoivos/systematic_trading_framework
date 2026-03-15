@@ -31,13 +31,29 @@ def validate_data_block(data: dict[str, Any]) -> None:
         symbols = data["symbols"]
         if not isinstance(symbols, list) or not symbols or any(not isinstance(s, str) for s in symbols):
             raise ConfigValidationError("data.symbols must be a non-empty list[str].")
+        if len(set(symbols)) != len(symbols):
+            raise ConfigValidationError("data.symbols must not contain duplicates.")
 
     source = data.get("source", "yahoo")
-    if source not in {"yahoo", "alpha"}:
-        raise ConfigValidationError("data.source must be 'yahoo' or 'alpha'.")
+    if source not in {"yahoo", "alpha", "twelve_data", "twelve"}:
+        raise ConfigValidationError(
+            "data.source must be 'yahoo', 'alpha', 'twelve_data', or 'twelve'."
+        )
     interval = data.get("interval", "1d")
     if not isinstance(interval, str):
         raise ConfigValidationError("data.interval must be a string (e.g. '1d').")
+    requested_symbols = (
+        [data["symbol"]] if has_symbol else list(data.get("symbols", []) or [])
+    )
+    if source == "alpha":
+        if interval != "1d":
+            raise ConfigValidationError("data.interval must be '1d' when data.source='alpha'.")
+        for symbol in requested_symbols:
+            normalized = str(symbol).replace("=X", "")
+            if len(normalized) != 6 or not normalized.isalpha():
+                raise ConfigValidationError(
+                    "Alpha Vantage FX symbols must look like 'EURUSD' or 'EURUSD=X'."
+                )
     alignment = data.get("alignment", "inner")
     if alignment not in {"inner", "outer"}:
         raise ConfigValidationError("data.alignment must be 'inner' or 'outer'.")
@@ -143,6 +159,17 @@ def validate_model_block(model: dict[str, Any]) -> None:
         raise ConfigValidationError(f"Unknown model kind: {model['kind']}")
 
     if model["kind"] != "none":
+        feature_cols = model.get("feature_cols")
+        if feature_cols is not None:
+            if (
+                not isinstance(feature_cols, list)
+                or not feature_cols
+                or any(not isinstance(col, str) or not col.strip() for col in feature_cols)
+            ):
+                raise ConfigValidationError(
+                    "model.feature_cols must be a non-empty list[str] when provided."
+                )
+
         target = model.get("target", {}) or {}
         if not isinstance(target, dict):
             raise ConfigValidationError("model.target must be a mapping when provided.")
@@ -325,6 +352,15 @@ def validate_execution_block(execution: dict[str, Any]) -> None:
         raise ConfigValidationError("execution.current_weights must be a mapping.")
 
 
+def validate_logging_block(logging_cfg: dict[str, Any]) -> None:
+    if not isinstance(logging_cfg.get("enabled", False), bool):
+        raise ConfigValidationError("logging.enabled must be boolean.")
+    if not isinstance(logging_cfg.get("run_name", ""), str) or not logging_cfg.get("run_name", "").strip():
+        raise ConfigValidationError("logging.run_name must be a non-empty string.")
+    if not isinstance(logging_cfg.get("output_dir", ""), str) or not logging_cfg.get("output_dir", "").strip():
+        raise ConfigValidationError("logging.output_dir must be a non-empty string.")
+
+
 def validate_resolved_config(cfg: dict[str, Any]) -> dict[str, Any]:
     """
     Validate all top-level blocks and normalize the runtime sub-config.
@@ -338,6 +374,7 @@ def validate_resolved_config(cfg: dict[str, Any]) -> dict[str, Any]:
     validate_portfolio_block(cfg["portfolio"])
     validate_monitoring_block(cfg["monitoring"])
     validate_execution_block(cfg["execution"])
+    validate_logging_block(cfg["logging"])
     cfg["runtime"] = validate_runtime_block(dict(cfg.get("runtime", {}) or {}))
     return cfg
 
@@ -347,6 +384,7 @@ __all__ = [
     "validate_backtest_block",
     "validate_data_block",
     "validate_execution_block",
+    "validate_logging_block",
     "validate_features_block",
     "validate_model_block",
     "validate_monitoring_block",

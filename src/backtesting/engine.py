@@ -97,7 +97,8 @@ def run_backtest(
     elif returns_type != "simple":
         raise ValueError("returns_type must be 'simple' or 'log'.")
 
-    positions = signal.copy()
+    leverage_cap = abs(float(max_leverage))
+    positions = signal.copy().clip(lower=-leverage_cap, upper=leverage_cap)
 
     if target_vol is not None:
         if vol_col is None:
@@ -110,6 +111,7 @@ def run_backtest(
             target_vol=target_vol,
             max_leverage=max_leverage,
         ).fillna(0.0)
+        positions = positions.clip(lower=-leverage_cap, upper=leverage_cap)
 
     prev_positions = positions.shift(1).fillna(0.0)
     returns = _apply_missing_return_policy(

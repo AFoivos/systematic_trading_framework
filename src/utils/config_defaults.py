@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -8,7 +9,9 @@ from src.intraday import (
     infer_periods_per_year,
     infer_volatility_annualization_factor,
 )
-from src.utils.paths import in_project
+from src.utils.paths import PROJECT_ROOT, enforce_safe_absolute_path, in_project
+
+_RUN_NAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
 
 
 def default_data_block(data: dict[str, Any]) -> dict[str, Any]:
@@ -145,13 +148,33 @@ def default_execution_block(execution: dict[str, Any]) -> dict[str, Any]:
     return execution
 
 
+def _sanitize_run_name(value: str) -> str:
+    safe = _RUN_NAME_RE.sub("_", str(value)).strip("._")
+    if not safe:
+        raise ValueError("logging.run_name is empty after sanitization.")
+    return safe
+
+
 def resolve_logging_block(logging_cfg: dict[str, Any], config_path: Path) -> dict[str, Any]:
     logging_cfg = dict(logging_cfg) if logging_cfg else {}
     logging_cfg.setdefault("enabled", True)
-    logging_cfg.setdefault("run_name", Path(config_path).stem)
+    logging_cfg["run_name"] = _sanitize_run_name(logging_cfg.get("run_name", Path(config_path).stem))
     out_dir = logging_cfg.get("output_dir", "logs/experiments")
-    if isinstance(out_dir, str):
-        logging_cfg["output_dir"] = str(in_project(out_dir))
+    if not isinstance(out_dir, str):
+        raise ValueError("logging.output_dir must be a string.")
+
+    resolved_out_dir = Path(out_dir)
+    if not resolved_out_dir.is_absolute():
+        resolved_out_dir = (PROJECT_ROOT / resolved_out_dir).resolve()
+    else:
+        resolved_out_dir = resolved_out_dir.resolve()
+
+    try:
+        resolved_out_dir.relative_to(PROJECT_ROOT.resolve())
+    except ValueError as exc:
+        raise ValueError("logging.output_dir must stay inside the project root.") from exc
+
+    logging_cfg["output_dir"] = str(enforce_safe_absolute_path(resolved_out_dir))
     return logging_cfg
 
 

@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import fcntl
 import json
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
+from uuid import uuid4
 
 import pandas as pd
 
 from src.utils.paths import PROJECT_ROOT, enforce_safe_absolute_path
-from src.utils.run_metadata import compute_dataframe_fingerprint
+from src.utils.run_metadata import compute_dataframe_fingerprint, file_sha256
 
 
 def _resolve_path(path: str | Path) -> Path:
@@ -33,9 +36,33 @@ def _resolve_snapshot_dir(
     focused responsibility so the surrounding code remains modular, readable, and easier to
     test.
     """
-    if not dataset_id:
+    if not isinstance(dataset_id, str) or not dataset_id.strip():
         raise ValueError("dataset_id must be a non-empty string.")
-    return _resolve_path(root_dir) / stage / dataset_id
+
+    stage_root = (_resolve_path(root_dir) / stage).resolve()
+    snapshot_dir = (stage_root / dataset_id).resolve()
+    try:
+        snapshot_dir.relative_to(stage_root)
+    except ValueError as exc:
+        raise ValueError(
+            f"Unsafe dataset_id '{dataset_id}': escapes snapshot root."
+        ) from exc
+    return snapshot_dir
+
+
+@contextmanager
+def _snapshot_lock(snapshot_dir: Path):
+    """
+    Serialize writers targeting the same snapshot directory so concurrent saves cannot
+    clobber each other's temporary files.
+    """
+    lock_path = snapshot_dir / ".snapshot.lock"
+    with lock_path.open("w", encoding="utf-8") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def asset_frames_to_long_frame(asset_frames: Mapping[str, pd.DataFrame]) -> pd.DataFrame:
@@ -133,25 +160,27 @@ def save_dataset_snapshot(
 
     data_path = snapshot_dir / "dataset.csv"
     metadata_path = snapshot_dir / "metadata.json"
-    data_tmp_path = snapshot_dir / "dataset.csv.tmp"
-    metadata_tmp_path = snapshot_dir / "metadata.json.tmp"
+    with _snapshot_lock(snapshot_dir):
+        data_tmp_path = snapshot_dir / f"dataset.{uuid4().hex}.csv.tmp"
+        metadata_tmp_path = snapshot_dir / f"metadata.{uuid4().hex}.json.tmp"
 
-    long_frame = asset_frames_to_long_frame(asset_frames)
-    long_frame.to_csv(data_tmp_path, index=False)
+        long_frame = asset_frames_to_long_frame(asset_frames)
+        long_frame.to_csv(data_tmp_path, index=False)
+        data_tmp_path.replace(data_path)
 
-    metadata = build_dataset_snapshot_metadata(
-        asset_frames,
-        dataset_id=dataset_id,
-        stage=stage,
-        context=context,
-    )
-    metadata["data_path"] = str(data_path)
+        metadata = build_dataset_snapshot_metadata(
+            asset_frames,
+            dataset_id=dataset_id,
+            stage=stage,
+            context=context,
+        )
+        metadata["data_path"] = str(data_path)
+        metadata["data_sha256"] = file_sha256(data_path)
 
-    with metadata_tmp_path.open("w", encoding="utf-8") as f:
-        json.dump(metadata, f, indent=2, default=str)
+        with metadata_tmp_path.open("w", encoding="utf-8") as f:
+            json.dump(metadata, f, indent=2, default=str)
 
-    data_tmp_path.replace(data_path)
-    metadata_tmp_path.replace(metadata_path)
+        metadata_tmp_path.replace(metadata_path)
 
     return {
         "dataset_id": dataset_id,
@@ -200,6 +229,25 @@ def load_dataset_snapshot(
     if metadata_path.exists():
         with metadata_path.open("r", encoding="utf-8") as f:
             metadata = json.load(f)
+
+    expected_data_sha256 = metadata.get("data_sha256")
+    if expected_data_sha256 is not None:
+        actual_data_sha256 = file_sha256(data_path)
+        if actual_data_sha256 != expected_data_sha256:
+            raise ValueError(
+                f"Dataset snapshot checksum mismatch for '{data_path}'."
+            )
+        metadata["verified_fingerprint"] = True
+    else:
+        expected_fingerprint = dict(metadata.get("fingerprint", {}) or {})
+        if expected_fingerprint:
+            actual_fingerprint = compute_dataframe_fingerprint(asset_frames_to_long_frame(asset_frames))
+            if actual_fingerprint.get("sha256") != expected_fingerprint.get("sha256"):
+                raise ValueError(
+                    f"Dataset snapshot fingerprint mismatch for '{data_path}'."
+                )
+            metadata["verified_fingerprint"] = True
+
     metadata.setdefault("data_path", str(data_path))
     return asset_frames, metadata
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
+from uuid import uuid4
 
 import pandas as pd
 
@@ -19,7 +20,6 @@ from src.experiments.orchestration.reporting import (
 )
 from src.experiments.orchestration.types import ExperimentResult
 from src.utils.config import load_experiment_config
-from src.utils.paths import in_project
 from src.utils.repro import apply_runtime_reproducibility
 from src.utils.run_metadata import (
     build_run_metadata,
@@ -78,7 +78,14 @@ def run_experiment_pipeline(
         signals_cfg=dict(cfg.get("signals", {}) or {}),
     )
 
-    is_portfolio = bool(cfg.get("portfolio", {}).get("enabled")) or len(asset_frames) > 1
+    portfolio_enabled = bool(cfg.get("portfolio", {}).get("enabled", False))
+    if len(asset_frames) > 1 and not portfolio_enabled:
+        raise ValueError(
+            "Multiple assets were loaded but portfolio.enabled=false. "
+            "Enable portfolio mode or reduce the run to a single asset."
+        )
+
+    is_portfolio = portfolio_enabled
     portfolio_weights: pd.DataFrame | None = None
     portfolio_diagnostics: pd.DataFrame | None = None
     portfolio_meta: dict[str, object] = {}
@@ -143,10 +150,10 @@ def run_experiment_pipeline(
             ),
             model_meta=model_meta,
         )
-        base_dir = Path(logging_cfg.get("output_dir", "logs/experiments"))
-        run_name = logging_cfg.get("run_name", Path(config_path).stem)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        run_dir = in_project(base_dir) / f"{run_name}_{timestamp}"
+        base_dir = Path(logging_cfg.get("output_dir", "logs/experiments")).resolve()
+        run_name = str(logging_cfg.get("run_name", Path(config_path).stem))
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        run_dir = base_dir / f"{run_name}_{timestamp}_{uuid4().hex[:8]}"
         artifacts = save_artifacts(
             run_dir=run_dir,
             cfg=cfg,

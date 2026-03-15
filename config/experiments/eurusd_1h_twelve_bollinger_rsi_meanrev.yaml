@@ -1,0 +1,13 @@
+extends: experiments/fx_majors_1h_twelve_bollinger_rsi_meanrev.yaml
+
+data:
+  symbol: "EURUSD"
+  symbols: null
+  storage:
+    dataset_id: "eurusd_1h_twelve_bollinger_rsi_meanrev"
+
+portfolio:
+  enabled: false
+
+logging:
+  run_name: eurusd_1h_twelve_bollinger_rsi_meanrev_v1

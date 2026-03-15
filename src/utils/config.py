@@ -41,14 +41,14 @@ def load_experiment_config_typed(config_path: str | Path) -> ResolvedExperimentC
     Load an experiment YAML into a typed resolved config object.
     """
     path = _resolve_config_path(config_path)
-    cfg = load_with_extends(path)
-    cfg = apply_top_level_defaults(cfg, config_path=path)
-    inject_api_key_from_env(cfg["data"])
     try:
+        cfg = load_with_extends(path)
+        cfg = apply_top_level_defaults(cfg, config_path=path)
+        inject_api_key_from_env(cfg["data"])
         cfg = validate_resolved_config(cfg)
-    except (ConfigValidationError, ValueError) as exc:
+        return ResolvedExperimentConfig.from_dict(cfg)
+    except (ConfigValidationError, TypeError, ValueError) as exc:
         raise ConfigError(str(exc)) from exc
-    return ResolvedExperimentConfig.from_dict(cfg)
 
 
 def load_experiment_config(config_path: str | Path) -> dict[str, Any]:

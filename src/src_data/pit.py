@@ -142,7 +142,11 @@ def load_universe_snapshot(path: str | Path) -> pd.DataFrame:
         raise ValueError("Universe snapshot has invalid 'effective_from' values.")
 
     if "effective_to" in out.columns:
+        raw_effective_to = out["effective_to"].copy()
         out["effective_to"] = pd.to_datetime(out["effective_to"], errors="coerce")
+        invalid_effective_to = raw_effective_to.notna() & out["effective_to"].isna()
+        if invalid_effective_to.any():
+            raise ValueError("Universe snapshot has invalid 'effective_to' values.")
     else:
         out["effective_to"] = pd.NaT
 

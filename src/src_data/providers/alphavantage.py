@@ -102,7 +102,7 @@ class AlphaVantageFXProvider(MarketDataProvider):
         if start:
             df = df[df.index >= pd.to_datetime(start)]
         if end:
-            df = df[df.index <= pd.to_datetime(end)]
+            df = df[df.index < pd.to_datetime(end)]
 
         df["volume"] = 0.0
         return df

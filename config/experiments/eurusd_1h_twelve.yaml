@@ -1,0 +1,145 @@
+extends: base/hourly.yaml
+
+data:
+  source: twelve_data
+  symbol: "EURUSD"
+  interval: "1h"
+  start: "2024-01-01"
+  end: null
+  api_key_env: "TWELVEDATA_API_KEY"
+  storage:
+    mode: live_or_cached
+    dataset_id: "eurusd_1h_twelve_core"
+    save_raw: true
+    save_processed: true
+
+features:
+  - step: returns
+    params:
+      log: true
+      col_name: close_logret
+  - step: volatility
+    params:
+      returns_col: close_logret
+      rolling_windows: [24, 72]
+      ewma_spans: [24, 72]
+      annualization_factor: 6048.0
+  - step: trend
+    params:
+      price_col: close
+      sma_windows: [24, 72, 168]
+      ema_spans: [24, 72]
+  - step: trend_regime
+    params:
+      price_col: close
+      base_sma_for_sign: 72
+      short_sma: 24
+      long_sma: 72
+  - step: indicators
+    params:
+      price_col: close
+      high_col: high
+      low_col: low
+      volume_col: volume
+      bb_window: 24
+      bb_nstd: 2.0
+      roc_windows: [6, 24]
+      atr_window: 24
+      adx_window: 24
+      vol_z_window: 72
+      include_mfi: false
+  - step: oscillators
+    params:
+      price_col: close
+      high_col: high
+      low_col: low
+      rsi_windows: [3, 14]
+      stoch_windows: [14]
+      stoch_smooth: 3
+  - step: momentum
+    params:
+      price_col: close
+      returns_col: close_logret
+      vol_col: vol_rolling_24
+      windows: [6, 24, 72]
+  - step: lags
+    params:
+      cols: [close_logret]
+      lags: [1, 2, 6]
+
+model:
+  kind: logistic_regression_clf
+  feature_cols:
+    - lag_close_logret_1
+    - lag_close_logret_2
+    - lag_close_logret_6
+    - vol_rolling_24
+    - vol_ewma_24
+    - close_over_sma_24
+    - close_over_sma_72
+    - close_over_ema_24
+    - close_trend_state_sma_24_72
+    - bb_width_24_2.0
+    - bb_percent_b_24_2.0
+    - roc_6
+    - roc_24
+    - atr_over_price_24
+    - adx_24
+    - ppo_12_26
+    - ppo_hist_12_26_9
+    - close_rsi_3
+    - close_rsi_14
+    - close_stoch_k_14
+    - close_stoch_d_14
+    - close_logret_mom_6
+    - close_logret_mom_24
+    - close_logret_norm_mom_24
+  params:
+    max_iter: 1000
+    C: 0.25
+  target:
+    kind: forward_return
+    price_col: close
+    horizon: 3
+  split:
+    method: walk_forward
+    train_size: 1440
+    test_size: 168
+    step_size: 168
+    expanding: true
+
+signals:
+  kind: probability_threshold
+  params:
+    prob_col: pred_prob
+    upper: 0.55
+    lower: 0.45
+    signal_name: signal_prob
+
+risk:
+  vol_col: vol_rolling_24
+  target_vol: 0.10
+  max_leverage: 3.0
+  cost_per_turnover: 0.0001
+  slippage_per_turnover: 0.0
+  dd_guard:
+    max_drawdown: 0.15
+    cooloff_bars: 24
+
+backtest:
+  returns_col: close_logret
+  signal_col: signal_prob
+  vol_col: vol_rolling_24
+  periods_per_year: 6048
+  returns_type: log
+
+monitoring:
+  enabled: true
+  psi_threshold: 0.15
+  n_bins: 10
+
+execution:
+  enabled: false
+
+logging:
+  run_name: eurusd_1h_twelve_logreg_v1

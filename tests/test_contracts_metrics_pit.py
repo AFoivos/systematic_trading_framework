@@ -347,6 +347,23 @@ def test_universe_snapshot_asof_membership_check(tmp_path) -> None:
         assert_symbol_in_snapshot("QQQ", snap, as_of="2020-06-01")
 
 
+def test_universe_snapshot_rejects_invalid_effective_to_values(tmp_path) -> None:
+    """
+    Invalid effective_to values should fail loudly instead of becoming open-ended memberships.
+    """
+    snapshot_path = tmp_path / "bad_universe_snapshot.csv"
+    pd.DataFrame(
+        {
+            "symbol": ["SPY"],
+            "effective_from": ["2010-01-01"],
+            "effective_to": ["not-a-date"],
+        }
+    ).to_csv(snapshot_path, index=False)
+
+    with pytest.raises(ValueError, match="effective_to"):
+        load_universe_snapshot(snapshot_path)
+
+
 def test_apply_pit_hardening_raises_when_symbol_exits_universe_mid_sample(tmp_path) -> None:
     """
     Verify that PIT hardening raises when symbol exits universe mid sample behaves as expected

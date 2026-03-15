@@ -1,0 +1,144 @@
+extends: base/hourly.yaml
+
+data:
+  source: twelve_data
+  symbols: ["EURUSD", "USDJPY", "GBPUSD", "AUDUSD"]
+  interval: "1h"
+  start: "2024-01-01"
+  end: null
+  alignment: inner
+  api_key_env: "TWELVEDATA_API_KEY"
+  storage:
+    mode: live_or_cached
+    dataset_id: "fx_majors_1h_twelve_bollinger_squeeze"
+    save_raw: true
+    save_processed: true
+
+features:
+  - step: returns
+    params:
+      log: true
+      col_name: close_logret
+  - step: volatility
+    params:
+      returns_col: close_logret
+      rolling_windows: [24, 72]
+      ewma_spans: [24, 72]
+      annualization_factor: 6048.0
+  - step: trend
+    params:
+      price_col: close
+      sma_windows: [24, 72]
+      ema_spans: [24, 72]
+  - step: indicators
+    params:
+      price_col: close
+      high_col: high
+      low_col: low
+      volume_col: volume
+      bb_window: 24
+      roc_windows: [2, 6, 24]
+      atr_window: 24
+      adx_window: 24
+      vol_z_window: 72
+      include_mfi: false
+  - step: momentum
+    params:
+      price_col: close
+      returns_col: close_logret
+      vol_col: vol_rolling_24
+      windows: [6, 24]
+  - step: lags
+    params:
+      cols: [close_logret]
+      lags: [1, 2, 6]
+
+model:
+  kind: lightgbm_clf
+  feature_cols:
+    - lag_close_logret_1
+    - lag_close_logret_2
+    - lag_close_logret_6
+    - vol_rolling_24
+    - vol_ewma_24
+    - close_over_ema_24
+    - close_over_sma_72
+    - bb_width_24_2.0
+    - bb_percent_b_24_2.0
+    - atr_over_price_24
+    - adx_24
+    - roc_2
+    - roc_6
+    - roc_24
+    - ppo_12_26
+    - ppo_hist_12_26_9
+    - macd_hist_12_26_9
+    - close_logret_mom_6
+    - close_logret_norm_mom_24
+  params:
+    n_estimators: 400
+    learning_rate: 0.03
+    num_leaves: 31
+    max_depth: 4
+    subsample: 0.8
+    colsample_bytree: 0.8
+    min_child_samples: 20
+    random_state: 7
+  target:
+    kind: forward_return
+    price_col: close
+    horizon: 6
+  split:
+    method: walk_forward
+    train_size: 2160
+    test_size: 168
+    step_size: 168
+    expanding: false
+
+signals:
+  kind: probability_threshold
+  params:
+    prob_col: pred_prob
+    upper: 0.6
+    lower: 0.4
+    signal_name: signal_prob
+
+portfolio:
+  enabled: true
+  construction: signal_weights
+  gross_target: 1.0
+  long_short: true
+  constraints:
+    min_weight: -0.4
+    max_weight: 0.4
+    max_gross_leverage: 1.0
+    target_net_exposure: 0.0
+    turnover_limit: 0.35
+  asset_groups:
+    EURUSD: fx
+    USDJPY: fx
+    GBPUSD: fx
+    AUDUSD: fx
+
+risk:
+  target_vol: null
+  max_leverage: 1.0
+  cost_per_turnover: 0.0001
+  slippage_per_turnover: 0.0
+
+backtest:
+  returns_col: close_logret
+  signal_col: signal_prob
+  periods_per_year: 6048
+  returns_type: log
+
+monitoring:
+  enabled: true
+  psi_threshold: 0.15
+  n_bins: 10
+
+execution:
+  enabled: false
+
+logging:
+  run_name: fx_majors_1h_twelve_bollinger_squeeze_v1

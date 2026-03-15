@@ -110,9 +110,18 @@ def make_tft_fold_predictor() -> Callable[
             raise ValueError("TFT hidden_dim must be divisible by num_heads.")
 
         seed = int(runtime_meta.get("seed", 7))
+        deterministic = bool(runtime_meta.get("deterministic", True))
         torch.manual_seed(seed)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed)
+        if deterministic:
+            try:
+                torch.use_deterministic_algorithms(True)
+            except Exception:
+                pass
+            if hasattr(torch.backends, "cudnn"):
+                torch.backends.cudnn.deterministic = True
+                torch.backends.cudnn.benchmark = False
         threads = runtime_meta.get("threads")
         if isinstance(threads, int) and threads > 0:
             torch.set_num_threads(threads)
@@ -189,9 +198,18 @@ def make_tft_fold_predictor() -> Callable[
         ).to(device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
         quantile_tensor = torch.tensor(quantiles, dtype=torch.float32, device=device)
+        data_loader_generator = torch.Generator()
+        data_loader_generator.manual_seed(seed)
 
         ds = TensorDataset(torch.tensor(x_train, dtype=torch.float32), torch.tensor(y_train, dtype=torch.float32))
-        loader = DataLoader(ds, batch_size=max(8, min(batch_size, len(ds))), shuffle=True, drop_last=False)
+        loader = DataLoader(
+            ds,
+            batch_size=max(8, min(batch_size, len(ds))),
+            shuffle=True,
+            drop_last=False,
+            num_workers=0,
+            generator=data_loader_generator,
+        )
         model.train()
         for _ in range(max(1, epochs)):
             for xb, yb in loader:
@@ -253,6 +271,7 @@ def make_tft_fold_predictor() -> Callable[
             "tft_test_samples": int(x_test.shape[0]),
             "tft_epochs": int(max(1, epochs)),
             "runtime_threads": runtime_meta.get("threads"),
+            "deterministic": deterministic,
         }
         return pred_ret, extra_cols, model, fold_meta
 

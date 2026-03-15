@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from src.backtesting.engine import BacktestResult, run_backtest
+from src.evaluation.metrics import compute_backtest_metrics
 from src.experiments.orchestration.common import align_asset_column
 from src.portfolio import (
     PortfolioConstraints,
@@ -79,12 +80,21 @@ def run_single_asset_backtest(
         raise ValueError("target_vol is set but no vol_col was found or configured.")
 
     bt_df = df
-    if model_meta and model_meta.get("split_index") is not None:
+    oos_mask: pd.Series | None = None
+    if model_meta:
         bt_subset = backtest_cfg.get("subset", "test")
-        if bt_subset == "test":
+        if bt_subset == "test" and "pred_is_oos" in df.columns:
+            oos_mask = df["pred_is_oos"].fillna(False).astype(bool)
+            if bool(oos_mask.any()):
+                bt_df = df.copy()
+                bt_df.loc[~oos_mask, signal_col] = 0.0
+                first_oos_label = oos_mask[oos_mask].index[0]
+                bt_df = bt_df.loc[first_oos_label:]
+                oos_mask = oos_mask.reindex(bt_df.index).fillna(False).astype(bool)
+        elif model_meta.get("split_index") is not None and backtest_cfg.get("subset", "test") == "test":
             bt_df = df.iloc[int(model_meta["split_index"]) :]
 
-    return run_backtest(
+    result = run_backtest(
         bt_df,
         signal_col=signal_col,
         returns_col=returns_col,
@@ -100,6 +110,16 @@ def run_single_asset_backtest(
         cooloff_bars=dd_cfg.get("cooloff_bars", 20),
         periods_per_year=backtest_cfg.get("periods_per_year", 252),
     )
+    if oos_mask is not None and bool(oos_mask.any()):
+        aligned_oos_mask = oos_mask.reindex(result.returns.index).fillna(False).astype(bool)
+        result.summary = compute_backtest_metrics(
+            net_returns=result.returns.loc[aligned_oos_mask],
+            periods_per_year=backtest_cfg.get("periods_per_year", 252),
+            turnover=result.turnover.loc[aligned_oos_mask],
+            costs=result.costs.loc[aligned_oos_mask],
+            gross_returns=result.gross_returns.loc[aligned_oos_mask],
+        )
+    return result
 
 
 def run_portfolio_backtest(
@@ -133,8 +153,8 @@ def run_portfolio_backtest(
         expected_returns = align_asset_column(asset_frames, column=expected_return_col, how=alignment)
         covariance_by_date = build_rolling_covariance_by_date(
             asset_returns,
-            window=int(portfolio_cfg.get("covariance_window", 60)),
-            rebalance_step=int(portfolio_cfg.get("covariance_rebalance_step", 1)),
+            window=int(portfolio_cfg.get("covariance_window") or 60),
+            rebalance_step=int(portfolio_cfg.get("covariance_rebalance_step") or 1),
         )
         weights, diagnostics = build_optimized_weights_over_time(
             expected_returns,

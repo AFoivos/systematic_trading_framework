@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import subprocess
+import sys
 
 import numpy as np
 import pandas as pd
@@ -70,6 +72,23 @@ def test_dataset_snapshot_roundtrip(tmp_path) -> None:
     assert sorted(loaded_frames) == ["AAA", "BBB"]
     assert loaded_frames["AAA"].index.equals(asset_frames["AAA"].index)
     assert list(loaded_frames["AAA"].columns) == list(asset_frames["AAA"].columns)
+    assert metadata["verified_fingerprint"] is True
+
+
+def test_dataset_snapshot_rejects_path_traversal_in_dataset_id(tmp_path) -> None:
+    """
+    Dataset snapshot helpers should reject dataset ids that escape the configured root.
+    """
+    asset_frames = {"AAA": _synthetic_ohlcv(periods=10, seed=1)}
+
+    with pytest.raises(ValueError):
+        save_dataset_snapshot(
+            asset_frames,
+            dataset_id="../../escape",
+            stage="raw",
+            root_dir=tmp_path,
+            context={},
+        )
 
 
 def test_load_asset_frames_rejects_cached_snapshot_with_mismatched_pit_context(tmp_path) -> None:
@@ -105,6 +124,81 @@ def test_load_asset_frames_rejects_cached_snapshot_with_mismatched_pit_context(t
                 },
             }
         )
+
+
+def test_load_dataset_snapshot_rejects_fingerprint_mismatch(tmp_path) -> None:
+    """
+    Cached snapshots should fail loudly when on-disk data no longer matches stored metadata.
+    """
+    asset_frames = {"AAA": _synthetic_ohlcv(periods=20, seed=1)}
+    saved = save_dataset_snapshot(
+        asset_frames,
+        dataset_id="demo_dataset",
+        stage="raw",
+        root_dir=tmp_path,
+        context={"source": "synthetic"},
+    )
+
+    data_path = Path(saved["data_path"])
+    data_path.write_text(
+        "timestamp,asset,open,high,low,close,volume\n2020-01-01,AAA,999,999,999,999,999\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError):
+        load_dataset_snapshot(
+            stage="raw",
+            root_dir=tmp_path,
+            dataset_id="demo_dataset",
+        )
+
+
+def test_dataset_snapshot_parallel_writes_remain_loadable(tmp_path) -> None:
+    """
+    Concurrent writers targeting the same snapshot should not leave corrupted temp files behind.
+    """
+    script = """
+from pathlib import Path
+import sys
+import numpy as np
+import pandas as pd
+
+from src.src_data.storage import save_dataset_snapshot
+
+root = Path(sys.argv[1])
+seed = int(sys.argv[2])
+rng = np.random.default_rng(seed)
+idx = pd.date_range("2020-01-01", periods=4000, freq="D")
+close = 100.0 + np.cumsum(rng.normal(0.0, 1.0, size=len(idx)))
+frame = pd.DataFrame(index=idx)
+frame["open"] = close
+frame["high"] = close + 1.0
+frame["low"] = close - 1.0
+frame["close"] = close
+frame["volume"] = 1000.0
+save_dataset_snapshot(
+    {"AAA": frame},
+    dataset_id="shared_dataset",
+    stage="raw",
+    root_dir=root,
+    context={"seed": seed},
+)
+"""
+    proc_a = subprocess.Popen([sys.executable, "-c", script, str(tmp_path), "1"])
+    proc_b = subprocess.Popen([sys.executable, "-c", script, str(tmp_path), "2"])
+
+    assert proc_a.wait() == 0
+    assert proc_b.wait() == 0
+
+    loaded_frames, metadata = load_dataset_snapshot(
+        stage="raw",
+        root_dir=tmp_path,
+        dataset_id="shared_dataset",
+    )
+
+    assert "AAA" in loaded_frames
+    assert metadata["verified_fingerprint"] is True
+    assert not list((tmp_path / "raw" / "shared_dataset").glob("*.tmp"))
 
 
 def test_build_rebalance_orders_reports_share_deltas() -> None:
@@ -293,3 +387,63 @@ def test_run_experiment_supports_multi_asset_portfolio_storage_monitoring_and_ex
     assert all("classification_metrics" in fold for fold in result.model_meta["per_asset"]["AAA"]["folds"])
     assert (tmp_path / "raw_store" / "raw" / "multi_asset_demo" / "dataset.csv").exists()
     assert len(list((tmp_path / "processed_store" / "processed").glob("*/dataset.csv"))) == 1
+
+
+def test_run_experiment_rejects_multi_asset_without_explicit_portfolio_mode(tmp_path, monkeypatch) -> None:
+    """
+    Multi-asset runs should fail loudly when portfolio mode is explicitly disabled.
+    """
+    symbols = ["AAA", "BBB"]
+    synthetic_panel = {
+        "AAA": _synthetic_ohlcv(periods=120, seed=11, amplitude=0.012),
+        "BBB": _synthetic_ohlcv(periods=120, seed=19, amplitude=0.009),
+    }
+
+    def _mock_load_panel(**kwargs):
+        requested = kwargs["symbols"]
+        return {symbol: synthetic_panel[symbol].copy() for symbol in requested}
+
+    monkeypatch.setattr(runner_mod, "load_ohlcv_panel", _mock_load_panel)
+
+    config_path = tmp_path / "multi_asset_disabled.yaml"
+    config = {
+        "data": {
+            "symbols": symbols,
+            "source": "yahoo",
+            "interval": "1d",
+            "start": "2020-01-01",
+        },
+        "features": [
+            {"step": "returns", "params": {"log": False, "col_name": "close_ret"}},
+            {"step": "lags", "params": {"cols": ["close_ret"], "lags": [1, 2]}},
+        ],
+        "model": {
+            "kind": "logistic_regression_clf",
+            "params": {"max_iter": 200},
+            "feature_cols": ["lag_close_ret_1", "lag_close_ret_2"],
+            "target": {"kind": "forward_return", "price_col": "close", "horizon": 1},
+            "split": {
+                "method": "walk_forward",
+                "train_size": 80,
+                "test_size": 20,
+                "step_size": 20,
+                "expanding": True,
+            },
+        },
+        "signals": {
+            "kind": "probability_conviction",
+            "params": {"prob_col": "pred_prob", "signal_name": "signal_prob_size", "clip": 1.0},
+        },
+        "portfolio": {"enabled": False},
+        "backtest": {
+            "returns_col": "close_ret",
+            "signal_col": "signal_prob_size",
+            "periods_per_year": 252,
+            "returns_type": "simple",
+        },
+        "logging": {"enabled": False},
+    }
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="portfolio.enabled=false"):
+        runner_mod.run_experiment(config_path)

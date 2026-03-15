@@ -1,0 +1,13 @@
+extends: experiments/fx_majors_1h_twelve_trend_pullback.yaml
+
+data:
+  symbol: "GBPUSD"
+  symbols: null
+  storage:
+    dataset_id: "gbpusd_1h_twelve_trend_pullback"
+
+portfolio:
+  enabled: false
+
+logging:
+  run_name: gbpusd_1h_twelve_trend_pullback_v1

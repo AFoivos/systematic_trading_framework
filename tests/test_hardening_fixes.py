@@ -8,14 +8,17 @@ import pandas as pd
 import pytest
 
 import src.experiments.runner as runner_mod
+from src.backtesting.engine import run_backtest
 from src.features.technical.momentum import add_momentum_features
 from src.portfolio.construction import PortfolioPerformance
 from src.portfolio.covariance import build_rolling_covariance_by_date
 from src.signals.forecast_signal import compute_forecast_threshold_signal
 from src.signals.rsi_signal import compute_rsi_signal
-from src.src_data.providers.alphavantage import _build_retry_session
+from src.src_data.loaders import load_ohlcv, load_ohlcv_panel
+from src.src_data.providers.alphavantage import AlphaVantageFXProvider, _build_retry_session
+from src.src_data.providers.twelvedata import TwelveDataProvider
 from src.src_data.storage import save_dataset_snapshot
-from src.utils.config import ConfigError, load_experiment_config
+from src.utils.config import ConfigError, load_experiment_config, load_experiment_config_typed
 from src.utils.paths import enforce_safe_absolute_path
 from src.utils.repro import apply_runtime_reproducibility
 from src.utils.run_metadata import build_run_metadata
@@ -225,6 +228,101 @@ backtest:
         load_experiment_config(cfg_path)
 
 
+def test_config_validation_rejects_string_feature_cols(tmp_path) -> None:
+    """
+    feature_cols should fail fast unless provided as a list of column names.
+    """
+    cfg_path = tmp_path / "bad_feature_cols.yaml"
+    cfg_path.write_text(
+        """
+data:
+  symbol: SPY
+model:
+  kind: logistic_regression_clf
+  feature_cols: close_ret
+backtest:
+  returns_col: close_ret
+  signal_col: signal
+        """.strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigError, match="feature_cols"):
+        load_experiment_config(cfg_path)
+
+
+def test_config_validation_rejects_duplicate_symbols(tmp_path) -> None:
+    """
+    Duplicate symbols should be rejected instead of being silently overwritten.
+    """
+    cfg_path = tmp_path / "dup_symbols.yaml"
+    cfg_path.write_text(
+        """
+data:
+  symbols: [SPY, SPY]
+backtest:
+  returns_col: close_ret
+  signal_col: signal
+        """.strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigError, match="must not contain duplicates"):
+        load_experiment_config(cfg_path)
+
+
+def test_load_ohlcv_panel_rejects_duplicate_symbols() -> None:
+    """
+    Direct panel-loading helper should reject duplicate symbols before touching providers.
+    """
+    with pytest.raises(ValueError, match="duplicates"):
+        load_ohlcv_panel(["SPY", "SPY"])
+
+
+def test_logging_output_dir_must_stay_inside_project_root(tmp_path) -> None:
+    """
+    Logging output_dir should not be allowed to escape the repository root.
+    """
+    cfg_path = tmp_path / "bad_logging.yaml"
+    cfg_path.write_text(
+        """
+data:
+  symbol: SPY
+backtest:
+  returns_col: close_ret
+  signal_col: signal
+logging:
+  output_dir: ../../../../tmp/stf_escape
+        """.strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigError, match="project root"):
+        load_experiment_config(cfg_path)
+
+
+def test_logging_run_name_is_sanitized(tmp_path) -> None:
+    """
+    Logging run_name should be normalized to a safe path component.
+    """
+    cfg_path = tmp_path / "safe_logging.yaml"
+    cfg_path.write_text(
+        """
+data:
+  symbol: SPY
+backtest:
+  returns_col: close_ret
+  signal_col: signal
+logging:
+  run_name: ../../evil
+        """.strip(),
+        encoding="utf-8",
+    )
+
+    cfg = load_experiment_config(cfg_path)
+    assert cfg["logging"]["run_name"] == "evil"
+
+
 def test_dataset_snapshot_atomic_write_leaves_no_tmp_files(tmp_path) -> None:
     """
     Snapshot persistence should not leave temporary files after a successful save.
@@ -243,6 +341,110 @@ def test_dataset_snapshot_atomic_write_leaves_no_tmp_files(tmp_path) -> None:
     assert not list(snapshot_dir.glob("*.tmp"))
 
 
+def test_save_artifacts_refuses_existing_run_dir(tmp_path) -> None:
+    """
+    Artifact persistence should fail loudly instead of mixing files into an existing run folder.
+    """
+    idx = pd.date_range("2024-01-01", periods=2, freq="D")
+    perf = PortfolioPerformance(
+        equity_curve=pd.Series([1.0, 1.01], index=idx),
+        net_returns=pd.Series([0.0, 0.01], index=idx),
+        gross_returns=pd.Series([0.0, 0.01], index=idx),
+        costs=pd.Series([0.0, 0.0], index=idx),
+        turnover=pd.Series([0.0, 0.0], index=idx),
+        summary={"sharpe": 1.0},
+    )
+    run_dir = tmp_path / "existing_run"
+    run_dir.mkdir()
+
+    kwargs = {
+        "run_dir": run_dir,
+        "cfg": {"features": [], "signals": {}},
+        "data": pd.DataFrame({"close": [1.0, 1.1]}, index=idx),
+        "performance": perf,
+        "model_meta": {},
+        "evaluation": {"primary_summary": {"sharpe": 1.0}},
+        "monitoring": {},
+        "execution": {},
+        "execution_orders": None,
+        "portfolio_weights": None,
+        "portfolio_diagnostics": None,
+        "portfolio_meta": {},
+        "storage_meta": {},
+        "run_metadata": {"runtime": {}},
+        "config_hash_sha256": "a" * 64,
+        "data_fingerprint": {"sha256": "b" * 64},
+    }
+
+    with pytest.raises(FileExistsError):
+        runner_mod._save_artifacts(**kwargs)
+
+
+def test_run_backtest_caps_positions_at_max_leverage() -> None:
+    """
+    max_leverage should cap positions even when volatility targeting is disabled.
+    """
+    idx = pd.date_range("2024-01-01", periods=3, freq="D")
+    df = pd.DataFrame(
+        {
+            "signal": [10.0, -10.0, 2.0],
+            "close_ret": [0.0, 0.01, -0.01],
+        },
+        index=idx,
+    )
+
+    result = run_backtest(
+        df,
+        signal_col="signal",
+        returns_col="close_ret",
+        max_leverage=3.0,
+        dd_guard=False,
+    )
+
+    assert result.positions.max() <= 3.0
+    assert result.positions.min() >= -3.0
+
+
+def test_single_asset_backtest_summary_uses_strict_oos_rows() -> None:
+    """
+    subset=test should not let non-OOS gap rows contaminate the reported single-asset summary.
+    """
+    idx = pd.date_range("2024-01-01", periods=4, freq="D")
+    df = pd.DataFrame(
+        {
+            "signal": [1.0, 1.0, 1.0, 1.0],
+            "close_ret": [0.0, 0.0, -0.9, 0.0],
+            "pred_is_oos": [False, True, False, True],
+        },
+        index=idx,
+    )
+    cfg = {
+        "backtest": {
+            "returns_col": "close_ret",
+            "signal_col": "signal",
+            "periods_per_year": 252,
+            "returns_type": "simple",
+            "subset": "test",
+        },
+        "risk": {
+            "cost_per_turnover": 0.0,
+            "slippage_per_turnover": 0.0,
+            "target_vol": None,
+            "max_leverage": 3.0,
+            "dd_guard": {"enabled": False, "max_drawdown": 0.2, "cooloff_bars": 1},
+        },
+    }
+
+    result = runner_mod._run_single_asset_backtest(
+        "AAA",
+        df,
+        cfg=cfg,
+        model_meta={"split_index": 1},
+    )
+
+    assert np.isclose(result.summary["cumulative_return"], 0.0)
+
+
 def test_alphavantage_retry_session_is_configured() -> None:
     """
     AlphaVantage session should have retry policy for transient HTTP failures.
@@ -258,6 +460,211 @@ def test_alphavantage_retry_session_is_configured() -> None:
         session.close()
 
 
+def test_alphavantage_config_rejects_intraday_interval(tmp_path) -> None:
+    """
+    AlphaVantage configs should fail fast when they request unsupported intraday intervals.
+    """
+    cfg_path = tmp_path / "alpha_intraday.yaml"
+    cfg_path.write_text(
+        """
+data:
+  symbol: EURUSD
+  source: alpha
+  interval: 1h
+backtest:
+  returns_col: close_ret
+  signal_col: signal
+        """.strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigError, match="must be '1d'"):
+        load_experiment_config(cfg_path)
+
+
+def test_alphavantage_provider_uses_end_exclusive_filter(monkeypatch) -> None:
+    """
+    AlphaVantage provider should align its end-date filtering with end-exclusive split semantics.
+    """
+    class _FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {
+                "Time Series FX (Daily)": {
+                    "2024-01-03": {
+                        "1. open": "1.2",
+                        "2. high": "1.3",
+                        "3. low": "1.1",
+                        "4. close": "1.25",
+                    },
+                    "2024-01-02": {
+                        "1. open": "1.1",
+                        "2. high": "1.2",
+                        "3. low": "1.0",
+                        "4. close": "1.15",
+                    },
+                    "2024-01-01": {
+                        "1. open": "1.0",
+                        "2. high": "1.1",
+                        "3. low": "0.9",
+                        "4. close": "1.05",
+                    },
+                }
+            }
+
+    class _FakeSession:
+        def get(self, *args, **kwargs):
+            return _FakeResponse()
+
+    monkeypatch.setattr(
+        "src.src_data.providers.alphavantage._build_retry_session",
+        lambda: _FakeSession(),
+    )
+
+    provider = AlphaVantageFXProvider(api_key="demo")
+    df = provider.get_ohlcv("EURUSD", start="2024-01-01", end="2024-01-03")
+
+    assert list(df.index) == [pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")]
+
+
+def test_twelve_data_config_accepts_intraday_interval(tmp_path) -> None:
+    """
+    Twelve Data configs should allow intraday intervals for forex-style experiments.
+    """
+    cfg_path = tmp_path / "twelve_intraday.yaml"
+    cfg_path.write_text(
+        """
+data:
+  symbol: EURUSD
+  source: twelve_data
+  interval: 1h
+backtest:
+  returns_col: close_ret
+  signal_col: signal
+        """.strip(),
+        encoding="utf-8",
+    )
+
+    cfg = load_experiment_config(cfg_path)
+    assert cfg["data"]["source"] == "twelve_data"
+    assert cfg["data"]["interval"] == "1h"
+
+
+def test_twelve_data_provider_normalizes_fx_symbol_and_filters_end_exclusive(monkeypatch) -> None:
+    """
+    Twelve Data provider should normalize EURUSD aliases and preserve end-exclusive filtering.
+    """
+    captured: dict[str, object] = {}
+
+    class _FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {
+                "meta": {"symbol": "EUR/USD", "interval": "1h"},
+                "values": [
+                    {
+                        "datetime": "2024-01-03 02:00:00",
+                        "open": "1.1030",
+                        "high": "1.1040",
+                        "low": "1.1020",
+                        "close": "1.1035",
+                    },
+                    {
+                        "datetime": "2024-01-03 01:00:00",
+                        "open": "1.1020",
+                        "high": "1.1030",
+                        "low": "1.1010",
+                        "close": "1.1025",
+                    },
+                    {
+                        "datetime": "2024-01-03 00:00:00",
+                        "open": "1.1010",
+                        "high": "1.1020",
+                        "low": "1.1000",
+                        "close": "1.1015",
+                    },
+                ],
+            }
+
+    class _FakeSession:
+        def get(self, url, params=None, timeout=None):
+            captured["url"] = url
+            captured["params"] = dict(params or {})
+            captured["timeout"] = timeout
+            return _FakeResponse()
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        "src.src_data.providers.twelvedata._build_retry_session",
+        lambda: _FakeSession(),
+    )
+
+    provider = TwelveDataProvider(api_key="demo")
+    df = provider.get_ohlcv("EURUSD=X", start="2024-01-03 00:00:00", end="2024-01-03 02:00:00", interval="1h")
+
+    assert captured["url"] == "https://api.twelvedata.com/time_series"
+    assert captured["params"]["symbol"] == "EUR/USD"
+    assert captured["params"]["interval"] == "1h"
+    assert list(df.index) == [
+        pd.Timestamp("2024-01-03 00:00:00"),
+        pd.Timestamp("2024-01-03 01:00:00"),
+    ]
+    assert (df["volume"] == 0.0).all()
+
+
+def test_load_ohlcv_routes_twelve_data_source(monkeypatch) -> None:
+    """
+    load_ohlcv should instantiate the Twelve Data provider when requested.
+    """
+    calls: dict[str, object] = {}
+
+    class _FakeProvider:
+        def __init__(self, api_key=None):
+            calls["api_key"] = api_key
+
+        def get_ohlcv(self, symbol, start=None, end=None, interval="1d"):
+            calls["symbol"] = symbol
+            calls["start"] = start
+            calls["end"] = end
+            calls["interval"] = interval
+            return pd.DataFrame(
+                {
+                    "open": [1.0],
+                    "high": [1.1],
+                    "low": [0.9],
+                    "close": [1.05],
+                    "volume": [0.0],
+                },
+                index=pd.DatetimeIndex([pd.Timestamp("2024-01-01 00:00:00")]),
+            )
+
+    monkeypatch.setattr("src.src_data.loaders.TwelveDataProvider", _FakeProvider)
+
+    df = load_ohlcv(
+        "EURUSD",
+        start="2024-01-01",
+        end="2024-01-02",
+        interval="1h",
+        source="twelve_data",
+        api_key="demo",
+    )
+
+    assert calls == {
+        "api_key": "demo",
+        "symbol": "EURUSD",
+        "start": "2024-01-01",
+        "end": "2024-01-02",
+        "interval": "1h",
+    }
+    assert list(df.columns) == ["open", "high", "low", "close", "volume"]
+
+
 def test_tft_config_feature_columns_exist_after_feature_pipeline() -> None:
     """
     TFT experiment config should request only features produced by configured steps.
@@ -267,6 +674,264 @@ def test_tft_config_feature_columns_exist_after_feature_pipeline() -> None:
     features_df = runner_mod._apply_feature_steps(df, list(cfg.get("features", []) or []))
     missing = [c for c in cfg["model"]["feature_cols"] if c not in features_df.columns]
     assert not missing
+
+
+def test_eurusd_twelve_hourly_config_feature_pipeline_computes_expected_features() -> None:
+    """
+    The EURUSD Twelve Data hourly config should produce the declared feature set with
+    numerically consistent intraday feature calculations.
+    """
+    cfg = load_experiment_config("experiments/eurusd_1h_twelve.yaml")
+
+    idx = pd.date_range("2024-01-01 00:00:00", periods=240, freq="h")
+    base = np.linspace(0.0, 0.03, len(idx))
+    cyc = 0.002 * np.sin(np.arange(len(idx)) / 8.0)
+    close = 1.08 * np.exp(base + cyc)
+
+    df = pd.DataFrame(index=idx)
+    df["close"] = close
+    df["open"] = df["close"].shift(1).fillna(df["close"].iloc[0] * 0.9995)
+    df["high"] = np.maximum(df["open"], df["close"]) * 1.0008
+    df["low"] = np.minimum(df["open"], df["close"]) * 0.9992
+    df["volume"] = 1000.0 + (np.arange(len(idx)) % 24) * 10.0
+    df = df[["open", "high", "low", "close", "volume"]]
+
+    features_df = runner_mod._apply_feature_steps(df, list(cfg.get("features", []) or []))
+
+    assert cfg["backtest"]["periods_per_year"] == 6048
+    assert cfg["features"][1]["params"]["annualization_factor"] == 6048.0
+
+    missing = [c for c in cfg["model"]["feature_cols"] if c not in features_df.columns]
+    assert not missing
+
+    expected_logret = np.log(df["close"] / df["close"].shift(1))
+    np.testing.assert_allclose(
+        features_df["close_logret"].to_numpy(dtype=float),
+        expected_logret.to_numpy(dtype=float),
+        equal_nan=True,
+    )
+
+    expected_vol_24 = expected_logret.rolling(window=24).std(ddof=1) * np.sqrt(6048.0)
+    np.testing.assert_allclose(
+        features_df["vol_rolling_24"].to_numpy(dtype=float),
+        expected_vol_24.to_numpy(dtype=float),
+        equal_nan=True,
+    )
+
+    expected_lag_1 = expected_logret.shift(1)
+    np.testing.assert_allclose(
+        features_df["lag_close_logret_1"].to_numpy(dtype=float),
+        expected_lag_1.to_numpy(dtype=float),
+        equal_nan=True,
+    )
+
+    expected_sma_24 = df["close"].rolling(window=24, min_periods=24).mean()
+    expected_close_over_sma_24 = df["close"] / expected_sma_24 - 1.0
+    np.testing.assert_allclose(
+        features_df["close_over_sma_24"].to_numpy(dtype=float),
+        expected_close_over_sma_24.to_numpy(dtype=float),
+        equal_nan=True,
+    )
+
+    trend_state_values = set(features_df["close_trend_state_sma_24_72"].dropna().astype(float).unique())
+    assert trend_state_values.issubset({-1.0, 0.0, 1.0})
+    assert "mfi_24" not in features_df.columns
+
+
+FX_SINGLE_ASSET_TWELVE_WRAPPER_CASES = [
+    (f"experiments/{slug}_1h_twelve_{strategy}.yaml", symbol, 6048)
+    for slug, symbol in [
+        ("eurusd", "EURUSD"),
+        ("usdjpy", "USDJPY"),
+        ("gbpusd", "GBPUSD"),
+        ("audusd", "AUDUSD"),
+    ]
+    for strategy in [
+        "trend_pullback",
+        "bollinger_squeeze",
+        "bollinger_rsi_meanrev",
+        "fx_trend_model",
+        "garch_hybrid",
+        "sarimax_hybrid",
+        "tft_hybrid",
+        "vol_regime",
+    ]
+]
+
+
+@pytest.mark.parametrize(
+    "config_name,expected_periods_per_year",
+    [
+        ("experiments/fx_majors_1h_twelve_trend_pullback.yaml", 6048),
+        ("experiments/fx_majors_1h_twelve_bollinger_squeeze.yaml", 6048),
+        ("experiments/fx_majors_1h_twelve_bollinger_rsi_meanrev.yaml", 6048),
+        ("experiments/fx_majors_1h_twelve_fx_trend_model.yaml", 6048),
+        ("experiments/fx_majors_1h_twelve_garch_hybrid.yaml", 6048),
+        ("experiments/fx_majors_1h_twelve_sarimax_hybrid.yaml", 6048),
+        ("experiments/fx_majors_1h_twelve_tft_hybrid.yaml", 6048),
+        ("experiments/fx_majors_1h_twelve_vol_regime.yaml", 6048),
+        ("experiments/usdbtc_1h_twelve_trend_pullback.yaml", 8760),
+        ("experiments/usdbtc_1h_twelve_bollinger_squeeze.yaml", 8760),
+        ("experiments/usdbtc_1h_twelve_bollinger_rsi_meanrev.yaml", 8760),
+        ("experiments/usdbtc_1h_twelve_fx_trend_model.yaml", 8760),
+        ("experiments/usdbtc_1h_twelve_garch_hybrid.yaml", 8760),
+        ("experiments/usdbtc_1h_twelve_sarimax_hybrid.yaml", 8760),
+        ("experiments/usdbtc_1h_twelve_tft_hybrid.yaml", 8760),
+        ("experiments/usdbtc_1h_twelve_vol_regime.yaml", 8760),
+    ],
+)
+def test_new_twelve_strategy_configs_load_and_produce_declared_features(
+    config_name: str,
+    expected_periods_per_year: int,
+) -> None:
+    """
+    Newly added Twelve Data strategy configs should load cleanly and request only features that
+    the configured feature pipeline actually produces.
+    """
+    cfg = load_experiment_config(config_name)
+
+    idx = pd.date_range("2024-01-01 00:00:00", periods=400, freq="h")
+    base = np.linspace(0.0, 0.04, len(idx))
+    cyc = 0.003 * np.sin(np.arange(len(idx)) / 9.0)
+    close = 100.0 * np.exp(base + cyc)
+
+    df = pd.DataFrame(index=idx)
+    df["close"] = close
+    df["open"] = df["close"].shift(1).fillna(df["close"].iloc[0] * 0.999)
+    df["high"] = np.maximum(df["open"], df["close"]) * 1.001
+    df["low"] = np.minimum(df["open"], df["close"]) * 0.999
+    df["volume"] = 1000.0 + (np.arange(len(idx)) % 24) * 25.0
+    df = df[["open", "high", "low", "close", "volume"]]
+
+    features_df = runner_mod._apply_feature_steps(df, list(cfg.get("features", []) or []))
+
+    assert cfg["backtest"]["periods_per_year"] == expected_periods_per_year
+    symbols = list(cfg["data"].get("symbols", []) or [])
+    if len(symbols) > 1:
+        assert cfg["portfolio"]["enabled"] is True
+
+    assert "close_logret" in features_df.columns
+    assert "vol_rolling_24" in features_df.columns
+
+    model_cfg = dict(cfg.get("model", {}) or {})
+    feature_cols = list(model_cfg.get("feature_cols", []) or [])
+    if feature_cols:
+        missing = [c for c in feature_cols if c not in features_df.columns]
+        assert not missing
+
+    if cfg["signals"]["kind"] == "volatility_regime":
+        assert cfg["signals"]["params"]["vol_col"] in features_df.columns
+
+
+@pytest.mark.parametrize(
+    "config_name,expected_symbol,expected_periods_per_year",
+    FX_SINGLE_ASSET_TWELVE_WRAPPER_CASES,
+)
+def test_single_asset_twelve_strategy_wrappers_override_symbol_cleanly(
+    config_name: str,
+    expected_symbol: str,
+    expected_periods_per_year: int,
+) -> None:
+    """
+    Single-asset FX wrappers should disable portfolio mode, override the symbol cleanly,
+    and still request only features produced by the inherited strategy pipeline.
+    """
+    cfg = load_experiment_config(config_name)
+
+    assert cfg["data"]["symbol"] == expected_symbol
+    assert cfg["data"].get("symbols") is None
+    assert cfg["portfolio"]["enabled"] is False
+    assert cfg["backtest"]["periods_per_year"] == expected_periods_per_year
+    assert cfg["data"]["storage"]["dataset_id"].startswith(expected_symbol.lower())
+    assert cfg["logging"]["run_name"].startswith(expected_symbol.lower())
+
+    idx = pd.date_range("2024-01-01 00:00:00", periods=400, freq="h")
+    base = np.linspace(0.0, 0.04, len(idx))
+    cyc = 0.003 * np.sin(np.arange(len(idx)) / 7.0)
+    close = 100.0 * np.exp(base + cyc)
+
+    df = pd.DataFrame(index=idx)
+    df["close"] = close
+    df["open"] = df["close"].shift(1).fillna(df["close"].iloc[0] * 0.999)
+    df["high"] = np.maximum(df["open"], df["close"]) * 1.001
+    df["low"] = np.minimum(df["open"], df["close"]) * 0.999
+    df["volume"] = 800.0 + (np.arange(len(idx)) % 24) * 15.0
+    df = df[["open", "high", "low", "close", "volume"]]
+
+    features_df = runner_mod._apply_feature_steps(df, list(cfg.get("features", []) or []))
+    assert "close_logret" in features_df.columns
+
+    model_cfg = dict(cfg.get("model", {}) or {})
+    feature_cols = list(model_cfg.get("feature_cols", []) or [])
+    if feature_cols:
+        missing = [c for c in feature_cols if c not in features_df.columns]
+        assert not missing
+
+    if cfg["signals"]["kind"] == "volatility_regime":
+        assert cfg["signals"]["params"]["vol_col"] in features_df.columns
+
+
+def test_typed_loader_accepts_null_covariance_window(tmp_path) -> None:
+    """
+    Nullable portfolio covariance parameters should remain loadable in typed configs.
+    """
+    cfg_path = tmp_path / "typed_portfolio_nulls.yaml"
+    cfg_path.write_text(
+        """
+data:
+  symbol: SPY
+backtest:
+  returns_col: close_ret
+  signal_col: signal
+portfolio:
+  covariance_window: null
+  covariance_rebalance_step: null
+        """.strip(),
+        encoding="utf-8",
+    )
+
+    cfg = load_experiment_config_typed(cfg_path)
+    assert cfg.portfolio.covariance_window is None
+    assert cfg.portfolio.covariance_rebalance_step is None
+
+
+def test_portfolio_backtest_accepts_null_covariance_settings() -> None:
+    """
+    Mean-variance portfolio path should treat null covariance settings as default runtime values.
+    """
+    idx = pd.date_range("2024-01-01", periods=8, freq="D")
+    asset_frames = {
+        "AAA": pd.DataFrame(
+            {"close_ret": np.linspace(0.001, 0.008, len(idx)), "signal": np.linspace(0.01, 0.08, len(idx))},
+            index=idx,
+        ),
+        "BBB": pd.DataFrame(
+            {"close_ret": np.linspace(-0.002, 0.003, len(idx)), "signal": np.linspace(0.02, 0.01, len(idx))},
+            index=idx,
+        ),
+    }
+    cfg = {
+        "data": {"alignment": "inner"},
+        "backtest": {"returns_col": "close_ret", "signal_col": "signal", "returns_type": "simple"},
+        "risk": {"cost_per_turnover": 0.0, "slippage_per_turnover": 0.0},
+        "portfolio": {
+            "enabled": True,
+            "construction": "mean_variance",
+            "expected_return_col": "signal",
+            "covariance_window": None,
+            "covariance_rebalance_step": None,
+            "risk_aversion": 1.0,
+            "trade_aversion": 0.0,
+            "constraints": {"min_weight": -1.0, "max_weight": 1.0, "max_gross_leverage": 1.0},
+        },
+    }
+
+    perf, weights, diagnostics, meta = runner_mod._run_portfolio_backtest(asset_frames, cfg=cfg)
+
+    assert isinstance(perf.summary, dict)
+    assert not weights.empty
+    assert not diagnostics.empty
+    assert meta["construction"] == "mean_variance"
 
 
 def test_runtime_repro_metadata_marks_pythonhashseed_limitations() -> None:
@@ -285,6 +950,15 @@ def test_dockerfile_runs_as_non_root_user() -> None:
     """
     content = Path("Dockerfile").read_text(encoding="utf-8")
     assert "USER appuser" in content
+
+
+def test_dockerfile_uses_lockfile_for_installs() -> None:
+    """
+    Docker builds should install from the pinned lockfile for reproducibility.
+    """
+    content = Path("Dockerfile").read_text(encoding="utf-8")
+    assert "requirements.lock.txt" in content
+    assert "pip install -r /tmp/requirements.lock.txt" in content
 
 
 def test_requirements_lock_contains_pinned_versions() -> None:

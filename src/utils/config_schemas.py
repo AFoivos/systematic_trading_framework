@@ -117,10 +117,13 @@ class ModelConfig:
             "pred_ret_col",
             "returns_input_col",
         }
+        feature_cols_raw = data.get("feature_cols")
+        if feature_cols_raw is not None and not isinstance(feature_cols_raw, list):
+            raise TypeError("model.feature_cols must be a list[str].")
         return cls(
             kind=str(data.get("kind", "none")),
             params=dict(data.get("params", {}) or {}),
-            feature_cols=[str(v) for v in data["feature_cols"]] if data.get("feature_cols") is not None else None,
+            feature_cols=[str(v) for v in feature_cols_raw] if feature_cols_raw is not None else None,
             target=dict(data.get("target", {}) or {}),
             split=dict(data.get("split", {}) or {}),
             runtime=dict(data.get("runtime", {}) or {}),
@@ -262,8 +265,8 @@ class PortfolioConfig:
     gross_target: float
     long_short: bool
     expected_return_col: str | None = None
-    covariance_window: int = 60
-    covariance_rebalance_step: int = 1
+    covariance_window: int | None = 60
+    covariance_rebalance_step: int | None = 1
     risk_aversion: float = 5.0
     trade_aversion: float = 0.0
     constraints: dict[str, Any] = field(default_factory=dict)
@@ -285,14 +288,22 @@ class PortfolioConfig:
             "constraints",
             "asset_groups",
         }
+        covariance_window_raw = data.get("covariance_window", 60)
+        covariance_rebalance_step_raw = data.get("covariance_rebalance_step", 1)
         return cls(
             enabled=bool(data.get("enabled", False)),
             construction=str(data.get("construction", "signal_weights")),
             gross_target=float(data.get("gross_target", 1.0)),
             long_short=bool(data.get("long_short", True)),
             expected_return_col=data.get("expected_return_col"),
-            covariance_window=int(data.get("covariance_window", 60)),
-            covariance_rebalance_step=int(data.get("covariance_rebalance_step", 1)),
+            covariance_window=(
+                int(covariance_window_raw) if covariance_window_raw is not None else None
+            ),
+            covariance_rebalance_step=(
+                int(covariance_rebalance_step_raw)
+                if covariance_rebalance_step_raw is not None
+                else None
+            ),
             risk_aversion=float(data.get("risk_aversion", 5.0)),
             trade_aversion=float(data.get("trade_aversion", 0.0)),
             constraints=dict(data.get("constraints", {}) or {}),

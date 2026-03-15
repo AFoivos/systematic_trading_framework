@@ -6,6 +6,7 @@ import pandas as pd
 
 from src.src_data.providers.yahoo import YahooFinanceProvider
 from src.src_data.providers.alphavantage import AlphaVantageFXProvider
+from src.src_data.providers.twelvedata import TwelveDataProvider
 
 
 def load_ohlcv(
@@ -13,7 +14,7 @@ def load_ohlcv(
     start: str | None = None,
     end: str | None = None,
     interval: str = "1d",
-    source: Literal["yahoo", "alpha"] = "yahoo",
+    source: Literal["yahoo", "alpha", "twelve_data", "twelve"] = "yahoo",
     api_key: Optional[str] = None,
 ) -> pd.DataFrame:
     """
@@ -27,10 +28,12 @@ def load_ohlcv(
         End date (π.χ. "2025-01-01").
     interval : str
         "1d", "1h", "5m", κλπ (όπως τα υποστηρίζει το yfinance).
-    source : Literal["yahoo", "alpha"]
-        "yahoo" (default) ή "alpha" για Alpha Vantage FX.
+    source : Literal["yahoo", "alpha", "twelve_data", "twelve"]
+        "yahoo" (default), "alpha" για Alpha Vantage FX, ή "twelve_data"/"twelve"
+        για Twelve Data time series.
     api_key : str | None
-        Απαιτείται για source="alpha" (ή env ALPHAVANTAGE_API_KEY).
+        Απαιτείται για source="alpha" (ή env ALPHAVANTAGE_API_KEY) και προαιρετικά για
+        source="twelve_data"/"twelve" (ή env TWELVEDATA_API_KEY).
 
     Returns
     -------
@@ -43,6 +46,8 @@ def load_ohlcv(
         provider = YahooFinanceProvider()
     elif source == "alpha":
         provider = AlphaVantageFXProvider(api_key=api_key)
+    elif source in {"twelve_data", "twelve"}:
+        provider = TwelveDataProvider(api_key=api_key)
     else:
         raise ValueError(f"Unknown data source: {source}")
 
@@ -60,7 +65,7 @@ def load_ohlcv_panel(
     start: str | None = None,
     end: str | None = None,
     interval: str = "1d",
-    source: Literal["yahoo", "alpha"] = "yahoo",
+    source: Literal["yahoo", "alpha", "twelve_data", "twelve"] = "yahoo",
     api_key: Optional[str] = None,
 ) -> dict[str, pd.DataFrame]:
     """
@@ -70,11 +75,14 @@ def load_ohlcv_panel(
     """
     if not symbols:
         raise ValueError("symbols cannot be empty.")
+    normalized_symbols = [str(symbol) for symbol in symbols]
+    if len(set(normalized_symbols)) != len(normalized_symbols):
+        raise ValueError("symbols contains duplicates.")
 
     panel: dict[str, pd.DataFrame] = {}
-    for symbol in symbols:
-        panel[str(symbol)] = load_ohlcv(
-            symbol=str(symbol),
+    for symbol in normalized_symbols:
+        panel[symbol] = load_ohlcv(
+            symbol=symbol,
             start=start,
             end=end,
             interval=interval,
