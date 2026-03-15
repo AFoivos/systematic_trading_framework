@@ -5,9 +5,10 @@
 Η υλοποίηση ακολουθεί υβριδικό pattern:
 
 - `Layered architecture` για σαφή separation of concerns.
-- `Pipeline orchestration` μέσω του `src/experiments/runner.py`.
+- `Pipeline orchestration` μέσω του `src/experiments/orchestration/*`, με το `src/experiments/runner.py` ως thin façade.
 - `Registry pattern` για dynamic resolution feature/model/signal functions.
 - `Contract-first validation` για data και target assumptions.
+- `Typed configuration and orchestration payloads` για πιο καθαρά boundaries μεταξύ stages.
 - `Artifact-driven reproducibility` για config/data/runtime traceability.
 
 Η επιλογή αυτή είναι κατάλληλη για quant/ML projects επειδή επιτρέπει γρήγορη εναλλαγή πειραμάτων χωρίς να
@@ -16,12 +17,14 @@
 
 ### 2.2 Layered Breakdown
 
-- `Configuration layer`: `src/utils/config.py`, YAMLs.
+- `Configuration layer`: YAMLs + `src/utils/config.py` façade + `src/utils/config_loader.py`, `src/utils/config_defaults.py`, `src/utils/config_validation.py`, `src/utils/config_schemas.py`.
 - `Infrastructure/repro layer`: `src/utils/repro.py`, `src/utils/run_metadata.py`, `src/utils/paths.py`.
 - `Data layer`: `src/src_data/*`.
+- `Intraday layer`: `src/intraday/*`.
 - `Feature layer`: `src/features/*`.
 - `Model layer`: `src/models/*`, `src/models/lightgbm_baseline.py`.
-- `Experiment-model adapter layer`: `src/experiments/models.py`, `src/experiments/registry.py`.
+- `Experiment-model adapter layer`: `src/experiments/models.py` façade + `src/experiments/modeling/*`.
+- `Experiment orchestration layer`: `src/experiments/orchestration/*`, `src/experiments/registry.py`.
 - `Signal layer`: `src/signals/*`, `src/backtesting/strategies.py`.
 - `Backtesting/evaluation layer`: `src/backtesting/engine.py`, `src/evaluation/*`.
 - `Portfolio layer`: `src/portfolio/*`.
@@ -32,49 +35,43 @@
 ### 2.3 ASCII Διάγραμμα Συστήματος
 
 ```text
-[YAML Configs] ---> [utils.config]
+[YAML Configs] ---> [utils.config façade]
       |                    |
       v                    v
-[runtime/repro] ---> [experiments.runner] <-----------------------------+
-                             |                                           |
-                             v                                           |
-                      [src_data.loaders] ---> [providers]                |
-                             |                                           |
-                             v                                           |
-                      [src_data.pit] ---> [validation] ---> [storage]    |
-                             |                                           |
-                             v                                           |
-                          [features] ---> [experiments.models] ---> [signals]
-                             |                   |                    |
-                             |                   v                    |
-                             |              [src.models]              |
-                             |                   |                    |
-                             |            [time_splits]               |
-                             |                   |                    |
-                             +---------> [backtesting.engine] <-------+
-                                                 |
-                      +--------------------------+--------------------------+
-                      |                                                     |
-                      v                                                     v
-               [portfolio.*]                                        [evaluation.metrics]
-                      |                                                     |
-                      +-------------------> [monitoring] <------------------+
-                                                 |
-                                                 v
-                                          [execution.paper]
-                                                 |
-                                                 v
-                                        [logs/experiments artifacts]
+[config_loader/defaults/validation/schemas] ---> [experiments.runner façade]
+                                                      |
+                                                      v
+                                            [orchestration.pipeline]
+                                                      |
+             +-------------------+--------------------+-------------------+
+             |                   |                    |                   |
+             v                   v                    v                   v
+   [data_stage + src_data] [feature_stage] [modeling/* + src.models] [signals]
+             |                   |                    |                   |
+             +-------------------+--------------------+-------------------+
+                                                      |
+                                                      v
+                                   [backtest_stage] ---> [portfolio.*]
+                                                      |
+                              +-----------------------+----------------------+
+                              |                                              |
+                              v                                              v
+                       [reporting/monitoring]                         [execution_stage]
+                              |                                              |
+                              +-----------------------+----------------------+
+                                                      |
+                                                      v
+                                               [artifacts + logs]
 ```
 
 ### 2.4 Σχόλιο για την Κατεύθυνση των Εξαρτήσεων
 
-Οι χαμηλότεροι layers (`src_data`, `features`, `risk`, `evaluation`, `portfolio`, `models`) δεν γνωρίζουν
-τίποτε για τον orchestrator. Το `src/experiments/models.py` λειτουργεί πλέον ως λεπτό experiment adapter:
-χτίζει targets, ορίζει split policy, καλεί τα estimator/fold engines του `src/models/` και συναρμολογεί strict
-OOS outputs και metadata. Αντίθετα, ο orchestrator εξαρτάται από όλους. Αυτή είναι υγιής κατεύθυνση
-σύζευξης. Το βασικό architectural hotspot παραμένει το `runner.py`, επειδή εξακολουθεί να συγκεντρώνει
-orchestration, artifact persistence και μέρος της evaluation/reporting assembly.
+Οι χαμηλότεροι layers (`src_data`, `features`, `risk`, `evaluation`, `portfolio`, `models`, `intraday`) δεν
+γνωρίζουν τίποτε για τον orchestrator. Το `src/experiments/models.py` είναι πλέον καθαρό façade προς το
+`src/experiments/modeling/*`, όπου χτίζονται targets, split policies και strict OOS outputs. Αντίστοιχα, το
+`src/experiments/runner.py` είναι façade προς το `src/experiments/orchestration/*`, όπου βρίσκονται τα data,
+feature, model, backtest, reporting, execution και artifact stages. Έτσι η σύζευξη παραμένει κατευθυνόμενη
+προς τα πάνω και τα μεγάλα hotspots έχουν διασπαστεί σε μικρότερα, testable modules.
 
 ### 2.5 ASCII Class Diagram
 

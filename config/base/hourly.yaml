@@ -1,0 +1,38 @@
+data:
+  source: yahoo
+  interval: "1h"
+  start: "2024-01-01"
+  end: null
+  pit:
+    timestamp_alignment:
+      source_timezone: "UTC"
+      output_timezone: "UTC"
+      normalize_daily: false
+      duplicate_policy: "last"
+    corporate_actions:
+      policy: "none"
+      adj_close_col: "adj_close"
+    universe_snapshot: {}
+
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+
+risk:
+  cost_per_turnover: 0.0005
+  slippage_per_turnover: 0.0
+  target_vol: null
+  max_leverage: 3.0
+  dd_guard:
+    max_drawdown: 0.2
+    cooloff_bars: 20
+
+backtest:
+  periods_per_year: 1638
+  returns_type: simple
+
+logging:
+  output_dir: logs/experiments

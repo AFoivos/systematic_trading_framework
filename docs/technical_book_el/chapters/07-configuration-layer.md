@@ -4,8 +4,16 @@
 
 Το configuration layer είναι declarative και inheritance-based. Το `extends` επιτρέπει base defaults και
 κάθε experiment YAML περιγράφει μόνο τις διαφοροποιήσεις. Η φόρτωση δεν είναι απλό parsing YAML:
-περιλαμβάνει path normalization, default injection, semantic validation, env-based secret injection και
-runtime normalization.
+περιλαμβάνει path normalization, default injection, semantic validation, env-based secret injection,
+runtime normalization και typed resolved config objects.
+
+Η υλοποίηση έχει πλέον σαφή modules:
+
+- `src/utils/config.py`: stable façade με `load_experiment_config(...)` και `load_experiment_config_typed(...)`.
+- `src/utils/config_loader.py`: path resolution, YAML loading, inheritance merge, env secret injection.
+- `src/utils/config_defaults.py`: default policies ανά block και intraday-aware annualization defaults.
+- `src/utils/config_validation.py`: semantic validation και registry-aware checks.
+- `src/utils/config_schemas.py`: typed resolved config objects για το orchestration layer.
 
 ### 7.2 Configuration Schema ανά Block
 
@@ -64,6 +72,44 @@ logging:
 Ορίζει τα canonical defaults του repository: Yahoo daily data, strict reproducibility, βασικό risk model,
 drawdown guard και default logging output directory. Είναι η βάση πάνω στην οποία κληρονομούν τα experiment
 configs, επομένως λειτουργεί ως policy baseline.
+
+#### `config/base/hourly.yaml`
+
+```yaml
+data:
+  source: yahoo
+  interval: 1h
+  start: '2024-01-01'
+  end: null
+  pit:
+    timestamp_alignment:
+      source_timezone: UTC
+      output_timezone: UTC
+      normalize_daily: false
+      duplicate_policy: last
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+risk:
+  cost_per_turnover: 0.0005
+  slippage_per_turnover: 0.0
+  target_vol: null
+  max_leverage: 3.0
+  dd_guard:
+    max_drawdown: 0.2
+    cooloff_bars: 20
+backtest:
+  periods_per_year: 1638
+  returns_type: simple
+logging:
+  output_dir: logs/experiments
+```
+
+Αυτό είναι το intraday-safe baseline. Κρατά τα timestamps intact (`normalize_daily: false`) και χρησιμοποιεί
+annualization defaults συμβατά με `1h` bars υπό regular-session assumptions.
 
 #### `config/experiments/lgbm_spy.yaml`
 

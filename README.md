@@ -67,7 +67,8 @@ systematic-trading-framework/
 ├── src/
 │   ├── features/           # Feature engineering (lags, rolling stats, regimes)
 │   ├── models/             # Estimator/fold engines and notebook baselines
-│   ├── experiments/        # Config adapters, target construction, OOS assembly
+│   ├── intraday/           # Intraday interval/session defaults and annualization helpers
+│   ├── experiments/        # Registry, façades and split orchestration/model adapters
 │   ├── backtesting/        # Time-aware backtesting engine
 │   ├── risk/               # Position sizing, exposure control, costs
 │   ├── evaluation/         # Metrics & performance analysis
@@ -76,7 +77,7 @@ systematic-trading-framework/
 │   ├── monitoring/         # Drift and feature stability diagnostics
 │   ├── execution/          # Paper execution order exports
 │   ├── src_data/           # Market data loading, PIT hardening, snapshot storage
-│   └── utils/              # Shared utilities
+│   └── utils/              # Shared utilities, config loader/defaults/validation/schemas
 │
 ├── tests/                  # Unit & integration tests
 │
@@ -143,13 +144,20 @@ The container uses `.devcontainer/devcontainer.json` and auto-configures:
 
 ## ⚙️ Config-Based Experiments
 
-Define experiments in YAML under `config/` (e.g., `config/experiments/trend_spy.yaml`). Inherit defaults via `extends: base/daily.yaml`. Load and run:
+Define experiments in YAML under `config/` (e.g., `config/experiments/trend_spy.yaml`). Inherit defaults via `extends: base/daily.yaml` for daily work or `extends: base/hourly.yaml` for intraday work. Load and run:
 
 ```python
 from src.utils.config import load_experiment_config
 cfg = load_experiment_config("experiments/trend_spy.yaml")
 # then: load/persist raw snapshots, build features, train model with time-aware splits,
 # map signals, optionally construct portfolio weights, run backtest, save artifacts
+```
+
+If you want the typed resolved object used by the orchestration layer:
+
+```python
+from src.utils.config import load_experiment_config_typed
+typed_cfg = load_experiment_config_typed("experiments/trend_spy.yaml")
 ```
 
 Keep secrets out of Git: store API keys in env vars and reference them with `data.api_key_env`.
@@ -166,7 +174,10 @@ Key config blocks now supported:
 Architecture boundary:
 
 * `src/models/` contains estimator-specific fold engines such as SARIMAX, GARCH and TFT.
-* `src/experiments/` contains the experiment-facing adapters that build targets, apply split policy, collect strict OOS predictions and assemble evaluation metadata.
+* `src/experiments/modeling/` contains target construction, split policy, anti-leakage loops and strict OOS assembly.
+* `src/experiments/orchestration/` contains the end-to-end run stages: data, features, models, backtest, reporting, execution and artifacts.
+* `src/utils/config_*.py` contains loader/defaults/validation/schema modules, while `src/utils/config.py` stays as a stable façade.
+* `src/intraday/` centralizes intraday-safe defaults such as `normalize_daily=false` guards and annualization inference.
 
 ---
 

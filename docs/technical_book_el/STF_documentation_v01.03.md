@@ -85,9 +85,10 @@ backtesting, reproducibility metadata και παραγωγή execution-ready pa
 Η υλοποίηση ακολουθεί υβριδικό pattern:
 
 - `Layered architecture` για σαφή separation of concerns.
-- `Pipeline orchestration` μέσω του `src/experiments/runner.py`.
+- `Pipeline orchestration` μέσω του `src/experiments/orchestration/*`, με το `src/experiments/runner.py` ως thin façade.
 - `Registry pattern` για dynamic resolution feature/model/signal functions.
 - `Contract-first validation` για data και target assumptions.
+- `Typed configuration and orchestration payloads` για πιο καθαρά boundaries μεταξύ stages.
 - `Artifact-driven reproducibility` για config/data/runtime traceability.
 
 Η επιλογή αυτή είναι κατάλληλη για quant/ML projects επειδή επιτρέπει γρήγορη εναλλαγή πειραμάτων χωρίς να
@@ -96,12 +97,14 @@ backtesting, reproducibility metadata και παραγωγή execution-ready pa
 
 ### 2.2 Layered Breakdown
 
-- `Configuration layer`: `src/utils/config.py`, YAMLs.
+- `Configuration layer`: YAMLs + `src/utils/config.py` façade + `src/utils/config_loader.py`, `src/utils/config_defaults.py`, `src/utils/config_validation.py`, `src/utils/config_schemas.py`.
 - `Infrastructure/repro layer`: `src/utils/repro.py`, `src/utils/run_metadata.py`, `src/utils/paths.py`.
 - `Data layer`: `src/src_data/*`.
+- `Intraday layer`: `src/intraday/*`.
 - `Feature layer`: `src/features/*`.
 - `Model layer`: `src/models/*`, `src/models/lightgbm_baseline.py`.
-- `Experiment-model adapter layer`: `src/experiments/models.py`, `src/experiments/registry.py`.
+- `Experiment-model adapter layer`: `src/experiments/models.py` façade + `src/experiments/modeling/*`.
+- `Experiment orchestration layer`: `src/experiments/orchestration/*`, `src/experiments/registry.py`.
 - `Signal layer`: `src/signals/*`, `src/backtesting/strategies.py`.
 - `Backtesting/evaluation layer`: `src/backtesting/engine.py`, `src/evaluation/*`.
 - `Portfolio layer`: `src/portfolio/*`.
@@ -149,12 +152,11 @@ backtesting, reproducibility metadata και παραγωγή execution-ready pa
 
 ### 2.4 Σχόλιο για την Κατεύθυνση των Εξαρτήσεων
 
-Οι χαμηλότεροι layers (`src_data`, `features`, `risk`, `evaluation`, `portfolio`, `models`) δεν γνωρίζουν
-τίποτε για τον orchestrator. Το `src/experiments/models.py` λειτουργεί πλέον ως λεπτό experiment adapter:
-χτίζει targets, ορίζει split policy, καλεί τα estimator/fold engines του `src/models/` και συναρμολογεί strict
-OOS outputs και metadata. Αντίθετα, ο orchestrator εξαρτάται από όλους. Αυτή είναι υγιής κατεύθυνση
-σύζευξης. Το βασικό architectural hotspot παραμένει το `runner.py`, επειδή εξακολουθεί να συγκεντρώνει
-orchestration, artifact persistence και μέρος της evaluation/reporting assembly.
+Οι χαμηλότεροι layers (`src_data`, `features`, `risk`, `evaluation`, `portfolio`, `models`, `intraday`) δεν
+γνωρίζουν τίποτε για τον orchestrator. Το `src/experiments/models.py` είναι πλέον καθαρό façade προς το
+`src/experiments/modeling/*`, ενώ το `src/experiments/runner.py` είναι façade προς το
+`src/experiments/orchestration/*`. Έτσι η σύζευξη παραμένει κατευθυνόμενη προς τα πάνω και τα μεγάλα
+hotspots έχουν διασπαστεί σε μικρότερα, testable modules.
 
 ### 2.5 ASCII Class Diagram
 
@@ -221,9 +223,10 @@ orchestration, artifact persistence και μέρος της evaluation/reportin
 - `src/portfolio`: Portfolio constraints, optimization, signal-to-weight mapping και portfolio-level accounting.
 - `src/monitoring`: Production-style drift diagnostics για features.
 - `src/execution`: Paper execution export layer.
+- `src/intraday`: Intraday interval/session defaults και annualization helpers.
 - `src/models`: Καθαρά estimator/fold engines για SARIMAX, GARCH, TFT και lightweight notebook baselines.
-- `src/experiments`: Experiment-facing orchestration domain: contracts, registries, config adapters, target construction, split policy, strict OOS assembly και end-to-end run coordination.
-- `src/utils`: Infrastructure utilities για paths, config normalization, reproducibility και run metadata.
+- `src/experiments`: Experiment-facing domain με contracts, registries, façades και split subpackages για orchestration και modeling.
+- `src/utils`: Infrastructure utilities για paths, config normalization, reproducibility και run metadata. Το config layer πλέον είναι σπασμένο σε `config_loader`, `config_defaults`, `config_validation`, `config_schemas`.
 - `tests`: Regression suite που κωδικοποιεί τις θεμελιώδεις υποθέσεις correctness, anti-leakage και reproducibility.
 
 Οι φάκελοι `data/`, `logs/`, `output/` και `tmp/` λειτουργούν ως operational surfaces. Δεν είναι μέρος της
@@ -251,9 +254,14 @@ equity curves, costs, orders και metadata manifests.
 | `src/execution/paper.py` | 66 | Paper execution artifact builder που μετατρέπει target weights σε notional/share deltas. |
 | `src/experiments/__init__.py` | 38 | Public API surface με lazy exports του runner ώστε τα package imports να μένουν σταθερά χωρίς circular-import side effects. |
 | `src/experiments/contracts.py` | 130 | Υλοποίηση του module `contracts.py` μέσα στο package `experiments`, με ρόλο συμβατό με τη συνολική layered αρχιτεκτονική του repository. |
-| `src/experiments/models.py` | 1002 | Experiment-model adapter layer: target construction, split policy, OOS assembly και thin wrappers προς τα estimator engines του `src/models/`. |
+| `config/base/hourly.yaml` | 38 | Intraday-safe base config με `normalize_daily: false` και `1h` annualization defaults. |
+| `src/experiments/models.py` | 19 | Stable façade προς το `src/experiments/modeling/*` ώστε registry και imports να μείνουν συμβατά. |
 | `src/experiments/registry.py` | 88 | Υλοποίηση του module `registry.py` μέσα στο package `experiments`, με ρόλο συμβατό με τη συνολική layered αρχιτεκτονική του repository. |
-| `src/experiments/runner.py` | 1264 | Κεντρικός orchestrator. Συνδέει config loading, data ingestion, PIT hardening, features, model fitting, signal generation, single-asset ή portfolio backtest, monitoring, execution και artifact persistence. |
+| `src/experiments/runner.py` | 130 | Thin façade που κρατά stable entrypoints και legacy monkeypatch/test surfaces προς το orchestration package. |
+| `src/experiments/modeling/classification.py` | 292 | Shared classifier training loop με target building, anti-leakage splits και OOS assembly. |
+| `src/experiments/modeling/forecasting.py` | 391 | Shared forecasting loop για SARIMAX, GARCH και TFT με fold diagnostics και strict OOS predictions. |
+| `src/experiments/orchestration/pipeline.py` | 189 | End-to-end pipeline assembly που καλεί τα επιμέρους data/feature/model/backtest/reporting/execution stages. |
+| `src/experiments/orchestration/reporting.py` | 257 | OOS evaluation payloads, fold summaries και monitoring report assembly. |
 | `src/features/__init__.py` | 20 | Public API surface που επανεξάγει symbols του package ώστε τα imports ανώτερου layer να μένουν σταθερά. |
 | `src/features/lags.py` | 35 | Υλοποίηση του module `lags.py` μέσα στο package `features`, με ρόλο συμβατό με τη συνολική layered αρχιτεκτονική του repository. |
 | `src/features/returns.py` | 64 | Υλοποίηση του module `returns.py` μέσα στο package `features`, με ρόλο συμβατό με τη συνολική layered αρχιτεκτονική του repository. |
@@ -294,7 +302,12 @@ equity curves, costs, orders και metadata manifests.
 | `src/src_data/storage.py` | 208 | Persistence layer για raw/processed dataset snapshots σε canonical long format. |
 | `src/src_data/validation.py` | 57 | Υλοποίηση του module `validation.py` μέσα στο package `src_data`, με ρόλο συμβατό με τη συνολική layered αρχιτεκτονική του repository. |
 | `src/utils/__init__.py` | 0 | Public API surface που επανεξάγει symbols του package ώστε τα imports ανώτερου layer να μένουν σταθερά. |
-| `src/utils/config.py` | 590 | Configuration loader/validator με inheritance μέσω `extends`, defaults, normalization paths και semantic validation blocks. |
+| `src/intraday/calendar.py` | 149 | Intraday interval parsing, annualization inference και guards για timestamp normalization. |
+| `src/utils/config.py` | 69 | Stable façade που εκθέτει dict και typed config loading πάνω από τα επιμέρους config modules. |
+| `src/utils/config_defaults.py` | 188 | Default policies ανά block, including intraday-aware volatility/backtest annualization defaults. |
+| `src/utils/config_loader.py` | 96 | YAML loading, inheritance merge, safe path resolution και env secret injection. |
+| `src/utils/config_schemas.py` | 490 | Typed resolved config objects για orchestration-facing usage. |
+| `src/utils/config_validation.py` | 358 | Semantic validation για data/model/backtest/portfolio/execution blocks και intraday guards. |
 | `src/utils/paths.py` | 63 | Υλοποίηση του module `paths.py` μέσα στο package `utils`, με ρόλο συμβατό με τη συνολική layered αρχιτεκτονική του repository. |
 | `src/utils/repro.py` | 149 | Υλοποίηση του module `repro.py` μέσα στο package `utils`, με ρόλο συμβατό με τη συνολική layered αρχιτεκτονική του repository. |
 | `src/utils/run_metadata.py` | 294 | Reproducibility metadata layer: hashing config/data, συλλογή environment/git metadata και artifact manifesting. |
@@ -11209,7 +11222,7 @@ modular αλλά όχι ακόμη distributed.
 
 ### 13.3 Πού Θα Εμφανιστεί Bottleneck
 
-- Στο `runner.py`, επειδή ο orchestration layer κάνει πολλά responsibilities σε ένα process.
+- Στο `src/experiments/orchestration/pipeline.py` και στα per-stage pandas joins, επειδή η ροή παραμένει single-process παρότι είναι πλέον modularized.
 - Στο `build_rolling_covariance_by_date()` για μεγάλο αριθμό assets και μεγάλα windows.
 - Στο `optimize_mean_variance()` όταν μεγαλώνει ο αριθμός assets και constraints.
 - Στο pandas-based long-format snapshot persistence για μεγάλα intraday panels.
@@ -11254,21 +11267,22 @@ modular αλλά όχι ακόμη distributed.
 
 ### 15.1 Τεχνικό Χρέος
 
-1. Το `src/experiments/runner.py` έχει 1,264 LOC και συγκεντρώνει orchestration, evaluation assembly, execution output και artifact persistence. Είναι λειτουργικό αλλά architectural hotspot.
-2. Το artifact-centric logging είναι χρήσιμο, αλλά λείπει structured application logger για operational observability σε long-running jobs.
-3. Το `src/models/lightgbm_baseline.py` χρησιμοποιεί `n_jobs=-1`, που δεν είναι απόλυτα ευθυγραμμισμένο με το strict reproducibility philosophy του υπόλοιπου framework.
-4. Το optimizer fallback path επιτρέπει runtime warnings όταν του δοθούν pathological covariance matrices. Το test το θεωρεί αποδεκτό, αλλά production code θα ωφελούνταν από πιο καθαρή numerical sanitization.
-5. Τα test configs γράφονται μερικές φορές ως JSON text σε `.yaml` path, κάτι που είναι νόμιμο για YAML parsers αλλά όχι ιδανικό για readability.
+1. Το μεγάλο orchestration hotspot έχει διασπαστεί σε `src/experiments/orchestration/*`, αλλά το `src/experiments/registry.py` παραμένει ενιαίο σημείο dynamic wiring για features/models/signals.
+2. Το config layer έχει πλέον `loader/defaults/validation/schemas`, αλλά τα nested blocks εξακολουθούν να κουβαλούν αρκετά `dict[str, Any]` extras για συμβατότητα.
+3. Το artifact-centric logging είναι χρήσιμο, αλλά λείπει structured application logger για operational observability σε long-running jobs.
+4. Το `src/models/lightgbm_baseline.py` χρησιμοποιεί `n_jobs=-1`, που δεν είναι απόλυτα ευθυγραμμισμένο με το strict reproducibility philosophy του υπόλοιπου framework.
+5. Το optimizer fallback path επιτρέπει runtime warnings όταν του δοθούν pathological covariance matrices. Το test το θεωρεί αποδεκτό, αλλά production code θα ωφελούνταν από πιο καθαρή numerical sanitization.
 
 ### 15.2 Συγκεκριμένες Προτάσεις Refactor
 
-1. Διάσπαση του `runner.py` σε υπομονάδες όπως `orchestration/data_stage.py`, `orchestration/model_stage.py`, `orchestration/reporting.py`, `orchestration/artifacts.py`.
-2. Εισαγωγή explicit typed schemas για `summary.json` και `run_metadata.json` μέσω dataclasses ή Pydantic-like validation layer.
+1. Διάσπαση του `registry.py` σε `feature_registry.py`, `signal_registry.py`, `model_registry.py` ώστε να συνεχίσει να μικραίνει το central wiring surface.
+2. Επέκταση των typed schemas ώστε `summary.json`, `run_metadata.json` και execution artifacts να έχουν αυστηρότερη runtime validation.
 3. Μετατροπή snapshot storage από CSV σε Parquet για ταχύτερο I/O και preservation dtypes.
 4. Προσθήκη model calibration diagnostics (reliability curves, calibration error) πριν από probability-threshold signal mapping.
 5. Εισαγωγή factor/exposure model στο portfolio layer για πιο ρεαλιστικές neutrality constraints.
 6. Προσθήκη transaction-cost model δεύτερης τάξης (spread + impact) για intraday ή μεγαλύτερο universe.
-7. Προσθήκη benchmark harness για runtime και memory profiling ανά module.
+7. Επέκταση του `src/intraday/` με session features όπως opening range, session VWAP και overnight gap handling.
+8. Προσθήκη benchmark harness για runtime και memory profiling ανά module.
 
 ### 15.3 Extension Roadmap
 

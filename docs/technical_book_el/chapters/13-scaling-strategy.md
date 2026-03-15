@@ -14,7 +14,7 @@ modular αλλά όχι ακόμη distributed.
 
 ### 13.3 Πού Θα Εμφανιστεί Bottleneck
 
-- Στο `runner.py`, επειδή ο orchestration layer κάνει πολλά responsibilities σε ένα process.
+- Στο `src/experiments/orchestration/pipeline.py` και στα per-stage pandas joins, επειδή η ροή παραμένει single-process παρότι είναι πλέον modularized.
 - Στο `build_rolling_covariance_by_date()` για μεγάλο αριθμό assets και μεγάλα windows.
 - Στο `optimize_mean_variance()` όταν μεγαλώνει ο αριθμός assets και constraints.
 - Στο pandas-based long-format snapshot persistence για μεγάλα intraday panels.

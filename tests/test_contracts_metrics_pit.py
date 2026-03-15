@@ -16,7 +16,7 @@ from src.src_data.pit import (
     assert_symbol_in_snapshot,
     load_universe_snapshot,
 )
-from src.utils.config import load_experiment_config
+from src.utils.config import ConfigError, ResolvedExperimentConfig, load_experiment_config, load_experiment_config_typed
 
 
 def _synthetic_frame(n: int = 240) -> pd.DataFrame:
@@ -224,6 +224,79 @@ backtest:
 
     assert intraday["data"]["pit"]["timestamp_alignment"]["normalize_daily"] is False
     assert daily["data"]["pit"]["timestamp_alignment"]["normalize_daily"] is True
+
+
+def test_intraday_configs_infer_intraday_annualization_defaults(tmp_path) -> None:
+    """
+    Intraday configs should derive annualization defaults from the configured interval.
+    """
+    cfg_path = tmp_path / "intraday_vol.yaml"
+    cfg_path.write_text(
+        """
+data:
+  symbol: "SPY"
+  interval: "1h"
+features:
+  - step: "volatility"
+backtest:
+  returns_col: "close_ret"
+  signal_col: "signal"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    cfg = load_experiment_config(cfg_path)
+
+    assert cfg["backtest"]["periods_per_year"] == 1638
+    assert cfg["features"][0]["params"]["annualization_factor"] == 1638.0
+
+
+def test_intraday_configs_reject_daily_timestamp_normalization(tmp_path) -> None:
+    """
+    Intraday configs should fail fast if a daily-normalization setting would collapse bars.
+    """
+    cfg_path = tmp_path / "intraday_bad.yaml"
+    cfg_path.write_text(
+        """
+data:
+  symbol: "SPY"
+  interval: "1h"
+  pit:
+    timestamp_alignment:
+      normalize_daily: true
+backtest:
+  returns_col: "close_ret"
+  signal_col: "signal"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigError):
+        load_experiment_config(cfg_path)
+
+
+def test_typed_config_loader_returns_resolved_schema(tmp_path) -> None:
+    """
+    The typed config loader should expose a structured resolved config object for orchestration code.
+    """
+    cfg_path = tmp_path / "typed.yaml"
+    cfg_path.write_text(
+        """
+data:
+  symbol: "SPY"
+  interval: "1d"
+backtest:
+  returns_col: "close_ret"
+  signal_col: "signal"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    cfg = load_experiment_config_typed(cfg_path)
+
+    assert isinstance(cfg, ResolvedExperimentConfig)
+    assert cfg.data.interval == "1d"
+    assert cfg.backtest.periods_per_year == 252
 
 
 def test_apply_corporate_actions_policy_adj_close_ratio() -> None:
