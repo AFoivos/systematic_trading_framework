@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -10,7 +11,12 @@ import pandas as pd
 import pytest
 
 from src.utils.config import load_experiment_config
-from src.utils.repro import RuntimeConfigError, apply_runtime_reproducibility, validate_runtime_config
+from src.utils.repro import (
+    RuntimeConfigError,
+    apply_runtime_reproducibility,
+    runtime_reproducibility_context,
+    validate_runtime_config,
+)
 from src.utils.run_metadata import build_artifact_manifest, compute_config_hash, compute_dataframe_fingerprint
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -87,6 +93,27 @@ def test_apply_runtime_reproducibility_sets_deterministic_numpy_stream() -> None
     assert np.array_equal(arr1, arr2)
     assert ctx1["thread_env"]["OMP_NUM_THREADS"] == "1"
     assert ctx2["pythonhashseed_matches_seed"] is True
+
+
+def test_runtime_reproducibility_context_restores_global_state(monkeypatch) -> None:
+    """
+    Scoped reproducibility settings should restore environment and RNG state on exit.
+    """
+    monkeypatch.setenv("OMP_NUM_THREADS", "7")
+    np.random.seed(321)
+    state_before = np.random.get_state()
+    expected = np.random.rand(4)
+    np.random.set_state(state_before)
+
+    with runtime_reproducibility_context(
+        {"seed": 123, "deterministic": True, "threads": 1, "repro_mode": "strict"}
+    ):
+        assert os.environ["OMP_NUM_THREADS"] == "1"
+        _ = np.random.rand(4)
+
+    assert os.environ["OMP_NUM_THREADS"] == "7"
+    actual = np.random.rand(4)
+    assert np.array_equal(actual, expected)
 
 
 def test_compute_config_hash_ignores_config_path_field() -> None:

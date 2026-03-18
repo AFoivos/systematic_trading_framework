@@ -73,6 +73,12 @@ def train_sarimax_fold(
     if active_features:
         exog_test_all = test_df[active_features].astype(float)
         valid_test = exog_test_all.notna().all(axis=1)
+        if not bool(valid_test.all()):
+            examples = ", ".join(str(ts) for ts in exog_test_all.index[~valid_test][:5])
+            raise ValueError(
+                "SARIMAX test fold contains missing exogenous rows. "
+                f"Cannot align forecasts safely for timestamps: {examples}"
+            )
         pred_index = exog_test_all.index[valid_test]
         exog_test = exog_test_all.loc[pred_index]
 

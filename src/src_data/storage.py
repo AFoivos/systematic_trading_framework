@@ -149,6 +149,7 @@ def save_dataset_snapshot(
     stage: str,
     root_dir: str | Path,
     context: Mapping[str, Any] | None = None,
+    overwrite: bool = False,
 ) -> dict[str, Any]:
     """
     Save dataset snapshot for the data ingestion and storage layer together with the metadata
@@ -161,6 +162,12 @@ def save_dataset_snapshot(
     data_path = snapshot_dir / "dataset.csv"
     metadata_path = snapshot_dir / "metadata.json"
     with _snapshot_lock(snapshot_dir):
+        if not overwrite and (data_path.exists() or metadata_path.exists()):
+            raise FileExistsError(
+                f"Dataset snapshot already exists for dataset_id='{dataset_id}' at '{snapshot_dir}'. "
+                "Use a versioned dataset_id or pass overwrite=True."
+            )
+
         data_tmp_path = snapshot_dir / f"dataset.{uuid4().hex}.csv.tmp"
         metadata_tmp_path = snapshot_dir / f"metadata.{uuid4().hex}.json.tmp"
 

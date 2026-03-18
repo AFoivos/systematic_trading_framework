@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.evaluation.metrics import compute_backtest_metrics
+from src.evaluation.metrics import annualized_return, compute_backtest_metrics
 from src.experiments.contracts import TargetContract, validate_feature_target_contract
 from src.experiments.models import train_lightgbm_classifier
 from src.features.technical.indicators import compute_mfi
@@ -120,6 +120,14 @@ def test_metrics_suite_includes_risk_and_cost_attribution() -> None:
     assert np.isclose(metrics["total_turnover"], 1.7)
     assert np.isclose(metrics["total_cost"], 0.004)
     assert np.isclose(metrics["cost_drag"], 0.004)
+
+
+def test_annualized_return_is_nan_after_non_positive_terminal_wealth() -> None:
+    """
+    Annualized return should be undefined once the cumulative path breaches non-positive wealth.
+    """
+    out = annualized_return(pd.Series([-1.5], dtype=float), periods_per_year=252)
+    assert np.isnan(out)
 
 
 def test_rsi_saturates_to_100_in_monotonic_uptrend() -> None:

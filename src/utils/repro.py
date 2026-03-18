@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 import os
 import random
+import sys
 import threading
 from typing import Any, Mapping
 
@@ -148,9 +150,63 @@ def apply_runtime_reproducibility(runtime_cfg: Mapping[str, Any] | None) -> dict
     }
 
 
+@contextmanager
+def runtime_reproducibility_context(runtime_cfg: Mapping[str, Any] | None):
+    """
+    Apply reproducibility settings for a scoped block and restore global process state on exit.
+    """
+    runtime = validate_runtime_config(runtime_cfg)
+    prev_env = {name: os.environ.get(name) for name in ("PYTHONHASHSEED", *_THREAD_ENV_VARS)}
+    py_state = random.getstate()
+    np_state = np.random.get_state()
+
+    torch_state: dict[str, Any] | None = None
+    torch = None
+    should_manage_torch = bool(runtime.get("deterministic")) and bool(runtime.get("seed_torch", False))
+    if should_manage_torch and "torch" in sys.modules:
+        torch = sys.modules.get("torch")
+    if torch is not None:  # pragma: no branch - environment dependent
+        torch_state = {
+            "cpu_rng_state": torch.get_rng_state(),
+            "num_threads": torch.get_num_threads(),
+        }
+        if hasattr(torch, "are_deterministic_algorithms_enabled"):
+            torch_state["deterministic_algorithms"] = torch.are_deterministic_algorithms_enabled()
+        if hasattr(torch.backends, "cudnn"):
+            torch_state["cudnn_deterministic"] = torch.backends.cudnn.deterministic
+            torch_state["cudnn_benchmark"] = torch.backends.cudnn.benchmark
+        if torch.cuda.is_available():
+            torch_state["cuda_rng_state_all"] = torch.cuda.get_rng_state_all()
+
+    applied = apply_runtime_reproducibility(runtime)
+    try:
+        yield applied
+    finally:
+        with _REPRO_LOCK:
+            random.setstate(py_state)
+            np.random.set_state(np_state)
+            for name, value in prev_env.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
+
+            if torch_state is not None and torch is not None:  # pragma: no branch - env dependent
+                torch.set_rng_state(torch_state["cpu_rng_state"])
+                torch.set_num_threads(int(torch_state["num_threads"]))
+                if "cuda_rng_state_all" in torch_state and torch.cuda.is_available():
+                    torch.cuda.set_rng_state_all(torch_state["cuda_rng_state_all"])
+                if hasattr(torch, "use_deterministic_algorithms") and "deterministic_algorithms" in torch_state:
+                    torch.use_deterministic_algorithms(bool(torch_state["deterministic_algorithms"]))
+                if hasattr(torch.backends, "cudnn"):
+                    torch.backends.cudnn.deterministic = bool(torch_state.get("cudnn_deterministic", False))
+                    torch.backends.cudnn.benchmark = bool(torch_state.get("cudnn_benchmark", False))
+
+
 __all__ = [
     "RuntimeConfigError",
     "normalize_runtime_config",
     "validate_runtime_config",
     "apply_runtime_reproducibility",
+    "runtime_reproducibility_context",
 ]

@@ -9,6 +9,24 @@ from src.src_data.providers.alphavantage import AlphaVantageFXProvider
 from src.src_data.providers.twelvedata import TwelveDataProvider
 
 
+def _canonical_symbol_for_source(symbol: str, source: str) -> str:
+    raw = str(symbol).strip().upper()
+    if source in {"twelve_data", "twelve"}:
+        if raw.endswith("=X"):
+            raw = raw[:-2]
+        if "/" in raw:
+            parts = raw.split("/")
+            if len(parts) == 2 and all(len(part) == 3 and part.isalpha() for part in parts):
+                return f"{parts[0]}/{parts[1]}"
+            return raw
+        if len(raw) == 6 and raw.isalpha():
+            return f"{raw[:3]}/{raw[3:]}"
+        return raw
+    if source == "alpha":
+        return raw.replace("=X", "")
+    return raw
+
+
 def load_ohlcv(
     symbol: str,
     start: str | None = None,
@@ -76,7 +94,8 @@ def load_ohlcv_panel(
     if not symbols:
         raise ValueError("symbols cannot be empty.")
     normalized_symbols = [str(symbol) for symbol in symbols]
-    if len(set(normalized_symbols)) != len(normalized_symbols):
+    canonical_symbols = [_canonical_symbol_for_source(symbol, source) for symbol in normalized_symbols]
+    if len(set(canonical_symbols)) != len(canonical_symbols):
         raise ValueError("symbols contains duplicates.")
 
     panel: dict[str, pd.DataFrame] = {}

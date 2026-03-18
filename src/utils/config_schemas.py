@@ -361,6 +361,7 @@ class ExecutionConfig:
     price_col: str
     min_trade_notional: float
     current_weights: dict[str, Any] = field(default_factory=dict)
+    current_prices: dict[str, Any] = field(default_factory=dict)
     extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -372,6 +373,7 @@ class ExecutionConfig:
             "price_col",
             "min_trade_notional",
             "current_weights",
+            "current_prices",
         }
         return cls(
             enabled=bool(data.get("enabled", False)),
@@ -380,6 +382,7 @@ class ExecutionConfig:
             price_col=str(data.get("price_col", "close")),
             min_trade_notional=float(data.get("min_trade_notional", 0.0)),
             current_weights=dict(data.get("current_weights", {}) or {}),
+            current_prices=dict(data.get("current_prices", {}) or {}),
             extra=_extras(data, known),
         )
 
@@ -391,6 +394,7 @@ class ExecutionConfig:
             "price_col": self.price_col,
             "min_trade_notional": self.min_trade_notional,
             "current_weights": dict(self.current_weights),
+            "current_prices": dict(self.current_prices),
         }
         return payload | dict(self.extra)
 

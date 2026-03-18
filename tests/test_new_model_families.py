@@ -103,6 +103,40 @@ def test_sarimax_forecaster_produces_oos_forecasts() -> None:
     assert meta["oos_regression_summary"]["evaluation_rows"] > 0
 
 
+def test_sarimax_forecaster_rejects_missing_test_exogenous_rows() -> None:
+    """
+    SARIMAX should fail loudly when test exogenous rows are missing and would misalign forecasts.
+    """
+    df = _synthetic_ohlcv_with_returns()
+    train_size = 140
+    df.loc[df.index[train_size], "lag_close_ret_1"] = np.nan
+
+    with pytest.raises(ValueError, match="missing exogenous rows"):
+        train_sarimax_forecaster(
+            df,
+            model_cfg={
+                "feature_cols": ["lag_close_ret_1", "lag_close_ret_2", "vol_rolling_20"],
+                "target": {"kind": "forward_return", "price_col": "close", "horizon": 1},
+                "split": {
+                    "method": "walk_forward",
+                    "train_size": train_size,
+                    "test_size": 30,
+                    "step_size": 30,
+                    "expanding": True,
+                    "max_folds": 1,
+                },
+                "params": {
+                    "order": [1, 0, 1],
+                    "seasonal_order": [0, 0, 0, 0],
+                    "trend": "c",
+                    "use_exog": True,
+                    "maxiter": 40,
+                    "allow_fallback": True,
+                },
+            },
+        )
+
+
 def test_garch_forecaster_emits_volatility_forecast() -> None:
     """
     Verify GARCH forecaster emits positive volatility forecasts on OOS rows.

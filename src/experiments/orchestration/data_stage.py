@@ -105,6 +105,7 @@ def load_asset_frames(
                 stage="raw",
                 root_dir=raw_dir,
                 context=expected_context,
+                overwrite=True,
             )
     else:
         for _, df in sorted(asset_frames.items()):
@@ -137,6 +138,7 @@ def save_processed_snapshot_if_enabled(
             "config_hash_sha256": config_hash_sha256,
             "feature_steps": list(feature_steps),
         },
+        overwrite=True,
     )
 
 

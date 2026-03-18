@@ -38,7 +38,7 @@ def build_rolling_covariance_by_date(
             continue
         if (i - (min_periods - 1)) % rebalance_step != 0:
             continue
-        cov = hist.cov().fillna(0.0)
+        cov = hist.cov()
         covariances[pd.Timestamp(ts)] = cov
 
     return covariances

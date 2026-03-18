@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from src.experiments.registry import FEATURE_REGISTRY, MODEL_REGISTRY, SIGNAL_REGISTRY
@@ -9,6 +10,33 @@ from src.utils.repro import RuntimeConfigError, validate_runtime_config
 
 class ConfigValidationError(ValueError):
     """Raised for invalid or inconsistent experiment configs."""
+
+
+def _canonical_symbol_for_source(symbol: str, source: str) -> str:
+    raw = str(symbol).strip().upper()
+    if source in {"twelve_data", "twelve"}:
+        if raw.endswith("=X"):
+            raw = raw[:-2]
+        if "/" in raw:
+            parts = raw.split("/")
+            if len(parts) == 2 and all(len(part) == 3 and part.isalpha() for part in parts):
+                return f"{parts[0]}/{parts[1]}"
+            return raw
+        if len(raw) == 6 and raw.isalpha():
+            return f"{raw[:3]}/{raw[3:]}"
+        return raw
+    if source == "alpha":
+        return raw.replace("=X", "")
+    return raw
+
+
+def _finite_number(value: Any, *, field: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ConfigValidationError(f"{field} must be a finite number.")
+    out = float(value)
+    if not math.isfinite(out):
+        raise ConfigValidationError(f"{field} must be a finite number.")
+    return out
 
 
 def validate_runtime_block(runtime_cfg: dict[str, Any]) -> dict[str, Any]:
@@ -45,6 +73,11 @@ def validate_data_block(data: dict[str, Any]) -> None:
     requested_symbols = (
         [data["symbol"]] if has_symbol else list(data.get("symbols", []) or [])
     )
+    canonical_symbols = [_canonical_symbol_for_source(symbol, source) for symbol in requested_symbols]
+    if len(set(canonical_symbols)) != len(canonical_symbols):
+        raise ConfigValidationError(
+            "data.symbols must not contain provider-equivalent duplicates after normalization."
+        )
     if source == "alpha":
         if interval != "1d":
             raise ConfigValidationError("data.interval must be '1d' when data.source='alpha'.")
@@ -255,24 +288,30 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
 
 
 def validate_risk_block(risk: dict[str, Any]) -> None:
-    cpt = risk.get("cost_per_turnover", 0.0)
+    cpt = _finite_number(risk.get("cost_per_turnover", 0.0), field="risk.cost_per_turnover")
     if cpt < 0:
         raise ConfigValidationError("risk.cost_per_turnover must be >= 0.")
-    spt = risk.get("slippage_per_turnover", 0.0)
+    spt = _finite_number(
+        risk.get("slippage_per_turnover", 0.0),
+        field="risk.slippage_per_turnover",
+    )
     if spt < 0:
         raise ConfigValidationError("risk.slippage_per_turnover must be >= 0.")
     tv = risk.get("target_vol")
-    if tv is not None and tv <= 0:
+    if tv is not None and _finite_number(tv, field="risk.target_vol") <= 0:
         raise ConfigValidationError("risk.target_vol must be > 0 or null.")
-    max_lev = risk.get("max_leverage", 3.0)
+    max_lev = _finite_number(risk.get("max_leverage", 3.0), field="risk.max_leverage")
     if max_lev <= 0:
         raise ConfigValidationError("risk.max_leverage must be > 0.")
     dd = risk.get("dd_guard", {})
     if not isinstance(dd, dict):
         raise ConfigValidationError("risk.dd_guard must be a mapping.")
-    if dd.get("max_drawdown", 0.2) <= 0:
+    if _finite_number(dd.get("max_drawdown", 0.2), field="risk.dd_guard.max_drawdown") <= 0:
         raise ConfigValidationError("risk.dd_guard.max_drawdown must be > 0.")
-    if dd.get("cooloff_bars", 0) < 0:
+    cooloff_bars = dd.get("cooloff_bars", 0)
+    if not isinstance(cooloff_bars, int):
+        raise ConfigValidationError("risk.dd_guard.cooloff_bars must be an integer >= 0.")
+    if cooloff_bars < 0:
         raise ConfigValidationError("risk.dd_guard.cooloff_bars must be >= 0.")
 
 
@@ -299,7 +338,7 @@ def validate_portfolio_block(portfolio: dict[str, Any]) -> None:
     construction = portfolio.get("construction", "signal_weights")
     if construction not in {"signal_weights", "mean_variance"}:
         raise ConfigValidationError("portfolio.construction must be 'signal_weights' or 'mean_variance'.")
-    if float(portfolio.get("gross_target", 1.0)) <= 0:
+    if _finite_number(portfolio.get("gross_target", 1.0), field="portfolio.gross_target") <= 0:
         raise ConfigValidationError("portfolio.gross_target must be > 0.")
     if not isinstance(portfolio.get("long_short", True), bool):
         raise ConfigValidationError("portfolio.long_short must be boolean.")
@@ -314,9 +353,9 @@ def validate_portfolio_block(portfolio: dict[str, Any]) -> None:
         not isinstance(covariance_rebalance_step, int) or covariance_rebalance_step <= 0
     ):
         raise ConfigValidationError("portfolio.covariance_rebalance_step must be a positive integer.")
-    if float(portfolio.get("risk_aversion", 0.0)) < 0:
+    if _finite_number(portfolio.get("risk_aversion", 0.0), field="portfolio.risk_aversion") < 0:
         raise ConfigValidationError("portfolio.risk_aversion must be >= 0.")
-    if float(portfolio.get("trade_aversion", 0.0)) < 0:
+    if _finite_number(portfolio.get("trade_aversion", 0.0), field="portfolio.trade_aversion") < 0:
         raise ConfigValidationError("portfolio.trade_aversion must be >= 0.")
     if not isinstance(portfolio.get("constraints", {}), dict):
         raise ConfigValidationError("portfolio.constraints must be a mapping.")
@@ -330,7 +369,7 @@ def validate_portfolio_block(portfolio: dict[str, Any]) -> None:
 def validate_monitoring_block(monitoring: dict[str, Any]) -> None:
     if not isinstance(monitoring.get("enabled", False), bool):
         raise ConfigValidationError("monitoring.enabled must be boolean.")
-    if float(monitoring.get("psi_threshold", 0.2)) < 0:
+    if _finite_number(monitoring.get("psi_threshold", 0.2), field="monitoring.psi_threshold") < 0:
         raise ConfigValidationError("monitoring.psi_threshold must be >= 0.")
     n_bins = monitoring.get("n_bins", 10)
     if not isinstance(n_bins, int) or n_bins <= 1:
@@ -342,14 +381,19 @@ def validate_execution_block(execution: dict[str, Any]) -> None:
         raise ConfigValidationError("execution.enabled must be boolean.")
     if execution.get("mode", "paper") != "paper":
         raise ConfigValidationError("execution.mode currently supports only 'paper'.")
-    if float(execution.get("capital", 0.0)) <= 0:
+    if _finite_number(execution.get("capital", 0.0), field="execution.capital") <= 0:
         raise ConfigValidationError("execution.capital must be > 0.")
     if not isinstance(execution.get("price_col", "close"), str):
         raise ConfigValidationError("execution.price_col must be a string.")
-    if float(execution.get("min_trade_notional", 0.0)) < 0:
+    if _finite_number(
+        execution.get("min_trade_notional", 0.0),
+        field="execution.min_trade_notional",
+    ) < 0:
         raise ConfigValidationError("execution.min_trade_notional must be >= 0.")
     if not isinstance(execution.get("current_weights", {}), dict):
         raise ConfigValidationError("execution.current_weights must be a mapping.")
+    if not isinstance(execution.get("current_prices", {}), dict):
+        raise ConfigValidationError("execution.current_prices must be a mapping.")
 
 
 def validate_logging_block(logging_cfg: dict[str, Any]) -> None:

@@ -157,6 +157,41 @@ def test_execution_output_handles_empty_portfolio_weights() -> None:
     assert orders.empty
 
 
+def test_execution_output_can_liquidate_current_only_assets_with_current_prices() -> None:
+    """
+    Execution output should allow liquidation of assets present only in current_weights.
+    """
+    idx = pd.date_range("2024-01-01", periods=2, freq="D")
+    asset_frames = {"AAA": pd.DataFrame({"close": [100.0, 101.0]}, index=idx)}
+    perf = PortfolioPerformance(
+        equity_curve=pd.Series([1.0, 1.0], index=idx),
+        net_returns=pd.Series([0.0, 0.0], index=idx),
+        gross_returns=pd.Series([0.0, 0.0], index=idx),
+        costs=pd.Series([0.0, 0.0], index=idx),
+        turnover=pd.Series([0.0, 0.0], index=idx),
+        summary={},
+    )
+
+    meta, orders = runner_mod._build_execution_output(
+        asset_frames=asset_frames,
+        execution_cfg={
+            "enabled": True,
+            "capital": 100_000.0,
+            "price_col": "close",
+            "current_weights": {"BBB": 0.2},
+            "current_prices": {"BBB": 50.0},
+        },
+        portfolio_weights=pd.DataFrame({"AAA": [0.1, 0.1]}, index=idx),
+        performance=perf,
+        alignment="inner",
+    )
+
+    assert meta["order_count"] == 2
+    assert "BBB" in orders.index
+    assert float(orders.loc["BBB", "target_weight"]) == 0.0
+    assert float(orders.loc["BBB", "delta_weight"]) == -0.2
+
+
 def test_portfolio_oos_mask_requires_all_assets_oos() -> None:
     """
     strict_oos_only date mask should require all assets to be OOS on the same date.
@@ -279,6 +314,36 @@ def test_load_ohlcv_panel_rejects_duplicate_symbols() -> None:
         load_ohlcv_panel(["SPY", "SPY"])
 
 
+def test_config_validation_rejects_provider_equivalent_duplicate_symbols(tmp_path) -> None:
+    """
+    Provider-level symbol aliases should be treated as duplicates during config validation.
+    """
+    cfg_path = tmp_path / "dup_twelve_symbols.yaml"
+    cfg_path.write_text(
+        """
+data:
+  source: twelve_data
+  interval: 1h
+  symbols: [EURUSD, EUR/USD]
+backtest:
+  returns_col: close_ret
+  signal_col: signal
+        """.strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigError, match="provider-equivalent duplicates"):
+        load_experiment_config(cfg_path)
+
+
+def test_load_ohlcv_panel_rejects_provider_equivalent_duplicate_symbols() -> None:
+    """
+    Direct panel loading should reject provider-equivalent symbol aliases before provider I/O.
+    """
+    with pytest.raises(ValueError, match="duplicates"):
+        load_ohlcv_panel(["EURUSD", "EUR/USD"], source="twelve_data")
+
+
 def test_logging_output_dir_must_stay_inside_project_root(tmp_path) -> None:
     """
     Logging output_dir should not be allowed to escape the repository root.
@@ -321,6 +386,28 @@ logging:
 
     cfg = load_experiment_config(cfg_path)
     assert cfg["logging"]["run_name"] == "evil"
+
+
+def test_config_validation_wraps_invalid_numeric_types_as_config_error(tmp_path) -> None:
+    """
+    Invalid numeric config values should raise ConfigError instead of raw TypeError.
+    """
+    cfg_path = tmp_path / "bad_numeric.yaml"
+    cfg_path.write_text(
+        """
+data:
+  symbol: SPY
+backtest:
+  returns_col: close_ret
+  signal_col: signal
+risk:
+  cost_per_turnover: bad
+        """.strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigError, match="finite number"):
+        load_experiment_config(cfg_path)
 
 
 def test_dataset_snapshot_atomic_write_leaves_no_tmp_files(tmp_path) -> None:
@@ -618,6 +705,42 @@ def test_twelve_data_provider_normalizes_fx_symbol_and_filters_end_exclusive(mon
     assert (df["volume"] == 0.0).all()
 
 
+def test_twelve_data_provider_raises_on_truncated_history(monkeypatch) -> None:
+    """
+    Twelve Data provider should fail loudly when the response appears capped by outputsize.
+    """
+
+    class _FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {
+                "meta": {"symbol": "BTC/USD", "interval": "1h"},
+                "values": [
+                    {"datetime": "2024-01-05 02:00:00", "open": "1", "high": "1", "low": "1", "close": "1"},
+                    {"datetime": "2024-01-05 01:00:00", "open": "1", "high": "1", "low": "1", "close": "1"},
+                    {"datetime": "2024-01-05 00:00:00", "open": "1", "high": "1", "low": "1", "close": "1"},
+                ],
+            }
+
+    class _FakeSession:
+        def get(self, url, params=None, timeout=None):
+            return _FakeResponse()
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        "src.src_data.providers.twelvedata._build_retry_session",
+        lambda: _FakeSession(),
+    )
+
+    provider = TwelveDataProvider(api_key="demo", outputsize=3)
+    with pytest.raises(ValueError, match="truncated by outputsize"):
+        provider.get_ohlcv("BTC/USD", start="2024-01-01 00:00:00", interval="1h")
+
+
 def test_load_ohlcv_routes_twelve_data_source(monkeypatch) -> None:
     """
     load_ohlcv should instantiate the Twelve Data provider when requested.
@@ -893,6 +1016,32 @@ portfolio:
     cfg = load_experiment_config_typed(cfg_path)
     assert cfg.portfolio.covariance_window is None
     assert cfg.portfolio.covariance_rebalance_step is None
+
+
+def test_typed_loader_accepts_execution_current_prices(tmp_path) -> None:
+    """
+    Typed config loader should preserve optional execution.current_prices mappings.
+    """
+    cfg_path = tmp_path / "execution_current_prices.yaml"
+    cfg_path.write_text(
+        """
+data:
+  symbol: SPY
+backtest:
+  returns_col: close_ret
+  signal_col: signal
+execution:
+  current_weights:
+    BBB: 0.2
+  current_prices:
+    BBB: 50.0
+        """.strip(),
+        encoding="utf-8",
+    )
+
+    cfg = load_experiment_config_typed(cfg_path)
+    assert cfg.execution.current_weights == {"BBB": 0.2}
+    assert cfg.execution.current_prices == {"BBB": 50.0}
 
 
 def test_portfolio_backtest_accepts_null_covariance_settings() -> None:

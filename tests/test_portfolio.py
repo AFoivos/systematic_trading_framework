@@ -8,6 +8,7 @@ import pandas as pd
 from src.portfolio import (
     PortfolioConstraints,
     apply_constraints,
+    build_rolling_covariance_by_date,
     build_weights_from_signals_over_time,
     compute_portfolio_performance,
     optimize_mean_variance,
@@ -129,6 +130,40 @@ def test_optimize_mean_variance_respects_core_constraints() -> None:
     assert abs(float(weights.sum())) <= 1e-6
     assert float(np.abs(weights.loc[["A", "B"]]).sum()) <= 0.6 + 1e-8
     assert weights["A"] >= weights["D"]
+
+
+def test_optimize_mean_variance_zeroes_assets_without_valid_covariance() -> None:
+    """
+    Assets with incomplete covariance estimates should stay flat instead of looking risk-free.
+    """
+    idx = pd.date_range("2024-01-01", periods=5, freq="D")
+    returns = pd.DataFrame(
+        {
+            "AAA": [0.01, 0.02, -0.01, 0.015, 0.01],
+            "BBB": [np.nan, np.nan, np.nan, 0.03, np.nan],
+        },
+        index=idx,
+    )
+    cov_by_date = build_rolling_covariance_by_date(returns, window=5, min_periods=2)
+    cov = cov_by_date[idx[-1]]
+    mu = pd.Series({"AAA": 0.01, "BBB": 0.25}, dtype=float)
+    constraints = PortfolioConstraints(
+        min_weight=0.0,
+        max_weight=1.0,
+        max_gross_leverage=1.0,
+        target_net_exposure=1.0,
+    )
+
+    weights, meta = optimize_mean_variance(
+        mu,
+        covariance=cov,
+        constraints=constraints,
+        risk_aversion=1.0,
+    )
+
+    assert np.isclose(weights["AAA"], 1.0)
+    assert np.isclose(weights["BBB"], 0.0)
+    assert "BBB" in meta["unsupported_covariance_assets"]
 
 
 def test_apply_constraints_turnover_limit_raises_when_constraint_set_is_infeasible() -> None:

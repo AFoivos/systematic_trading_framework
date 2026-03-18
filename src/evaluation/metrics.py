@@ -39,7 +39,7 @@ def annualized_return(returns: pd.Series, periods_per_year: int = 252) -> float:
         return 0.0
     cumulative = float((1.0 + rets).prod())
     if cumulative <= 0:
-        return -1.0
+        return float("nan")
     return float(cumulative ** (periods_per_year / len(rets)) - 1.0)
 
 
@@ -277,4 +277,3 @@ __all__ = [
     "compute_backtest_metrics",
     "merge_metric_overrides",
 ]
-

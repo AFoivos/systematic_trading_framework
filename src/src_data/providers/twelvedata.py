@@ -180,6 +180,16 @@ class TwelveDataProvider(MarketDataProvider):
         out = out[~out.index.duplicated(keep="last")]
         out = out.dropna(subset=["open", "high", "low", "close"])
 
+        # Twelve Data may silently cap wide history requests at outputsize rows.
+        if start_ts is not None and len(out) >= int(self.outputsize) and not out.empty:
+            oldest_returned = pd.Timestamp(out.index.min())
+            if oldest_returned > start_ts:
+                raise ValueError(
+                    "Twelve Data response appears truncated by outputsize. "
+                    f"requested_start={start_ts}, oldest_returned={oldest_returned}, "
+                    f"outputsize={self.outputsize}."
+                )
+
         if start_ts is not None:
             out = out[out.index >= start_ts]
         if end_ts is not None:

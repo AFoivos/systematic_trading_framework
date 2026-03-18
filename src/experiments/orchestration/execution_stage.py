@@ -24,6 +24,8 @@ def build_execution_output(
     price_col = str(execution_cfg.get("price_col", "close"))
     current_weights_cfg = dict(execution_cfg.get("current_weights", {}) or {})
     current_weights = pd.Series(current_weights_cfg, dtype=float) if current_weights_cfg else None
+    current_prices_cfg = dict(execution_cfg.get("current_prices", {}) or {})
+    current_prices = pd.Series(current_prices_cfg, dtype=float) if current_prices_cfg else pd.Series(dtype=float)
 
     if portfolio_weights is not None and (portfolio_weights.empty or len(portfolio_weights.columns) == 0):
         empty_orders = pd.DataFrame(columns=["target_weight", "current_weight", "delta_weight", "price"])
@@ -40,6 +42,17 @@ def build_execution_output(
         target_weights = portfolio_weights.iloc[-1].astype(float)
         prices = align_asset_column(asset_frames, column=price_col, how=alignment).reindex(portfolio_weights.index)
         latest_prices = prices.iloc[-1].astype(float)
+        if current_weights is not None:
+            missing_assets = current_weights.index.difference(latest_prices.index)
+            if len(missing_assets) > 0:
+                supplemental_prices = current_prices.reindex(missing_assets)
+                if supplemental_prices.isna().any():
+                    missing = [str(asset) for asset in supplemental_prices[supplemental_prices.isna()].index]
+                    raise ValueError(
+                        "Missing prices for assets present only in execution.current_weights. "
+                        f"Provide execution.current_prices for: {missing}"
+                    )
+                latest_prices = pd.concat([latest_prices, supplemental_prices.astype(float)])
         as_of = portfolio_weights.index[-1]
     else:
         asset = next(iter(sorted(asset_frames)))

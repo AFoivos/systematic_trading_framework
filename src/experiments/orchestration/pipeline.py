@@ -20,7 +20,7 @@ from src.experiments.orchestration.reporting import (
 )
 from src.experiments.orchestration.types import ExperimentResult
 from src.utils.config import load_experiment_config
-from src.utils.repro import apply_runtime_reproducibility
+from src.utils.repro import runtime_reproducibility_context
 from src.utils.run_metadata import (
     build_run_metadata,
     compute_config_hash,
@@ -43,154 +43,154 @@ def run_experiment_pipeline(
     Execute the end-to-end experiment workflow using the split orchestration stages.
     """
     cfg = load_experiment_config(config_path)
-    runtime_applied = apply_runtime_reproducibility(cfg.get("runtime", {}))
-    config_hash_sha256, config_hash_input = compute_config_hash(cfg)
+    with runtime_reproducibility_context(cfg.get("runtime", {})) as runtime_applied:
+        config_hash_sha256, config_hash_input = compute_config_hash(cfg)
 
-    data_cfg = cfg["data"]
-    raw_asset_frames, storage_meta = load_asset_frames_fn(data_cfg)
-    raw_long_frame = asset_frames_to_long_frame(raw_asset_frames)
-    data_fingerprint = compute_dataframe_fingerprint(raw_long_frame)
+        data_cfg = cfg["data"]
+        raw_asset_frames, storage_meta = load_asset_frames_fn(data_cfg)
+        raw_long_frame = asset_frames_to_long_frame(raw_asset_frames)
+        data_fingerprint = compute_dataframe_fingerprint(raw_long_frame)
 
-    feature_asset_frames = apply_steps_to_assets(
-        raw_asset_frames,
-        feature_steps=list(cfg.get("features", []) or []),
-    )
-    processed_snapshot = save_processed_snapshot_fn(
-        feature_asset_frames,
-        data_cfg=data_cfg,
-        config_hash_sha256=config_hash_sha256,
-        feature_steps=list(cfg.get("features", []) or []),
-    )
-    if processed_snapshot is not None:
-        storage_meta["saved_processed_snapshot"] = processed_snapshot
+        feature_asset_frames = apply_steps_to_assets(
+            raw_asset_frames,
+            feature_steps=list(cfg.get("features", []) or []),
+        )
+        processed_snapshot = save_processed_snapshot_fn(
+            feature_asset_frames,
+            data_cfg=data_cfg,
+            config_hash_sha256=config_hash_sha256,
+            feature_steps=list(cfg.get("features", []) or []),
+        )
+        if processed_snapshot is not None:
+            storage_meta["saved_processed_snapshot"] = processed_snapshot
 
-    model_cfg = dict(cfg.get("model", {"kind": "none"}) or {})
-    model_cfg.setdefault("runtime", cfg.get("runtime", {}))
-    returns_col = cfg.get("backtest", {}).get("returns_col")
-    model_asset_frames, model, model_meta = apply_model_to_assets(
-        feature_asset_frames,
-        model_cfg=model_cfg,
-        returns_col=returns_col,
-    )
-
-    asset_frames = apply_signals_to_assets(
-        model_asset_frames,
-        signals_cfg=dict(cfg.get("signals", {}) or {}),
-    )
-
-    portfolio_enabled = bool(cfg.get("portfolio", {}).get("enabled", False))
-    if len(asset_frames) > 1 and not portfolio_enabled:
-        raise ValueError(
-            "Multiple assets were loaded but portfolio.enabled=false. "
-            "Enable portfolio mode or reduce the run to a single asset."
+        model_cfg = dict(cfg.get("model", {"kind": "none"}) or {})
+        model_cfg.setdefault("runtime", cfg.get("runtime", {}))
+        returns_col = cfg.get("backtest", {}).get("returns_col")
+        model_asset_frames, model, model_meta = apply_model_to_assets(
+            feature_asset_frames,
+            model_cfg=model_cfg,
+            returns_col=returns_col,
         )
 
-    is_portfolio = portfolio_enabled
-    portfolio_weights: pd.DataFrame | None = None
-    portfolio_diagnostics: pd.DataFrame | None = None
-    portfolio_meta: dict[str, object] = {}
-
-    if is_portfolio:
-        performance, portfolio_weights, portfolio_diagnostics, portfolio_meta = run_portfolio_backtest(
-            asset_frames,
-            cfg=cfg,
+        asset_frames = apply_signals_to_assets(
+            model_asset_frames,
+            signals_cfg=dict(cfg.get("signals", {}) or {}),
         )
-        evaluation = build_portfolio_evaluation(
+
+        portfolio_enabled = bool(cfg.get("portfolio", {}).get("enabled", False))
+        if len(asset_frames) > 1 and not portfolio_enabled:
+            raise ValueError(
+                "Multiple assets were loaded but portfolio.enabled=false. "
+                "Enable portfolio mode or reduce the run to a single asset."
+            )
+
+        is_portfolio = portfolio_enabled
+        portfolio_weights: pd.DataFrame | None = None
+        portfolio_diagnostics: pd.DataFrame | None = None
+        portfolio_meta: dict[str, object] = {}
+
+        if is_portfolio:
+            performance, portfolio_weights, portfolio_diagnostics, portfolio_meta = run_portfolio_backtest(
+                asset_frames,
+                cfg=cfg,
+            )
+            evaluation = build_portfolio_evaluation(
+                asset_frames,
+                performance=performance,
+                model_meta=model_meta,
+                periods_per_year=cfg["backtest"].get("periods_per_year", 252),
+                alignment=cfg["data"].get("alignment", "inner"),
+            )
+        else:
+            asset = next(iter(sorted(asset_frames)))
+            performance = run_single_asset_backtest(
+                asset,
+                asset_frames[asset],
+                cfg=cfg,
+                model_meta=model_meta,
+            )
+            evaluation = build_single_asset_evaluation(
+                asset,
+                asset_frames[asset],
+                performance=performance,
+                model_meta=model_meta,
+                periods_per_year=cfg["backtest"].get("periods_per_year", 252),
+            )
+
+        monitoring = compute_monitoring_report(
             asset_frames,
-            performance=performance,
             model_meta=model_meta,
-            periods_per_year=cfg["backtest"].get("periods_per_year", 252),
+            monitoring_cfg=dict(cfg.get("monitoring", {}) or {}),
+        )
+        execution, execution_orders = build_execution_output(
+            asset_frames=asset_frames,
+            execution_cfg=dict(cfg.get("execution", {}) or {}),
+            portfolio_weights=portfolio_weights,
+            performance=performance,
             alignment=cfg["data"].get("alignment", "inner"),
         )
-    else:
-        asset = next(iter(sorted(asset_frames)))
-        performance = run_single_asset_backtest(
-            asset,
-            asset_frames[asset],
-            cfg=cfg,
-            model_meta=model_meta,
-        )
-        evaluation = build_single_asset_evaluation(
-            asset,
-            asset_frames[asset],
-            performance=performance,
-            model_meta=model_meta,
-            periods_per_year=cfg["backtest"].get("periods_per_year", 252),
-        )
 
-    monitoring = compute_monitoring_report(
-        asset_frames,
-        model_meta=model_meta,
-        monitoring_cfg=dict(cfg.get("monitoring", {}) or {}),
-    )
-    execution, execution_orders = build_execution_output(
-        asset_frames=asset_frames,
-        execution_cfg=dict(cfg.get("execution", {}) or {}),
-        portfolio_weights=portfolio_weights,
-        performance=performance,
-        alignment=cfg["data"].get("alignment", "inner"),
-    )
+        artifacts: dict[str, str] = {}
+        logging_cfg = cfg.get("logging", {}) or {}
+        if logging_cfg.get("enabled", True):
+            run_metadata = build_run_metadata(
+                config_path=cfg.get("config_path", config_path),
+                runtime_applied=runtime_applied,
+                config_hash_sha256=config_hash_sha256,
+                config_hash_input=config_hash_input,
+                data_fingerprint=data_fingerprint,
+                data_context=(
+                    build_storage_context(
+                        data_cfg,
+                        symbols=resolve_symbols(data_cfg),
+                        pit_cfg=dict(data_cfg.get("pit", {}) or {}),
+                    ).to_dict()
+                    | {"storage": storage_meta}
+                ),
+                model_meta=model_meta,
+            )
+            base_dir = Path(logging_cfg.get("output_dir", "logs/experiments")).resolve()
+            run_name = str(logging_cfg.get("run_name", Path(config_path).stem))
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            run_dir = base_dir / f"{run_name}_{timestamp}_{uuid4().hex[:8]}"
+            artifacts = save_artifacts(
+                run_dir=run_dir,
+                cfg=cfg,
+                data=(asset_frames if is_portfolio else next(iter(asset_frames.values()))),
+                performance=performance,
+                model_meta=model_meta,
+                evaluation=evaluation,
+                monitoring=monitoring,
+                execution=execution,
+                execution_orders=execution_orders,
+                portfolio_weights=portfolio_weights,
+                portfolio_diagnostics=portfolio_diagnostics,
+                portfolio_meta=portfolio_meta,
+                storage_meta=storage_meta,
+                run_metadata=run_metadata,
+                config_hash_sha256=config_hash_sha256,
+                data_fingerprint=data_fingerprint,
+            )
 
-    artifacts: dict[str, str] = {}
-    logging_cfg = cfg.get("logging", {}) or {}
-    if logging_cfg.get("enabled", True):
-        run_metadata = build_run_metadata(
-            config_path=cfg.get("config_path", config_path),
-            runtime_applied=runtime_applied,
-            config_hash_sha256=config_hash_sha256,
-            config_hash_input=config_hash_input,
-            data_fingerprint=data_fingerprint,
-            data_context=(
-                build_storage_context(
-                    data_cfg,
-                    symbols=resolve_symbols(data_cfg),
-                    pit_cfg=dict(data_cfg.get("pit", {}) or {}),
-                ).to_dict()
-                | {"storage": storage_meta}
-            ),
+        result_data: pd.DataFrame | dict[str, pd.DataFrame]
+        if len(asset_frames) == 1 and not is_portfolio:
+            result_data = next(iter(asset_frames.values()))
+        else:
+            result_data = asset_frames
+
+        return ExperimentResult(
+            config=cfg,
+            data=result_data,
+            backtest=performance,
+            model=model,
             model_meta=model_meta,
-        )
-        base_dir = Path(logging_cfg.get("output_dir", "logs/experiments")).resolve()
-        run_name = str(logging_cfg.get("run_name", Path(config_path).stem))
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        run_dir = base_dir / f"{run_name}_{timestamp}_{uuid4().hex[:8]}"
-        artifacts = save_artifacts(
-            run_dir=run_dir,
-            cfg=cfg,
-            data=(asset_frames if is_portfolio else next(iter(asset_frames.values()))),
-            performance=performance,
-            model_meta=model_meta,
+            artifacts=artifacts,
             evaluation=evaluation,
             monitoring=monitoring,
             execution=execution,
-            execution_orders=execution_orders,
             portfolio_weights=portfolio_weights,
-            portfolio_diagnostics=portfolio_diagnostics,
-            portfolio_meta=portfolio_meta,
-            storage_meta=storage_meta,
-            run_metadata=run_metadata,
-            config_hash_sha256=config_hash_sha256,
-            data_fingerprint=data_fingerprint,
         )
-
-    result_data: pd.DataFrame | dict[str, pd.DataFrame]
-    if len(asset_frames) == 1 and not is_portfolio:
-        result_data = next(iter(asset_frames.values()))
-    else:
-        result_data = asset_frames
-
-    return ExperimentResult(
-        config=cfg,
-        data=result_data,
-        backtest=performance,
-        model=model,
-        model_meta=model_meta,
-        artifacts=artifacts,
-        evaluation=evaluation,
-        monitoring=monitoring,
-        execution=execution,
-        portfolio_weights=portfolio_weights,
-    )
 
 
 __all__ = ["run_experiment_pipeline"]

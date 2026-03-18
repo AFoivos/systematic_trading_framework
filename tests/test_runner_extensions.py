@@ -182,6 +182,7 @@ save_dataset_snapshot(
     stage="raw",
     root_dir=root,
     context={"seed": seed},
+    overwrite=True,
 )
 """
     proc_a = subprocess.Popen([sys.executable, "-c", script, str(tmp_path), "1"])
@@ -199,6 +200,29 @@ save_dataset_snapshot(
     assert "AAA" in loaded_frames
     assert metadata["verified_fingerprint"] is True
     assert not list((tmp_path / "raw" / "shared_dataset").glob("*.tmp"))
+
+
+def test_dataset_snapshot_requires_explicit_overwrite(tmp_path) -> None:
+    """
+    Reusing a dataset id should fail unless overwrite intent is explicit.
+    """
+    asset_frames = {"AAA": _synthetic_ohlcv(periods=20, seed=1)}
+    save_dataset_snapshot(
+        asset_frames,
+        dataset_id="demo_dataset",
+        stage="raw",
+        root_dir=tmp_path,
+        context={"source": "synthetic"},
+    )
+
+    with pytest.raises(FileExistsError, match="overwrite=True"):
+        save_dataset_snapshot(
+            asset_frames,
+            dataset_id="demo_dataset",
+            stage="raw",
+            root_dir=tmp_path,
+            context={"source": "synthetic"},
+        )
 
 
 def test_build_rebalance_orders_reports_share_deltas() -> None:

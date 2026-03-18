@@ -145,6 +145,7 @@ def default_execution_block(execution: dict[str, Any]) -> dict[str, Any]:
     execution.setdefault("price_col", "close")
     execution.setdefault("min_trade_notional", 0.0)
     execution["current_weights"] = dict(execution.get("current_weights", {}) or {})
+    execution["current_prices"] = dict(execution.get("current_prices", {}) or {})
     return execution
 
 
