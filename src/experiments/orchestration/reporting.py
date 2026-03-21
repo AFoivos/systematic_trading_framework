@@ -114,6 +114,7 @@ def build_single_asset_evaluation(
             "model_oos_summary": dict(model_meta.get("oos_classification_summary", {}) or {}),
             "model_oos_regression_summary": dict(model_meta.get("oos_regression_summary", {}) or {}),
             "model_oos_volatility_summary": dict(model_meta.get("oos_volatility_summary", {}) or {}),
+            "model_oos_policy_summary": dict(model_meta.get("oos_policy_summary", {}) or {}),
             "asset": asset,
         },
     ).to_dict()
@@ -172,6 +173,7 @@ def build_portfolio_evaluation(
             "model_oos_summary": dict(model_meta.get("oos_classification_summary", {}) or {}),
             "model_oos_regression_summary": dict(model_meta.get("oos_regression_summary", {}) or {}),
             "model_oos_volatility_summary": dict(model_meta.get("oos_volatility_summary", {}) or {}),
+            "model_oos_policy_summary": dict(model_meta.get("oos_policy_summary", {}) or {}),
             "folds_by_asset": {
                 asset: list(meta.get("folds", []) or [])
                 for asset, meta in dict(model_meta.get("per_asset", {}) or {}).items()

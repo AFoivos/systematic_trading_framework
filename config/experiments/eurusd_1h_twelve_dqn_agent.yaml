@@ -1,0 +1,35 @@
+extends: experiments/eurusd_1h_twelve_ppo_agent.yaml
+
+data:
+  storage:
+    dataset_id: "eurusd_1h_twelve_dqn_agent"
+
+model:
+  kind: dqn_agent
+  params:
+    total_timesteps: 20000
+    learning_starts: 500
+    buffer_size: 50000
+    batch_size: 64
+    train_freq: 1
+    gradient_steps: 1
+    target_update_interval: 250
+    learning_rate: 0.0005
+    gamma: 0.99
+    device: cpu
+    extractor:
+      kind: flatten
+  env:
+    window_size: 48
+    execution_lag_bars: 1
+    action_space: discrete
+    position_grid: [-1.0, 0.0, 1.0]
+    max_signal_abs: 1.0
+    reward:
+      cost_per_turnover: 0.0001
+      slippage_per_turnover: 0.0
+      inventory_penalty: 0.0
+      drawdown_penalty: 0.0
+
+logging:
+  run_name: eurusd_1h_twelve_dqn_agent_v1

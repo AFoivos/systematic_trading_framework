@@ -61,8 +61,8 @@ def test_purged_walk_forward_respects_purge_and_embargo() -> None:
         assert np.max(split.train_idx) <= split.test_start - purge_bars - 1
 
     for prev, curr in zip(splits[:-1], splits[1:]):
-        assert curr.test_start - prev.test_start == step_size + embargo_bars
-        assert curr.test_start >= prev.test_end + embargo_bars
+        assert curr.test_start - prev.test_start == step_size
+        assert curr.test_start >= prev.test_end
 
 
 def test_purged_walk_forward_excludes_prior_embargo_rows_from_future_training() -> None:

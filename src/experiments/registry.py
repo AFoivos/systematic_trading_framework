@@ -21,16 +21,22 @@ from src.backtesting.strategies import (
     volatility_regime_strategy,
 )
 from src.experiments.models import (
+    train_dqn_agent,
+    train_dqn_portfolio_agent,
     train_garch_forecaster,
     train_lightgbm_classifier,
     train_logistic_regression_classifier,
+    train_ppo_agent,
+    train_ppo_portfolio_agent,
     train_sarimax_forecaster,
     train_tft_forecaster,
 )
 
 FeatureFn = Callable[..., pd.DataFrame]
 SignalFn = Callable[..., Union[pd.DataFrame, pd.Series]]
-ModelFn = Callable[..., tuple[pd.DataFrame, Optional[object], dict]]
+SingleAssetModelFn = Callable[..., tuple[pd.DataFrame, Optional[object], dict]]
+PortfolioModelFn = Callable[..., tuple[dict[str, pd.DataFrame], Optional[object], dict]]
+ModelFn = Union[SingleAssetModelFn, PortfolioModelFn]
 
 
 FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
@@ -56,13 +62,35 @@ SIGNAL_REGISTRY: Mapping[str, SignalFn] = {
     "volatility_regime": volatility_regime_strategy,
 }
 
-MODEL_REGISTRY: Mapping[str, ModelFn] = {
+SINGLE_ASSET_MODEL_REGISTRY: Mapping[str, SingleAssetModelFn] = {
     "lightgbm_clf": train_lightgbm_classifier,
     "logistic_regression_clf": train_logistic_regression_classifier,
     "sarimax_forecaster": train_sarimax_forecaster,
     "garch_forecaster": train_garch_forecaster,
     "tft_forecaster": train_tft_forecaster,
+    "ppo_agent": train_ppo_agent,
+    "dqn_agent": train_dqn_agent,
 }
+
+PORTFOLIO_MODEL_REGISTRY: Mapping[str, PortfolioModelFn] = {
+    "ppo_portfolio_agent": train_ppo_portfolio_agent,
+    "dqn_portfolio_agent": train_dqn_portfolio_agent,
+}
+
+MODEL_REGISTRY: Mapping[str, ModelFn] = {
+    **SINGLE_ASSET_MODEL_REGISTRY,
+    **PORTFOLIO_MODEL_REGISTRY,
+}
+
+RL_MODEL_KINDS = frozenset(
+    {
+        "ppo_agent",
+        "dqn_agent",
+        "ppo_portfolio_agent",
+        "dqn_portfolio_agent",
+    }
+)
+PORTFOLIO_MODEL_KINDS = frozenset(PORTFOLIO_MODEL_REGISTRY)
 
 
 def get_feature_fn(name: str) -> FeatureFn:
@@ -96,3 +124,11 @@ def get_model_fn(name: str) -> ModelFn:
     if name not in MODEL_REGISTRY:
         raise KeyError(f"Unknown model kind: {name}")
     return MODEL_REGISTRY[name]
+
+
+def is_portfolio_model_kind(name: str) -> bool:
+    return name in PORTFOLIO_MODEL_KINDS
+
+
+def is_rl_model_kind(name: str) -> bool:
+    return name in RL_MODEL_KINDS

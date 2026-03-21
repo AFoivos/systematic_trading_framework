@@ -131,7 +131,7 @@ def run_backtest(
             max_drawdown=max_drawdown,
             cooloff_bars=cooloff_bars,
             min_exposure=0.0,
-        )
+        ).shift(1).fillna(1.0)
         positions = positions * mult
         prev_positions = positions.shift(1).fillna(0.0)
         turnover = (positions - prev_positions).abs()

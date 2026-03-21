@@ -1,0 +1,11 @@
+extends: experiments/fx_majors_1h_twelve_ppo_agent.yaml
+
+data:
+  storage:
+    dataset_id: "fx_majors_1h_twelve_ppo_portfolio_agent"
+
+model:
+  kind: ppo_portfolio_agent
+
+logging:
+  run_name: fx_majors_1h_twelve_ppo_portfolio_agent_v1

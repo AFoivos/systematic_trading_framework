@@ -12,6 +12,37 @@ from src.intraday import (
 from src.utils.paths import PROJECT_ROOT, enforce_safe_absolute_path, in_project
 
 _RUN_NAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
+_FIAT_CODES = {"AUD", "CAD", "CHF", "EUR", "GBP", "JPY", "NZD", "USD"}
+
+
+def _looks_like_pair_symbol(symbol: str) -> tuple[str, str] | None:
+    raw = str(symbol).strip().upper().replace("=X", "")
+    for sep in ("/", "-"):
+        if sep in raw:
+            left, right = raw.split(sep, 1)
+            if len(left) == 3 and len(right) == 3 and left.isalpha() and right.isalpha():
+                return left, right
+            return None
+    if len(raw) == 6 and raw.isalpha():
+        return raw[:3], raw[3:]
+    return None
+
+
+def _annualization_kwargs_for_data(data: dict[str, Any]) -> dict[str, float | int]:
+    symbols = []
+    if data.get("symbol") is not None:
+        symbols = [str(data["symbol"])]
+    elif data.get("symbols") is not None:
+        symbols = [str(symbol) for symbol in list(data.get("symbols", []) or [])]
+
+    pairs = [_looks_like_pair_symbol(symbol) for symbol in symbols]
+    valid_pairs = [pair for pair in pairs if pair is not None]
+    if valid_pairs and len(valid_pairs) == len(symbols):
+        if all(left in _FIAT_CODES and right in _FIAT_CODES for left, right in valid_pairs):
+            return {"trading_days_per_year": 252, "trading_hours_per_day": 24.0}
+        if all(left not in _FIAT_CODES or right not in _FIAT_CODES for left, right in valid_pairs):
+            return {"trading_days_per_year": 365, "trading_hours_per_day": 24.0}
+    return {"trading_days_per_year": 252, "trading_hours_per_day": 6.5}
 
 
 def default_data_block(data: dict[str, Any]) -> dict[str, Any]:
@@ -68,18 +99,20 @@ def default_feature_steps(
     features: list[dict[str, Any]],
     *,
     interval: str,
+    data: dict[str, Any],
 ) -> list[dict[str, Any]]:
     """
     Apply feature-step defaults that depend on market frequency.
     """
     out: list[dict[str, Any]] = []
+    annualization_kwargs = _annualization_kwargs_for_data(data)
     for step in list(features or []):
         step_cfg = dict(step)
         params = dict(step_cfg.get("params", {}) or {})
         if step_cfg.get("step") == "volatility":
             params.setdefault(
                 "annualization_factor",
-                infer_volatility_annualization_factor(interval),
+                infer_volatility_annualization_factor(interval, **annualization_kwargs),
             )
         step_cfg["params"] = params
         out.append(step_cfg)
@@ -105,9 +138,11 @@ def default_backtest_block(
     backtest: dict[str, Any],
     *,
     interval: str,
+    data: dict[str, Any],
 ) -> dict[str, Any]:
     backtest = dict(backtest) if backtest else {}
-    backtest.setdefault("periods_per_year", infer_periods_per_year(interval))
+    annualization_kwargs = _annualization_kwargs_for_data(data)
+    backtest.setdefault("periods_per_year", infer_periods_per_year(interval, **annualization_kwargs))
     backtest.setdefault("returns_type", "simple")
     backtest.setdefault("missing_return_policy", "raise_if_exposed")
     return backtest
@@ -186,12 +221,16 @@ def apply_top_level_defaults(cfg: dict[str, Any], *, config_path: Path) -> dict[
     out = dict(cfg)
     out["data"] = default_data_block(out.get("data", {}))
     interval = str(out["data"].get("interval", "1d"))
-    out["features"] = default_feature_steps(list(out.get("features", []) or []), interval=interval)
+    out["features"] = default_feature_steps(
+        list(out.get("features", []) or []),
+        interval=interval,
+        data=out["data"],
+    )
     out["model"] = dict(out.get("model", {"kind": "none"}) or {"kind": "none"})
     out["signals"] = dict(out.get("signals", {"kind": "none", "params": {}}) or {"kind": "none", "params": {}})
     out["runtime"] = dict(out.get("runtime", {}) or {})
     out["risk"] = default_risk_block(out.get("risk", {}))
-    out["backtest"] = default_backtest_block(out.get("backtest", {}), interval=interval)
+    out["backtest"] = default_backtest_block(out.get("backtest", {}), interval=interval, data=out["data"])
     out["portfolio"] = default_portfolio_block(out.get("portfolio", {}))
     out["monitoring"] = default_monitoring_block(out.get("monitoring", {}))
     out["execution"] = default_execution_block(out.get("execution", {}))

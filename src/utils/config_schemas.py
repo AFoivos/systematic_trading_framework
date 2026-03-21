@@ -97,10 +97,13 @@ class ModelConfig:
     target: dict[str, Any] = field(default_factory=dict)
     split: dict[str, Any] = field(default_factory=dict)
     runtime: dict[str, Any] = field(default_factory=dict)
+    env: dict[str, Any] = field(default_factory=dict)
     use_features: bool = True
     pred_prob_col: str | None = None
     pred_ret_col: str | None = None
     returns_input_col: str | None = None
+    signal_col: str | None = None
+    action_col: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -112,10 +115,13 @@ class ModelConfig:
             "target",
             "split",
             "runtime",
+            "env",
             "use_features",
             "pred_prob_col",
             "pred_ret_col",
             "returns_input_col",
+            "signal_col",
+            "action_col",
         }
         feature_cols_raw = data.get("feature_cols")
         if feature_cols_raw is not None and not isinstance(feature_cols_raw, list):
@@ -127,10 +133,13 @@ class ModelConfig:
             target=dict(data.get("target", {}) or {}),
             split=dict(data.get("split", {}) or {}),
             runtime=dict(data.get("runtime", {}) or {}),
+            env=dict(data.get("env", {}) or {}),
             use_features=bool(data.get("use_features", True)),
             pred_prob_col=data.get("pred_prob_col"),
             pred_ret_col=data.get("pred_ret_col"),
             returns_input_col=data.get("returns_input_col"),
+            signal_col=data.get("signal_col"),
+            action_col=data.get("action_col"),
             extra=_extras(data, known),
         )
 
@@ -142,10 +151,13 @@ class ModelConfig:
             "target": dict(self.target),
             "split": dict(self.split),
             "runtime": dict(self.runtime),
+            "env": dict(self.env),
             "use_features": self.use_features,
             "pred_prob_col": self.pred_prob_col,
             "pred_ret_col": self.pred_ret_col,
             "returns_input_col": self.returns_input_col,
+            "signal_col": self.signal_col,
+            "action_col": self.action_col,
         }
         return payload | dict(self.extra)
 

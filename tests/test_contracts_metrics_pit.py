@@ -259,6 +259,58 @@ backtest:
     assert cfg["features"][0]["params"]["annualization_factor"] == 1638.0
 
 
+def test_fx_intraday_defaults_infer_24h_business_day_annualization(tmp_path) -> None:
+    """
+    FX intraday configs should infer 24h annualization over trading days by default.
+    """
+    cfg_path = tmp_path / "fx_intraday_defaults.yaml"
+    cfg_path.write_text(
+        """
+extends: base/hourly.yaml
+data:
+  source: twelve_data
+  symbol: EURUSD
+features:
+  - step: volatility
+backtest:
+  returns_col: close_ret
+  signal_col: signal
+""".strip(),
+        encoding="utf-8",
+    )
+
+    cfg = load_experiment_config(cfg_path)
+
+    assert cfg["backtest"]["periods_per_year"] == 6048
+    assert cfg["features"][0]["params"]["annualization_factor"] == 6048.0
+
+
+def test_crypto_intraday_defaults_infer_24h_calendar_day_annualization(tmp_path) -> None:
+    """
+    Crypto intraday configs should infer 24h calendar-day annualization by default.
+    """
+    cfg_path = tmp_path / "crypto_intraday_defaults.yaml"
+    cfg_path.write_text(
+        """
+extends: base/hourly.yaml
+data:
+  source: twelve_data
+  symbol: BTC/USD
+features:
+  - step: volatility
+backtest:
+  returns_col: close_ret
+  signal_col: signal
+""".strip(),
+        encoding="utf-8",
+    )
+
+    cfg = load_experiment_config(cfg_path)
+
+    assert cfg["backtest"]["periods_per_year"] == 8760
+    assert cfg["features"][0]["params"]["annualization_factor"] == 8760.0
+
+
 def test_intraday_configs_reject_daily_timestamp_normalization(tmp_path) -> None:
     """
     Intraday configs should fail fast if a daily-normalization setting would collapse bars.

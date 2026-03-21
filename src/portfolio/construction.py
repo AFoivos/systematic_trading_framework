@@ -177,18 +177,35 @@ def build_optimized_weights_over_time(
     prev_w: pd.Series | None = None
 
     cov_dict = dict(covariance_by_date or {})
+    last_cov: pd.DataFrame | None = None
 
     for ts, mu_t in mu_df.iterrows():
         cov_t = cov_dict.get(pd.Timestamp(ts))
-        w_t, meta = optimize_mean_variance(
-            mu_t,
-            covariance=cov_t,
-            constraints=constraints,
-            prev_weights=prev_w,
-            asset_to_group=asset_to_group,
-            risk_aversion=risk_aversion,
-            trade_aversion=trade_aversion,
-        )
+        if cov_t is not None:
+            last_cov = cov_t
+
+        if covariance_by_date is not None and last_cov is None:
+            if prev_w is None:
+                w_t = pd.Series(0.0, index=mu_df.columns, dtype=float)
+            else:
+                w_t = prev_w.reindex(mu_df.columns).fillna(0.0).astype(float)
+            meta = {
+                "solver_success": False,
+                "used_fallback": False,
+                "net_exposure": float(w_t.sum()),
+                "gross_exposure": float(np.abs(w_t).sum()),
+                "turnover": 0.0,
+            }
+        else:
+            w_t, meta = optimize_mean_variance(
+                mu_t,
+                covariance=last_cov,
+                constraints=constraints,
+                prev_weights=prev_w,
+                asset_to_group=asset_to_group,
+                risk_aversion=risk_aversion,
+                trade_aversion=trade_aversion,
+            )
         weights.loc[ts] = w_t
         meta_rows.append(
             {

@@ -1,0 +1,596 @@
+# Full 1h intraday experiment template.
+# Keep exactly one active model block and one active signals block.
+# Annualization guide for 1h bars:
+# - US cash-session equities: 1638
+# - FX / 24h x 252 trading days: 6048
+# - 24/7 crypto: 8760
+# RL / DRL guide:
+# - Set model.kind to ppo_agent | dqn_agent | ppo_portfolio_agent | dqn_portfolio_agent
+# - RL currently requires model.target.horizon=1 and model.env.execution_lag_bars=1
+# - RL runs must keep signals.kind: none and backtest.signal_col aligned with model.signal_col
+# - Portfolio RL also requires data.alignment=inner, portfolio.enabled=true, portfolio.construction=signal_weights
+extends: base/hourly.yaml
+
+data:
+  source: twelve_data  # yahoo | twelve_data ; alpha supports only 1d, not 1h
+  symbol: "EURUSD"  # single asset example; set to null if you use `symbols`
+  # symbols: ["EURUSD", "USDJPY", "GBPUSD", "AUDUSD"]  # multi-asset example
+  interval: "1h"
+  start: "2024-01-01"
+  end: null  # e.g. "2025-12-31"
+  alignment: inner  # inner | outer ; portfolio RL currently requires inner
+  api_key_env: "TWELVEDATA_API_KEY"  # preferred over api_key
+  # api_key: null
+  pit:
+    timestamp_alignment:
+      source_timezone: "UTC"
+      output_timezone: "UTC"
+      normalize_daily: false
+      duplicate_policy: "last"  # first | last | raise
+    corporate_actions:
+      policy: "none"  # none | adj_close_ratio | adj_close_replace_close
+      adj_close_col: "adj_close"
+    universe_snapshot:
+      path: null  # e.g. "data/metadata/fx_universe_snapshot.csv"
+      as_of: null  # e.g. "2024-01-01"
+      inactive_policy: "raise"  # raise | drop_inactive_rows
+  storage:
+    mode: live_or_cached  # live | live_or_cached | cached_only
+    dataset_id: "eurusd_1h_template_full"
+    load_path: null  # e.g. "data/raw/eurusd_snapshot"
+    raw_dir: data/raw
+    processed_dir: data/processed
+    save_raw: true
+    save_processed: true
+
+runtime:
+  seed: 7
+  repro_mode: strict  # strict | relaxed
+  deterministic: true
+  threads: 1
+  seed_torch: false  # switch to true only when you need torch-level seeding
+
+features:
+  - step: returns
+    params:
+      log: true
+      col_name: close_logret  # e.g. close_ret | close_logret
+
+  - step: volatility
+    params:
+      returns_col: close_logret
+      rolling_windows: [24, 72, 120]
+      ewma_spans: [24, 72]
+      annualization_factor: 6048.0  # FX=6048.0 | US equities=1638.0 | crypto=8760.0
+
+  - step: trend
+    params:
+      price_col: close
+      sma_windows: [24, 72, 120]
+      ema_spans: [6, 24, 72]
+
+  - step: trend_regime
+    params:
+      price_col: close
+      base_sma_for_sign: 72
+      short_sma: 24
+      long_sma: 72
+
+  - step: indicators
+    params:
+      price_col: close
+      high_col: high
+      low_col: low
+      volume_col: volume
+      bb_window: 24
+      bb_nstd: 2.0
+      macd_fast: 12
+      macd_slow: 26
+      macd_signal: 9
+      ppo_fast: 12
+      ppo_slow: 26
+      ppo_signal: 9
+      roc_windows: [2, 6, 24]
+      atr_window: 24
+      adx_window: 24
+      vol_z_window: 72
+      include_mfi: false
+
+  - step: oscillators
+    params:
+      price_col: close
+      high_col: high
+      low_col: low
+      rsi_windows: [2, 6, 14]
+      stoch_windows: [14]
+      stoch_smooth: 3
+
+  - step: momentum
+    params:
+      price_col: close
+      returns_col: close_logret
+      vol_col: vol_rolling_24
+      windows: [6, 24, 72]
+
+  - step: lags
+    params:
+      cols: [close_logret]
+      lags: [1, 2, 6]
+      prefix: lag
+
+model:
+  kind: logistic_regression_clf  # none | logistic_regression_clf | lightgbm_clf | sarimax_forecaster | garch_forecaster | tft_forecaster | ppo_agent | dqn_agent | ppo_portfolio_agent | dqn_portfolio_agent
+  use_features: true  # mainly relevant for forecasters; leave true unless you want no exogenous features
+  pred_prob_col: pred_prob
+  pred_ret_col: pred_ret  # used by forecasters; harmless for classifiers
+  # signal_col: signal_rl  # RL only; backtest.signal_col must match
+  # action_col: action_rl  # RL only; stores raw agent actions
+  # returns_input_col: close_logret  # use only for GARCH
+  # feature_cols: [lag_close_logret_1, lag_close_logret_2, vol_rolling_24]  # prefer explicit lists once stable
+  target:
+    kind: forward_return
+    price_col: close
+    horizon: 3  # e.g. 1 | 3 | 6 ; RL currently supports only 1
+    # quantiles: [0.25, 0.75]  # classification only; build labels from train-fold quantiles
+  split:
+    method: walk_forward  # time | walk_forward | purged
+    train_size: 2160  # e.g. 90 days * 24 bars for 1h FX
+    # train_frac: 0.7  # alternative to train_size
+    test_size: 168  # e.g. 1 week of 1h FX bars
+    step_size: 168
+    expanding: false
+    # max_folds: 8
+    # purge_bars: 3  # use when method=purged; must be >= target.horizon
+    # embargo_bars: 24
+  # If model.feature_cols is omitted, the framework infers numeric feature columns.
+  # For maximum reproducibility, replace inference with an explicit list once stable.
+  params:
+    max_iter: 1000
+    C: 0.25
+    solver: lbfgs
+
+# Alternative model blocks. Uncomment one block and replace the active `model:` above if needed.
+
+# model:
+#   kind: none
+#   target:
+#     kind: forward_return
+#     price_col: close
+#     horizon: 1
+#   split:
+#     method: walk_forward
+#     train_size: 1440
+#     test_size: 168
+#     step_size: 168
+#     expanding: false
+#   params: {}
+
+# model:
+#   kind: lightgbm_clf
+#   use_features: true
+#   pred_prob_col: pred_prob
+#   target:
+#     kind: forward_return
+#     price_col: close
+#     horizon: 3
+#     # quantiles: [0.25, 0.75]
+#   split:
+#     method: walk_forward
+#     train_size: 2160
+#     test_size: 168
+#     step_size: 168
+#     expanding: false
+#   params:
+#     n_estimators: 400
+#     learning_rate: 0.03
+#     num_leaves: 31
+#     max_depth: 4
+#     subsample: 0.8
+#     colsample_bytree: 0.8
+#     min_child_samples: 20
+#     random_state: 7
+
+# model:
+#   kind: sarimax_forecaster
+#   use_features: true  # set false for pure univariate SARIMAX
+#   pred_prob_col: pred_prob
+#   pred_ret_col: pred_ret
+#   target:
+#     kind: forward_return
+#     price_col: close
+#     horizon: 3
+#   split:
+#     method: walk_forward
+#     train_size: 2160
+#     test_size: 168
+#     step_size: 168
+#     expanding: false
+#   params:
+#     order: [1, 0, 1]
+#     seasonal_order: [1, 0, 0, 24]
+#     trend: "c"  # e.g. n | c | t | ct
+#     use_exog: true
+#     enforce_stationarity: false
+#     enforce_invertibility: false
+#     maxiter: 200
+#     allow_fallback: true
+
+# model:
+#   kind: garch_forecaster
+#   use_features: false
+#   pred_prob_col: pred_prob
+#   pred_ret_col: pred_ret
+#   returns_input_col: close_logret
+#   target:
+#     kind: forward_return
+#     price_col: close
+#     horizon: 1
+#   split:
+#     method: walk_forward
+#     train_size: 1440
+#     test_size: 168
+#     step_size: 168
+#     expanding: false
+#   params:
+#     returns_input_col: close_logret
+#     mean_model: ar1  # constant | ar1
+
+# model:
+#   kind: tft_forecaster
+#   use_features: true
+#   pred_prob_col: pred_prob
+#   pred_ret_col: pred_ret
+#   target:
+#     kind: forward_return
+#     price_col: close
+#     horizon: 3
+#   split:
+#     method: walk_forward
+#     train_size: 2160
+#     test_size: 168
+#     step_size: 168
+#     expanding: false
+#   params:
+#     lookback: 48
+#     hidden_dim: 32
+#     num_heads: 4
+#     num_layers: 2
+#     dropout: 0.1
+#     epochs: 20
+#     batch_size: 64
+#     learning_rate: 0.001
+#     weight_decay: 0.0001
+#     quantiles: [0.1, 0.5, 0.9]
+
+# model:
+#   kind: ppo_agent
+#   signal_col: signal_rl
+#   action_col: action_rl
+#   feature_cols: [lag_close_logret_1, lag_close_logret_2, vol_rolling_24, close_rsi_14]
+#   target:
+#     kind: forward_return
+#     price_col: close
+#     horizon: 1
+#   split:
+#     method: walk_forward
+#     train_size: 2160
+#     test_size: 168
+#     step_size: 168
+#     expanding: false
+#   env:
+#     window_size: 48
+#     execution_lag_bars: 1
+#     action_space: continuous  # continuous | discrete
+#     max_signal_abs: 1.0
+#     reward:
+#       cost_per_turnover: 0.0001
+#       slippage_per_turnover: 0.0
+#       inventory_penalty: 0.0
+#       drawdown_penalty: 0.0
+#   params:
+#     policy: MlpPolicy
+#     total_timesteps: 20000
+#     n_steps: 128
+#     batch_size: 64
+#     learning_rate: 0.0003
+#     gamma: 0.99
+#     device: cpu  # cpu | cuda
+#     extractor:
+#       kind: lstm  # flatten | cnn1d | lstm | transformer
+#       features_dim: 64
+#       hidden_dim: 64
+#       num_layers: 2
+#       num_heads: 4  # transformer only; hidden_dim must divide cleanly
+#       dropout: 0.1
+#       # conv_channels: [32, 64]  # cnn1d only
+#       # kernel_sizes: [3, 3]  # cnn1d only
+
+# model:
+#   kind: dqn_agent
+#   signal_col: signal_rl
+#   action_col: action_rl
+#   feature_cols: [lag_close_logret_1, lag_close_logret_2, vol_rolling_24, close_rsi_14]
+#   target:
+#     kind: forward_return
+#     price_col: close
+#     horizon: 1
+#   split:
+#     method: walk_forward
+#     train_size: 2160
+#     test_size: 168
+#     step_size: 168
+#     expanding: false
+#   env:
+#     window_size: 48
+#     execution_lag_bars: 1
+#     action_space: discrete
+#     position_grid: [-1.0, 0.0, 1.0]  # single-asset discrete actions
+#     max_signal_abs: 1.0
+#     reward:
+#       cost_per_turnover: 0.0001
+#       slippage_per_turnover: 0.0
+#       inventory_penalty: 0.0
+#       drawdown_penalty: 0.0
+#   params:
+#     policy: MlpPolicy
+#     total_timesteps: 20000
+#     learning_starts: 500
+#     buffer_size: 50000
+#     batch_size: 64
+#     train_freq: 1
+#     gradient_steps: 1
+#     target_update_interval: 250
+#     learning_rate: 0.0005
+#     gamma: 0.99
+#     device: cpu  # cpu | cuda
+#     extractor:
+#       kind: cnn1d  # flatten | cnn1d | lstm | transformer
+#       features_dim: 64
+#       hidden_dim: 64
+#       num_layers: 2
+#       num_heads: 4
+#       dropout: 0.1
+#       conv_channels: [32, 64]
+#       kernel_sizes: [3, 3]
+
+# model:
+#   kind: ppo_portfolio_agent
+#   signal_col: signal_rl
+#   action_col: action_rl
+#   feature_cols: [lag_close_logret_1, lag_close_logret_2, vol_rolling_24, close_rsi_14]
+#   target:
+#     kind: forward_return
+#     price_col: close
+#     horizon: 1
+#   split:
+#     method: walk_forward
+#     train_size: 2160
+#     test_size: 168
+#     step_size: 168
+#     expanding: false
+#   env:
+#     window_size: 48
+#     execution_lag_bars: 1
+#     action_space: continuous
+#     max_signal_abs: 1.0
+#     reward:
+#       cost_per_turnover: 0.0001
+#       slippage_per_turnover: 0.0
+#       inventory_penalty: 0.0
+#       drawdown_penalty: 0.0
+#   params:
+#     policy: MlpPolicy
+#     total_timesteps: 20000
+#     n_steps: 128
+#     batch_size: 64
+#     learning_rate: 0.0003
+#     gamma: 0.99
+#     device: cpu
+#     extractor:
+#       kind: transformer  # flatten | cnn1d | lstm | transformer
+#       features_dim: 64
+#       hidden_dim: 64
+#       num_layers: 2
+#       num_heads: 4
+#       dropout: 0.1
+
+# model:
+#   kind: dqn_portfolio_agent
+#   signal_col: signal_rl
+#   action_col: action_rl
+#   feature_cols: [lag_close_logret_1, lag_close_logret_2, vol_rolling_24, close_rsi_14]
+#   target:
+#     kind: forward_return
+#     price_col: close
+#     horizon: 1
+#   split:
+#     method: walk_forward
+#     train_size: 2160
+#     test_size: 168
+#     step_size: 168
+#     expanding: false
+#   env:
+#     window_size: 48
+#     execution_lag_bars: 1
+#     action_space: discrete
+#     # action_templates rows must match the number of assets in data.symbols
+#     action_templates:
+#       - [0.0, 0.0, 0.0, 0.0]
+#       - [1.0, 0.0, 0.0, 0.0]
+#       - [0.0, 1.0, 0.0, 0.0]
+#       - [0.0, 0.0, 1.0, 0.0]
+#       - [0.0, 0.0, 0.0, 1.0]
+#       - [-1.0, 0.0, 0.0, 0.0]
+#       - [0.0, -1.0, 0.0, 0.0]
+#       - [0.0, 0.0, -1.0, 0.0]
+#       - [0.0, 0.0, 0.0, -1.0]
+#     max_signal_abs: 1.0
+#     reward:
+#       cost_per_turnover: 0.0001
+#       slippage_per_turnover: 0.0
+#       inventory_penalty: 0.0
+#       drawdown_penalty: 0.0
+#   params:
+#     policy: MlpPolicy
+#     total_timesteps: 20000
+#     learning_starts: 500
+#     buffer_size: 50000
+#     batch_size: 64
+#     train_freq: 1
+#     gradient_steps: 1
+#     target_update_interval: 250
+#     learning_rate: 0.0005
+#     gamma: 0.99
+#     device: cpu
+#     extractor:
+#       kind: flatten  # flatten | cnn1d | lstm | transformer
+#       features_dim: 64
+#       hidden_dim: 64
+#       num_layers: 2
+#       num_heads: 4
+#       dropout: 0.1
+
+signals:
+  kind: probability_threshold  # none | trend_state | probability_threshold | probability_conviction | forecast_threshold | forecast_vol_adjusted | rsi | momentum | stochastic | volatility_regime
+  params:
+    prob_col: pred_prob
+    upper: 0.55
+    lower: 0.45
+    signal_name: signal_prob
+
+# Alternative signals blocks. Uncomment one block and replace the active `signals:` above if needed.
+
+# signals:
+#   kind: none
+#   params: {}  # required for RL / DRL agents; they emit `model.signal_col` directly
+
+# signals:
+#   kind: trend_state
+#   params:
+#     state_col: close_trend_state_sma_24_72
+#     signal_name: signal_trend_state
+#     mode: long_short_hold  # long_only | short_only | long_short | long_short_hold
+
+# signals:
+#   kind: probability_conviction
+#   params:
+#     prob_col: pred_prob
+#     signal_name: signal_prob_size
+#     clip: 1.0
+
+# signals:
+#   kind: forecast_threshold
+#   params:
+#     forecast_col: pred_ret
+#     upper: 0.0
+#     lower: null  # if null the code uses `-abs(upper)`
+#     signal_name: signal_forecast
+#     mode: long_short_hold
+
+# signals:
+#   kind: forecast_vol_adjusted
+#   params:
+#     forecast_col: pred_ret
+#     vol_col: pred_vol
+#     signal_name: signal_forecast_vol_adj
+#     clip: 1.0
+#     vol_floor: 1.0e-6
+
+# signals:
+#   kind: rsi
+#   params:
+#     rsi_col: close_rsi_14
+#     buy_level: 30.0
+#     sell_level: 70.0
+#     signal_name: signal_rsi
+#     mode: long_short_hold
+
+# signals:
+#   kind: momentum
+#   params:
+#     momentum_col: close_logret_mom_24
+#     long_threshold: 0.0
+#     short_threshold: 0.0
+#     signal_name: signal_momentum
+#     mode: long_short_hold
+
+# signals:
+#   kind: stochastic
+#   params:
+#     k_col: close_stoch_k_14
+#     buy_level: 20.0
+#     sell_level: 80.0
+#     signal_name: signal_stochastic
+#     mode: long_short_hold
+
+# signals:
+#   kind: volatility_regime
+#   params:
+#     vol_col: vol_rolling_24
+#     quantile: 0.4
+#     signal_name: signal_vol_regime
+#     mode: long_short_hold
+
+portfolio:
+  enabled: false  # set true for multi-asset portfolio construction; required for portfolio RL agents
+  construction: signal_weights  # signal_weights | mean_variance ; RL with portfolio.enabled=true requires signal_weights
+  gross_target: 1.0
+  long_short: true
+  expected_return_col: null  # for mean_variance; defaults to backtest.signal_col if null
+  covariance_window: 60
+  covariance_rebalance_step: 1
+  risk_aversion: 5.0
+  trade_aversion: 0.0
+  constraints:
+    min_weight: -0.4
+    max_weight: 0.4
+    max_gross_leverage: 1.0
+    target_net_exposure: 0.0
+    turnover_limit: 0.35
+    # group_max_exposure:
+    #   fx: 1.0
+    #   crypto: 0.5
+  asset_groups:
+    # EURUSD: fx
+    # USDJPY: fx
+    # GBPUSD: fx
+    # BTC/USD: crypto
+
+risk:
+  cost_per_turnover: 0.0001
+  slippage_per_turnover: 0.0
+  target_vol: null  # e.g. 0.10 ; single-asset RL currently requires null
+  max_leverage: 1.0
+  vol_col: vol_rolling_24  # used when target_vol is not null or for diagnostics
+  dd_guard:
+    enabled: true  # set false when you want RL reward and backtest path to stay closer
+    max_drawdown: 0.15
+    cooloff_bars: 24
+
+backtest:
+  returns_col: close_logret  # use close_ret if features.returns.log=false ; RL examples often use close_ret/simple
+  signal_col: signal_prob  # switch to signal_rl for RL / DRL runs
+  vol_col: vol_rolling_24
+  periods_per_year: 6048  # FX=6048 | US equities=1638 | crypto=8760
+  returns_type: log  # log if returns_col is log-return; simple if returns_col is simple-return
+  missing_return_policy: raise_if_exposed  # raise | raise_if_exposed | fill_zero
+  subset: test  # backtest only OOS/test predictions when model output is available
+
+monitoring:
+  enabled: true
+  psi_threshold: 0.15
+  n_bins: 10
+
+execution:
+  enabled: false
+  mode: paper
+  capital: 100000.0
+  price_col: close
+  min_trade_notional: 0.0
+  current_weights: {}
+  current_prices: {}
+
+logging:
+  enabled: true
+  run_name: eurusd_1h_template_full_v1
+  output_dir: logs/experiments

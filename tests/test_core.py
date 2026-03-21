@@ -229,6 +229,33 @@ def test_run_backtest_vol_targeting_flattens_missing_vol_warmup() -> None:
     assert bt.equity_curve.notna().all()
 
 
+def test_run_backtest_drawdown_guard_applies_from_next_bar() -> None:
+    """
+    Drawdown guard should reduce exposure only after the breach bar has completed.
+    """
+    idx = pd.date_range("2020-01-01", periods=4, freq="D")
+    df = pd.DataFrame(
+        {
+            "signal": [1.0, 1.0, 1.0, 1.0],
+            "returns": [0.0, -0.30, 0.10, 0.10],
+        },
+        index=idx,
+    )
+
+    bt = run_backtest(
+        df,
+        signal_col="signal",
+        returns_col="returns",
+        dd_guard=True,
+        max_drawdown=0.2,
+        cooloff_bars=1,
+    )
+
+    assert np.isclose(bt.positions.iloc[1], 1.0)
+    assert np.isclose(bt.positions.iloc[2], 0.0)
+    assert np.isclose(bt.turnover.iloc[1], 0.0)
+
+
 def test_volatility_regime_signal_is_causal_by_default() -> None:
     """
     Verify that volatility regime signal is causal by default behaves as expected under a

@@ -1,0 +1,22 @@
+extends: experiments/eurusd_1h_twelve_ppo_handcrafted.yaml
+
+data:
+  start: "2025-11-01"
+  storage:
+    dataset_id: "eurusd_1h_twelve_ppo_handcrafted_smoke"
+
+model:
+  split:
+    max_folds: 2
+  params:
+    total_timesteps: 5000
+    n_steps: 128
+    batch_size: 64
+    learning_rate: 0.0003
+    gamma: 0.99
+    device: cpu
+    extractor:
+      kind: flatten
+
+logging:
+  run_name: eurusd_1h_twelve_ppo_handcrafted_smoke_v1

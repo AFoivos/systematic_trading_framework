@@ -3,9 +3,19 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from src.experiments.registry import FEATURE_REGISTRY, MODEL_REGISTRY, SIGNAL_REGISTRY
+from src.experiments.registry import (
+    FEATURE_REGISTRY,
+    MODEL_REGISTRY,
+    PORTFOLIO_MODEL_KINDS,
+    RL_MODEL_KINDS,
+    SIGNAL_REGISTRY,
+)
 from src.intraday import validate_intraday_normalization_policy
 from src.utils.repro import RuntimeConfigError, validate_runtime_config
+
+_RL_SINGLE_ASSET_DQN_KINDS = {"dqn_agent"}
+_RL_PORTFOLIO_DQN_KINDS = {"dqn_portfolio_agent"}
+_RL_EXTRACTOR_KINDS = {"flatten", "cnn1d", "lstm", "transformer"}
 
 
 class ConfigValidationError(ValueError):
@@ -37,6 +47,18 @@ def _finite_number(value: Any, *, field: str) -> float:
     if not math.isfinite(out):
         raise ConfigValidationError(f"{field} must be a finite number.")
     return out
+
+
+def _positive_int(value: Any, *, field: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ConfigValidationError(f"{field} must be a positive integer.")
+    return value
+
+
+def _non_negative_int(value: Any, *, field: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ConfigValidationError(f"{field} must be an integer >= 0.")
+    return value
 
 
 def validate_runtime_block(runtime_cfg: dict[str, Any]) -> dict[str, Any]:
@@ -211,9 +233,7 @@ def validate_model_block(model: dict[str, Any]) -> None:
             raise ConfigValidationError("model.target.kind must be 'forward_return'.")
         if "price_col" in target and not isinstance(target["price_col"], str):
             raise ConfigValidationError("model.target.price_col must be a string.")
-        horizon = int(target.get("horizon", 1))
-        if horizon <= 0:
-            raise ConfigValidationError("model.target.horizon must be a positive integer.")
+        _positive_int(target.get("horizon", 1), field="model.target.horizon")
         quantiles = target.get("quantiles")
         if quantiles is not None:
             if not isinstance(quantiles, (list, tuple)) or len(quantiles) != 2:
@@ -221,6 +241,134 @@ def validate_model_block(model: dict[str, Any]) -> None:
             q_low, q_high = float(quantiles[0]), float(quantiles[1])
             if not (0.0 <= q_low < q_high <= 1.0):
                 raise ConfigValidationError("model.target.quantiles must satisfy 0 <= low < high <= 1.")
+
+        if model["kind"] in RL_MODEL_KINDS:
+            if int(target.get("horizon", 1)) != 1:
+                raise ConfigValidationError("RL model.target.horizon currently supports only 1.")
+            env_cfg = model.get("env", {})
+            if env_cfg is not None and not isinstance(env_cfg, dict):
+                raise ConfigValidationError("model.env must be a mapping when provided.")
+            env_cfg = dict(env_cfg or {})
+
+            action_space = env_cfg.get("action_space")
+            if action_space is not None and action_space not in {"continuous", "discrete"}:
+                raise ConfigValidationError("model.env.action_space must be 'continuous' or 'discrete'.")
+
+            execution_lag_bars = _positive_int(
+                env_cfg.get("execution_lag_bars", 1),
+                field="model.env.execution_lag_bars",
+            )
+            if execution_lag_bars != 1:
+                raise ConfigValidationError("RL currently supports only model.env.execution_lag_bars=1.")
+
+            _positive_int(env_cfg.get("window_size", 32), field="model.env.window_size")
+
+            if "max_signal_abs" in env_cfg and "max_position" in env_cfg:
+                left = _finite_number(env_cfg["max_signal_abs"], field="model.env.max_signal_abs")
+                right = _finite_number(env_cfg["max_position"], field="model.env.max_position")
+                if not math.isclose(left, right):
+                    raise ConfigValidationError(
+                        "model.env.max_signal_abs and model.env.max_position must match when both are set."
+                    )
+            max_signal_abs = _finite_number(
+                env_cfg.get("max_signal_abs", env_cfg.get("max_position", 1.0)),
+                field="model.env.max_signal_abs",
+            )
+            if max_signal_abs <= 0:
+                raise ConfigValidationError("model.env.max_signal_abs must be > 0.")
+
+            reward_cfg = env_cfg.get("reward", {})
+            if reward_cfg is not None and not isinstance(reward_cfg, dict):
+                raise ConfigValidationError("model.env.reward must be a mapping when provided.")
+            for key in (
+                "cost_per_turnover",
+                "slippage_per_turnover",
+                "inventory_penalty",
+                "drawdown_penalty",
+            ):
+                value = _finite_number(
+                    dict(reward_cfg or {}).get(key, 0.0),
+                    field=f"model.env.reward.{key}",
+                )
+                if value < 0:
+                    raise ConfigValidationError(f"model.env.reward.{key} must be >= 0.")
+
+            if model["kind"] in (_RL_SINGLE_ASSET_DQN_KINDS | _RL_PORTFOLIO_DQN_KINDS):
+                resolved_action_space = action_space or "discrete"
+                if resolved_action_space != "discrete":
+                    raise ConfigValidationError("DQN agents require model.env.action_space='discrete'.")
+
+            if model["kind"] in _RL_SINGLE_ASSET_DQN_KINDS or (
+                model["kind"] == "ppo_agent" and action_space == "discrete"
+            ):
+                position_grid = env_cfg.get("position_grid")
+                if position_grid is not None:
+                    if not isinstance(position_grid, (list, tuple)) or len(position_grid) == 0:
+                        raise ConfigValidationError(
+                            "model.env.position_grid must be a non-empty list when provided."
+                        )
+                    for idx, value in enumerate(position_grid):
+                        _finite_number(value, field=f"model.env.position_grid[{idx}]")
+
+            if model["kind"] in _RL_PORTFOLIO_DQN_KINDS or (
+                model["kind"] == "ppo_portfolio_agent" and action_space == "discrete"
+            ):
+                action_templates = env_cfg.get("action_templates")
+                if action_templates is not None:
+                    if not isinstance(action_templates, (list, tuple)) or len(action_templates) == 0:
+                        raise ConfigValidationError(
+                            "model.env.action_templates must be a non-empty 2D list when provided."
+                        )
+                    row_lengths: set[int] = set()
+                    for row_idx, row in enumerate(action_templates):
+                        if not isinstance(row, (list, tuple)) or len(row) == 0:
+                            raise ConfigValidationError(
+                                "Each model.env.action_templates row must be a non-empty list."
+                            )
+                        row_lengths.add(len(row))
+                        for col_idx, value in enumerate(row):
+                            _finite_number(
+                                value,
+                                field=f"model.env.action_templates[{row_idx}][{col_idx}]",
+                            )
+                    if len(row_lengths) != 1:
+                        raise ConfigValidationError(
+                            "model.env.action_templates rows must all have the same length."
+                        )
+
+            if "signal_col" in model and model["signal_col"] is not None and not isinstance(model["signal_col"], str):
+                raise ConfigValidationError("model.signal_col must be a string when provided.")
+            if "action_col" in model and model["action_col"] is not None and not isinstance(model["action_col"], str):
+                raise ConfigValidationError("model.action_col must be a string when provided.")
+
+            params = model.get("params", {}) or {}
+            if not isinstance(params, dict):
+                raise ConfigValidationError("model.params must be a mapping.")
+            if "total_timesteps" in params:
+                _positive_int(params["total_timesteps"], field="model.params.total_timesteps")
+            if "policy" in params and not isinstance(params["policy"], str):
+                raise ConfigValidationError("model.params.policy must be a string.")
+            if "device" in params and not isinstance(params["device"], str):
+                raise ConfigValidationError("model.params.device must be a string.")
+            extractor_cfg = params.get("extractor")
+            if extractor_cfg is not None:
+                if not isinstance(extractor_cfg, dict):
+                    raise ConfigValidationError("model.params.extractor must be a mapping when provided.")
+                kind = extractor_cfg.get("kind", "flatten")
+                if kind not in _RL_EXTRACTOR_KINDS:
+                    raise ConfigValidationError(
+                        "model.params.extractor.kind must be one of: flatten, cnn1d, lstm, transformer."
+                    )
+                for key in ("features_dim", "hidden_dim", "num_layers", "num_heads"):
+                    if key in extractor_cfg:
+                        _positive_int(extractor_cfg[key], field=f"model.params.extractor.{key}")
+                if "dropout" in extractor_cfg:
+                    dropout = _finite_number(
+                        extractor_cfg["dropout"],
+                        field="model.params.extractor.dropout",
+                    )
+                    if not 0.0 <= dropout < 1.0:
+                        raise ConfigValidationError("model.params.extractor.dropout must be in [0,1).")
 
     split = model.get("split")
     if split is None:
@@ -244,8 +392,8 @@ def validate_model_block(model: dict[str, Any]) -> None:
         raise ConfigValidationError(
             "model.split for walk_forward/purged requires either train_size or train_frac."
         )
-    if train_size is not None and (not isinstance(train_size, int) or train_size <= 0):
-        raise ConfigValidationError("model.split.train_size must be a positive integer.")
+    if train_size is not None:
+        _positive_int(train_size, field="model.split.train_size")
     if train_size is None:
         train_frac = float(train_frac)
         if not 0.0 < train_frac < 1.0:
@@ -253,29 +401,23 @@ def validate_model_block(model: dict[str, Any]) -> None:
                 "model.split.train_frac must be in (0,1) when train_size is not provided."
             )
 
-    test_size = int(split.get("test_size", 63))
-    if test_size <= 0:
-        raise ConfigValidationError("model.split.test_size must be a positive integer.")
+    _positive_int(split.get("test_size", 63), field="model.split.test_size")
 
     step_size = split.get("step_size")
-    if step_size is not None and (not isinstance(step_size, int) or step_size <= 0):
-        raise ConfigValidationError("model.split.step_size must be a positive integer when provided.")
+    if step_size is not None:
+        _positive_int(step_size, field="model.split.step_size")
 
     expanding = split.get("expanding", True)
     if not isinstance(expanding, bool):
         raise ConfigValidationError("model.split.expanding must be boolean.")
 
     max_folds = split.get("max_folds")
-    if max_folds is not None and (not isinstance(max_folds, int) or max_folds <= 0):
-        raise ConfigValidationError("model.split.max_folds must be a positive integer when provided.")
+    if max_folds is not None:
+        _positive_int(max_folds, field="model.split.max_folds")
 
     if method == "purged":
-        purge_bars = int(split.get("purge_bars", 0))
-        embargo_bars = int(split.get("embargo_bars", 0))
-        if purge_bars < 0:
-            raise ConfigValidationError("model.split.purge_bars must be >= 0 for method=purged.")
-        if embargo_bars < 0:
-            raise ConfigValidationError("model.split.embargo_bars must be >= 0 for method=purged.")
+        _non_negative_int(split.get("purge_bars", 0), field="model.split.purge_bars")
+        _non_negative_int(split.get("embargo_bars", 0), field="model.split.embargo_bars")
 
 
 def validate_signals_block(signals: dict[str, Any]) -> None:
@@ -308,11 +450,7 @@ def validate_risk_block(risk: dict[str, Any]) -> None:
         raise ConfigValidationError("risk.dd_guard must be a mapping.")
     if _finite_number(dd.get("max_drawdown", 0.2), field="risk.dd_guard.max_drawdown") <= 0:
         raise ConfigValidationError("risk.dd_guard.max_drawdown must be > 0.")
-    cooloff_bars = dd.get("cooloff_bars", 0)
-    if not isinstance(cooloff_bars, int):
-        raise ConfigValidationError("risk.dd_guard.cooloff_bars must be an integer >= 0.")
-    if cooloff_bars < 0:
-        raise ConfigValidationError("risk.dd_guard.cooloff_bars must be >= 0.")
+    _non_negative_int(dd.get("cooloff_bars", 0), field="risk.dd_guard.cooloff_bars")
 
 
 def validate_backtest_block(backtest: dict[str, Any]) -> None:
@@ -357,8 +495,58 @@ def validate_portfolio_block(portfolio: dict[str, Any]) -> None:
         raise ConfigValidationError("portfolio.risk_aversion must be >= 0.")
     if _finite_number(portfolio.get("trade_aversion", 0.0), field="portfolio.trade_aversion") < 0:
         raise ConfigValidationError("portfolio.trade_aversion must be >= 0.")
-    if not isinstance(portfolio.get("constraints", {}), dict):
+    constraints_cfg = portfolio.get("constraints", {})
+    if not isinstance(constraints_cfg, dict):
         raise ConfigValidationError("portfolio.constraints must be a mapping.")
+    constraints_cfg = dict(constraints_cfg or {})
+    min_weight = _finite_number(
+        constraints_cfg.get("min_weight", -1.0),
+        field="portfolio.constraints.min_weight",
+    )
+    max_weight = _finite_number(
+        constraints_cfg.get("max_weight", 1.0),
+        field="portfolio.constraints.max_weight",
+    )
+    max_gross_leverage = _finite_number(
+        constraints_cfg.get("max_gross_leverage", 1.0),
+        field="portfolio.constraints.max_gross_leverage",
+    )
+    target_net_exposure = _finite_number(
+        constraints_cfg.get("target_net_exposure", 0.0),
+        field="portfolio.constraints.target_net_exposure",
+    )
+    turnover_limit_raw = constraints_cfg.get("turnover_limit")
+    turnover_limit = (
+        None
+        if turnover_limit_raw is None
+        else _finite_number(turnover_limit_raw, field="portfolio.constraints.turnover_limit")
+    )
+    group_caps_raw = constraints_cfg.get("group_max_exposure", {})
+    if not isinstance(group_caps_raw, dict):
+        raise ConfigValidationError("portfolio.constraints.group_max_exposure must be a mapping.")
+    group_caps = {}
+    for group, cap in dict(group_caps_raw or {}).items():
+        if not isinstance(group, str):
+            raise ConfigValidationError(
+                "portfolio.constraints.group_max_exposure keys must be strings."
+            )
+        group_caps[group] = _finite_number(
+            cap,
+            field=f"portfolio.constraints.group_max_exposure[{group}]",
+        )
+    from src.portfolio.constraints import PortfolioConstraints
+
+    try:
+        PortfolioConstraints(
+            min_weight=min_weight,
+            max_weight=max_weight,
+            max_gross_leverage=max_gross_leverage,
+            target_net_exposure=target_net_exposure,
+            turnover_limit=turnover_limit,
+            group_max_exposure=group_caps or None,
+        )
+    except ValueError as exc:
+        raise ConfigValidationError(str(exc)) from exc
     if not isinstance(portfolio.get("asset_groups", {}), dict):
         raise ConfigValidationError("portfolio.asset_groups must be a mapping.")
     for asset, group in portfolio.get("asset_groups", {}).items():
@@ -390,10 +578,21 @@ def validate_execution_block(execution: dict[str, Any]) -> None:
         field="execution.min_trade_notional",
     ) < 0:
         raise ConfigValidationError("execution.min_trade_notional must be >= 0.")
-    if not isinstance(execution.get("current_weights", {}), dict):
+    current_weights = execution.get("current_weights", {})
+    if not isinstance(current_weights, dict):
         raise ConfigValidationError("execution.current_weights must be a mapping.")
-    if not isinstance(execution.get("current_prices", {}), dict):
+    for asset, value in dict(current_weights or {}).items():
+        if not isinstance(asset, str):
+            raise ConfigValidationError("execution.current_weights keys must be strings.")
+        _finite_number(value, field=f"execution.current_weights[{asset}]")
+    current_prices = execution.get("current_prices", {})
+    if not isinstance(current_prices, dict):
         raise ConfigValidationError("execution.current_prices must be a mapping.")
+    for asset, value in dict(current_prices or {}).items():
+        if not isinstance(asset, str):
+            raise ConfigValidationError("execution.current_prices keys must be strings.")
+        if _finite_number(value, field=f"execution.current_prices[{asset}]") <= 0:
+            raise ConfigValidationError(f"execution.current_prices[{asset}] must be > 0.")
 
 
 def validate_logging_block(logging_cfg: dict[str, Any]) -> None:
@@ -420,6 +619,28 @@ def validate_resolved_config(cfg: dict[str, Any]) -> dict[str, Any]:
     validate_execution_block(cfg["execution"])
     validate_logging_block(cfg["logging"])
     cfg["runtime"] = validate_runtime_block(dict(cfg.get("runtime", {}) or {}))
+
+    model_kind = str(cfg["model"].get("kind", "none"))
+    if model_kind in RL_MODEL_KINDS:
+        expected_signal_col = str(cfg["model"].get("signal_col") or "signal_rl")
+        if str(cfg["signals"].get("kind", "none")) != "none":
+            raise ConfigValidationError("RL model kinds require signals.kind='none'.")
+        if str(cfg["backtest"].get("signal_col")) != expected_signal_col:
+            raise ConfigValidationError(
+                "RL backtests must use the signal column emitted by the agent "
+                f"(expected backtest.signal_col='{expected_signal_col}')."
+            )
+        if bool(cfg["portfolio"].get("enabled", False)) and str(
+            cfg["portfolio"].get("construction", "signal_weights")
+        ) != "signal_weights":
+            raise ConfigValidationError("RL runs with portfolio.enabled=true require portfolio.construction='signal_weights'.")
+        if model_kind in PORTFOLIO_MODEL_KINDS:
+            if not bool(cfg["portfolio"].get("enabled", False)):
+                raise ConfigValidationError("Portfolio RL model kinds require portfolio.enabled=true.")
+            if str(cfg["data"].get("alignment", "inner")) != "inner":
+                raise ConfigValidationError("Portfolio RL model kinds currently require data.alignment='inner'.")
+        if not bool(cfg["portfolio"].get("enabled", False)) and cfg["risk"].get("target_vol") is not None:
+            raise ConfigValidationError("Single-asset RL backtests currently require risk.target_vol=null.")
     return cfg
 
 

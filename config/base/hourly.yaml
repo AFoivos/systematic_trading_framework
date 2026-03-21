@@ -31,7 +31,6 @@ risk:
     cooloff_bars: 20
 
 backtest:
-  periods_per_year: 1638
   returns_type: simple
 
 logging:

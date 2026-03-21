@@ -8,6 +8,7 @@ import pandas as pd
 from src.portfolio import (
     PortfolioConstraints,
     apply_constraints,
+    build_optimized_weights_over_time,
     build_rolling_covariance_by_date,
     build_weights_from_signals_over_time,
     compute_portfolio_performance,
@@ -164,6 +165,67 @@ def test_optimize_mean_variance_zeroes_assets_without_valid_covariance() -> None
     assert np.isclose(weights["AAA"], 1.0)
     assert np.isclose(weights["BBB"], 0.0)
     assert "BBB" in meta["unsupported_covariance_assets"]
+
+
+def test_optimize_mean_variance_raises_on_pairwise_missing_covariance() -> None:
+    """
+    Pairwise-missing covariances should fail loudly instead of being treated as zero correlation.
+    """
+    mu = pd.Series({"A": 0.10, "B": 0.08}, dtype=float)
+    cov = pd.DataFrame(
+        [[0.04, np.nan], [np.nan, 0.05]],
+        index=mu.index,
+        columns=mu.index,
+        dtype=float,
+    )
+
+    with np.testing.assert_raises(ValueError):
+        optimize_mean_variance(mu, covariance=cov)
+
+
+def test_build_optimized_weights_over_time_stays_flat_until_covariance_ready() -> None:
+    """
+    Mean-variance weights should remain flat before the first valid covariance snapshot exists.
+    """
+    idx = pd.date_range("2024-01-01", periods=6, freq="D")
+    expected_returns = pd.DataFrame(
+        {
+            "A": [0.05, 0.05, 0.05, 0.05, 0.05, 0.05],
+            "B": [0.01, 0.01, 0.01, 0.01, 0.01, 0.01],
+        },
+        index=idx,
+    )
+    asset_returns = pd.DataFrame(
+        {
+            "A": [0.01, 0.02, -0.01, 0.01, 0.0, 0.01],
+            "B": [0.0, -0.01, 0.01, 0.0, 0.02, -0.01],
+        },
+        index=idx,
+    )
+    cov_by_date = build_rolling_covariance_by_date(
+        asset_returns,
+        window=3,
+        min_periods=3,
+        rebalance_step=2,
+    )
+
+    weights, diagnostics = build_optimized_weights_over_time(
+        expected_returns,
+        covariance_by_date=cov_by_date,
+        constraints=PortfolioConstraints(
+            min_weight=0.0,
+            max_weight=1.0,
+            max_gross_leverage=1.0,
+            target_net_exposure=1.0,
+        ),
+        risk_aversion=1.0,
+    )
+
+    first_cov_ts = min(cov_by_date)
+    pre_cov = weights.loc[weights.index < first_cov_ts]
+    assert not pre_cov.empty
+    assert np.isclose(pre_cov.to_numpy(dtype=float), 0.0).all()
+    assert diagnostics.loc[diagnostics.index < first_cov_ts, "turnover"].eq(0.0).all()
 
 
 def test_apply_constraints_turnover_limit_raises_when_constraint_set_is_infeasible() -> None:

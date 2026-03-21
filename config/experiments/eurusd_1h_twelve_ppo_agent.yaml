@@ -1,0 +1,14 @@
+extends: experiments/fx_majors_1h_twelve_ppo_agent.yaml
+
+data:
+  symbol: "EURUSD"
+  symbols: null
+  storage:
+    dataset_id: "eurusd_1h_twelve_ppo_agent"
+
+portfolio:
+  enabled: false
+  construction: signal_weights
+
+logging:
+  run_name: eurusd_1h_twelve_ppo_agent_v1

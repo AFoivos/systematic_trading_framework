@@ -26,7 +26,9 @@ def population_stability_index(
     quantiles = np.linspace(0.0, 1.0, int(n_bins) + 1)
     edges = np.unique(np.quantile(ref.to_numpy(dtype=float), quantiles))
     if len(edges) < 2:
-        return 0.0
+        ref_value = float(ref.iloc[0])
+        cur_max_dev = float(np.max(np.abs(cur.to_numpy(dtype=float) - ref_value)))
+        return 0.0 if cur_max_dev <= float(eps) else float("inf")
 
     bins = edges.astype(float)
     bins[0] = -np.inf

@@ -155,7 +155,7 @@ def purged_walk_forward_split_indices(
 
         train_end = test_start - purge_bars
         if train_end <= 0:
-            test_start += step_size + embargo_bars
+            test_start += step_size
             continue
 
         if expanding:
@@ -164,7 +164,7 @@ def purged_walk_forward_split_indices(
             train_start = max(0, train_end - train_size)
 
         if train_end <= train_start:
-            test_start += step_size + embargo_bars
+            test_start += step_size
             continue
 
         train_idx = np.arange(train_start, train_end, dtype=int)
@@ -198,7 +198,7 @@ def purged_walk_forward_split_indices(
 
         if test_end >= n_samples:
             break
-        test_start += step_size + embargo_bars
+        test_start += step_size
 
     if not splits:
         raise ValueError("No valid folds produced. Check train/test/purge/embargo settings.")

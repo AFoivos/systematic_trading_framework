@@ -66,6 +66,10 @@ def run_experiment_pipeline(
 
         model_cfg = dict(cfg.get("model", {"kind": "none"}) or {})
         model_cfg.setdefault("runtime", cfg.get("runtime", {}))
+        model_cfg.setdefault("risk", cfg.get("risk", {}))
+        model_cfg.setdefault("portfolio", cfg.get("portfolio", {}))
+        model_cfg.setdefault("backtest", cfg.get("backtest", {}))
+        model_cfg.setdefault("data_alignment", cfg.get("data", {}).get("alignment", "inner"))
         returns_col = cfg.get("backtest", {}).get("returns_col")
         model_asset_frames, model, model_meta = apply_model_to_assets(
             feature_asset_frames,

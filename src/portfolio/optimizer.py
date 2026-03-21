@@ -28,15 +28,27 @@ def _prepare_covariance(assets: pd.Index, covariance: pd.DataFrame | None) -> pd
 
 def _supported_assets_from_covariance(covariance: pd.DataFrame) -> pd.Index:
     """
-    Keep only assets with a finite, positive variance estimate.
+    Keep only assets with finite, positive variances and a fully finite covariance submatrix.
     """
     diag = pd.Series(
         np.diag(covariance.to_numpy(dtype=float)),
         index=covariance.index,
         dtype=float,
     )
-    valid_diag = diag.notna() & np.isfinite(diag) & (diag > 0.0)
-    return covariance.index[valid_diag]
+    supported = covariance.index[(diag.notna() & np.isfinite(diag) & (diag > 0.0)).to_numpy()]
+
+    while len(supported) > 0:
+        sub = covariance.loc[supported, supported].astype(float)
+        finite_rows = pd.Series(
+            np.isfinite(sub.to_numpy(dtype=float)).all(axis=1),
+            index=supported,
+            dtype=bool,
+        )
+        if bool(finite_rows.all()):
+            break
+        supported = supported[finite_rows.to_numpy()]
+
+    return supported
 
 
 def _meta_diagnostics(
@@ -201,7 +213,7 @@ def optimize_mean_variance(
 
         mu = mu_full.loc[supported_assets]
         assets = mu.index
-        cov = cov_full.loc[assets, assets].fillna(0.0)
+        cov = cov_full.loc[assets, assets]
     else:
         mu = mu_full
         assets = mu.index
@@ -262,7 +274,7 @@ def optimize_mean_variance(
     bounds = [(constraints.min_weight, constraints.max_weight) for _ in assets]
     x0 = _initial_weights(assets, constraints=constraints, prev_weights=prev_weights)
     if not bool(np.isfinite(cov_np).all()):
-        if not allow_fallback:
+        if not bool(np.isinf(cov_np).any()) or not allow_fallback:
             raise ValueError("Covariance contains non-finite values.")
 
         w = _fallback_weights(mu, constraints=effective_constraints)
