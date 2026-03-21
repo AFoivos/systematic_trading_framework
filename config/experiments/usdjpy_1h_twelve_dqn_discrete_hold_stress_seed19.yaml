@@ -1,0 +1,11 @@
+extends: experiments/usdjpy_1h_twelve_dqn_discrete_hold_stress.yaml
+
+runtime:
+  seed: 19
+
+data:
+  storage:
+    dataset_id: "usdjpy_1h_twelve_dqn_discrete_hold_stress_seed19"
+
+logging:
+  run_name: usdjpy_1h_twelve_dqn_discrete_hold_stress_seed19_v1

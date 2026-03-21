@@ -1,0 +1,11 @@
+extends: experiments/eurusd_1h_twelve_dqn_discrete_hold_stress.yaml
+
+runtime:
+  seed: 11
+
+data:
+  storage:
+    dataset_id: "eurusd_1h_twelve_dqn_discrete_hold_stress_seed11"
+
+logging:
+  run_name: eurusd_1h_twelve_dqn_discrete_hold_stress_seed11_v1

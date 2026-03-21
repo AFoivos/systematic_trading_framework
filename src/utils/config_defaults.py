@@ -119,6 +119,32 @@ def default_feature_steps(
     return out
 
 
+def default_model_block(model: dict[str, Any]) -> dict[str, Any]:
+    model = dict(model) if model else {}
+    kind = str(model.get("kind", "none"))
+    if kind not in {"ppo_agent", "dqn_agent", "ppo_portfolio_agent", "dqn_portfolio_agent"}:
+        return model
+
+    env = dict(model.get("env", {}) or {})
+    env.setdefault("window_size", 32)
+    env.setdefault("execution_lag_bars", 1)
+    env.setdefault("min_holding_bars", 0)
+    env.setdefault("action_hysteresis", 0.0)
+    if "max_signal_abs" not in env and "max_position" in env:
+        env["max_signal_abs"] = env["max_position"]
+    env.setdefault("max_signal_abs", 1.0)
+
+    reward = dict(env.get("reward", {}) or {})
+    reward.setdefault("cost_per_turnover", 0.0)
+    reward.setdefault("slippage_per_turnover", 0.0)
+    reward.setdefault("inventory_penalty", 0.0)
+    reward.setdefault("drawdown_penalty", 0.0)
+    reward.setdefault("switching_penalty", 0.0)
+    env["reward"] = reward
+    model["env"] = env
+    return model
+
+
 def default_risk_block(risk: dict[str, Any]) -> dict[str, Any]:
     risk = dict(risk) if risk else {}
     risk.setdefault("cost_per_turnover", 0.0)
@@ -128,6 +154,7 @@ def default_risk_block(risk: dict[str, Any]) -> dict[str, Any]:
     dd = risk.get("dd_guard") or {}
     if not isinstance(dd, dict):
         raise ValueError("risk.dd_guard must be a mapping.")
+    dd.setdefault("enabled", True)
     dd.setdefault("max_drawdown", 0.2)
     dd.setdefault("cooloff_bars", 20)
     risk["dd_guard"] = dd
@@ -226,7 +253,7 @@ def apply_top_level_defaults(cfg: dict[str, Any], *, config_path: Path) -> dict[
         interval=interval,
         data=out["data"],
     )
-    out["model"] = dict(out.get("model", {"kind": "none"}) or {"kind": "none"})
+    out["model"] = default_model_block(out.get("model", {"kind": "none"}) or {"kind": "none"})
     out["signals"] = dict(out.get("signals", {"kind": "none", "params": {}}) or {"kind": "none", "params": {}})
     out["runtime"] = dict(out.get("runtime", {}) or {})
     out["risk"] = default_risk_block(out.get("risk", {}))
@@ -244,6 +271,7 @@ __all__ = [
     "default_data_block",
     "default_execution_block",
     "default_feature_steps",
+    "default_model_block",
     "default_monitoring_block",
     "default_portfolio_block",
     "default_risk_block",

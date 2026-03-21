@@ -280,6 +280,8 @@ model:
 #   env:
 #     window_size: 48
 #     execution_lag_bars: 1
+#     min_holding_bars: 0  # raise to 2-4 to force slower trading
+#     action_hysteresis: 0.0  # continuous-only deadband around the current action
 #     action_space: continuous  # continuous | discrete
 #     max_signal_abs: 1.0
 #     reward:
@@ -287,6 +289,7 @@ model:
 #       slippage_per_turnover: 0.0
 #       inventory_penalty: 0.0
 #       drawdown_penalty: 0.0
+#       switching_penalty: 0.0  # per-switch penalty on top of turnover costs
 #   params:
 #     policy: MlpPolicy
 #     total_timesteps: 20000
@@ -323,6 +326,8 @@ model:
 #   env:
 #     window_size: 48
 #     execution_lag_bars: 1
+#     min_holding_bars: 0  # useful for discrete hold grids
+#     action_hysteresis: 0.0  # ignored unless action changes are small enough to suppress
 #     action_space: discrete
 #     position_grid: [-1.0, 0.0, 1.0]  # single-asset discrete actions
 #     max_signal_abs: 1.0
@@ -331,6 +336,7 @@ model:
 #       slippage_per_turnover: 0.0
 #       inventory_penalty: 0.0
 #       drawdown_penalty: 0.0
+#       switching_penalty: 0.0  # direct penalty for changing actions too often
 #   params:
 #     policy: MlpPolicy
 #     total_timesteps: 20000
@@ -371,6 +377,8 @@ model:
 #   env:
 #     window_size: 48
 #     execution_lag_bars: 1
+#     min_holding_bars: 0
+#     action_hysteresis: 0.0
 #     action_space: continuous
 #     max_signal_abs: 1.0
 #     reward:
@@ -378,6 +386,7 @@ model:
 #       slippage_per_turnover: 0.0
 #       inventory_penalty: 0.0
 #       drawdown_penalty: 0.0
+#       switching_penalty: 0.0
 #   params:
 #     policy: MlpPolicy
 #     total_timesteps: 20000
@@ -412,6 +421,8 @@ model:
 #   env:
 #     window_size: 48
 #     execution_lag_bars: 1
+#     min_holding_bars: 0
+#     action_hysteresis: 0.0
 #     action_space: discrete
 #     # action_templates rows must match the number of assets in data.symbols
 #     action_templates:
@@ -430,6 +441,7 @@ model:
 #       slippage_per_turnover: 0.0
 #       inventory_penalty: 0.0
 #       drawdown_penalty: 0.0
+#       switching_penalty: 0.0
 #   params:
 #     policy: MlpPolicy
 #     total_timesteps: 20000

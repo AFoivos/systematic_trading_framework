@@ -1,0 +1,31 @@
+extends: experiments/usdjpy_1h_twelve_dqn_discrete_hold.yaml
+
+data:
+  start: "2025-09-01"
+  storage:
+    dataset_id: "usdjpy_1h_twelve_dqn_discrete_hold_stress"
+
+model:
+  split:
+    max_folds: 8
+  params:
+    total_timesteps: 12000
+  env:
+    min_holding_bars: 3
+    reward:
+      cost_per_turnover: 0.0001
+      slippage_per_turnover: 0.00005
+      inventory_penalty: 0.0
+      drawdown_penalty: 0.00005
+      switching_penalty: 0.00005
+
+risk:
+  cost_per_turnover: 0.0001
+  slippage_per_turnover: 0.00005
+  dd_guard:
+    enabled: true
+    max_drawdown: 0.04
+    cooloff_bars: 24
+
+logging:
+  run_name: usdjpy_1h_twelve_dqn_discrete_hold_stress_v1

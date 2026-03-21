@@ -17,7 +17,12 @@ from src.experiments.modeling.metrics import (
     empty_volatility_metrics,
 )
 from src.experiments.modeling.runtime import infer_feature_columns, resolve_runtime_for_model
-from src.models.rl.envs import PortfolioTradingEnv, RLRewardConfig, SingleAssetTradingEnv
+from src.models.rl.envs import (
+    PortfolioTradingEnv,
+    RLExecutionConfig,
+    RLRewardConfig,
+    SingleAssetTradingEnv,
+)
 from src.models.rl.sb3 import make_vec_env, train_sb3_model
 from src.portfolio import PortfolioConstraints
 
@@ -234,6 +239,20 @@ def _build_reward_config(model_cfg: dict[str, Any]) -> RLRewardConfig:
         ),
         inventory_penalty=float(reward_cfg.get("inventory_penalty", 0.0)),
         drawdown_penalty=float(reward_cfg.get("drawdown_penalty", 0.0)),
+        switching_penalty=float(reward_cfg.get("switching_penalty", 0.0)),
+    )
+
+
+def _build_execution_config(model_cfg: dict[str, Any]) -> RLExecutionConfig:
+    env_cfg = dict(model_cfg.get("env", {}) or {})
+    risk_cfg = dict(model_cfg.get("risk", {}) or {})
+    dd_cfg = dict(risk_cfg.get("dd_guard", {}) or {})
+    return RLExecutionConfig(
+        min_holding_bars=int(env_cfg.get("min_holding_bars", 0)),
+        action_hysteresis=float(env_cfg.get("action_hysteresis", 0.0)),
+        dd_guard_enabled=bool(dd_cfg.get("enabled", False)),
+        max_drawdown=float(dd_cfg.get("max_drawdown", 0.2)),
+        cooloff_bars=int(dd_cfg.get("cooloff_bars", 20)),
     )
 
 
@@ -361,6 +380,7 @@ def _rollout_single_asset_policy(
     max_signal_abs: float,
     discrete_action_values: np.ndarray | None,
     reward_config: RLRewardConfig,
+    execution_config: RLExecutionConfig,
 ) -> tuple[pd.Series, pd.Series, pd.Series]:
     rollout_env = SingleAssetTradingEnv(
         features=bundle.features,
@@ -370,6 +390,7 @@ def _rollout_single_asset_policy(
         max_signal_abs=max_signal_abs,
         discrete_action_values=discrete_action_values,
         reward_config=reward_config,
+        execution_config=execution_config,
     )
     signals = pd.Series(np.nan, index=bundle.index, dtype="float32")
     actions = pd.Series(np.nan, index=bundle.index, dtype="float32")
@@ -416,6 +437,7 @@ def _rollout_portfolio_policy(
     max_signal_abs: float,
     discrete_action_templates: np.ndarray | None,
     reward_config: RLRewardConfig,
+    execution_config: RLExecutionConfig,
     constraints: PortfolioConstraints,
     asset_to_group: Mapping[str, str] | None,
     long_short: bool,
@@ -430,6 +452,7 @@ def _rollout_portfolio_policy(
         max_signal_abs=max_signal_abs,
         discrete_action_templates=discrete_action_templates,
         reward_config=reward_config,
+        execution_config=execution_config,
         constraints=constraints,
         asset_to_group=asset_to_group,
         long_short=long_short,
@@ -594,6 +617,8 @@ def _train_single_asset_rl(
         algorithm=algorithm,
     )
     reward_config = _build_reward_config(model_cfg)
+    execution_config = _build_execution_config(model_cfg)
+    execution_config = _build_execution_config(model_cfg)
 
     split_cfg = dict(model_cfg.get("split", {}) or {})
     split_method = str(split_cfg.get("method", "time"))
@@ -659,6 +684,7 @@ def _train_single_asset_rl(
                     max_signal_abs=max_signal_abs,
                     discrete_action_values=discrete_action_values,
                     reward_config=reward_config,
+                    execution_config=execution_config,
                 )
 
             env_fns.append(_factory)
@@ -687,6 +713,7 @@ def _train_single_asset_rl(
             max_signal_abs=max_signal_abs,
             discrete_action_values=discrete_action_values,
             reward_config=reward_config,
+            execution_config=execution_config,
         )
         valid_signals = signals.dropna().astype("float32", copy=False)
         valid_actions = actions.dropna().astype("float32", copy=False)
@@ -798,6 +825,7 @@ def _train_portfolio_rl(
     _validate_execution_lag(env_cfg)
     window_size = _coerce_positive_int(env_cfg.get("window_size", 32), name="model.env.window_size", default=32)
     reward_config = _build_reward_config(model_cfg)
+    execution_config = _build_execution_config(model_cfg)
     if alignment != "inner":
         raise ValueError("Portfolio RL currently requires inner alignment.")
 
@@ -898,6 +926,7 @@ def _train_portfolio_rl(
                     max_signal_abs=max_signal_abs,
                     discrete_action_templates=discrete_templates,
                     reward_config=reward_config,
+                    execution_config=execution_config,
                     constraints=constraints,
                     asset_to_group=asset_to_group,
                     long_short=long_short,
@@ -930,6 +959,7 @@ def _train_portfolio_rl(
             max_signal_abs=max_signal_abs,
             discrete_action_templates=discrete_templates,
             reward_config=reward_config,
+            execution_config=execution_config,
             constraints=constraints,
             asset_to_group=asset_to_group,
             long_short=long_short,

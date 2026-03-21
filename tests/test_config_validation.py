@@ -89,3 +89,17 @@ def test_validate_execution_block_rejects_invalid_current_weight_and_price_value
                 "current_prices": {"AAA": 0.0},
             }
         )
+
+
+def test_validate_model_block_rejects_ppo_only_params_for_dqn() -> None:
+    model = {
+        "kind": "dqn_agent",
+        "feature_cols": ["close_ret"],
+        "target": {"kind": "forward_return", "horizon": 1},
+        "split": {"method": "walk_forward", "train_size": 100, "test_size": 20},
+        "env": {"action_space": "discrete", "window_size": 8, "execution_lag_bars": 1},
+        "params": {"total_timesteps": 128, "n_steps": 16},
+    }
+
+    with pytest.raises(ConfigValidationError, match="PPO-only"):
+        validate_model_block(model)

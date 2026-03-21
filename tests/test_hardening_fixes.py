@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 import src.experiments.runner as runner_mod
-from src.backtesting.engine import run_backtest
+from src.backtesting.engine import BacktestResult, run_backtest
 from src.features.technical.momentum import add_momentum_features
 from src.portfolio.construction import PortfolioPerformance
 from src.portfolio.covariance import build_rolling_covariance_by_date
@@ -465,6 +465,123 @@ def test_save_artifacts_refuses_existing_run_dir(tmp_path) -> None:
 
     with pytest.raises(FileExistsError):
         runner_mod._save_artifacts(**kwargs)
+
+
+def test_save_artifacts_writes_experiment_report(tmp_path) -> None:
+    """
+    Saving artifacts should also emit a human-readable experiment report with charts.
+    """
+    idx = pd.date_range("2024-01-01", periods=5, freq="D", name="datetime")
+    perf = BacktestResult(
+        equity_curve=pd.Series([1.0, 1.01, 1.005, 1.02, 1.03], index=idx, name="equity"),
+        returns=pd.Series([0.0, 0.01, -0.00495, 0.01493, 0.00976], index=idx, name="signal_rl"),
+        gross_returns=pd.Series([0.0, 0.011, -0.004, 0.015, 0.010], index=idx, name="signal_rl"),
+        costs=pd.Series([0.0, 0.001, 0.00095, 0.00007, 0.00024], index=idx, name="signal_rl"),
+        positions=pd.Series([0.0, 0.2, 0.2, 0.0, 0.2], index=idx, name="signal_rl"),
+        turnover=pd.Series([0.0, 0.2, 0.0, 0.2, 0.2], index=idx, name="signal_rl"),
+        summary={
+            "sharpe": 1.0,
+            "gross_pnl": 0.032,
+            "net_pnl": 0.029,
+            "total_cost": 0.003,
+            "avg_turnover": 0.12,
+            "hit_rate": 0.6,
+        },
+    )
+    run_dir = tmp_path / "reported_run"
+    artifacts = runner_mod._save_artifacts(
+        run_dir=run_dir,
+        cfg={
+            "config_path": "config/experiments/demo.yaml",
+            "data": {"source": "synthetic", "symbol": "TEST", "interval": "1h", "start": "2024-01-01"},
+            "features": [{"step": "returns", "params": {"col_name": "close_logret", "log": True}}],
+            "model": {
+                "kind": "ppo_agent",
+                "target": {"kind": "forward_return", "horizon": 1},
+                "env": {"max_signal_abs": 0.2, "reward": {"inventory_penalty": 0.0}},
+            },
+            "signals": {"kind": "none", "params": {}},
+            "risk": {},
+            "backtest": {"returns_type": "log"},
+            "portfolio": {"enabled": False},
+            "runtime": {},
+            "logging": {"run_name": "demo_report"},
+        },
+        data=pd.DataFrame({"close": [1.0, 1.1, 1.2, 1.3, 1.4]}, index=idx),
+        performance=perf,
+        model_meta={
+            "feature_cols": ["lag_close_logret_1", "vol_rolling_24"],
+            "contracts": {"n_features": 2},
+            "folds": [
+                {
+                    "fold": 0,
+                    "policy_metrics": {
+                        "mean_reward": 0.001,
+                        "mean_abs_signal": 0.16,
+                        "signal_turnover": 0.1,
+                        "flat_rate": 0.2,
+                    },
+                }
+            ],
+        },
+        evaluation={
+            "primary_summary": {
+                "sharpe": 1.0,
+                "gross_pnl": 0.032,
+                "net_pnl": 0.029,
+                "total_cost": 0.003,
+                "avg_turnover": 0.12,
+                "hit_rate": 0.6,
+            },
+            "fold_backtest_summaries": [
+                {
+                    "fold": 0,
+                    "test_rows": 5,
+                    "metrics": {
+                        "gross_pnl": 0.032,
+                        "net_pnl": 0.029,
+                        "total_cost": 0.003,
+                        "sharpe": 1.0,
+                        "avg_turnover": 0.12,
+                    },
+                }
+            ],
+            "model_oos_policy_summary": {
+                "mean_abs_signal": 0.16,
+                "signal_turnover": 0.1,
+                "long_rate": 0.6,
+                "short_rate": 0.2,
+                "flat_rate": 0.2,
+            },
+        },
+        monitoring={},
+        execution={},
+        execution_orders=None,
+        portfolio_weights=None,
+        portfolio_diagnostics=None,
+        portfolio_meta={},
+        storage_meta={},
+        run_metadata={"runtime": {}, "model_meta": {"contracts": {"n_features": 2}, "folds": [{"fold": 0, "policy_metrics": {"mean_reward": 0.001}}]}},
+        config_hash_sha256="a" * 64,
+        data_fingerprint={"sha256": "b" * 64},
+    )
+
+    report_path = Path(artifacts["report"])
+    assert report_path.exists()
+    assert (run_dir / "report_assets" / "equity_curve.png").exists()
+    assert (run_dir / "report_assets" / "drawdown_curve.png").exists()
+    assert (run_dir / "report_assets" / "cumulative_returns.png").exists()
+    assert (run_dir / "report_assets" / "rolling_pnl.png").exists()
+    assert (run_dir / "report_assets" / "cumulative_cost_drag.png").exists()
+    assert (run_dir / "report_assets" / "positions_turnover.png").exists()
+    assert (run_dir / "report_assets" / "rolling_behavior.png").exists()
+    assert (run_dir / "report_assets" / "signal_distribution.png").exists()
+    report_text = report_path.read_text(encoding="utf-8")
+    assert "## Pipeline Trace" in report_text
+    assert "### 2. Data Load And PIT" in report_text
+    assert "## Primary Summary" in report_text
+    assert "## OOS Policy Summary" in report_text
+    assert "## Diagnostics" in report_text
 
 
 def test_run_backtest_caps_positions_at_max_leverage() -> None:

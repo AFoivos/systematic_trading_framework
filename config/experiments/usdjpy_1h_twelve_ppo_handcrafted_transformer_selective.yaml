@@ -1,0 +1,33 @@
+extends: experiments/usdjpy_1h_twelve_ppo_handcrafted_transformer_iter.yaml
+
+data:
+  storage:
+    dataset_id: "usdjpy_1h_twelve_ppo_handcrafted_transformer_selective"
+
+model:
+  split:
+    max_folds: 4
+  feature_cols:
+    - lag_close_logret_1
+    - lag_close_logret_2
+    - lag_close_logret_6
+    - lag_close_logret_24
+    - vol_rolling_24
+    - vol_ewma_24
+    - close_over_ema_6
+    - close_trend_state_sma_24_72
+    - close_logret_mom_6
+    - close_logret_mom_24
+    - close_logret_norm_mom_24
+    - close_rsi_2
+    - close_rsi_14
+    - bb_percent_b_24_2.0
+  env:
+    max_signal_abs: 0.20
+    reward:
+      inventory_penalty: 0.00015
+  params:
+    total_timesteps: 5000
+
+logging:
+  run_name: usdjpy_1h_twelve_ppo_handcrafted_transformer_selective_v1

@@ -16,6 +16,18 @@ from src.utils.repro import RuntimeConfigError, validate_runtime_config
 _RL_SINGLE_ASSET_DQN_KINDS = {"dqn_agent"}
 _RL_PORTFOLIO_DQN_KINDS = {"dqn_portfolio_agent"}
 _RL_EXTRACTOR_KINDS = {"flatten", "cnn1d", "lstm", "transformer"}
+_PPO_ONLY_RL_PARAM_KEYS = {"n_steps", "gae_lambda", "clip_range", "ent_coef", "vf_coef", "max_grad_norm"}
+_DQN_ONLY_RL_PARAM_KEYS = {
+    "buffer_size",
+    "learning_starts",
+    "tau",
+    "train_freq",
+    "gradient_steps",
+    "target_update_interval",
+    "exploration_fraction",
+    "exploration_initial_eps",
+    "exploration_final_eps",
+}
 
 
 class ConfigValidationError(ValueError):
@@ -276,6 +288,16 @@ def validate_model_block(model: dict[str, Any]) -> None:
             )
             if max_signal_abs <= 0:
                 raise ConfigValidationError("model.env.max_signal_abs must be > 0.")
+            _non_negative_int(
+                env_cfg.get("min_holding_bars", 0),
+                field="model.env.min_holding_bars",
+            )
+            action_hysteresis = _finite_number(
+                env_cfg.get("action_hysteresis", 0.0),
+                field="model.env.action_hysteresis",
+            )
+            if action_hysteresis < 0:
+                raise ConfigValidationError("model.env.action_hysteresis must be >= 0.")
 
             reward_cfg = env_cfg.get("reward", {})
             if reward_cfg is not None and not isinstance(reward_cfg, dict):
@@ -285,6 +307,7 @@ def validate_model_block(model: dict[str, Any]) -> None:
                 "slippage_per_turnover",
                 "inventory_penalty",
                 "drawdown_penalty",
+                "switching_penalty",
             ):
                 value = _finite_number(
                     dict(reward_cfg or {}).get(key, 0.0),
@@ -344,6 +367,20 @@ def validate_model_block(model: dict[str, Any]) -> None:
             params = model.get("params", {}) or {}
             if not isinstance(params, dict):
                 raise ConfigValidationError("model.params must be a mapping.")
+            if model["kind"] in (_RL_SINGLE_ASSET_DQN_KINDS | _RL_PORTFOLIO_DQN_KINDS):
+                bad_keys = sorted(set(params) & _PPO_ONLY_RL_PARAM_KEYS)
+                if bad_keys:
+                    raise ConfigValidationError(
+                        "DQN agents do not accept PPO-only model.params keys: "
+                        + ", ".join(bad_keys)
+                    )
+            if model["kind"] in {"ppo_agent", "ppo_portfolio_agent"}:
+                bad_keys = sorted(set(params) & _DQN_ONLY_RL_PARAM_KEYS)
+                if bad_keys:
+                    raise ConfigValidationError(
+                        "PPO agents do not accept DQN-only model.params keys: "
+                        + ", ".join(bad_keys)
+                    )
             if "total_timesteps" in params:
                 _positive_int(params["total_timesteps"], field="model.params.total_timesteps")
             if "policy" in params and not isinstance(params["policy"], str):
@@ -448,6 +485,8 @@ def validate_risk_block(risk: dict[str, Any]) -> None:
     dd = risk.get("dd_guard", {})
     if not isinstance(dd, dict):
         raise ConfigValidationError("risk.dd_guard must be a mapping.")
+    if "enabled" in dd and not isinstance(dd.get("enabled"), bool):
+        raise ConfigValidationError("risk.dd_guard.enabled must be boolean.")
     if _finite_number(dd.get("max_drawdown", 0.2), field="risk.dd_guard.max_drawdown") <= 0:
         raise ConfigValidationError("risk.dd_guard.max_drawdown must be > 0.")
     _non_negative_int(dd.get("cooloff_bars", 0), field="risk.dd_guard.cooloff_bars")

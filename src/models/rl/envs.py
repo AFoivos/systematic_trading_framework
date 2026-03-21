@@ -16,6 +16,16 @@ class RLRewardConfig:
     slippage_per_turnover: float = 0.0
     inventory_penalty: float = 0.0
     drawdown_penalty: float = 0.0
+    switching_penalty: float = 0.0
+
+
+@dataclass(frozen=True)
+class RLExecutionConfig:
+    min_holding_bars: int = 0
+    action_hysteresis: float = 0.0
+    dd_guard_enabled: bool = False
+    max_drawdown: float = 0.2
+    cooloff_bars: int = 20
 
 
 def _safe_window(
@@ -65,6 +75,7 @@ class SingleAssetTradingEnv(gym.Env):
         max_signal_abs: float,
         discrete_action_values: Sequence[float] | None,
         reward_config: RLRewardConfig,
+        execution_config: RLExecutionConfig,
         start_step: int = 0,
         end_step: int | None = None,
     ) -> None:
@@ -98,6 +109,7 @@ class SingleAssetTradingEnv(gym.Env):
             raise ValueError("Discrete single-asset RL requires non-empty discrete_action_values.")
 
         self.reward_config = reward_config
+        self.execution_config = execution_config
         self.start_step = int(max(start_step, 0))
         max_reward_step = len(self.features) - 2
         self.end_step = int(max_reward_step if end_step is None else min(end_step, max_reward_step))
@@ -126,6 +138,8 @@ class SingleAssetTradingEnv(gym.Env):
         self.equity = 1.0
         self.running_max = 1.0
         self.drawdown = 0.0
+        self.bars_since_switch = int(self.execution_config.min_holding_bars)
+        self.cooloff_remaining = 0
 
     def _map_action(self, action: np.ndarray | int) -> float:
         if self.continuous_actions:
@@ -143,18 +157,34 @@ class SingleAssetTradingEnv(gym.Env):
         state_cols[:, 1] = float(drawdown)
         return np.concatenate([window, state_cols], axis=1).astype(np.float32, copy=False)
 
+    def _apply_execution_controls(self, action_value: float) -> float:
+        controlled = float(action_value)
+        if self.cooloff_remaining > 0:
+            return 0.0
+        if abs(controlled - float(self.position)) <= float(self.execution_config.action_hysteresis):
+            controlled = float(self.position)
+        if (
+            abs(controlled - float(self.position)) > 1e-12
+            and self.bars_since_switch < int(self.execution_config.min_holding_bars)
+        ):
+            controlled = float(self.position)
+        return controlled
+
     def _transition(self, *, action_value: float) -> tuple[float, dict[str, float]]:
+        forced_cooloff = self.cooloff_remaining > 0
+        actual_action_value = self._apply_execution_controls(action_value)
         next_return = float(self.simple_returns[self.current_step + 1])
-        turnover = abs(float(action_value) - float(self.position))
+        turnover = abs(float(actual_action_value) - float(self.position))
         costs = float(self.reward_config.cost_per_turnover + self.reward_config.slippage_per_turnover) * turnover
-        gross_return = float(action_value) * next_return
-        inventory_penalty = float(self.reward_config.inventory_penalty) * abs(float(action_value))
+        gross_return = float(actual_action_value) * next_return
+        inventory_penalty = float(self.reward_config.inventory_penalty) * abs(float(actual_action_value))
+        switching_penalty = float(self.reward_config.switching_penalty) * float(turnover > 1e-12 and not forced_cooloff)
 
         tentative_equity = float(self.equity * (1.0 + gross_return - costs))
         running_max = max(float(self.running_max), tentative_equity)
         drawdown = float(tentative_equity / running_max - 1.0) if running_max > 0 else 0.0
         drawdown_penalty = float(self.reward_config.drawdown_penalty) * abs(min(drawdown, 0.0))
-        reward = gross_return - costs - inventory_penalty - drawdown_penalty
+        reward = gross_return - costs - inventory_penalty - drawdown_penalty - switching_penalty
 
         return reward, {
             "next_return": next_return,
@@ -163,8 +193,9 @@ class SingleAssetTradingEnv(gym.Env):
             "turnover": turnover,
             "inventory_penalty": inventory_penalty,
             "drawdown_penalty": drawdown_penalty,
+            "switching_penalty": switching_penalty,
             "reward": float(reward),
-            "position": float(action_value),
+            "position": float(actual_action_value),
             "drawdown": drawdown,
             "equity": tentative_equity,
             "running_max": running_max,
@@ -177,9 +208,12 @@ class SingleAssetTradingEnv(gym.Env):
         self.equity = 1.0
         self.running_max = 1.0
         self.drawdown = 0.0
+        self.bars_since_switch = int(self.execution_config.min_holding_bars)
+        self.cooloff_remaining = 0
         return self._build_observation(step=self.current_step, position=self.position, drawdown=self.drawdown), {}
 
     def step(self, action: np.ndarray | int) -> tuple[np.ndarray, float, bool, bool, dict]:
+        prev_position = float(self.position)
         action_value = self._map_action(action)
         reward, info = self._transition(action_value=action_value)
 
@@ -187,6 +221,18 @@ class SingleAssetTradingEnv(gym.Env):
         self.equity = float(info["equity"])
         self.running_max = float(info["running_max"])
         self.drawdown = float(info["drawdown"])
+        if abs(self.position - prev_position) > 1e-12:
+            self.bars_since_switch = 0
+        else:
+            self.bars_since_switch += 1
+        if (
+            self.execution_config.dd_guard_enabled
+            and self.cooloff_remaining <= 0
+            and self.drawdown <= -abs(float(self.execution_config.max_drawdown))
+        ):
+            self.cooloff_remaining = int(self.execution_config.cooloff_bars) + 1
+        elif self.cooloff_remaining > 0:
+            self.cooloff_remaining -= 1
         self.current_step += 1
 
         terminated = bool(self.current_step > self.end_step)
@@ -216,6 +262,7 @@ class PortfolioTradingEnv(gym.Env):
         max_signal_abs: float,
         discrete_action_templates: np.ndarray | None,
         reward_config: RLRewardConfig,
+        execution_config: RLExecutionConfig,
         constraints: PortfolioConstraints,
         asset_to_group: Mapping[str, str] | None,
         long_short: bool,
@@ -258,6 +305,7 @@ class PortfolioTradingEnv(gym.Env):
             raise ValueError("Discrete portfolio RL requires non-empty action templates.")
 
         self.reward_config = reward_config
+        self.execution_config = execution_config
         self.constraints = constraints
         self.asset_to_group = {str(k): str(v) for k, v in dict(asset_to_group or {}).items()}
         self.long_short = bool(long_short)
@@ -288,9 +336,12 @@ class PortfolioTradingEnv(gym.Env):
 
         self.current_step = self.start_step
         self.weights = pd.Series(0.0, index=self.asset_names, dtype=float)
+        self.signal_state = pd.Series(0.0, index=self.asset_names, dtype=float)
         self.equity = 1.0
         self.running_max = 1.0
         self.drawdown = 0.0
+        self.bars_since_switch = int(self.execution_config.min_holding_bars)
+        self.cooloff_remaining = 0
 
     def _map_action(self, action: np.ndarray | int) -> np.ndarray:
         if self.continuous_actions:
@@ -311,6 +362,22 @@ class PortfolioTradingEnv(gym.Env):
         state_cols[:, -1] = float(drawdown)
         return np.concatenate([flattened_window, state_cols], axis=1).astype(np.float32, copy=False)
 
+    def _apply_execution_controls(self, signal_values: np.ndarray) -> np.ndarray:
+        controlled = np.asarray(signal_values, dtype=np.float32).copy()
+        prev_signals = self.signal_state.to_numpy(dtype=np.float32)
+        if self.cooloff_remaining > 0:
+            return np.zeros_like(controlled, dtype=np.float32)
+        hysteresis = float(self.execution_config.action_hysteresis)
+        if hysteresis > 0.0:
+            hold_mask = np.abs(controlled - prev_signals) <= hysteresis
+            controlled = np.where(hold_mask, prev_signals, controlled)
+        if (
+            np.any(np.abs(controlled - prev_signals) > 1e-12)
+            and self.bars_since_switch < int(self.execution_config.min_holding_bars)
+        ):
+            controlled = prev_signals.copy()
+        return controlled.astype(np.float32, copy=False)
+
     def _signals_to_weights(self, signal_values: np.ndarray) -> tuple[pd.Series, dict[str, float | dict[str, float]]]:
         signal_series = pd.Series(signal_values.astype(float), index=self.asset_names, dtype=float)
         raw_weights = signal_to_raw_weights(
@@ -326,7 +393,9 @@ class PortfolioTradingEnv(gym.Env):
         )
 
     def _transition(self, *, signal_values: np.ndarray) -> tuple[float, dict[str, float | dict[str, float]]]:
-        target_weights, diagnostics = self._signals_to_weights(signal_values)
+        forced_cooloff = self.cooloff_remaining > 0
+        actual_signal_values = self._apply_execution_controls(signal_values)
+        target_weights, diagnostics = self._signals_to_weights(actual_signal_values)
         next_returns = pd.Series(
             self.simple_returns[self.current_step + 1].astype(float),
             index=self.asset_names,
@@ -336,12 +405,16 @@ class PortfolioTradingEnv(gym.Env):
         turnover = float((target_weights - self.weights).abs().sum())
         costs = float(self.reward_config.cost_per_turnover + self.reward_config.slippage_per_turnover) * turnover
         inventory_penalty = float(self.reward_config.inventory_penalty) * float(target_weights.abs().sum())
+        switch_fraction = float(
+            np.mean(np.abs(actual_signal_values - self.signal_state.to_numpy(dtype=np.float32)) > 1e-12)
+        )
+        switching_penalty = float(self.reward_config.switching_penalty) * switch_fraction * float(not forced_cooloff)
 
         tentative_equity = float(self.equity * (1.0 + gross_return - costs))
         running_max = max(float(self.running_max), tentative_equity)
         drawdown = float(tentative_equity / running_max - 1.0) if running_max > 0 else 0.0
         drawdown_penalty = float(self.reward_config.drawdown_penalty) * abs(min(drawdown, 0.0))
-        reward = gross_return - costs - inventory_penalty - drawdown_penalty
+        reward = gross_return - costs - inventory_penalty - drawdown_penalty - switching_penalty
 
         return reward, {
             "gross_return": gross_return,
@@ -349,12 +422,13 @@ class PortfolioTradingEnv(gym.Env):
             "turnover": turnover,
             "inventory_penalty": inventory_penalty,
             "drawdown_penalty": drawdown_penalty,
+            "switching_penalty": switching_penalty,
             "reward": float(reward),
             "drawdown": drawdown,
             "equity": tentative_equity,
             "running_max": running_max,
             "weights": target_weights.to_dict(),
-            "signals": {asset: float(value) for asset, value in zip(self.asset_names, signal_values)},
+            "signals": {asset: float(value) for asset, value in zip(self.asset_names, actual_signal_values)},
             "diagnostics": diagnostics,
         }
 
@@ -362,19 +436,36 @@ class PortfolioTradingEnv(gym.Env):
         super().reset(seed=seed)
         self.current_step = self.start_step
         self.weights = pd.Series(0.0, index=self.asset_names, dtype=float)
+        self.signal_state = pd.Series(0.0, index=self.asset_names, dtype=float)
         self.equity = 1.0
         self.running_max = 1.0
         self.drawdown = 0.0
+        self.bars_since_switch = int(self.execution_config.min_holding_bars)
+        self.cooloff_remaining = 0
         return self._build_observation(step=self.current_step, weights=self.weights, drawdown=self.drawdown), {}
 
     def step(self, action: np.ndarray | int) -> tuple[np.ndarray, float, bool, bool, dict]:
+        prev_signals = self.signal_state.copy()
         signal_values = self._map_action(action)
         reward, info = self._transition(signal_values=signal_values)
 
         self.weights = pd.Series(info["weights"], dtype=float).reindex(self.asset_names).fillna(0.0)
+        self.signal_state = pd.Series(info["signals"], dtype=float).reindex(self.asset_names).fillna(0.0)
         self.equity = float(info["equity"])
         self.running_max = float(info["running_max"])
         self.drawdown = float(info["drawdown"])
+        if bool((self.signal_state - prev_signals).abs().gt(1e-12).any()):
+            self.bars_since_switch = 0
+        else:
+            self.bars_since_switch += 1
+        if (
+            self.execution_config.dd_guard_enabled
+            and self.cooloff_remaining <= 0
+            and self.drawdown <= -abs(float(self.execution_config.max_drawdown))
+        ):
+            self.cooloff_remaining = int(self.execution_config.cooloff_bars) + 1
+        elif self.cooloff_remaining > 0:
+            self.cooloff_remaining -= 1
         self.current_step += 1
 
         terminated = bool(self.current_step > self.end_step)
@@ -388,6 +479,7 @@ class PortfolioTradingEnv(gym.Env):
 
 __all__ = [
     "PortfolioTradingEnv",
+    "RLExecutionConfig",
     "RLRewardConfig",
     "SingleAssetTradingEnv",
 ]

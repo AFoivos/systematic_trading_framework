@@ -7,9 +7,11 @@ import sys
 import textwrap
 
 import pytest
+import numpy as np
 
 from src.experiments.registry import MODEL_REGISTRY
 from src.utils.config_validation import ConfigValidationError, validate_model_block, validate_resolved_config
+from src.models.rl.envs import RLExecutionConfig, RLRewardConfig, SingleAssetTradingEnv
 
 
 def _base_rl_model_cfg(*, signal_col: str = "signal_rl") -> dict[str, object]:
@@ -234,6 +236,56 @@ def test_validate_model_block_rejects_continuous_dqn_action_space() -> None:
 
     with pytest.raises(ConfigValidationError, match="DQN agents require"):
         validate_model_block(model)
+
+
+def test_single_asset_env_enforces_min_holding_bars_and_switching_penalty() -> None:
+    env = SingleAssetTradingEnv(
+        features=np.zeros((6, 1), dtype=np.float32),
+        simple_returns=np.zeros(6, dtype=np.float32),
+        window_size=2,
+        continuous_actions=False,
+        max_signal_abs=1.0,
+        discrete_action_values=[-1.0, 0.0, 1.0],
+        reward_config=RLRewardConfig(switching_penalty=0.1),
+        execution_config=RLExecutionConfig(min_holding_bars=2),
+    )
+    env.reset()
+
+    _, reward_1, _, _, info_1 = env.step(2)
+    _, reward_2, _, _, info_2 = env.step(0)
+    _, reward_3, _, _, info_3 = env.step(0)
+    _, reward_4, _, _, info_4 = env.step(0)
+
+    assert np.isclose(info_1["position"], 1.0)
+    assert np.isclose(reward_1, -0.1)
+    assert np.isclose(info_2["position"], 1.0)
+    assert np.isclose(reward_2, 0.0)
+    assert np.isclose(info_3["position"], 1.0)
+    assert np.isclose(reward_3, 0.0)
+    assert np.isclose(info_4["position"], -1.0)
+    assert np.isclose(reward_4, -0.1)
+
+
+def test_single_asset_env_dd_guard_forces_future_flat_cooloff() -> None:
+    env = SingleAssetTradingEnv(
+        features=np.zeros((6, 1), dtype=np.float32),
+        simple_returns=np.array([0.0, -0.3, 0.05, 0.05, 0.05, 0.05], dtype=np.float32),
+        window_size=2,
+        continuous_actions=False,
+        max_signal_abs=1.0,
+        discrete_action_values=[0.0, 1.0],
+        reward_config=RLRewardConfig(),
+        execution_config=RLExecutionConfig(dd_guard_enabled=True, max_drawdown=0.1, cooloff_bars=1),
+    )
+    env.reset()
+
+    _, _, _, _, info_1 = env.step(1)
+    _, _, _, _, info_2 = env.step(1)
+    _, _, _, _, info_3 = env.step(1)
+
+    assert info_1["position"] == 1.0
+    assert info_2["position"] == 0.0
+    assert info_3["position"] == 0.0
 
 
 def test_validate_resolved_config_rejects_rl_signal_pipeline_mismatch() -> None:
