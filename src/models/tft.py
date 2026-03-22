@@ -5,62 +5,7 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 
-
-def _build_sequence_samples(
-    *,
-    full_df: pd.DataFrame,
-    indices: np.ndarray,
-    feature_cols: list[str],
-    target_col: str,
-    lookback: int,
-    require_target: bool,
-    allowed_window_indices: set[int] | None = None,
-) -> tuple[np.ndarray, np.ndarray, pd.Index]:
-    """
-    Build rolling supervised windows for sequence models such as TFT.
-    """
-    if lookback <= 1:
-        raise ValueError("lookback must be > 1 for sequence models.")
-    if not feature_cols:
-        raise ValueError("TFT requires at least one feature column.")
-
-    x_raw = full_df[feature_cols].to_numpy(dtype=float)
-    y_raw = full_df[target_col].to_numpy(dtype=float)
-    index_values = full_df.index
-
-    x_rows: list[np.ndarray] = []
-    y_rows: list[float] = []
-    out_index: list[pd.Timestamp] = []
-    for idx in np.asarray(indices, dtype=int):
-        start = int(idx - lookback + 1)
-        if start < 0:
-            continue
-        window = np.arange(start, int(idx) + 1, dtype=int)
-        if allowed_window_indices is not None and any(int(w) not in allowed_window_indices for w in window):
-            continue
-        x_win = x_raw[window]
-        if not np.isfinite(x_win).all():
-            continue
-        if require_target:
-            y_val = float(y_raw[int(idx)])
-            if not np.isfinite(y_val):
-                continue
-            y_rows.append(y_val)
-        x_rows.append(x_win.astype("float32"))
-        out_index.append(index_values[int(idx)])
-
-    if not x_rows:
-        return (
-            np.empty((0, lookback, len(feature_cols)), dtype="float32"),
-            np.empty((0,), dtype="float32"),
-            pd.Index([], dtype="datetime64[ns]"),
-        )
-    x_arr = np.stack(x_rows, axis=0).astype("float32")
-    if require_target:
-        y_arr = np.asarray(y_rows, dtype="float32")
-    else:
-        y_arr = np.empty((len(x_rows),), dtype="float32")
-    return x_arr, y_arr, pd.Index(out_index)
+from src.models.sequence import build_sequence_samples, fit_sequence_scaler
 
 
 def make_tft_fold_predictor() -> Callable[
@@ -97,6 +42,7 @@ def make_tft_fold_predictor() -> Callable[
         batch_size = int(model_params.get("batch_size", 64))
         learning_rate = float(model_params.get("learning_rate", 1e-3))
         weight_decay = float(model_params.get("weight_decay", 1e-4))
+        scale_target = bool(model_params.get("scale_target", True))
         quantiles_cfg = model_params.get("quantiles", [0.1, 0.5, 0.9])
         quantiles = tuple(float(q) for q in quantiles_cfg)
 
@@ -126,30 +72,43 @@ def make_tft_fold_predictor() -> Callable[
         if isinstance(threads, int) and threads > 0:
             torch.set_num_threads(threads)
 
+        scaler = fit_sequence_scaler(
+            full_df=full_df,
+            train_idx=np.asarray(train_idx, dtype=int),
+            feature_cols=feature_cols,
+            target_col=target_col,
+            scale_target=scale_target,
+        )
         allowed_train = set(int(i) for i in np.asarray(train_idx, dtype=int))
-        x_train, y_train, _ = _build_sequence_samples(
+        train_samples = build_sequence_samples(
             full_df=full_df,
             indices=np.asarray(train_idx, dtype=int),
             feature_cols=feature_cols,
             target_col=target_col,
             lookback=lookback,
             require_target=True,
+            scaler=scaler,
             allowed_window_indices=allowed_train,
         )
+        x_train = train_samples.x
+        y_train = train_samples.y
         if x_train.shape[0] < 32:
             raise ValueError(
                 f"TFT fold has only {x_train.shape[0]} train samples after sequence construction."
             )
 
-        x_test, _, test_prediction_index = _build_sequence_samples(
+        test_samples = build_sequence_samples(
             full_df=full_df,
             indices=np.asarray(test_idx, dtype=int),
             feature_cols=feature_cols,
             target_col=target_col,
             lookback=lookback,
             require_target=False,
+            scaler=scaler,
             allowed_window_indices=None,
         )
+        x_test = test_samples.x
+        test_prediction_index = test_samples.index
 
         class _MiniTFT(nn.Module):
             """
@@ -247,7 +206,11 @@ def make_tft_fold_predictor() -> Callable[
         for i, q in enumerate(quantiles):
             col = f"pred_q{int(round(q * 100)):02d}"
             quantile_to_col[q] = col
-            extra_cols[col] = pd.Series(pred_np[:, i], index=test_prediction_index, dtype="float32")
+            extra_cols[col] = pd.Series(
+                scaler.inverse_target(pred_np[:, i]),
+                index=test_prediction_index,
+                dtype="float32",
+            )
 
         median_q = min(quantiles, key=lambda q: abs(q - 0.5))
         pred_ret = pd.Series(extra_cols[quantile_to_col[median_q]], copy=False).astype("float32")
@@ -259,7 +222,11 @@ def make_tft_fold_predictor() -> Callable[
             pred_vol = ((q_high - q_low).abs() / 2.0).astype("float32")
             extra_cols["pred_vol"] = pred_vol
 
-        prob_scale = float(np.std(y_train, ddof=1)) if len(y_train) >= 2 else None
+        prob_scale = (
+            float(np.std(scaler.inverse_target(y_train), ddof=1))
+            if len(y_train) >= 2
+            else None
+        )
         fold_meta = {
             "lookback": lookback,
             "quantiles": list(quantiles),
@@ -272,6 +239,7 @@ def make_tft_fold_predictor() -> Callable[
             "tft_epochs": int(max(1, epochs)),
             "runtime_threads": runtime_meta.get("threads"),
             "deterministic": deterministic,
+            "scaled_target": bool(scale_target),
         }
         return pred_ret, extra_cols, model, fold_meta
 

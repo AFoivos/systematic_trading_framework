@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -9,6 +11,7 @@ import pytest
 
 import src.experiments.runner as runner_mod
 from src.backtesting.engine import BacktestResult, run_backtest
+from src.experiments.orchestration.stage_trace import build_stage_tail_snapshot, format_stage_tail_snapshot
 from src.features.technical.momentum import add_momentum_features
 from src.portfolio.construction import PortfolioPerformance
 from src.portfolio.covariance import build_rolling_covariance_by_date
@@ -58,12 +61,40 @@ def test_runner_sensitive_redaction_is_recursive() -> None:
     assert redacted["safe"]["value"] == 7
 
 
+def test_optional_model_modules_import_without_xgboost_or_lightgbm() -> None:
+    """
+    Optional estimator dependencies should not break module import at framework load time.
+    """
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+import importlib
+import sys
+sys.modules.pop("src.experiments.modeling.classification", None)
+sys.modules.pop("src.models.classification", None)
+sys.modules.pop("src.models.lightgbm_baseline", None)
+sys.modules["xgboost"] = None
+sys.modules["lightgbm"] = None
+import src.models.classification
+import src.models.lightgbm_baseline
+print("ok")
+""",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+
+
 def test_run_metadata_redacts_config_hash_input_secrets() -> None:
     """
     Ensure run metadata never writes plaintext credentials from config payloads.
     """
     meta = build_run_metadata(
-        config_path="config/experiments/logreg_spy.yaml",
+        config_path="config/experiments/btcusd_1h_dukas_lightgbm_triple_barrier_garch_long_oos.yaml",
         runtime_applied={},
         config_hash_sha256="x" * 64,
         config_hash_input={"data": {"api_key": "top-secret", "symbol": "SPY"}},
@@ -388,6 +419,75 @@ logging:
     assert cfg["logging"]["run_name"] == "evil"
 
 
+def test_logging_stage_tails_defaults_are_resolved(tmp_path) -> None:
+    """
+    Stage-tail logging should resolve explicit defaults so runtime/reporting can rely on a
+    stable logging contract.
+    """
+    cfg_path = tmp_path / "stage_tail_defaults.yaml"
+    cfg_path.write_text(
+        """
+data:
+  symbol: SPY
+backtest:
+  returns_col: close_ret
+  signal_col: signal
+        """.strip(),
+        encoding="utf-8",
+    )
+
+    cfg = load_experiment_config(cfg_path)
+    assert cfg["logging"]["stage_tails"] == {
+        "enabled": True,
+        "stdout": True,
+        "report": True,
+        "limit": 10,
+        "max_columns": 16,
+        "max_assets": 3,
+    }
+
+
+def test_stage_tail_snapshot_formats_added_columns_and_rows() -> None:
+    """
+    Stage-tail snapshots should report row/column deltas and render a readable tail preview.
+    """
+    idx = pd.date_range("2024-01-01", periods=4, freq="h", name="timestamp")
+    prev = pd.DataFrame(
+        {
+            "open": [1.0, 1.1, 1.2, 1.3],
+            "high": [1.1, 1.2, 1.3, 1.4],
+            "low": [0.9, 1.0, 1.1, 1.2],
+            "close": [1.05, 1.15, 1.25, 1.35],
+            "volume": [10.0, 11.0, 12.0, 13.0],
+        },
+        index=idx,
+    )
+    curr = prev.copy()
+    curr["close_logret"] = [0.0, 0.1, 0.2, 0.3]
+    curr["signal"] = [0.0, 1.0, -1.0, 0.0]
+
+    snapshot = build_stage_tail_snapshot(
+        stage="features_applied",
+        asset_frames={"BTCUSD": curr},
+        previous_asset_frames={"BTCUSD": prev},
+        limit=2,
+        max_columns=8,
+        max_assets=1,
+    )
+    asset_payload = snapshot["assets"][0]
+
+    assert snapshot["stage"] == "features_applied"
+    assert asset_payload["added_columns"] == ["close_logret", "signal"]
+    assert len(asset_payload["tail_rows"]) == 2
+    assert "close_logret" in asset_payload["shown_columns"]
+
+    rendered = format_stage_tail_snapshot(snapshot)
+    assert "[stage_tails] stage=features_applied" in rendered
+    assert "asset=BTCUSD" in rendered
+    assert "close_logret" in rendered
+    assert "tail(2):" in rendered
+
+
 def test_config_validation_wraps_invalid_numeric_types_as_config_error(tmp_path) -> None:
     """
     Invalid numeric config values should raise ConfigError instead of raw TypeError.
@@ -512,9 +612,60 @@ def test_save_artifacts_writes_experiment_report(tmp_path) -> None:
         model_meta={
             "feature_cols": ["lag_close_logret_1", "vol_rolling_24"],
             "contracts": {"n_features": 2},
+            "feature_importance": {
+                "available": True,
+                "top_features": [
+                    {
+                        "rank": 1,
+                        "feature": "lag_close_logret_1",
+                        "mean_importance": 0.8,
+                        "mean_importance_normalized": 0.8,
+                        "fold_count": 1,
+                        "source": "feature_importances_",
+                    },
+                    {
+                        "rank": 2,
+                        "feature": "vol_rolling_24",
+                        "mean_importance": 0.2,
+                        "mean_importance_normalized": 0.2,
+                        "fold_count": 1,
+                        "source": "feature_importances_",
+                    },
+                ],
+            },
+            "label_distribution": {
+                "train": {"labeled_rows": 10, "class_counts": {"0": 4, "1": 6}, "positive_rate": 0.6},
+                "oos_evaluation": {"labeled_rows": 5, "class_counts": {"0": 2, "1": 3}, "positive_rate": 0.6},
+            },
+            "prediction_diagnostics": {
+                "oos_rows": 5,
+                "predicted_rows": 5,
+                "non_oos_prediction_rows": 0,
+                "missing_oos_prediction_rows": 0,
+                "oos_prediction_coverage": 1.0,
+                "alignment_ok": True,
+            },
+            "missing_value_diagnostics": {
+                "train_rows_dropped_missing": 1,
+                "test_rows_missing_features": 0,
+                "folds_with_zero_predictions": 0,
+            },
             "folds": [
                 {
                     "fold": 0,
+                    "train_rows_raw": 10,
+                    "train_rows": 9,
+                    "train_rows_dropped_missing": 1,
+                    "test_rows": 5,
+                    "test_pred_rows": 5,
+                    "test_rows_missing_features": 0,
+                    "train_feature_availability": {"rows": 10, "complete_rows": 9, "missing_rows": 1},
+                    "test_feature_availability": {"rows": 5, "complete_rows": 5, "missing_rows": 0},
+                    "classification_metrics": {"evaluation_rows": 5, "accuracy": 0.6},
+                    "feature_importance": [
+                        {"feature": "lag_close_logret_1", "importance": 0.8, "importance_normalized": 0.8, "source": "feature_importances_"},
+                        {"feature": "vol_rolling_24", "importance": 0.2, "importance_normalized": 0.2, "source": "feature_importances_"},
+                    ],
                     "policy_metrics": {
                         "mean_reward": 0.001,
                         "mean_abs_signal": 0.16,
@@ -561,13 +712,114 @@ def test_save_artifacts_writes_experiment_report(tmp_path) -> None:
         portfolio_diagnostics=None,
         portfolio_meta={},
         storage_meta={},
-        run_metadata={"runtime": {}, "model_meta": {"contracts": {"n_features": 2}, "folds": [{"fold": 0, "policy_metrics": {"mean_reward": 0.001}}]}},
+        run_metadata={
+            "runtime": {},
+            "model_meta": {
+                "contracts": {"n_features": 2},
+                "feature_importance": {
+                    "available": True,
+                    "top_features": [
+                        {
+                            "rank": 1,
+                            "feature": "lag_close_logret_1",
+                            "mean_importance": 0.8,
+                            "mean_importance_normalized": 0.8,
+                            "fold_count": 1,
+                            "source": "feature_importances_",
+                        }
+                    ],
+                },
+                "label_distribution": {
+                    "train": {"labeled_rows": 10, "class_counts": {"0": 4, "1": 6}, "positive_rate": 0.6},
+                    "oos_evaluation": {"labeled_rows": 5, "class_counts": {"0": 2, "1": 3}, "positive_rate": 0.6},
+                },
+                "prediction_diagnostics": {
+                    "oos_rows": 5,
+                    "predicted_rows": 5,
+                    "non_oos_prediction_rows": 0,
+                    "missing_oos_prediction_rows": 0,
+                    "oos_prediction_coverage": 1.0,
+                    "alignment_ok": True,
+                },
+                "missing_value_diagnostics": {
+                    "train_rows_dropped_missing": 1,
+                    "test_rows_missing_features": 0,
+                    "folds_with_zero_predictions": 0,
+                },
+                "folds": [
+                    {
+                        "fold": 0,
+                        "train_rows_raw": 10,
+                        "train_rows": 9,
+                        "train_rows_dropped_missing": 1,
+                        "test_rows": 5,
+                        "test_pred_rows": 5,
+                        "test_rows_missing_features": 0,
+                        "train_feature_availability": {"rows": 10, "complete_rows": 9, "missing_rows": 1},
+                        "test_feature_availability": {"rows": 5, "complete_rows": 5, "missing_rows": 0},
+                        "classification_metrics": {"evaluation_rows": 5, "accuracy": 0.6},
+                        "policy_metrics": {"mean_reward": 0.001},
+                    }
+                ],
+            },
+        },
         config_hash_sha256="a" * 64,
         data_fingerprint={"sha256": "b" * 64},
+        stage_tails={
+            "config": {"enabled": True, "stdout": True, "report": True, "limit": 2, "max_columns": 8, "max_assets": 1},
+            "stages": [
+                {
+                    "stage": "raw_loaded",
+                    "asset_count": 1,
+                    "shown_asset_count": 1,
+                    "limit": 2,
+                    "max_columns": 8,
+                    "max_assets": 1,
+                    "assets": [
+                        {
+                            "asset": "TEST",
+                            "rows": 5,
+                            "row_delta": 5,
+                            "column_count": 5,
+                            "column_delta": 5,
+                            "added_columns": ["open", "high", "low", "close", "volume"],
+                            "removed_columns": [],
+                            "shown_columns": ["datetime", "open", "high", "low", "close", "volume"],
+                            "truncated_columns": [],
+                            "tail_rows": [
+                                {
+                                    "datetime": "2024-01-04 00:00:00",
+                                    "open": 1.0,
+                                    "high": 1.0,
+                                    "low": 1.0,
+                                    "close": 1.3,
+                                    "volume": 10.0,
+                                },
+                                {
+                                    "datetime": "2024-01-05 00:00:00",
+                                    "open": 1.0,
+                                    "high": 1.0,
+                                    "low": 1.0,
+                                    "close": 1.4,
+                                    "volume": 10.0,
+                                },
+                            ],
+                        }
+                    ],
+                }
+            ],
+        },
     )
 
     report_path = Path(artifacts["report"])
     assert report_path.exists()
+    assert artifacts["equity_curve"].endswith("equity_curve.csv")
+    assert artifacts["equity_curve_chart"].endswith("report_assets/equity_curve.png")
+    assert artifacts["feature_importance"].endswith("feature_importance.csv")
+    assert artifacts["label_distribution"].endswith("label_distribution.csv")
+    assert artifacts["prediction_diagnostics"].endswith("prediction_diagnostics.json")
+    assert artifacts["fold_model_summary"].endswith("fold_model_summary.csv")
+    assert artifacts["stage_tails"].endswith("stage_tails.json")
     assert (run_dir / "report_assets" / "equity_curve.png").exists()
     assert (run_dir / "report_assets" / "drawdown_curve.png").exists()
     assert (run_dir / "report_assets" / "cumulative_returns.png").exists()
@@ -576,11 +828,22 @@ def test_save_artifacts_writes_experiment_report(tmp_path) -> None:
     assert (run_dir / "report_assets" / "positions_turnover.png").exists()
     assert (run_dir / "report_assets" / "rolling_behavior.png").exists()
     assert (run_dir / "report_assets" / "signal_distribution.png").exists()
+    assert (run_dir / "report_assets" / "feature_importance.png").exists()
+    assert (run_dir / "report_assets" / "label_distribution.png").exists()
+    assert (run_dir / "report_assets" / "prediction_coverage_by_fold.png").exists()
     report_text = report_path.read_text(encoding="utf-8")
     assert "## Pipeline Trace" in report_text
+    assert "## Stage Tail Trace" in report_text
+    assert "### raw_loaded" in report_text
     assert "### 2. Data Load And PIT" in report_text
     assert "## Primary Summary" in report_text
     assert "## OOS Policy Summary" in report_text
+    assert "## Prediction Diagnostics" in report_text
+    assert "## Missing-Value Diagnostics" in report_text
+    assert "## Label Distribution" in report_text
+    assert "## Feature Importance" in report_text
+    assert "## Model Fold Diagnostics" in report_text
+    assert "## Cost / Exposure / Turnover" in report_text
     assert "## Diagnostics" in report_text
 
 
@@ -905,128 +1168,31 @@ def test_load_ohlcv_routes_twelve_data_source(monkeypatch) -> None:
     assert list(df.columns) == ["open", "high", "low", "close", "volume"]
 
 
-def test_tft_config_feature_columns_exist_after_feature_pipeline() -> None:
-    """
-    TFT experiment config should request only features produced by configured steps.
-    """
-    cfg = load_experiment_config("experiments/tft_spy.yaml")
-    df = _synthetic_ohlcv(periods=260, seed=4)
-    features_df = runner_mod._apply_feature_steps(df, list(cfg.get("features", []) or []))
-    missing = [c for c in cfg["model"]["feature_cols"] if c not in features_df.columns]
-    assert not missing
+def test_load_ohlcv_rejects_dukascopy_csv_provider_route() -> None:
+    with pytest.raises(ValueError, match="requires data.storage.load_path"):
+        load_ohlcv(
+            "BTCUSD",
+            start="2024-01-01",
+            end="2024-01-02",
+            interval="1h",
+            source="dukascopy_csv",
+        )
 
 
-def test_eurusd_twelve_hourly_config_feature_pipeline_computes_expected_features() -> None:
-    """
-    The EURUSD Twelve Data hourly config should produce the declared feature set with
-    numerically consistent intraday feature calculations.
-    """
-    cfg = load_experiment_config("experiments/eurusd_1h_twelve.yaml")
-
-    idx = pd.date_range("2024-01-01 00:00:00", periods=240, freq="h")
-    base = np.linspace(0.0, 0.03, len(idx))
-    cyc = 0.002 * np.sin(np.arange(len(idx)) / 8.0)
-    close = 1.08 * np.exp(base + cyc)
-
-    df = pd.DataFrame(index=idx)
-    df["close"] = close
-    df["open"] = df["close"].shift(1).fillna(df["close"].iloc[0] * 0.9995)
-    df["high"] = np.maximum(df["open"], df["close"]) * 1.0008
-    df["low"] = np.minimum(df["open"], df["close"]) * 0.9992
-    df["volume"] = 1000.0 + (np.arange(len(idx)) % 24) * 10.0
-    df = df[["open", "high", "low", "close", "volume"]]
-
-    features_df = runner_mod._apply_feature_steps(df, list(cfg.get("features", []) or []))
-
-    assert cfg["backtest"]["periods_per_year"] == 6048
-    assert cfg["features"][1]["params"]["annualization_factor"] == 6048.0
-
-    missing = [c for c in cfg["model"]["feature_cols"] if c not in features_df.columns]
-    assert not missing
-
-    expected_logret = np.log(df["close"] / df["close"].shift(1))
-    np.testing.assert_allclose(
-        features_df["close_logret"].to_numpy(dtype=float),
-        expected_logret.to_numpy(dtype=float),
-        equal_nan=True,
-    )
-
-    expected_vol_24 = expected_logret.rolling(window=24).std(ddof=1) * np.sqrt(6048.0)
-    np.testing.assert_allclose(
-        features_df["vol_rolling_24"].to_numpy(dtype=float),
-        expected_vol_24.to_numpy(dtype=float),
-        equal_nan=True,
-    )
-
-    expected_lag_1 = expected_logret.shift(1)
-    np.testing.assert_allclose(
-        features_df["lag_close_logret_1"].to_numpy(dtype=float),
-        expected_lag_1.to_numpy(dtype=float),
-        equal_nan=True,
-    )
-
-    expected_sma_24 = df["close"].rolling(window=24, min_periods=24).mean()
-    expected_close_over_sma_24 = df["close"] / expected_sma_24 - 1.0
-    np.testing.assert_allclose(
-        features_df["close_over_sma_24"].to_numpy(dtype=float),
-        expected_close_over_sma_24.to_numpy(dtype=float),
-        equal_nan=True,
-    )
-
-    trend_state_values = set(features_df["close_trend_state_sma_24_72"].dropna().astype(float).unique())
-    assert trend_state_values.issubset({-1.0, 0.0, 1.0})
-    assert "mfi_24" not in features_df.columns
-
-
-FX_SINGLE_ASSET_TWELVE_WRAPPER_CASES = [
-    (f"experiments/{slug}_1h_twelve_{strategy}.yaml", symbol, 6048)
-    for slug, symbol in [
-        ("eurusd", "EURUSD"),
-        ("usdjpy", "USDJPY"),
-        ("gbpusd", "GBPUSD"),
-        ("audusd", "AUDUSD"),
-    ]
-    for strategy in [
-        "trend_pullback",
-        "bollinger_squeeze",
-        "bollinger_rsi_meanrev",
-        "fx_trend_model",
-        "garch_hybrid",
-        "sarimax_hybrid",
-        "tft_hybrid",
-        "vol_regime",
-    ]
+CURRENT_TRACKED_CONFIG_CASES = [
+    ("experiments/btcusd_1h_dukas_lightgbm_triple_barrier_garch_long_oos.yaml", 8760),
+    ("experiments/btcusd_1h_dukas_xgboost_triple_barrier_garch_long_oos.yaml", 8760),
 ]
 
 
-@pytest.mark.parametrize(
-    "config_name,expected_periods_per_year",
-    [
-        ("experiments/fx_majors_1h_twelve_trend_pullback.yaml", 6048),
-        ("experiments/fx_majors_1h_twelve_bollinger_squeeze.yaml", 6048),
-        ("experiments/fx_majors_1h_twelve_bollinger_rsi_meanrev.yaml", 6048),
-        ("experiments/fx_majors_1h_twelve_fx_trend_model.yaml", 6048),
-        ("experiments/fx_majors_1h_twelve_garch_hybrid.yaml", 6048),
-        ("experiments/fx_majors_1h_twelve_sarimax_hybrid.yaml", 6048),
-        ("experiments/fx_majors_1h_twelve_tft_hybrid.yaml", 6048),
-        ("experiments/fx_majors_1h_twelve_vol_regime.yaml", 6048),
-        ("experiments/usdbtc_1h_twelve_trend_pullback.yaml", 8760),
-        ("experiments/usdbtc_1h_twelve_bollinger_squeeze.yaml", 8760),
-        ("experiments/usdbtc_1h_twelve_bollinger_rsi_meanrev.yaml", 8760),
-        ("experiments/usdbtc_1h_twelve_fx_trend_model.yaml", 8760),
-        ("experiments/usdbtc_1h_twelve_garch_hybrid.yaml", 8760),
-        ("experiments/usdbtc_1h_twelve_sarimax_hybrid.yaml", 8760),
-        ("experiments/usdbtc_1h_twelve_tft_hybrid.yaml", 8760),
-        ("experiments/usdbtc_1h_twelve_vol_regime.yaml", 8760),
-    ],
-)
-def test_new_twelve_strategy_configs_load_and_produce_declared_features(
+@pytest.mark.parametrize("config_name,expected_periods_per_year", CURRENT_TRACKED_CONFIG_CASES)
+def test_tracked_experiment_configs_load_and_produce_declared_features(
     config_name: str,
     expected_periods_per_year: int,
 ) -> None:
     """
-    Newly added Twelve Data strategy configs should load cleanly and request only features that
-    the configured feature pipeline actually produces.
+    The currently tracked experiment configs should load cleanly and request only features that
+    the configured pipeline actually produces.
     """
     cfg = load_experiment_config(config_name)
 
@@ -1045,61 +1211,70 @@ def test_new_twelve_strategy_configs_load_and_produce_declared_features(
 
     features_df = runner_mod._apply_feature_steps(df, list(cfg.get("features", []) or []))
 
+    assert cfg["data"]["symbol"] == "BTCUSD"
+    assert cfg["portfolio"]["enabled"] is False
     assert cfg["backtest"]["periods_per_year"] == expected_periods_per_year
-    symbols = list(cfg["data"].get("symbols", []) or [])
-    if len(symbols) > 1:
-        assert cfg["portfolio"]["enabled"] is True
-
     assert "close_logret" in features_df.columns
     assert "vol_rolling_24" in features_df.columns
 
     model_cfg = dict(cfg.get("model", {}) or {})
     feature_cols = list(model_cfg.get("feature_cols", []) or [])
-    if feature_cols:
-        missing = [c for c in feature_cols if c not in features_df.columns]
-        assert not missing
-
-    if cfg["signals"]["kind"] == "volatility_regime":
-        assert cfg["signals"]["params"]["vol_col"] in features_df.columns
+    missing = [c for c in feature_cols if c not in features_df.columns]
+    assert not missing
 
 
-@pytest.mark.parametrize(
-    "config_name,expected_symbol,expected_periods_per_year",
-    FX_SINGLE_ASSET_TWELVE_WRAPPER_CASES,
-)
-def test_single_asset_twelve_strategy_wrappers_override_symbol_cleanly(
-    config_name: str,
-    expected_symbol: str,
-    expected_periods_per_year: int,
-) -> None:
+def test_btcusd_dukas_hourly_config_feature_pipeline_computes_expected_features() -> None:
     """
-    Single-asset FX wrappers should disable portfolio mode, override the symbol cleanly,
-    and still request only features produced by the inherited strategy pipeline.
+    The tracked BTCUSD Dukas hourly config should produce the declared feature set with
+    numerically consistent 24/7 annualization and volume-aware columns.
     """
-    cfg = load_experiment_config(config_name)
+    cfg = load_experiment_config("experiments/btcusd_1h_dukas_xgboost_triple_barrier_garch_long_oos.yaml")
 
-    assert cfg["data"]["symbol"] == expected_symbol
-    assert cfg["data"].get("symbols") is None
-    assert cfg["portfolio"]["enabled"] is False
-    assert cfg["backtest"]["periods_per_year"] == expected_periods_per_year
-    assert cfg["data"]["storage"]["dataset_id"].startswith(expected_symbol.lower())
-    assert cfg["logging"]["run_name"].startswith(expected_symbol.lower())
-
-    idx = pd.date_range("2024-01-01 00:00:00", periods=400, freq="h")
-    base = np.linspace(0.0, 0.04, len(idx))
-    cyc = 0.003 * np.sin(np.arange(len(idx)) / 7.0)
-    close = 100.0 * np.exp(base + cyc)
+    idx = pd.date_range("2024-01-01 00:00:00", periods=240, freq="h")
+    base = np.linspace(0.0, 0.03, len(idx))
+    cyc = 0.002 * np.sin(np.arange(len(idx)) / 8.0)
+    close = 42_000.0 * np.exp(base + cyc)
 
     df = pd.DataFrame(index=idx)
     df["close"] = close
-    df["open"] = df["close"].shift(1).fillna(df["close"].iloc[0] * 0.999)
-    df["high"] = np.maximum(df["open"], df["close"]) * 1.001
-    df["low"] = np.minimum(df["open"], df["close"]) * 0.999
-    df["volume"] = 800.0 + (np.arange(len(idx)) % 24) * 15.0
+    df["open"] = df["close"].shift(1).fillna(df["close"].iloc[0] * 0.9995)
+    df["high"] = np.maximum(df["open"], df["close"]) * 1.0008
+    df["low"] = np.minimum(df["open"], df["close"]) * 0.9992
+    df["volume"] = 1000.0 + (np.arange(len(idx)) % 24) * 10.0
     df = df[["open", "high", "low", "close", "volume"]]
 
     features_df = runner_mod._apply_feature_steps(df, list(cfg.get("features", []) or []))
-    assert "close_logret" in features_df.columns
+
+    assert cfg["backtest"]["periods_per_year"] == 8760
+    assert cfg["features"][1]["params"]["annualization_factor"] == 8760.0
+
+    missing = [c for c in cfg["model"]["feature_cols"] if c not in features_df.columns]
+    assert not missing
+
+    expected_logret = np.log(df["close"] / df["close"].shift(1))
+    np.testing.assert_allclose(
+        features_df["close_logret"].to_numpy(dtype=float),
+        expected_logret.to_numpy(dtype=float),
+        equal_nan=True,
+    )
+
+    expected_vol_24 = expected_logret.rolling(window=24).std(ddof=1) * np.sqrt(8760.0)
+    np.testing.assert_allclose(
+        features_df["vol_rolling_24"].to_numpy(dtype=float),
+        expected_vol_24.to_numpy(dtype=float),
+        equal_nan=True,
+    )
+
+    expected_lag_1 = expected_logret.shift(1)
+    np.testing.assert_allclose(
+        features_df["lag_close_logret_1"].to_numpy(dtype=float),
+        expected_lag_1.to_numpy(dtype=float),
+        equal_nan=True,
+    )
+
+    assert "volume_z_72" in features_df.columns
+    assert "volume_over_atr_24" in features_df.columns
+    assert "mfi_24" not in features_df.columns
 
     model_cfg = dict(cfg.get("model", {}) or {})
     feature_cols = list(model_cfg.get("feature_cols", []) or [])

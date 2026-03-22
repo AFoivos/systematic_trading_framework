@@ -3,9 +3,8 @@
 ### 3.1 Root-Level Breakdown
 
 - `.devcontainer`: VSCode Dev Container ορισμός για επαναλήψιμο development περιβάλλον.
-- `config`: Declarative experiment/configuration layer με inheritance και defaults.
-- `config/base`: Βασικά shared defaults για runtime, risk, backtest και logging.
-- `config/experiments`: Παραδείγματα και production-like experiment definitions.
+- `config`: Declarative experiment/configuration layer με self-contained experiment YAMLs.
+- `config/experiments`: Παραδείγματα και production-like experiment definitions, όπου κάθε tracked experiment είναι πλήρες και δεν εξαρτάται από checked-in parent YAML.
 - `data`: Persisted datasets, snapshots και metadata.
 - `data/raw`: Raw ή canonical point-in-time snapshots.
 - `data/processed`: Feature-enriched snapshots μετά από feature pipeline.
@@ -51,11 +50,8 @@ equity curves, costs, orders και metadata manifests.
 
 | Αρχείο | LOC | Ρόλος |
 |---|---:|---|
-| `config/base/daily.yaml` | 38 | Υλοποίηση του module `daily.yaml` μέσα στο package `base`, με ρόλο συμβατό με τη συνολική layered αρχιτεκτονική του repository. |
-| `config/experiments/lgbm_spy.yaml` | 80 | Υλοποίηση του module `lgbm_spy.yaml` μέσα στο package `experiments`, με ρόλο συμβατό με τη συνολική layered αρχιτεκτονική του repository. |
-| `config/experiments/logreg_spy.yaml` | 76 | Υλοποίηση του module `logreg_spy.yaml` μέσα στο package `experiments`, με ρόλο συμβατό με τη συνολική layered αρχιτεκτονική του repository. |
-| `config/experiments/portfolio_logreg_macro.yaml` | 100 | Υλοποίηση του module `portfolio_logreg_macro.yaml` μέσα στο package `experiments`, με ρόλο συμβατό με τη συνολική layered αρχιτεκτονική του repository. |
-| `config/experiments/trend_spy.yaml` | 55 | Υλοποίηση του module `trend_spy.yaml` μέσα στο package `experiments`, με ρόλο συμβατό με τη συνολική layered αρχιτεκτονική του repository. |
+| `config/experiments/btcusd_1h_dukas_lightgbm_triple_barrier_garch_long_oos.yaml` | 275 | Πλήρως self-contained BTCUSD LightGBM long-OOS experiment χωρίς `extends`, με local Dukas CSV ingest, triple-barrier target και GARCH overlay. |
+| `config/experiments/btcusd_1h_dukas_xgboost_triple_barrier_garch_long_oos.yaml` | 276 | Πλήρως self-contained BTCUSD XGBoost long-OOS experiment χωρίς `extends`, με ίδιο causal pipeline για apples-to-apples σύγκριση. |
 | `src/__init__.py` | 0 | Public API surface που επανεξάγει symbols του package ώστε τα imports ανώτερου layer να μένουν σταθερά. |
 | `src/backtesting/__init__.py` | 22 | Public API surface που επανεξάγει symbols του package ώστε τα imports ανώτερου layer να μένουν σταθερά. |
 | `src/backtesting/engine.py` | 115 | Single-asset vectorized backtest engine με cost model, vol targeting και drawdown cooloff guard. |
@@ -67,14 +63,13 @@ equity curves, costs, orders και metadata manifests.
 | `src/execution/paper.py` | 66 | Paper execution artifact builder που μετατρέπει target weights σε notional/share deltas. |
 | `src/experiments/__init__.py` | 38 | Public API surface με lazy exports του runner ώστε τα package imports να μένουν σταθερά χωρίς circular-import side effects. |
 | `src/experiments/contracts.py` | 130 | Υλοποίηση του module `contracts.py` μέσα στο package `experiments`, με ρόλο συμβατό με τη συνολική layered αρχιτεκτονική του repository. |
-| `config/base/hourly.yaml` | 38 | Intraday-safe base config με `normalize_daily: false` και `1h` annualization defaults. |
-| `src/experiments/models.py` | 19 | Stable façade προς το `src/experiments/modeling/*` ώστε registry και imports να μείνουν συμβατά. |
+| `src/experiments/models.py` | 19 | Stable façade προς το `src/models/*` ώστε registry και imports να μείνουν συμβατά. |
 | `src/experiments/registry.py` | 88 | Υλοποίηση του module `registry.py` μέσα στο package `experiments`, με ρόλο συμβατό με τη συνολική layered αρχιτεκτονική του repository. |
 | `src/experiments/runner.py` | 130 | Thin façade που κρατά stable entrypoints και legacy monkeypatch/test surfaces προς το orchestration package. |
-| `src/experiments/modeling/classification.py` | 292 | Shared classifier training loop με target building, anti-leakage splits και OOS assembly. |
-| `src/experiments/modeling/forecasting.py` | 391 | Shared forecasting loop για SARIMAX, GARCH και TFT με fold diagnostics και strict OOS predictions. |
-| `src/experiments/modeling/runtime.py` | 92 | Runtime reproducibility policy και feature-column inference για experiment models. |
-| `src/experiments/modeling/targets.py` | 70 | Forward-return target construction και quantile label helpers. |
+| `src/experiments/support/targets.py` | 264 | Experiment-side target construction για forward-return και triple-barrier labels με strict anti-leakage semantics. |
+| `src/experiments/support/metrics.py` | 153 | Shared classification/regression/volatility diagnostics για fold-safe OOS evaluation. |
+| `src/experiments/support/diagnostics.py` | 233 | Feature importance, label-distribution και prediction-alignment summaries για reports και artifacts. |
+| `src/experiments/modeling/*.py` | legacy | Compatibility facades για παλιά imports. Δεν είναι πλέον source of truth για νέα model work. |
 | `src/experiments/orchestration/pipeline.py` | 189 | End-to-end pipeline assembly που καλεί τα επιμέρους data/feature/model/backtest/reporting/execution stages. |
 | `src/experiments/orchestration/data_stage.py` | 143 | Data ingestion, PIT hardening, raw snapshot loading/saving και storage context handling. |
 | `src/experiments/orchestration/backtest_stage.py` | 185 | Single-asset και portfolio backtest orchestration, returns validation και portfolio constraints. |
@@ -123,7 +118,7 @@ equity curves, costs, orders και metadata manifests.
 | `src/intraday/calendar.py` | 149 | Intraday interval parsing, annualization inference και guards για timestamp normalization. |
 | `src/utils/config.py` | 69 | Stable façade που εκθέτει dict και typed config loading πάνω από τα επιμέρους config modules. |
 | `src/utils/config_defaults.py` | 188 | Default policies ανά block, including intraday-aware volatility/backtest annualization defaults. |
-| `src/utils/config_loader.py` | 96 | YAML loading, inheritance merge, safe path resolution και env secret injection. |
+| `src/utils/config_loader.py` | 57 | Self-contained YAML loading, safe path resolution, explicit rejection of `extends` και env secret injection. |
 | `src/utils/config_schemas.py` | 490 | Typed resolved config objects για orchestration-facing usage. |
 | `src/utils/config_validation.py` | 358 | Semantic validation για data/model/backtest/portfolio/execution blocks και intraday guards. |
 | `src/utils/paths.py` | 63 | Υλοποίηση του module `paths.py` μέσα στο package `utils`, με ρόλο συμβατό με τη συνολική layered αρχιτεκτονική του repository. |

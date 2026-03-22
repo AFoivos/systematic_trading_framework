@@ -13,20 +13,20 @@
 Ο model layer έχει πλέον δύο σαφή υποεπίπεδα:
 
 - `src/models/`: estimator-specific fold engines. Εδώ ζει η καθαρή αριθμητική λογική των SARIMAX, GARCH και TFT folds.
-- `src/experiments/modeling/`: experiment adapters. Εδώ χτίζονται forward targets, επιβάλλονται time splits, γίνεται anti-leakage trimming και assembled strict OOS outputs.
-- `src/experiments/models.py`: thin façade προς το `src/experiments/modeling/` για stable registry/import surface.
+- `src/experiments/support/`: experiment-side targets, metrics και diagnostics. Εδώ χτίζονται forward targets, fold-safe summaries και strict OOS support outputs.
+- `src/experiments/models.py`: thin façade προς το `src/models/` για stable registry/import surface.
 
 Αυτό σημαίνει ότι ο estimator code δεν γνωρίζει τίποτε για YAML configs, registries, artifacts ή reporting, ενώ το
 experiment layer δεν κρατά πια την εσωτερική αριθμητική υλοποίηση κάθε model family.
 
-Η διάσπαση μέσα στο `src/experiments/modeling/` είναι επίσης intentional:
+Η διάσπαση μέσα στο `src/experiments/support/` είναι επίσης intentional:
 
-- `runtime.py`: reproducibility / threading policy και feature-column inference.
 - `targets.py`: forward-return target construction και quantile labels.
 - `metrics.py`: classification, regression και volatility diagnostics.
-- `classification.py`: supervised classifier training loop.
-- `forecasting.py`: shared forecasting loop για SARIMAX, GARCH και TFT.
-- `types.py`: typed callable contracts για estimator factories και fold predictors.
+- `diagnostics.py`: feature importance, label distributions και prediction-alignment diagnostics.
+
+Το `src/experiments/modeling/` παραμένει μόνο ως compatibility façade για legacy imports και δεν είναι πλέον
+source of truth για νέα ανάπτυξη.
 
 ### 8.3 Μηχανική του Target
 

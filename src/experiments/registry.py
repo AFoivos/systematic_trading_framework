@@ -4,7 +4,14 @@ from typing import Callable, Mapping, Optional, Union
 
 import pandas as pd
 
-from src.features import add_close_returns, add_lagged_features, add_volatility_features
+from src.features import (
+    add_close_returns,
+    add_lagged_features,
+    add_macro_context_features,
+    add_regime_context_features,
+    add_session_context_features,
+    add_volatility_features,
+)
 from src.features.technical.indicators import add_indicator_features
 from src.features.technical.momentum import add_momentum_features
 from src.features.technical.oscillators import add_oscillator_features
@@ -14,6 +21,7 @@ from src.backtesting.strategies import (
     forecast_threshold_signal,
     forecast_vol_adjusted_signal,
     momentum_strategy,
+    probability_vol_adjusted_signal,
     probabilistic_signal,
     rsi_strategy,
     stochastic_strategy,
@@ -29,7 +37,10 @@ from src.experiments.models import (
     train_ppo_agent,
     train_ppo_portfolio_agent,
     train_sarimax_forecaster,
+    train_lstm_forecaster,
+    train_patchtst_forecaster,
     train_tft_forecaster,
+    train_xgboost_classifier,
 )
 
 FeatureFn = Callable[..., pd.DataFrame]
@@ -48,12 +59,16 @@ FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
     "lags": add_lagged_features,
     "momentum": add_momentum_features,
     "indicators": add_indicator_features,
+    "session_context": add_session_context_features,
+    "regime_context": add_regime_context_features,
+    "macro_context": add_macro_context_features,
 }
 
 SIGNAL_REGISTRY: Mapping[str, SignalFn] = {
     "trend_state": trend_state_signal,
     "probability_threshold": probabilistic_signal,
     "probability_conviction": conviction_sizing_signal,
+    "probability_vol_adjusted": probability_vol_adjusted_signal,
     "forecast_threshold": forecast_threshold_signal,
     "forecast_vol_adjusted": forecast_vol_adjusted_signal,
     "rsi": rsi_strategy,
@@ -65,8 +80,11 @@ SIGNAL_REGISTRY: Mapping[str, SignalFn] = {
 SINGLE_ASSET_MODEL_REGISTRY: Mapping[str, SingleAssetModelFn] = {
     "lightgbm_clf": train_lightgbm_classifier,
     "logistic_regression_clf": train_logistic_regression_classifier,
+    "xgboost_clf": train_xgboost_classifier,
     "sarimax_forecaster": train_sarimax_forecaster,
     "garch_forecaster": train_garch_forecaster,
+    "lstm_forecaster": train_lstm_forecaster,
+    "patchtst_forecaster": train_patchtst_forecaster,
     "tft_forecaster": train_tft_forecaster,
     "ppo_agent": train_ppo_agent,
     "dqn_agent": train_dqn_agent,

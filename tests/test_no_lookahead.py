@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from src.experiments.models import train_lightgbm_classifier
+from src.experiments.models import train_logistic_regression_classifier
 
 
 def _synthetic_price_frame(n: int = 260) -> pd.DataFrame:
@@ -31,10 +31,10 @@ def test_walk_forward_predictions_are_oos_only() -> None:
     surrounding component and makes failures easier to localize.
     """
     df = _synthetic_price_frame()
-    out, _, meta = train_lightgbm_classifier(
+    out, _, meta = train_logistic_regression_classifier(
         df=df,
         model_cfg={
-            "params": {"n_estimators": 30, "learning_rate": 0.05},
+            "params": {"max_iter": 1000, "solver": "lbfgs"},
             "feature_cols": ["feat_1", "feat_2"],
             "target": {"kind": "forward_return", "price_col": "close", "horizon": 2},
             "runtime": {"seed": 7, "deterministic": True, "threads": 1, "repro_mode": "strict"},
@@ -62,10 +62,10 @@ def test_purged_splits_respect_anti_leakage_gap() -> None:
     """
     df = _synthetic_price_frame()
     purge_bars = 3
-    out, _, meta = train_lightgbm_classifier(
+    out, _, meta = train_logistic_regression_classifier(
         df=df,
         model_cfg={
-            "params": {"n_estimators": 30, "learning_rate": 0.05},
+            "params": {"max_iter": 1000, "solver": "lbfgs"},
             "feature_cols": ["feat_1", "feat_2"],
             "target": {"kind": "forward_return", "price_col": "close", "horizon": 3},
             "runtime": {"seed": 7, "deterministic": True, "threads": 1, "repro_mode": "strict"},
@@ -95,10 +95,10 @@ def test_binary_forward_target_keeps_tail_labels_nan() -> None:
     """
     horizon = 5
     df = _synthetic_price_frame()
-    out, _, meta = train_lightgbm_classifier(
+    out, _, meta = train_logistic_regression_classifier(
         df=df,
         model_cfg={
-            "params": {"n_estimators": 30, "learning_rate": 0.05},
+            "params": {"max_iter": 1000, "solver": "lbfgs"},
             "feature_cols": ["feat_1", "feat_2"],
             "target": {"kind": "forward_return", "price_col": "close", "horizon": horizon},
             "runtime": {"seed": 7, "deterministic": True, "threads": 1, "repro_mode": "strict"},
@@ -121,10 +121,10 @@ def test_quantile_target_uses_train_only_distribution_per_fold() -> None:
     base = float(df.loc[df.index[-41], "close"])
     df.loc[tail_idx, "close"] = base * np.exp(np.linspace(0.0, 4.0, len(tail_idx)))
 
-    out, _, meta = train_lightgbm_classifier(
+    out, _, meta = train_logistic_regression_classifier(
         df=df,
         model_cfg={
-            "params": {"n_estimators": 30, "learning_rate": 0.05},
+            "params": {"max_iter": 1000, "solver": "lbfgs"},
             "feature_cols": ["feat_1", "feat_2"],
             "target": {
                 "kind": "forward_return",

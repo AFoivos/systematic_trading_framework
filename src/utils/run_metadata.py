@@ -21,6 +21,7 @@ _KEY_PACKAGES = (
     "pandas",
     "scikit-learn",
     "lightgbm",
+    "xgboost",
     "torch",
     "gymnasium",
     "stable-baselines3",

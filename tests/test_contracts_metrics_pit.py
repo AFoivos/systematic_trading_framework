@@ -6,7 +6,7 @@ import pytest
 
 from src.evaluation.metrics import annualized_return, compute_backtest_metrics
 from src.experiments.contracts import TargetContract, validate_feature_target_contract
-from src.experiments.models import train_lightgbm_classifier
+from src.experiments.models import train_logistic_regression_classifier
 from src.features.technical.indicators import compute_mfi
 from src.features.technical.oscillators import compute_rsi
 from src.src_data.pit import (
@@ -45,10 +45,10 @@ def test_forward_horizon_guard_trims_train_rows_in_time_split() -> None:
     df = _synthetic_frame()
     horizon = 5
 
-    _, _, meta = train_lightgbm_classifier(
+    _, _, meta = train_logistic_regression_classifier(
         df=df,
         model_cfg={
-            "params": {"n_estimators": 20, "learning_rate": 0.05},
+            "params": {"max_iter": 1000, "solver": "lbfgs"},
             "feature_cols": ["feat_1", "feat_2"],
             "target": {"kind": "forward_return", "price_col": "close", "horizon": horizon},
             "runtime": {"seed": 7, "deterministic": True, "threads": 1, "repro_mode": "strict"},
@@ -266,9 +266,9 @@ def test_fx_intraday_defaults_infer_24h_business_day_annualization(tmp_path) -> 
     cfg_path = tmp_path / "fx_intraday_defaults.yaml"
     cfg_path.write_text(
         """
-extends: base/hourly.yaml
 data:
   source: twelve_data
+  interval: 1h
   symbol: EURUSD
 features:
   - step: volatility
@@ -292,9 +292,9 @@ def test_crypto_intraday_defaults_infer_24h_calendar_day_annualization(tmp_path)
     cfg_path = tmp_path / "crypto_intraday_defaults.yaml"
     cfg_path.write_text(
         """
-extends: base/hourly.yaml
 data:
   source: twelve_data
+  interval: 1h
   symbol: BTC/USD
 features:
   - step: volatility
@@ -357,6 +357,39 @@ backtest:
     assert isinstance(cfg, ResolvedExperimentConfig)
     assert cfg.data.interval == "1d"
     assert cfg.backtest.periods_per_year == 252
+
+
+def test_config_loader_rejects_legacy_extends(tmp_path) -> None:
+    """
+    Tracked experiment configs must be fully self-contained and no longer support inheritance.
+    """
+    parent_cfg = tmp_path / "parent.yaml"
+    parent_cfg.write_text(
+        """
+data:
+  symbol: "SPY"
+  interval: "1d"
+backtest:
+  returns_col: "close_ret"
+  signal_col: "signal"
+""".strip(),
+        encoding="utf-8",
+    )
+    child_cfg = tmp_path / "child.yaml"
+    child_cfg.write_text(
+        f"""
+extends: "{parent_cfg}"
+data:
+  symbol: "QQQ"
+backtest:
+  returns_col: "close_ret"
+  signal_col: "signal"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigError, match="extends"):
+        load_experiment_config(child_cfg)
 
 
 def test_apply_corporate_actions_policy_adj_close_ratio() -> None:

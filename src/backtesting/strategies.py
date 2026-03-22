@@ -6,6 +6,7 @@ from src.signals import (
     compute_forecast_threshold_signal,
     compute_forecast_vol_adjusted_signal,
     compute_momentum_signal,
+    compute_probability_vol_adjusted_signal,
     compute_rsi_signal,
     compute_stochastic_signal,
     compute_trend_state_signal,
@@ -221,6 +222,40 @@ def forecast_vol_adjusted_signal(
         signal_col=signal_name,
         clip=clip,
         vol_floor=vol_floor,
+    )
+    return out[signal_name]
+
+
+def probability_vol_adjusted_signal(
+    df: pd.DataFrame,
+    prob_col: str = "pred_prob",
+    vol_col: str = "pred_vol",
+    signal_name: str = "signal_prob_vol_adj",
+    prob_center: float = 0.5,
+    upper: float | None = None,
+    lower: float | None = None,
+    vol_target: float = 0.001,
+    clip: float = 1.0,
+    vol_floor: float = 1e-6,
+    min_signal_abs: float = 0.0,
+    activation_filters: list[dict[str, object]] | None = None,
+) -> pd.Series:
+    """
+    Build a probability-based directional signal scaled by predicted volatility.
+    """
+    out = compute_probability_vol_adjusted_signal(
+        df,
+        prob_col=prob_col,
+        vol_col=vol_col,
+        signal_col=signal_name,
+        prob_center=prob_center,
+        upper=upper,
+        lower=lower,
+        vol_target=vol_target,
+        clip=clip,
+        vol_floor=vol_floor,
+        min_signal_abs=min_signal_abs,
+        activation_filters=activation_filters,
     )
     return out[signal_name]
 

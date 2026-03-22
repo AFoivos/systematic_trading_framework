@@ -8,7 +8,7 @@ from src.utils.config_defaults import apply_top_level_defaults
 from src.utils.config_loader import (
     ConfigPathError,
     inject_api_key_from_env,
-    load_with_extends,
+    load_resolved_config,
     resolve_config_path,
 )
 from src.utils.config_schemas import ResolvedExperimentConfig
@@ -42,7 +42,7 @@ def load_experiment_config_typed(config_path: str | Path) -> ResolvedExperimentC
     """
     path = _resolve_config_path(config_path)
     try:
-        cfg = load_with_extends(path)
+        cfg = load_resolved_config(path)
         cfg = apply_top_level_defaults(cfg, config_path=path)
         inject_api_key_from_env(cfg["data"])
         cfg = validate_resolved_config(cfg)
@@ -53,7 +53,7 @@ def load_experiment_config_typed(config_path: str | Path) -> ResolvedExperimentC
 
 def load_experiment_config(config_path: str | Path) -> dict[str, Any]:
     """
-    Load an experiment YAML, apply inheritance, defaults, validation,
+    Load a self-contained experiment YAML, apply defaults and validation,
     and resolve logging paths. Returns a plain dict ready for use.
     """
     return load_experiment_config_typed(config_path).to_dict()

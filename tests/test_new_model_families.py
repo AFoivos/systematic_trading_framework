@@ -17,6 +17,7 @@ from src.experiments.registry import MODEL_REGISTRY, SIGNAL_REGISTRY
 from src.signals.forecast_signal import (
     compute_forecast_threshold_signal,
     compute_forecast_vol_adjusted_signal,
+    compute_probability_vol_adjusted_signal,
 )
 
 
@@ -318,3 +319,71 @@ def test_forecast_signal_adapters_work_on_predictions() -> None:
 
     assert set(thresholded["signal_thr"].unique()) <= {-1.0, 0.0, 1.0}
     assert (vol_adj["signal_vol"].abs() <= 1.0 + 1e-12).all()
+
+
+def test_probability_vol_adjusted_signal_supports_dead_zone_and_floor() -> None:
+    idx = pd.date_range("2024-01-01", periods=5, freq="D")
+    df = pd.DataFrame(
+        {
+            "pred_prob": [0.30, 0.48, 0.50, 0.52, 0.70],
+            "pred_vol": [0.02, 0.02, 0.02, 0.02, 0.02],
+        },
+        index=idx,
+    )
+
+    out = compute_probability_vol_adjusted_signal(
+        df,
+        prob_col="pred_prob",
+        vol_col="pred_vol",
+        signal_col="signal_prob_vol",
+        prob_center=0.5,
+        upper=0.55,
+        lower=0.45,
+        vol_target=0.01,
+        clip=0.5,
+        min_signal_abs=0.05,
+    )
+
+    signal = out["signal_prob_vol"]
+    assert signal.iloc[1] == 0.0
+    assert signal.iloc[2] == 0.0
+    assert signal.iloc[3] == 0.0
+    assert signal.iloc[0] < 0.0
+    assert signal.iloc[4] > 0.0
+
+
+def test_probability_vol_adjusted_signal_supports_activation_filters() -> None:
+    idx = pd.date_range("2024-01-01", periods=5, freq="D")
+    df = pd.DataFrame(
+        {
+            "pred_prob": [0.30, 0.30, 0.70, 0.70, 0.70],
+            "pred_vol": [0.02, 0.02, 0.02, 0.02, 0.02],
+            "regime_vol_ratio_24_168": [1.10, 0.80, 1.20, 1.10, 1.20],
+            "adx_24": [25.0, 25.0, 18.0, 22.0, 30.0],
+        },
+        index=idx,
+    )
+
+    out = compute_probability_vol_adjusted_signal(
+        df,
+        prob_col="pred_prob",
+        vol_col="pred_vol",
+        signal_col="signal_prob_vol",
+        prob_center=0.5,
+        upper=0.55,
+        lower=0.45,
+        vol_target=0.01,
+        clip=0.5,
+        min_signal_abs=0.0,
+        activation_filters=[
+            {"col": "regime_vol_ratio_24_168", "op": "ge", "value": 1.0},
+            {"col": "adx_24", "op": "ge", "value": 20.0},
+        ],
+    )
+
+    signal = out["signal_prob_vol"]
+    assert signal.iloc[0] < 0.0
+    assert signal.iloc[1] == 0.0
+    assert signal.iloc[2] == 0.0
+    assert signal.iloc[3] > 0.0
+    assert signal.iloc[4] > 0.0

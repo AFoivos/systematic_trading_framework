@@ -416,15 +416,17 @@ class LoggingConfig:
     enabled: bool
     run_name: str
     output_dir: str
+    stage_tails: dict[str, Any] = field(default_factory=dict)
     extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "LoggingConfig":
-        known = {"enabled", "run_name", "output_dir"}
+        known = {"enabled", "run_name", "output_dir", "stage_tails"}
         return cls(
             enabled=bool(data.get("enabled", True)),
             run_name=str(data.get("run_name", "experiment")),
             output_dir=str(data.get("output_dir", "logs/experiments")),
+            stage_tails=dict(data.get("stage_tails", {}) or {}),
             extra=_extras(data, known),
         )
 
@@ -433,6 +435,7 @@ class LoggingConfig:
             "enabled": self.enabled,
             "run_name": self.run_name,
             "output_dir": self.output_dir,
+            "stage_tails": dict(self.stage_tails),
         } | dict(self.extra)
 
 

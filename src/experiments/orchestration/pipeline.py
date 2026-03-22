@@ -18,6 +18,10 @@ from src.experiments.orchestration.reporting import (
     build_single_asset_evaluation,
     compute_monitoring_report,
 )
+from src.experiments.orchestration.stage_trace import (
+    build_stage_tail_snapshot,
+    format_stage_tail_snapshot,
+)
 from src.experiments.orchestration.types import ExperimentResult
 from src.utils.config import load_experiment_config
 from src.utils.repro import runtime_reproducibility_context
@@ -33,6 +37,43 @@ LoadAssetFramesFn = Callable[[dict[str, object]], tuple[dict[str, pd.DataFrame],
 SaveProcessedFn = Callable[..., dict[str, object] | None]
 
 
+def _stage_tail_config(cfg: dict[str, object]) -> dict[str, object]:
+    logging_cfg = dict(cfg.get("logging", {}) or {})
+    stage_tails = dict(logging_cfg.get("stage_tails", {}) or {})
+    return {
+        "enabled": bool(stage_tails.get("enabled", False)),
+        "stdout": bool(stage_tails.get("stdout", True)),
+        "report": bool(stage_tails.get("report", True)),
+        "limit": int(stage_tails.get("limit", 10) or 10),
+        "max_columns": int(stage_tails.get("max_columns", 16) or 16),
+        "max_assets": int(stage_tails.get("max_assets", 3) or 3),
+    }
+
+
+def _record_stage_tail(
+    *,
+    traces: list[dict[str, object]],
+    stage: str,
+    asset_frames: dict[str, pd.DataFrame],
+    previous_asset_frames: dict[str, pd.DataFrame] | None,
+    stage_tail_cfg: dict[str, object],
+) -> None:
+    if not bool(stage_tail_cfg.get("enabled", False)):
+        return
+    snapshot = build_stage_tail_snapshot(
+        stage=stage,
+        asset_frames=asset_frames,
+        previous_asset_frames=previous_asset_frames,
+        limit=int(stage_tail_cfg.get("limit", 10) or 10),
+        max_columns=int(stage_tail_cfg.get("max_columns", 16) or 16),
+        max_assets=int(stage_tail_cfg.get("max_assets", 3) or 3),
+    )
+    traces.append(snapshot)
+    if bool(stage_tail_cfg.get("stdout", True)):
+        print(format_stage_tail_snapshot(snapshot))
+        print("")
+
+
 def run_experiment_pipeline(
     config_path: str | Path,
     *,
@@ -45,15 +86,31 @@ def run_experiment_pipeline(
     cfg = load_experiment_config(config_path)
     with runtime_reproducibility_context(cfg.get("runtime", {})) as runtime_applied:
         config_hash_sha256, config_hash_input = compute_config_hash(cfg)
+        stage_tail_cfg = _stage_tail_config(cfg)
+        stage_tails: list[dict[str, object]] = []
 
         data_cfg = cfg["data"]
         raw_asset_frames, storage_meta = load_asset_frames_fn(data_cfg)
+        _record_stage_tail(
+            traces=stage_tails,
+            stage="raw_loaded",
+            asset_frames=raw_asset_frames,
+            previous_asset_frames=None,
+            stage_tail_cfg=stage_tail_cfg,
+        )
         raw_long_frame = asset_frames_to_long_frame(raw_asset_frames)
         data_fingerprint = compute_dataframe_fingerprint(raw_long_frame)
 
         feature_asset_frames = apply_steps_to_assets(
             raw_asset_frames,
             feature_steps=list(cfg.get("features", []) or []),
+        )
+        _record_stage_tail(
+            traces=stage_tails,
+            stage="features_applied",
+            asset_frames=feature_asset_frames,
+            previous_asset_frames=raw_asset_frames,
+            stage_tail_cfg=stage_tail_cfg,
         )
         processed_snapshot = save_processed_snapshot_fn(
             feature_asset_frames,
@@ -76,10 +133,24 @@ def run_experiment_pipeline(
             model_cfg=model_cfg,
             returns_col=returns_col,
         )
+        _record_stage_tail(
+            traces=stage_tails,
+            stage="model_applied",
+            asset_frames=model_asset_frames,
+            previous_asset_frames=feature_asset_frames,
+            stage_tail_cfg=stage_tail_cfg,
+        )
 
         asset_frames = apply_signals_to_assets(
             model_asset_frames,
             signals_cfg=dict(cfg.get("signals", {}) or {}),
+        )
+        _record_stage_tail(
+            traces=stage_tails,
+            stage="signals_applied",
+            asset_frames=asset_frames,
+            previous_asset_frames=model_asset_frames,
+            stage_tail_cfg=stage_tail_cfg,
         )
 
         portfolio_enabled = bool(cfg.get("portfolio", {}).get("enabled", False))
@@ -175,6 +246,10 @@ def run_experiment_pipeline(
                 run_metadata=run_metadata,
                 config_hash_sha256=config_hash_sha256,
                 data_fingerprint=data_fingerprint,
+                stage_tails={
+                    "config": stage_tail_cfg,
+                    "stages": stage_tails,
+                },
             )
 
         result_data: pd.DataFrame | dict[str, pd.DataFrame]

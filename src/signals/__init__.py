@@ -6,6 +6,7 @@ from .volatility_signal import compute_volatility_regime_signal
 from .forecast_signal import (
     compute_forecast_threshold_signal,
     compute_forecast_vol_adjusted_signal,
+    compute_probability_vol_adjusted_signal,
 )
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "compute_volatility_regime_signal",
     "compute_forecast_threshold_signal",
     "compute_forecast_vol_adjusted_signal",
+    "compute_probability_vol_adjusted_signal",
 ]

@@ -23,7 +23,7 @@
 - `Intraday layer`: `src/intraday/*`.
 - `Feature layer`: `src/features/*`.
 - `Model layer`: `src/models/*`, `src/models/lightgbm_baseline.py`.
-- `Experiment-model adapter layer`: `src/experiments/models.py` façade + `src/experiments/modeling/*`.
+- `Experiment-model adapter layer`: `src/experiments/models.py` façade + `src/experiments/support/*`.
 - `Experiment orchestration layer`: `src/experiments/orchestration/*`, `src/experiments/registry.py`.
 - `Signal layer`: `src/signals/*`, `src/backtesting/strategies.py`.
 - `Backtesting/evaluation layer`: `src/backtesting/engine.py`, `src/evaluation/*`.
@@ -46,7 +46,7 @@
              +-------------------+--------------------+-------------------+
              |                   |                    |                   |
              v                   v                    v                   v
-   [data_stage + src_data] [feature_stage] [modeling/* + src.models] [signals]
+   [data_stage + src_data] [feature_stage] [experiments/support + src.models] [signals]
              |                   |                    |                   |
              +-------------------+--------------------+-------------------+
                                                       |
@@ -67,11 +67,12 @@
 ### 2.4 Σχόλιο για την Κατεύθυνση των Εξαρτήσεων
 
 Οι χαμηλότεροι layers (`src_data`, `features`, `risk`, `evaluation`, `portfolio`, `models`, `intraday`) δεν
-γνωρίζουν τίποτε για τον orchestrator. Το `src/experiments/models.py` είναι πλέον καθαρό façade προς το
-`src/experiments/modeling/*`, όπου χτίζονται targets, split policies και strict OOS outputs. Αντίστοιχα, το
-`src/experiments/runner.py` είναι façade προς το `src/experiments/orchestration/*`, όπου βρίσκονται τα data,
-feature, model, backtest, reporting, execution και artifact stages. Έτσι η σύζευξη παραμένει κατευθυνόμενη
-προς τα πάνω και τα μεγάλα hotspots έχουν διασπαστεί σε μικρότερα, testable modules.
+γνωρίζουν τίποτε για τον orchestrator. Το `src/experiments/models.py` είναι πλέον façade προς το `src/models/*`,
+ενώ τα experiment-side helpers για targets, diagnostics και split-safe summaries βρίσκονται στο
+`src/experiments/support/*`. Το `src/experiments/modeling/*` παραμένει μόνο ως compatibility façade για legacy
+imports. Αντίστοιχα, το `src/experiments/runner.py` είναι façade προς το `src/experiments/orchestration/*`, όπου
+βρίσκονται τα data, feature, model, backtest, reporting, execution και artifact stages. Έτσι η σύζευξη
+παραμένει κατευθυνόμενη προς τα πάνω και τα μεγάλα hotspots έχουν διασπαστεί σε μικρότερα, testable modules.
 
 ### 2.5 ASCII Class Diagram
 

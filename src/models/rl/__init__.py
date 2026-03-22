@@ -3,6 +3,12 @@ from __future__ import annotations
 from typing import Any
 
 from .envs import PortfolioTradingEnv, RLRewardConfig, SingleAssetTradingEnv
+from .trainers import (
+    train_dqn_agent,
+    train_dqn_portfolio_agent,
+    train_ppo_agent,
+    train_ppo_portfolio_agent,
+)
 
 
 def build_policy_kwargs(*args: Any, **kwargs: Any):
@@ -38,5 +44,9 @@ __all__ = [
     "SingleAssetTradingEnv",
     "build_policy_kwargs",
     "make_vec_env",
+    "train_dqn_agent",
+    "train_dqn_portfolio_agent",
+    "train_ppo_agent",
+    "train_ppo_portfolio_agent",
     "train_sb3_model",
 ]

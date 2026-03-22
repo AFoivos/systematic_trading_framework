@@ -223,6 +223,58 @@ def _save_fold_bar_chart(path: Path, *, fold_summaries: list[dict[str, Any]]) ->
     plt.close(fig)
 
 
+def _save_horizontal_bar_chart(
+    path: Path,
+    *,
+    title: str,
+    xlabel: str,
+    labels: list[str],
+    values: list[float],
+) -> None:
+    if not labels or not values:
+        return
+    _ensure_matplotlib_backend(path.parent.parent)
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(10, max(3.5, 0.35 * len(labels))))
+    y = np.arange(len(labels))
+    ax.barh(y, values, color="tab:blue")
+    ax.set_yticks(y)
+    ax.set_yticklabels(labels)
+    ax.invert_yaxis()
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.grid(axis="x", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _save_category_bar_chart(
+    path: Path,
+    *,
+    title: str,
+    xlabel: str,
+    ylabel: str,
+    categories: list[str],
+    values: list[float],
+) -> None:
+    if not categories or not values:
+        return
+    _ensure_matplotlib_backend(path.parent.parent)
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.bar(categories, values, color="tab:purple")
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
 def _save_rolling_line_chart(
     path: Path,
     *,
@@ -257,10 +309,126 @@ def _save_portfolio_exposure_chart(path: Path, *, weights: pd.DataFrame) -> None
     )
 
 
+def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2, default=str)
+
+
+def _write_model_diagnostic_artifacts(
+    *,
+    run_dir: Path,
+    model_meta: dict[str, Any],
+) -> tuple[dict[str, str], dict[str, str]]:
+    chart_paths: dict[str, str] = {}
+    artifact_paths: dict[str, str] = {}
+    report_assets_dir = run_dir / "report_assets"
+    report_assets_dir.mkdir(parents=True, exist_ok=True)
+
+    feature_importance = dict(model_meta.get("feature_importance", {}) or {})
+    top_features = list(feature_importance.get("top_features", []) or [])
+    if top_features:
+        feature_importance_path = run_dir / "feature_importance.csv"
+        pd.DataFrame(top_features).to_csv(feature_importance_path, index=False)
+        artifact_paths["feature_importance"] = str(feature_importance_path.relative_to(run_dir))
+
+        feature_chart_path = report_assets_dir / "feature_importance.png"
+        _save_horizontal_bar_chart(
+            feature_chart_path,
+            title="Feature Importance",
+            xlabel="Mean Importance",
+            labels=[str(row.get("feature")) for row in top_features],
+            values=[float(row.get("mean_importance", row.get("importance", 0.0)) or 0.0) for row in top_features],
+        )
+        if feature_chart_path.exists():
+            chart_paths["feature_importance_chart"] = str(feature_chart_path.relative_to(run_dir))
+
+    label_distribution = dict(model_meta.get("label_distribution", {}) or {})
+    label_rows: list[dict[str, Any]] = []
+    label_counts = dict(dict(label_distribution.get("oos_evaluation", {}) or {}).get("class_counts", {}) or {})
+    for section, payload in sorted(label_distribution.items()):
+        payload_dict = dict(payload or {})
+        for label, count in dict(payload_dict.get("class_counts", {}) or {}).items():
+            label_rows.append({"section": section, "label": label, "count": int(count)})
+    if label_rows:
+        label_path = run_dir / "label_distribution.csv"
+        pd.DataFrame(label_rows).to_csv(label_path, index=False)
+        artifact_paths["label_distribution"] = str(label_path.relative_to(run_dir))
+        if label_counts:
+            label_chart_path = report_assets_dir / "label_distribution.png"
+            categories = list(sorted(label_counts))
+            _save_category_bar_chart(
+                label_chart_path,
+                title="OOS Label Distribution",
+                xlabel="Label",
+                ylabel="Count",
+                categories=categories,
+                values=[float(label_counts[label]) for label in categories],
+            )
+            if label_chart_path.exists():
+                chart_paths["label_distribution_chart"] = str(label_chart_path.relative_to(run_dir))
+
+    prediction_diagnostics = dict(model_meta.get("prediction_diagnostics", {}) or {})
+    if prediction_diagnostics:
+        prediction_path = run_dir / "prediction_diagnostics.json"
+        _write_json(prediction_path, prediction_diagnostics)
+        artifact_paths["prediction_diagnostics"] = str(prediction_path.relative_to(run_dir))
+
+    missing_value_diagnostics = dict(model_meta.get("missing_value_diagnostics", {}) or {})
+    if missing_value_diagnostics:
+        missing_path = run_dir / "missing_value_diagnostics.json"
+        _write_json(missing_path, missing_value_diagnostics)
+        artifact_paths["missing_value_diagnostics"] = str(missing_path.relative_to(run_dir))
+
+    model_folds = list(model_meta.get("folds", []) or [])
+    if model_folds:
+        rows: list[dict[str, Any]] = []
+        for fold in model_folds:
+            classification = dict(fold.get("classification_metrics", {}) or {})
+            regression = dict(fold.get("regression_metrics", {}) or {})
+            rows.append(
+                {
+                    "fold": int(fold.get("fold", 0)),
+                    "train_rows_raw": fold.get("train_rows_raw"),
+                    "train_rows": fold.get("train_rows"),
+                    "train_rows_dropped_missing": fold.get("train_rows_dropped_missing"),
+                    "test_rows": fold.get("test_rows"),
+                    "test_pred_rows": fold.get("test_pred_rows"),
+                    "test_rows_missing_features": fold.get("test_rows_missing_features", fold.get("test_rows_without_prediction")),
+                    "classification_eval_rows": classification.get("evaluation_rows"),
+                    "regression_eval_rows": regression.get("evaluation_rows"),
+                    "classification_accuracy": classification.get("accuracy"),
+                    "regression_rmse": regression.get("rmse"),
+                }
+            )
+        fold_path = run_dir / "fold_model_summary.csv"
+        pd.DataFrame(rows).to_csv(fold_path, index=False)
+        artifact_paths["fold_model_summary"] = str(fold_path.relative_to(run_dir))
+
+        coverage_chart_path = report_assets_dir / "prediction_coverage_by_fold.png"
+        categories = [str(int(row["fold"])) for row in rows]
+        values = [
+            float(row["test_pred_rows"] or 0.0) / max(float(row["test_rows"] or 0.0), 1.0)
+            for row in rows
+        ]
+        _save_category_bar_chart(
+            coverage_chart_path,
+            title="Prediction Coverage By Fold",
+            xlabel="Fold",
+            ylabel="Coverage",
+            categories=categories,
+            values=values,
+        )
+        if coverage_chart_path.exists():
+            chart_paths["prediction_coverage_by_fold"] = str(coverage_chart_path.relative_to(run_dir))
+
+    return chart_paths, artifact_paths
+
+
 def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
     cfg = _load_yaml(run_dir / "config_used.yaml")
     summary_payload = _load_json(run_dir / "summary.json")
     run_metadata = _load_json(run_dir / "run_metadata.json")
+    model_meta = dict(run_metadata.get("model_meta", {}) or {})
 
     returns_type = str(dict(cfg.get("backtest", {}) or {}).get("returns_type", "simple"))
     net_returns = _first_series(_read_numeric_timeseries(run_dir / "returns.csv"))
@@ -283,7 +451,7 @@ def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
             ylabel="Equity",
             series_map={"equity": equity_curve},
         )
-        chart_paths["equity_curve"] = str(equity_path.relative_to(run_dir))
+        chart_paths["equity_curve_chart"] = str(equity_path.relative_to(run_dir))
 
         drawdown_path = report_assets_dir / "drawdown_curve.png"
         _save_line_chart(
@@ -385,6 +553,12 @@ def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
         if exposure_path.exists():
             chart_paths["portfolio_exposures"] = str(exposure_path.relative_to(run_dir))
 
+    model_chart_paths, model_artifact_paths = _write_model_diagnostic_artifacts(
+        run_dir=run_dir,
+        model_meta=model_meta,
+    )
+    chart_paths.update(model_chart_paths)
+
     report_path = run_dir / "report.md"
     artifact_paths = {
         "config": "config_used.yaml",
@@ -402,6 +576,9 @@ def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
         artifact_paths["monitoring"] = "monitoring_report.json"
     if (run_dir / "portfolio_weights.csv").exists():
         artifact_paths["portfolio_weights"] = "portfolio_weights.csv"
+    artifact_paths.update(model_artifact_paths)
+    if (run_dir / "stage_tails.json").exists():
+        artifact_paths["stage_tails"] = "stage_tails.json"
     for label, rel_path in chart_paths.items():
         artifact_paths[label] = rel_path
 
@@ -417,6 +594,8 @@ def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
 
     report_artifacts = {"report": str(report_path)}
     for label, rel_path in chart_paths.items():
+        report_artifacts[label] = str((run_dir / rel_path).resolve())
+    for label, rel_path in model_artifact_paths.items():
         report_artifacts[label] = str((run_dir / rel_path).resolve())
     return report_artifacts
 
@@ -439,6 +618,7 @@ def save_artifacts(
     run_metadata: dict[str, Any],
     config_hash_sha256: str,
     data_fingerprint: dict[str, Any],
+    stage_tails: dict[str, Any] | None = None,
 ) -> dict[str, str]:
     run_dir.mkdir(parents=True, exist_ok=False)
 
@@ -461,6 +641,7 @@ def save_artifacts(
         "signals": cfg.get("signals", {}),
         "resolved_feature_columns": resolved_feature_columns(model_meta),
         "data_stats": data_stats_payload(data),
+        "stage_tails": dict(stage_tails or {}),
         "reproducibility": {
             "config_hash_sha256": config_hash_sha256,
             "data_hash_sha256": data_fingerprint.get("sha256"),
@@ -473,6 +654,11 @@ def save_artifacts(
     metadata_path = run_dir / "run_metadata.json"
     with metadata_path.open("w", encoding="utf-8") as handle:
         json.dump(run_metadata, handle, indent=2, default=str)
+
+    stage_tails_path = None
+    if stage_tails:
+        stage_tails_path = run_dir / "stage_tails.json"
+        _write_json(stage_tails_path, dict(stage_tails))
 
     equity_path = run_dir / "equity_curve.csv"
     performance.equity_curve.to_csv(equity_path, header=True)
@@ -529,6 +715,8 @@ def save_artifacts(
         "costs": str(costs_path),
         "turnover": str(turnover_path),
     }
+    if stage_tails_path is not None:
+        artifacts["stage_tails"] = str(stage_tails_path)
     if positions_path is not None:
         artifacts["positions"] = str(positions_path)
     if monitoring_path is not None:

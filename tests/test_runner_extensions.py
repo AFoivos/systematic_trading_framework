@@ -75,6 +75,75 @@ def test_dataset_snapshot_roundtrip(tmp_path) -> None:
     assert metadata["verified_fingerprint"] is True
 
 
+def test_load_dataset_snapshot_accepts_single_asset_raw_csv_with_epoch_ms(tmp_path) -> None:
+    """
+    Explicit load_path CSVs should support canonical single-asset OHLCV with epoch-millisecond
+    timestamps instead of requiring framework snapshot format.
+    """
+    data_path = tmp_path / "raw_ohlcv.csv"
+    pd.DataFrame(
+        {
+            "timestamp": [1_420_149_600_000, 1_420_153_200_000, 1_420_156_800_000],
+            "open": [1.20, 1.21, 1.22],
+            "high": [1.25, 1.26, 1.27],
+            "low": [1.19, 1.20, 1.21],
+            "close": [1.23, 1.24, 1.25],
+            "volume": [100.0, 120.0, 140.0],
+        }
+    ).to_csv(data_path, index=False)
+
+    loaded_frames, metadata = load_dataset_snapshot(
+        stage="raw",
+        load_path=data_path,
+        requested_assets=["EURUSD"],
+    )
+
+    assert sorted(loaded_frames) == ["EURUSD"]
+    df = loaded_frames["EURUSD"]
+    assert list(df.columns) == ["open", "high", "low", "close", "volume"]
+    assert df.index[0] == pd.Timestamp("2015-01-01 22:00:00")
+    assert metadata["format"] == "external_single_asset_ohlcv_csv"
+    assert metadata["requires_pit_hardening"] is True
+
+
+def test_load_dataset_snapshot_applies_start_end_window_to_external_csv(tmp_path) -> None:
+    """
+    Explicit load_path CSVs should honor data.start/data.end like live providers do, using the
+    same UTC-naive timestamp convention after epoch-millisecond normalization.
+    """
+    data_path = tmp_path / "dukas_like_ohlcv.csv"
+    pd.DataFrame(
+        {
+            "timestamp": [
+                1_420_149_600_000,
+                1_420_153_200_000,
+                1_420_156_800_000,
+                1_420_160_400_000,
+            ],
+            "open": [119.746, 119.824, 119.885, 120.072],
+            "high": [119.841, 119.967, 120.074, 120.426],
+            "low": [119.701, 119.804, 119.835, 120.052],
+            "close": [119.824, 119.885, 120.074, 120.274],
+            "volume": [702.65, 3082.5, 2144.8899, 3877.04],
+        }
+    ).to_csv(data_path, index=False)
+
+    loaded_frames, metadata = load_dataset_snapshot(
+        stage="raw",
+        load_path=data_path,
+        requested_assets=["USDJPY"],
+        start="2015-01-02 00:00:00",
+        end="2015-01-02 01:00:00",
+    )
+
+    df = loaded_frames["USDJPY"]
+    assert len(df) == 1
+    assert df.index[0] == pd.Timestamp("2015-01-02 00:00:00")
+    assert float(df.iloc[0]["volume"]) == pytest.approx(2144.8899)
+    assert metadata["requested_start"] == "2015-01-02 00:00:00"
+    assert metadata["requested_end"] == "2015-01-02 01:00:00"
+
+
 def test_dataset_snapshot_rejects_path_traversal_in_dataset_id(tmp_path) -> None:
     """
     Dataset snapshot helpers should reject dataset ids that escape the configured root.
@@ -151,6 +220,108 @@ def test_load_dataset_snapshot_rejects_fingerprint_mismatch(tmp_path) -> None:
             root_dir=tmp_path,
             dataset_id="demo_dataset",
         )
+
+
+def test_load_asset_frames_accepts_raw_csv_load_path_and_applies_pit(tmp_path) -> None:
+    """
+    Raw CSV load_path inputs should be normalized, PIT-hardened, and validated through the same
+    data-stage path used by experiments.
+    """
+    data_path = tmp_path / "intraday_raw.csv"
+    pd.DataFrame(
+        {
+            "timestamp": [
+                1_420_153_200_000,
+                1_420_149_600_000,
+                1_420_149_600_000,
+            ],
+            "open": [1.21, 1.20, 1.205],
+            "high": [1.26, 1.25, 1.255],
+            "low": [1.20, 1.19, 1.195],
+            "close": [1.24, 1.23, 1.235],
+            "volume": [120.0, 100.0, 110.0],
+        }
+    ).to_csv(data_path, index=False)
+
+    frames, storage_meta = runner_mod._load_asset_frames(
+        {
+            "symbol": "USDJPY",
+            "source": "yahoo",
+            "interval": "1h",
+            "storage": {
+                "mode": "cached_only",
+                "load_path": str(data_path),
+            },
+            "pit": {
+                "timestamp_alignment": {
+                    "source_timezone": "UTC",
+                    "output_timezone": "UTC",
+                    "normalize_daily": False,
+                    "duplicate_policy": "last",
+                }
+            },
+        }
+    )
+
+    df = frames["USDJPY"]
+    assert len(df) == 2
+    assert df.index.is_monotonic_increasing
+    assert not df.index.has_duplicates
+    assert float(df.iloc[0]["close"]) == 1.235
+    assert storage_meta["loaded_from_cache"] is True
+    assert "USDJPY" in storage_meta["pit_meta_by_asset"]
+
+
+def test_load_asset_frames_applies_data_window_to_external_csv_load_path(tmp_path) -> None:
+    """
+    The data-stage path should pass start/end through to explicit CSV load_path inputs so YAML
+    windows behave consistently across local files and live providers.
+    """
+    data_path = tmp_path / "usdjpy_h1_dukas_like.csv"
+    pd.DataFrame(
+        {
+            "timestamp": [
+                1_420_149_600_000,
+                1_420_153_200_000,
+                1_420_156_800_000,
+                1_420_160_400_000,
+            ],
+            "open": [119.746, 119.824, 119.885, 120.072],
+            "high": [119.841, 119.967, 120.074, 120.426],
+            "low": [119.701, 119.804, 119.835, 120.052],
+            "close": [119.824, 119.885, 120.074, 120.274],
+            "volume": [702.65, 3082.5, 2144.8899, 3877.04],
+        }
+    ).to_csv(data_path, index=False)
+
+    frames, storage_meta = runner_mod._load_asset_frames(
+        {
+            "symbol": "USDJPY",
+            "source": "yahoo",
+            "interval": "1h",
+            "start": "2015-01-02 00:00:00",
+            "end": "2015-01-02 01:00:00",
+            "storage": {
+                "mode": "cached_only",
+                "load_path": str(data_path),
+            },
+            "pit": {
+                "timestamp_alignment": {
+                    "source_timezone": "UTC",
+                    "output_timezone": "UTC",
+                    "normalize_daily": False,
+                    "duplicate_policy": "last",
+                }
+            },
+        }
+    )
+
+    df = frames["USDJPY"]
+    assert len(df) == 1
+    assert df.index[0] == pd.Timestamp("2015-01-02 00:00:00")
+    assert float(df.iloc[0]["close"]) == pytest.approx(120.074)
+    assert storage_meta["loaded_snapshot"]["requested_start"] == "2015-01-02 00:00:00"
+    assert storage_meta["loaded_snapshot"]["requested_end"] == "2015-01-02 01:00:00"
 
 
 def test_dataset_snapshot_parallel_writes_remain_loadable(tmp_path) -> None:

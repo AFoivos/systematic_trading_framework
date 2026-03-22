@@ -4,6 +4,7 @@ from typing import Any
 
 import pandas as pd
 
+from src.experiments.support.diagnostics import aggregate_feature_importance, aggregate_label_distributions
 from src.experiments.registry import get_model_fn, is_portfolio_model_kind
 
 
@@ -130,6 +131,49 @@ def aggregate_model_meta(per_asset_meta: dict[str, dict[str, Any]]) -> dict[str,
         metric_keys=("mae", "rmse", "correlation", "mean_prediction", "mean_target"),
     )
 
+    feature_importance = aggregate_feature_importance(
+        [list(dict(meta.get("feature_importance", {}) or {}).get("top_features", []) or []) for meta in per_asset_meta.values()]
+    )
+
+    prediction_rows = sum(
+        int(meta.get("prediction_diagnostics", {}).get("predicted_rows") or 0)
+        for meta in per_asset_meta.values()
+    )
+    oos_rows = sum(
+        int(meta.get("prediction_diagnostics", {}).get("oos_rows") or 0)
+        for meta in per_asset_meta.values()
+    )
+    non_oos_prediction_rows = sum(
+        int(meta.get("prediction_diagnostics", {}).get("non_oos_prediction_rows") or 0)
+        for meta in per_asset_meta.values()
+    )
+    missing_oos_prediction_rows = sum(
+        int(meta.get("prediction_diagnostics", {}).get("missing_oos_prediction_rows") or 0)
+        for meta in per_asset_meta.values()
+    )
+    missing_value_diagnostics = {
+        "train_rows_dropped_missing": int(
+            sum(int(meta.get("missing_value_diagnostics", {}).get("train_rows_dropped_missing", 0) or 0) for meta in per_asset_meta.values())
+        ),
+        "test_rows_missing_features": int(
+            sum(int(meta.get("missing_value_diagnostics", {}).get("test_rows_missing_features", 0) or 0) for meta in per_asset_meta.values())
+        ),
+        "test_rows_without_prediction": int(
+            sum(int(meta.get("missing_value_diagnostics", {}).get("test_rows_without_prediction", 0) or 0) for meta in per_asset_meta.values())
+        ),
+        "folds_with_zero_predictions": int(
+            sum(int(meta.get("missing_value_diagnostics", {}).get("folds_with_zero_predictions", 0) or 0) for meta in per_asset_meta.values())
+        ),
+    }
+    label_distribution = {
+        "train": aggregate_label_distributions(
+            [dict(meta.get("label_distribution", {}) or {}).get("train", {}) for meta in per_asset_meta.values()]
+        ),
+        "oos_evaluation": aggregate_label_distributions(
+            [dict(meta.get("label_distribution", {}) or {}).get("oos_evaluation", {}) for meta in per_asset_meta.values()]
+        ),
+    }
+
     return {
         "model_kind": first.get("model_kind"),
         "assets": sorted(per_asset_meta),
@@ -141,6 +185,17 @@ def aggregate_model_meta(per_asset_meta: dict[str, dict[str, Any]]) -> dict[str,
         "oos_regression_summary": weighted_regression_summary,
         "oos_volatility_summary": weighted_volatility_summary,
         "oos_policy_summary": weighted_policy_summary(),
+        "feature_importance": feature_importance,
+        "label_distribution": label_distribution,
+        "prediction_diagnostics": {
+            "oos_rows": int(oos_rows),
+            "predicted_rows": int(prediction_rows),
+            "non_oos_prediction_rows": int(non_oos_prediction_rows),
+            "missing_oos_prediction_rows": int(missing_oos_prediction_rows),
+            "oos_prediction_coverage": float(prediction_rows / max(oos_rows, 1)),
+            "alignment_ok": bool(non_oos_prediction_rows == 0),
+        },
+        "missing_value_diagnostics": missing_value_diagnostics,
     }
 
 

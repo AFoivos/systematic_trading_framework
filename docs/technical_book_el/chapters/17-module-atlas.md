@@ -1,5 +1,7 @@
 ## 17. Αυτόματα Παραγόμενο Module Atlas και Πλήρης API Αναφορά
 
+> Σημείωση: το module atlas είναι auto-generated snapshot και μπορεί να εμφανίζει legacy paths ή call graph nodes που έχουν μείνει για compatibility facades. Η authoritative σημερινή αρχιτεκτονική περιγράφεται στα κεφάλαια `02`, `03`, `07`, `08` και στο `README.md`.
+
 Η ενότητα αυτή παράγεται μηχανικά από το τρέχον codebase και λειτουργεί ως canonical αναφορά
 για onboarding, architecture review και impact analysis. Συμπληρώνει το αφηγηματικό σώμα του
 βιβλίου με αυστηρά αποτυπωμένα imports, globals, classes, functions, methods και direct callers.

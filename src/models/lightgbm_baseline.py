@@ -5,7 +5,6 @@ from typing import Sequence
 
 import numpy as np
 import pandas as pd
-from lightgbm import LGBMRegressor
 
 from src.features.lags import add_lagged_features
 
@@ -60,8 +59,12 @@ def train_regressor(
     feature_cols: Sequence[str],
     target_col: str,
     cfg: LGBMBaselineConfig | None = None,
-) -> LGBMRegressor:
+) -> object:
     """Fit a LightGBM regressor on the provided split."""
+    try:
+        from lightgbm import LGBMRegressor
+    except Exception as exc:
+        raise ImportError("LightGBM baseline requires lightgbm to be installed.") from exc
 
     if cfg is None:
         cfg = LGBMBaselineConfig()
@@ -84,7 +87,7 @@ def train_regressor(
 
 
 def predict_returns(
-    model: LGBMRegressor,
+    model: object,
     df: pd.DataFrame,
     feature_cols: Sequence[str],
     pred_col: str = "pred_next_ret",

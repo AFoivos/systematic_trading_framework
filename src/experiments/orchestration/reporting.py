@@ -49,6 +49,79 @@ def _markdown_table(headers: list[str], rows: list[list[Any]]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _stage_tail_markdown(stage_tails: dict[str, Any]) -> list[str]:
+    stages = list(dict(stage_tails or {}).get("stages", []) or [])
+    if not stages:
+        return []
+
+    lines: list[str] = ["## Stage Tail Trace"]
+    for stage_payload in stages:
+        lines.extend(
+            [
+                "",
+                f"### {stage_payload.get('stage', 'stage')}",
+                _markdown_table(
+                    ["Metric", "Value"],
+                    [
+                        ["asset_count", stage_payload.get("asset_count")],
+                        ["shown_asset_count", stage_payload.get("shown_asset_count")],
+                        ["tail_limit", stage_payload.get("limit")],
+                        ["max_columns", stage_payload.get("max_columns")],
+                        ["max_assets", stage_payload.get("max_assets")],
+                    ],
+                ),
+            ]
+        )
+        for asset_payload in list(stage_payload.get("assets", []) or []):
+            lines.extend(
+                [
+                    f"#### Asset: {asset_payload.get('asset')}",
+                    _markdown_table(
+                        ["Metric", "Value"],
+                        [
+                            ["rows", asset_payload.get("rows")],
+                            ["row_delta", asset_payload.get("row_delta")],
+                            ["column_count", asset_payload.get("column_count")],
+                            ["column_delta", asset_payload.get("column_delta")],
+                            ["added_columns", ", ".join(list(asset_payload.get("added_columns", []) or []))],
+                            ["removed_columns", ", ".join(list(asset_payload.get("removed_columns", []) or []))],
+                            ["shown_columns", ", ".join(list(asset_payload.get("shown_columns", []) or []))],
+                            ["truncated_columns", ", ".join(list(asset_payload.get("truncated_columns", []) or []))],
+                        ],
+                    ),
+                ]
+            )
+            tail_rows = list(asset_payload.get("tail_rows", []) or [])
+            if tail_rows:
+                tail_df = pd.DataFrame(tail_rows)
+                lines.extend(
+                    [
+                        "",
+                        "```text",
+                        tail_df.to_string(index=False),
+                        "```",
+                    ]
+                )
+            else:
+                lines.append("_Empty tail._")
+    return lines
+
+
+def _dict_metric_rows(payload: dict[str, Any], *, prefix: str | None = None) -> list[list[Any]]:
+    rows: list[list[Any]] = []
+    for key, value in payload.items():
+        if isinstance(value, dict):
+            for inner_key, inner_value in value.items():
+                rows.append([f"{key}.{inner_key}" if prefix is None else f"{prefix}{key}.{inner_key}", inner_value])
+        elif not isinstance(value, list):
+            rows.append([key if prefix is None else f"{prefix}{key}", value])
+    return rows
+
+
+def _safe_meta_dict(value: Any) -> dict[str, Any]:
+    return dict(value or {}) if isinstance(value, dict) else {}
+
+
 def _extract_drifted_features(monitoring: dict[str, Any], limit: int = 8) -> list[tuple[str, str, float]]:
     drifted: list[tuple[str, str, float]] = []
     for asset, asset_report in sorted(dict(monitoring.get("per_asset", {}) or {}).items()):
@@ -112,7 +185,7 @@ def _build_pipeline_trace_markdown(
 ) -> str:
     from src.backtesting.engine import BacktestResult, run_backtest
     from src.experiments.contracts import validate_data_contract
-    from src.experiments.modeling.runtime import resolve_runtime_for_model
+    from src.models.runtime import resolve_runtime_for_model
     from src.experiments.orchestration.artifacts import save_artifacts, write_experiment_report_from_run_dir
     from src.experiments.orchestration.backtest_stage import run_portfolio_backtest, run_single_asset_backtest
     from src.experiments.orchestration.data_stage import load_asset_frames, save_processed_snapshot_if_enabled
@@ -440,6 +513,8 @@ def build_experiment_report_markdown(
     runtime_cfg = dict(cfg.get("runtime", {}) or {})
     data_stats = dict(summary_payload.get("data_stats", {}) or {})
     policy_summary = dict(evaluation.get("model_oos_policy_summary", {}) or {})
+    resolved_features = summary_payload.get("resolved_feature_columns", []) or []
+    stage_tails = dict(summary_payload.get("stage_tails", {}) or {})
 
     symbols = data_cfg.get("symbols") or ([data_cfg.get("symbol")] if data_cfg.get("symbol") else [])
     run_name = str(cfg.get("logging", {}).get("run_name", cfg.get("config_path", "experiment")))
@@ -463,6 +538,10 @@ def build_experiment_report_markdown(
         _markdown_table(["Metric", "Value"], [[key, value] for key, value in primary.items()]),
     ]
 
+    stage_tail_lines = _stage_tail_markdown(stage_tails)
+    if stage_tail_lines:
+        lines.extend(["", *stage_tail_lines])
+
     if policy_summary:
         lines.extend(
             [
@@ -470,6 +549,116 @@ def build_experiment_report_markdown(
                 _markdown_table(["Metric", "Value"], [[key, value] for key, value in policy_summary.items()]),
             ]
         )
+
+    model_summary_rows: list[list[Any]] = []
+    for label, payload in (
+        ("classification", _safe_meta_dict(evaluation.get("model_oos_summary"))),
+        ("regression", _safe_meta_dict(evaluation.get("model_oos_regression_summary"))),
+        ("volatility", _safe_meta_dict(evaluation.get("model_oos_volatility_summary"))),
+    ):
+        model_summary_rows.extend(_dict_metric_rows(payload, prefix=f"{label}."))
+    if model_summary_rows:
+        lines.extend(
+            [
+                "",
+                "## Model OOS Diagnostics",
+                _markdown_table(["Metric", "Value"], model_summary_rows),
+            ]
+        )
+
+    prediction_diagnostics = _safe_meta_dict(model_meta.get("prediction_diagnostics"))
+    if prediction_diagnostics:
+        lines.extend(
+            [
+                "",
+                "## Prediction Diagnostics",
+                _markdown_table(["Metric", "Value"], _dict_metric_rows(prediction_diagnostics)),
+            ]
+        )
+
+    missing_value_diagnostics = _safe_meta_dict(model_meta.get("missing_value_diagnostics"))
+    if missing_value_diagnostics:
+        lines.extend(
+            [
+                "",
+                "## Missing-Value Diagnostics",
+                _markdown_table(["Metric", "Value"], _dict_metric_rows(missing_value_diagnostics)),
+            ]
+        )
+
+    label_distribution = _safe_meta_dict(model_meta.get("label_distribution"))
+    if label_distribution:
+        label_rows: list[list[Any]] = []
+        for label, payload in sorted(label_distribution.items()):
+            label_rows.extend(_dict_metric_rows(_safe_meta_dict(payload), prefix=f"{label}."))
+        if label_rows:
+            lines.extend(
+                [
+                    "",
+                    "## Label Distribution",
+                    _markdown_table(["Metric", "Value"], label_rows),
+                ]
+            )
+
+    target_distribution = _safe_meta_dict(model_meta.get("target_distribution"))
+    if target_distribution:
+        distribution_rows: list[list[Any]] = []
+        for label, payload in sorted(target_distribution.items()):
+            if label == "folds":
+                continue
+            distribution_rows.extend(_dict_metric_rows(_safe_meta_dict(payload), prefix=f"{label}."))
+        if distribution_rows:
+            lines.extend(
+                [
+                    "",
+                    "## Target Distribution",
+                    _markdown_table(["Metric", "Value"], distribution_rows),
+                ]
+            )
+
+    feature_importance = _safe_meta_dict(model_meta.get("feature_importance"))
+    top_features = list(feature_importance.get("top_features", []) or [])
+    if top_features:
+        lines.extend(
+            [
+                "",
+                "## Feature Importance",
+                _markdown_table(
+                    ["Rank", "Feature", "Mean Importance", "Mean Importance Normalized", "Fold Count", "Source"],
+                    [
+                        [
+                            row.get("rank"),
+                            row.get("feature"),
+                            row.get("mean_importance", row.get("importance")),
+                            row.get("mean_importance_normalized", row.get("importance_normalized")),
+                            row.get("fold_count"),
+                            row.get("source"),
+                        ]
+                        for row in top_features
+                    ],
+                ),
+            ]
+        )
+
+    exposure_rows = [
+        ["gross_pnl", primary.get("gross_pnl")],
+        ["net_pnl", primary.get("net_pnl")],
+        ["total_cost", primary.get("total_cost")],
+        ["cost_drag", primary.get("cost_drag")],
+        ["cost_to_gross_pnl", primary.get("cost_to_gross_pnl")],
+        ["avg_turnover", primary.get("avg_turnover")],
+        ["total_turnover", primary.get("total_turnover")],
+        ["mean_abs_signal", policy_summary.get("mean_abs_signal")],
+        ["signal_turnover", policy_summary.get("signal_turnover")],
+        ["flat_rate", policy_summary.get("flat_rate")],
+    ]
+    lines.extend(
+        [
+            "",
+            "## Cost / Exposure / Turnover",
+            _markdown_table(["Metric", "Value"], exposure_rows),
+        ]
+    )
 
     lines.extend(
         [
@@ -534,6 +723,49 @@ def build_experiment_report_markdown(
             ]
         )
 
+    model_folds = list(model_meta.get("folds", []) or [])
+    if model_folds:
+        model_fold_rows: list[list[Any]] = []
+        for fold in model_folds:
+            train_availability = _safe_meta_dict(fold.get("train_feature_availability"))
+            test_availability = _safe_meta_dict(fold.get("test_feature_availability"))
+            model_fold_rows.append(
+                [
+                    fold.get("fold"),
+                    fold.get("train_rows_raw", fold.get("train_rows")),
+                    fold.get("train_rows"),
+                    fold.get("train_rows_dropped_missing", 0),
+                    fold.get("test_rows"),
+                    fold.get("test_pred_rows"),
+                    fold.get("test_rows_missing_features", fold.get("test_rows_without_prediction", 0)),
+                    train_availability.get("missing_rows"),
+                    test_availability.get("missing_rows"),
+                    _safe_meta_dict(fold.get("classification_metrics")).get("evaluation_rows")
+                    or _safe_meta_dict(fold.get("regression_metrics")).get("evaluation_rows"),
+                ]
+            )
+        lines.extend(
+            [
+                "",
+                "## Model Fold Diagnostics",
+                _markdown_table(
+                    [
+                        "Fold",
+                        "Train Raw",
+                        "Train Used",
+                        "Train Missing Drop",
+                        "Test Rows",
+                        "Pred Rows",
+                        "Test Missing / No Pred",
+                        "Train Feature Missing",
+                        "Test Feature Missing",
+                        "Eval Rows",
+                    ],
+                    model_fold_rows,
+                ),
+            ]
+        )
+
     lines.extend(
         [
             "",
@@ -553,7 +785,23 @@ def build_experiment_report_markdown(
             "## Feature Set",
             _markdown_table(
                 ["Order", "Feature"],
-                [[idx + 1, feature] for idx, feature in enumerate(summary_payload.get("resolved_feature_columns", []) or [])],
+                (
+                    [
+                        [idx + 1, feature]
+                        for idx, feature in enumerate(resolved_features)
+                    ]
+                    if isinstance(resolved_features, list)
+                    else [
+                        [idx + 1, f"{asset}:{feature}"]
+                        for idx, (asset, feature) in enumerate(
+                            [
+                                (str(asset), str(feature))
+                                for asset, features in sorted(dict(resolved_features).items())
+                                for feature in list(features or [])
+                            ]
+                        )
+                    ]
+                ),
             ),
             "## Feature Steps",
             "```yaml",

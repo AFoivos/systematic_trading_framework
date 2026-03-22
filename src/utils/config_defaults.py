@@ -238,6 +238,14 @@ def resolve_logging_block(logging_cfg: dict[str, Any], config_path: Path) -> dic
         raise ValueError("logging.output_dir must stay inside the project root.") from exc
 
     logging_cfg["output_dir"] = str(enforce_safe_absolute_path(resolved_out_dir))
+    stage_tails = dict(logging_cfg.get("stage_tails", {}) or {})
+    stage_tails.setdefault("enabled", True)
+    stage_tails.setdefault("stdout", True)
+    stage_tails.setdefault("report", True)
+    stage_tails.setdefault("limit", 10)
+    stage_tails.setdefault("max_columns", 16)
+    stage_tails.setdefault("max_assets", 3)
+    logging_cfg["stage_tails"] = stage_tails
     return logging_cfg
 
 

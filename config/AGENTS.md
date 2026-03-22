@@ -5,8 +5,8 @@
 
 ## Philosophy
 - Treat config as a declarative public interface.
-- Prefer explicit keys and explicit inheritance over hidden magic.
-- Keep shared defaults in `config/base/` and the config defaulting layer, not in ad-hoc runtime branches.
+- Prefer explicit keys in fully self-contained experiment YAMLs over inheritance chains.
+- Keep tracked experiment configs under `config/experiments/` standalone and reproducible on their own.
 
 ## Do
 - Keep example experiments realistic and internally consistent.
@@ -19,6 +19,8 @@
 - Do not encode environment-specific paths, secrets, or one-off local assumptions in tracked configs.
 - Do not silently override annualization, timestamp normalization, or alignment semantics.
 - Do not duplicate the same default across multiple runtime layers.
+- Do not reintroduce tracked `base/*.yaml` parents or make checked-in experiment YAMLs depend on `extends:`.
+- The loader rejects `extends`; every tracked experiment YAML must stay fully self-contained.
 
 ## Validate
 - Check that new keys are loaded by `src/utils/config_loader.py`.

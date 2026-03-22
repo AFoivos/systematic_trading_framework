@@ -36,7 +36,10 @@ def fit_garch11_state(
     if len(x) < 30:
         raise ValueError("GARCH requires at least 30 non-null training returns.")
 
-    mu = float(np.mean(x))
+    if mean_model not in {"zero", "constant", "ar1"}:
+        raise ValueError("mean_model for GARCH must be one of: zero, constant, ar1.")
+
+    mu = 0.0 if mean_model == "zero" else float(np.mean(x))
     eps = x - mu
     variance = float(np.var(eps, ddof=1))
     variance = max(variance, 1e-8)
@@ -126,8 +129,8 @@ def make_garch_fold_predictor(
         train_df = full_df.iloc[train_idx]
         test_df = full_df.iloc[test_idx]
         mean_model = str(model_params.get("mean_model", "constant"))
-        if mean_model not in {"constant", "ar1"}:
-            raise ValueError("model.params.mean_model for GARCH must be 'constant' or 'ar1'.")
+        if mean_model not in {"zero", "constant", "ar1"}:
+            raise ValueError("model.params.mean_model for GARCH must be one of: zero, constant, ar1.")
         if returns_input_col not in train_df.columns:
             raise KeyError(f"GARCH returns input column '{returns_input_col}' not found.")
 

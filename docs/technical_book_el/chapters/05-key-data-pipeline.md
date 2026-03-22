@@ -5,7 +5,7 @@
 Το canonical entry point είναι η CLI εκτέλεση:
 
 ```bash
-python -m src.experiments.runner config/experiments/logreg_spy.yaml
+python -m src.experiments.runner config/experiments/btcusd_1h_dukas_xgboost_triple_barrier_garch_long_oos.yaml
 ```
 
 Ο πυρήνας της εκτέλεσης είναι η `run_experiment()` που ενοποιεί configuration, data retrieval, feature

@@ -113,7 +113,7 @@ docker compose run --rm app pytest
 Run an experiment:
 
 ```bash
-docker compose run --rm app python -m src.experiments.runner config/experiments/trend_spy.yaml
+docker compose run --rm app python -m src.experiments.runner config/experiments/btcusd_1h_dukas_xgboost_triple_barrier_garch_long_oos.yaml
 ```
 
 Notes:
@@ -144,11 +144,11 @@ The container uses `.devcontainer/devcontainer.json` and auto-configures:
 
 ## ⚙️ Config-Based Experiments
 
-Define experiments in YAML under `config/` (e.g., `config/experiments/trend_spy.yaml`). Inherit defaults via `extends: base/daily.yaml` for daily work or `extends: base/hourly.yaml` for intraday work. Load and run:
+Define experiments as fully self-contained YAML files under `config/experiments/`. Each tracked experiment should include its own data/model/signal/backtest/runtime blocks explicitly. Load and run:
 
 ```python
 from src.utils.config import load_experiment_config
-cfg = load_experiment_config("experiments/trend_spy.yaml")
+cfg = load_experiment_config("config/experiments/btcusd_1h_dukas_xgboost_triple_barrier_garch_long_oos.yaml")
 # then: load/persist raw snapshots, build features, train model with time-aware splits,
 # map signals, optionally construct portfolio weights, run backtest, save artifacts
 ```
@@ -157,7 +157,7 @@ If you want the typed resolved object used by the orchestration layer:
 
 ```python
 from src.utils.config import load_experiment_config_typed
-typed_cfg = load_experiment_config_typed("experiments/trend_spy.yaml")
+typed_cfg = load_experiment_config_typed("config/experiments/btcusd_1h_dukas_xgboost_triple_barrier_garch_long_oos.yaml")
 ```
 
 Keep secrets out of Git: store API keys in env vars and reference them with `data.api_key_env`.
@@ -174,9 +174,11 @@ Key config blocks now supported:
 Architecture boundary:
 
 * `src/models/` contains estimator-specific fold engines such as SARIMAX, GARCH and TFT.
-* `src/experiments/modeling/` contains target construction, split policy, anti-leakage loops and strict OOS assembly.
+* `src/experiments/support/` contains target construction, experiment metrics/diagnostics, and strict OOS support helpers.
+* `src/experiments/modeling/` is kept only as a legacy compatibility facade; it is no longer the source of truth.
 * `src/experiments/orchestration/` contains the end-to-end run stages: data, features, models, backtest, reporting, execution and artifacts.
 * `src/utils/config_*.py` contains loader/defaults/validation/schema modules, while `src/utils/config.py` stays as a stable façade.
+* Tracked experiment YAMLs are fully self-contained; config inheritance via `extends` is no longer supported.
 * `src/intraday/` centralizes intraday-safe defaults such as `normalize_daily=false` guards and annualization inference.
 
 ---

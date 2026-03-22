@@ -32,7 +32,7 @@ def load_ohlcv(
     start: str | None = None,
     end: str | None = None,
     interval: str = "1d",
-    source: Literal["yahoo", "alpha", "twelve_data", "twelve"] = "yahoo",
+    source: Literal["yahoo", "alpha", "twelve_data", "twelve", "dukascopy_csv"] = "yahoo",
     api_key: Optional[str] = None,
 ) -> pd.DataFrame:
     """
@@ -46,9 +46,10 @@ def load_ohlcv(
         End date (π.χ. "2025-01-01").
     interval : str
         "1d", "1h", "5m", κλπ (όπως τα υποστηρίζει το yfinance).
-    source : Literal["yahoo", "alpha", "twelve_data", "twelve"]
+    source : Literal["yahoo", "alpha", "twelve_data", "twelve", "dukascopy_csv"]
         "yahoo" (default), "alpha" για Alpha Vantage FX, ή "twelve_data"/"twelve"
-        για Twelve Data time series.
+        για Twelve Data time series. Το "dukascopy_csv" είναι explicit external CSV source
+        και υποστηρίζεται μόνο μέσω data.storage.load_path, όχι από provider adapter.
     api_key : str | None
         Απαιτείται για source="alpha" (ή env ALPHAVANTAGE_API_KEY) και προαιρετικά για
         source="twelve_data"/"twelve" (ή env TWELVEDATA_API_KEY).
@@ -66,6 +67,10 @@ def load_ohlcv(
         provider = AlphaVantageFXProvider(api_key=api_key)
     elif source in {"twelve_data", "twelve"}:
         provider = TwelveDataProvider(api_key=api_key)
+    elif source == "dukascopy_csv":
+        raise ValueError(
+            "data.source='dukascopy_csv' requires data.storage.load_path; provider loading is not supported."
+        )
     else:
         raise ValueError(f"Unknown data source: {source}")
 
@@ -83,7 +88,7 @@ def load_ohlcv_panel(
     start: str | None = None,
     end: str | None = None,
     interval: str = "1d",
-    source: Literal["yahoo", "alpha", "twelve_data", "twelve"] = "yahoo",
+    source: Literal["yahoo", "alpha", "twelve_data", "twelve", "dukascopy_csv"] = "yahoo",
     api_key: Optional[str] = None,
 ) -> dict[str, pd.DataFrame]:
     """

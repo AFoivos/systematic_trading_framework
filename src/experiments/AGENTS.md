@@ -5,6 +5,7 @@
 
 ## Responsibility Boundary
 - Keep orchestration, targets, split logic, run assembly, and reporting here.
+- Keep experiment-side helper utilities under `src/experiments/support`, not mixed with estimator engines.
 - Keep estimator-specific training and inference logic in `src/models/`, not here.
 - Keep config parsing, defaults, and validation in `src/utils/config_*`, not stage modules.
 - Keep raw data normalization and PIT enforcement in `src/src_data/`, not here.

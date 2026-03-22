@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import yaml
 
@@ -44,35 +44,16 @@ def load_yaml_mapping(path: Path) -> dict[str, Any]:
     return data
 
 
-def deep_update(base: Mapping[str, Any], updates: Mapping[str, Any]) -> dict[str, Any]:
+def load_resolved_config(path: Path) -> dict[str, Any]:
     """
-    Recursively merge mappings; lists and scalars are overwritten.
+    Load a self-contained experiment config and reject legacy inheritance.
     """
-    merged: dict[str, Any] = dict(base)
-    for key, value in updates.items():
-        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
-            merged[key] = deep_update(merged[key], value)
-        else:
-            merged[key] = value
-    return merged
-
-
-def load_with_extends(path: Path, seen: set[Path] | None = None) -> dict[str, Any]:
-    """
-    Load config inheritance recursively and detect cycles.
-    """
-    seen = seen or set()
-    if path in seen:
-        raise ConfigPathError(f"Cyclic config inheritance detected at {path}")
-    seen.add(path)
-
     cfg = load_yaml_mapping(path)
-    parent_ref = cfg.pop("extends", None)
-    if parent_ref:
-        parent_path = resolve_config_path(parent_ref)
-        parent_cfg = load_with_extends(parent_path, seen)
-        cfg = deep_update(parent_cfg, cfg)
-
+    if "extends" in cfg:
+        raise ConfigPathError(
+            "Config inheritance via 'extends' is no longer supported. "
+            "Each experiment YAML must be fully self-contained."
+        )
     cfg["config_path"] = str(path)
     return cfg
 
@@ -88,9 +69,8 @@ def inject_api_key_from_env(data: dict[str, Any]) -> None:
 
 __all__ = [
     "ConfigPathError",
-    "deep_update",
     "inject_api_key_from_env",
-    "load_with_extends",
+    "load_resolved_config",
     "load_yaml_mapping",
     "resolve_config_path",
 ]

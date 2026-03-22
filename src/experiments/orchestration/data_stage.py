@@ -58,8 +58,12 @@ def load_asset_frames(
                 root_dir=raw_dir,
                 dataset_id=dataset_id,
                 load_path=load_path,
+                requested_assets=symbols,
+                start=data_cfg.get("start"),
+                end=data_cfg.get("end"),
             )
-            if not snapshot_context_matches(snapshot_meta, expected_context):
+            explicit_external_load = bool(snapshot_meta.get("explicit_load_path"))
+            if not explicit_external_load and not snapshot_context_matches(snapshot_meta, expected_context):
                 storage_meta["cache_context_mismatch"] = True
                 storage_meta["loaded_snapshot"] = snapshot_meta
                 if storage_mode == "cached_only":
@@ -108,9 +112,18 @@ def load_asset_frames(
                 overwrite=True,
             )
     else:
-        for _, df in sorted(asset_frames.items()):
-            validate_ohlcv_fn(df)
-            validate_data_contract_fn(df)
+        requires_pit_hardening = bool(storage_meta.get("loaded_snapshot", {}).get("requires_pit_hardening"))
+        pit_meta_by_asset: dict[str, Any] = {}
+        for asset, df in sorted(asset_frames.items()):
+            out = df
+            if requires_pit_hardening:
+                out, pit_meta = apply_pit_hardening_fn(df, pit_cfg=pit_cfg, symbol=asset)
+                pit_meta_by_asset[asset] = pit_meta
+                asset_frames[asset] = out
+            validate_ohlcv_fn(out)
+            validate_data_contract_fn(out)
+        if requires_pit_hardening:
+            storage_meta["pit_meta_by_asset"] = pit_meta_by_asset
 
     return asset_frames, storage_meta
 

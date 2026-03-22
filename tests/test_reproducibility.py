@@ -20,6 +20,7 @@ from src.utils.repro import (
 from src.utils.run_metadata import build_artifact_manifest, compute_config_hash, compute_dataframe_fingerprint
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+TRACKED_CONFIG = "experiments/btcusd_1h_dukas_lightgbm_triple_barrier_garch_long_oos.yaml"
 
 
 def test_runtime_defaults_are_loaded_from_config() -> None:
@@ -28,7 +29,7 @@ def test_runtime_defaults_are_loaded_from_config() -> None:
     representative regression scenario. The test protects the intended contract of the
     surrounding component and makes failures easier to localize.
     """
-    cfg = load_experiment_config("experiments/lgbm_spy.yaml")
+    cfg = load_experiment_config(TRACKED_CONFIG)
     runtime = cfg["runtime"]
 
     assert runtime["seed"] == 7
@@ -48,7 +49,7 @@ def test_config_module_imports_cleanly_in_isolation() -> None:
             "-c",
             (
                 "from src.utils.config import load_experiment_config; "
-                "cfg = load_experiment_config('experiments/lgbm_spy.yaml'); "
+                f"cfg = load_experiment_config('{TRACKED_CONFIG}'); "
                 "print(cfg['data']['interval'])"
             ),
         ],
@@ -59,7 +60,7 @@ def test_config_module_imports_cleanly_in_isolation() -> None:
     )
 
     assert proc.returncode == 0, proc.stderr
-    assert proc.stdout.strip().endswith("1d")
+    assert proc.stdout.strip().endswith("1h")
 
 
 def test_validate_runtime_config_rejects_invalid_threads() -> None:
@@ -122,7 +123,7 @@ def test_compute_config_hash_ignores_config_path_field() -> None:
     regression scenario. The test protects the intended contract of the surrounding component
     and makes failures easier to localize.
     """
-    cfg = load_experiment_config("experiments/lgbm_spy.yaml")
+    cfg = load_experiment_config(TRACKED_CONFIG)
     h1, _ = compute_config_hash(cfg)
 
     cfg2 = deepcopy(cfg)

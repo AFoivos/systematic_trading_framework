@@ -16,6 +16,18 @@ from src.utils.repro import RuntimeConfigError, validate_runtime_config
 _RL_SINGLE_ASSET_DQN_KINDS = {"dqn_agent"}
 _RL_PORTFOLIO_DQN_KINDS = {"dqn_portfolio_agent"}
 _RL_EXTRACTOR_KINDS = {"flatten", "cnn1d", "lstm", "transformer"}
+_CLASSIFIER_MODEL_KINDS = {"lightgbm_clf", "logistic_regression_clf", "xgboost_clf"}
+_DEEP_FORECASTER_MODEL_KINDS = {"lstm_forecaster", "patchtst_forecaster", "tft_forecaster"}
+_GARCH_OVERLAY_COMPATIBLE_MODEL_KINDS = {
+    "lightgbm_clf",
+    "logistic_regression_clf",
+    "xgboost_clf",
+    "sarimax_forecaster",
+    "lstm_forecaster",
+    "patchtst_forecaster",
+    "tft_forecaster",
+}
+_XGBOOST_UNSUPPORTED_PARAM_KEYS = {"num_leaves", "min_child_samples"}
 _PPO_ONLY_RL_PARAM_KEYS = {"n_steps", "gae_lambda", "clip_range", "ent_coef", "vf_coef", "max_grad_norm"}
 _DQN_ONLY_RL_PARAM_KEYS = {
     "buffer_size",
@@ -97,9 +109,9 @@ def validate_data_block(data: dict[str, Any]) -> None:
             raise ConfigValidationError("data.symbols must not contain duplicates.")
 
     source = data.get("source", "yahoo")
-    if source not in {"yahoo", "alpha", "twelve_data", "twelve"}:
+    if source not in {"yahoo", "alpha", "twelve_data", "twelve", "dukascopy_csv"}:
         raise ConfigValidationError(
-            "data.source must be 'yahoo', 'alpha', 'twelve_data', or 'twelve'."
+            "data.source must be 'yahoo', 'alpha', 'twelve_data', 'twelve', or 'dukascopy_csv'."
         )
     interval = data.get("interval", "1d")
     if not isinstance(interval, str):
@@ -121,6 +133,15 @@ def validate_data_block(data: dict[str, Any]) -> None:
                 raise ConfigValidationError(
                     "Alpha Vantage FX symbols must look like 'EURUSD' or 'EURUSD=X'."
                 )
+    if source == "dukascopy_csv":
+        storage_for_external_csv = data.get("storage", {}) or {}
+        if not isinstance(storage_for_external_csv, dict):
+            raise ConfigValidationError("data.storage must be a mapping when data.source='dukascopy_csv'.")
+        load_path = storage_for_external_csv.get("load_path")
+        if not isinstance(load_path, str) or not load_path.strip():
+            raise ConfigValidationError(
+                "data.storage.load_path is required when data.source='dukascopy_csv'."
+            )
     alignment = data.get("alignment", "inner")
     if alignment not in {"inner", "outer"}:
         raise ConfigValidationError("data.alignment must be 'inner' or 'outer'.")
@@ -241,11 +262,16 @@ def validate_model_block(model: dict[str, Any]) -> None:
         if not isinstance(target, dict):
             raise ConfigValidationError("model.target must be a mapping when provided.")
         target_kind = target.get("kind", "forward_return")
-        if target_kind != "forward_return":
-            raise ConfigValidationError("model.target.kind must be 'forward_return'.")
+        if target_kind not in {"forward_return", "triple_barrier"}:
+            raise ConfigValidationError("model.target.kind must be 'forward_return' or 'triple_barrier'.")
+        if target_kind == "triple_barrier" and model["kind"] not in _CLASSIFIER_MODEL_KINDS:
+            raise ConfigValidationError("model.target.kind='triple_barrier' is currently supported only for classifiers.")
+        if target_kind == "forward_return" and model["kind"] in _CLASSIFIER_MODEL_KINDS:
+            pass
         if "price_col" in target and not isinstance(target["price_col"], str):
             raise ConfigValidationError("model.target.price_col must be a string.")
-        _positive_int(target.get("horizon", 1), field="model.target.horizon")
+        if target_kind == "forward_return":
+            _positive_int(target.get("horizon", 1), field="model.target.horizon")
         quantiles = target.get("quantiles")
         if quantiles is not None:
             if not isinstance(quantiles, (list, tuple)) or len(quantiles) != 2:
@@ -253,6 +279,105 @@ def validate_model_block(model: dict[str, Any]) -> None:
             q_low, q_high = float(quantiles[0]), float(quantiles[1])
             if not (0.0 <= q_low < q_high <= 1.0):
                 raise ConfigValidationError("model.target.quantiles must satisfy 0 <= low < high <= 1.")
+            if target_kind != "forward_return":
+                raise ConfigValidationError("model.target.quantiles are only supported for target.kind='forward_return'.")
+        if target_kind == "triple_barrier":
+            for key in ("open_col", "high_col", "low_col", "returns_col", "volatility_col", "label_col"):
+                if key in target and target[key] is not None and not isinstance(target[key], str):
+                    raise ConfigValidationError(f"model.target.{key} must be a string or null.")
+            _positive_int(target.get("max_holding", target.get("horizon", 24)), field="model.target.max_holding")
+            for key in ("upper_mult", "lower_mult", "min_vol"):
+                value = _finite_number(target.get(key, 2.0 if key != "min_vol" else 1e-4), field=f"model.target.{key}")
+                if value <= 0:
+                    raise ConfigValidationError(f"model.target.{key} must be > 0.")
+            if "vol_window" in target:
+                _positive_int(target["vol_window"], field="model.target.vol_window")
+            neutral_label = target.get("neutral_label", "drop")
+            if neutral_label not in {"drop", "lower", "upper"}:
+                raise ConfigValidationError("model.target.neutral_label must be one of: drop, lower, upper.")
+            tie_break = target.get("tie_break", "closest_to_open")
+            if tie_break not in {"closest_to_open", "upper", "lower"}:
+                raise ConfigValidationError("model.target.tie_break must be one of: closest_to_open, upper, lower.")
+
+        overlay = model.get("overlay", {}) or {}
+        if overlay:
+            if not isinstance(overlay, dict):
+                raise ConfigValidationError("model.overlay must be a mapping when provided.")
+            if model["kind"] not in _GARCH_OVERLAY_COMPATIBLE_MODEL_KINDS:
+                raise ConfigValidationError(
+                    "model.overlay is currently supported only for lightgbm_clf, logistic_regression_clf, "
+                    "xgboost_clf, sarimax_forecaster, lstm_forecaster, patchtst_forecaster, and "
+                    "tft_forecaster."
+                )
+            overlay_kind = overlay.get("kind")
+            if overlay_kind != "garch":
+                raise ConfigValidationError("model.overlay.kind must currently be 'garch'.")
+            overlay_params = overlay.get("params", {}) or {}
+            if not isinstance(overlay_params, dict):
+                raise ConfigValidationError("model.overlay.params must be a mapping when provided.")
+            if "returns_input_col" in overlay_params and not isinstance(overlay_params["returns_input_col"], str):
+                raise ConfigValidationError("model.overlay.params.returns_input_col must be a string.")
+            if "mean_model" in overlay_params and overlay_params["mean_model"] not in {"zero", "constant", "ar1"}:
+                raise ConfigValidationError(
+                    "model.overlay.params.mean_model must be one of: zero, constant, ar1."
+                )
+
+        if model["kind"] in _DEEP_FORECASTER_MODEL_KINDS:
+            params = model.get("params", {}) or {}
+            if not isinstance(params, dict):
+                raise ConfigValidationError("model.params must be a mapping.")
+            _positive_int(params.get("lookback", 32), field="model.params.lookback")
+            if "epochs" in params:
+                _positive_int(params["epochs"], field="model.params.epochs")
+            if "batch_size" in params:
+                _positive_int(params["batch_size"], field="model.params.batch_size")
+            if "hidden_dim" in params:
+                _positive_int(params["hidden_dim"], field="model.params.hidden_dim")
+            if "num_layers" in params:
+                _positive_int(params["num_layers"], field="model.params.num_layers")
+            if "num_heads" in params:
+                _positive_int(params["num_heads"], field="model.params.num_heads")
+            if "patch_len" in params:
+                _positive_int(params["patch_len"], field="model.params.patch_len")
+            if "patch_stride" in params:
+                _positive_int(params["patch_stride"], field="model.params.patch_stride")
+            if "learning_rate" in params:
+                lr = _finite_number(params["learning_rate"], field="model.params.learning_rate")
+                if lr <= 0:
+                    raise ConfigValidationError("model.params.learning_rate must be > 0.")
+            if "weight_decay" in params:
+                wd = _finite_number(params["weight_decay"], field="model.params.weight_decay")
+                if wd < 0:
+                    raise ConfigValidationError("model.params.weight_decay must be >= 0.")
+            if "dropout" in params:
+                dropout = _finite_number(params["dropout"], field="model.params.dropout")
+                if not 0.0 <= dropout < 1.0:
+                    raise ConfigValidationError("model.params.dropout must be in [0,1).")
+            if "scale_target" in params and not isinstance(params["scale_target"], bool):
+                raise ConfigValidationError("model.params.scale_target must be boolean.")
+            quantiles = params.get("quantiles")
+            if quantiles is not None:
+                if not isinstance(quantiles, (list, tuple)) or len(quantiles) < 2:
+                    raise ConfigValidationError("model.params.quantiles must be a list with at least two values.")
+                q_values = [float(q) for q in quantiles]
+                if any(not 0.0 < q < 1.0 for q in q_values):
+                    raise ConfigValidationError("model.params.quantiles values must be in (0,1).")
+
+        params = model.get("params", {}) or {}
+        if not isinstance(params, dict):
+            raise ConfigValidationError("model.params must be a mapping.")
+        if model["kind"] == "xgboost_clf":
+            invalid_keys = [
+                key
+                for key in _XGBOOST_UNSUPPORTED_PARAM_KEYS
+                if key in params and params[key] is not None
+            ]
+            if invalid_keys:
+                joined = ", ".join(sorted(invalid_keys))
+                raise ConfigValidationError(
+                    "xgboost_clf does not support LightGBM-only params: "
+                    f"{joined}. Remove them or set them to null in the child config."
+                )
 
         if model["kind"] in RL_MODEL_KINDS:
             if int(target.get("horizon", 1)) != 1:
@@ -464,6 +589,84 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
         raise ConfigValidationError("signals.kind must be a string.")
     if signals["kind"] != "none" and signals["kind"] not in SIGNAL_REGISTRY:
         raise ConfigValidationError(f"Unknown signals kind: {signals['kind']}")
+    params = signals.get("params", {}) or {}
+    if not isinstance(params, dict):
+        raise ConfigValidationError("signals.params must be a mapping when provided.")
+    if signals["kind"] == "probability_vol_adjusted":
+        for key in ("prob_col", "vol_col", "signal_name"):
+            if key in params and params[key] is not None and not isinstance(params[key], str):
+                raise ConfigValidationError(f"signals.params.{key} must be a string.")
+        prob_center = _finite_number(params.get("prob_center", 0.5), field="signals.params.prob_center")
+        if not 0.0 < prob_center < 1.0:
+            raise ConfigValidationError("signals.params.prob_center must be in (0,1).")
+        vol_target = _finite_number(params.get("vol_target", 0.001), field="signals.params.vol_target")
+        if vol_target <= 0:
+            raise ConfigValidationError("signals.params.vol_target must be > 0.")
+        clip = _finite_number(params.get("clip", 1.0), field="signals.params.clip")
+        if clip <= 0:
+            raise ConfigValidationError("signals.params.clip must be > 0.")
+        vol_floor = _finite_number(params.get("vol_floor", 1e-6), field="signals.params.vol_floor")
+        if vol_floor <= 0:
+            raise ConfigValidationError("signals.params.vol_floor must be > 0.")
+        min_signal_abs = _finite_number(
+            params.get("min_signal_abs", 0.0),
+            field="signals.params.min_signal_abs",
+        )
+        if min_signal_abs < 0:
+            raise ConfigValidationError("signals.params.min_signal_abs must be >= 0.")
+        if min_signal_abs > clip:
+            raise ConfigValidationError("signals.params.min_signal_abs must be <= signals.params.clip.")
+        upper = params.get("upper")
+        lower = params.get("lower")
+        if upper is not None:
+            upper = _finite_number(upper, field="signals.params.upper")
+            if not 0.0 < upper < 1.0:
+                raise ConfigValidationError("signals.params.upper must be in (0,1).")
+        if lower is not None:
+            lower = _finite_number(lower, field="signals.params.lower")
+            if not 0.0 < lower < 1.0:
+                raise ConfigValidationError("signals.params.lower must be in (0,1).")
+        if upper is None and lower is not None:
+            upper = prob_center + (prob_center - lower)
+        elif lower is None and upper is not None:
+            lower = prob_center - (upper - prob_center)
+        if upper is not None and lower is not None and not lower < prob_center < upper:
+            raise ConfigValidationError(
+                "signals.params must satisfy lower < prob_center < upper for probability_vol_adjusted."
+            )
+        activation_filters = params.get("activation_filters")
+        if activation_filters is not None:
+            if not isinstance(activation_filters, list):
+                raise ConfigValidationError("signals.params.activation_filters must be a list when provided.")
+            allowed_ops = {"gt", "ge", "lt", "le"}
+            for idx, raw_filter in enumerate(activation_filters):
+                if not isinstance(raw_filter, dict):
+                    raise ConfigValidationError(
+                        f"signals.params.activation_filters[{idx}] must be a mapping."
+                    )
+                col = raw_filter.get("col")
+                if not isinstance(col, str) or not col:
+                    raise ConfigValidationError(
+                        f"signals.params.activation_filters[{idx}].col must be a non-empty string."
+                    )
+                op = str(raw_filter.get("op", "ge"))
+                if op not in allowed_ops:
+                    raise ConfigValidationError(
+                        f"signals.params.activation_filters[{idx}].op must be one of {sorted(allowed_ops)}."
+                    )
+                if "value" not in raw_filter:
+                    raise ConfigValidationError(
+                        f"signals.params.activation_filters[{idx}].value is required."
+                    )
+                _finite_number(
+                    raw_filter.get("value"),
+                    field=f"signals.params.activation_filters[{idx}].value",
+                )
+                use_abs = raw_filter.get("use_abs", False)
+                if not isinstance(use_abs, bool):
+                    raise ConfigValidationError(
+                        f"signals.params.activation_filters[{idx}].use_abs must be boolean."
+                    )
 
 
 def validate_risk_block(risk: dict[str, Any]) -> None:
@@ -641,6 +844,18 @@ def validate_logging_block(logging_cfg: dict[str, Any]) -> None:
         raise ConfigValidationError("logging.run_name must be a non-empty string.")
     if not isinstance(logging_cfg.get("output_dir", ""), str) or not logging_cfg.get("output_dir", "").strip():
         raise ConfigValidationError("logging.output_dir must be a non-empty string.")
+    stage_tails = logging_cfg.get("stage_tails", {})
+    if not isinstance(stage_tails, dict):
+        raise ConfigValidationError("logging.stage_tails must be a mapping.")
+    for key in ("enabled", "stdout", "report"):
+        if key in stage_tails and not isinstance(stage_tails.get(key), bool):
+            raise ConfigValidationError(f"logging.stage_tails.{key} must be boolean.")
+    for key in ("limit", "max_columns", "max_assets"):
+        if key in stage_tails:
+            if isinstance(stage_tails.get(key), bool) or not isinstance(stage_tails.get(key), int):
+                raise ConfigValidationError(f"logging.stage_tails.{key} must be a positive integer.")
+            if int(stage_tails.get(key)) <= 0:
+                raise ConfigValidationError(f"logging.stage_tails.{key} must be > 0.")
 
 
 def validate_resolved_config(cfg: dict[str, Any]) -> dict[str, Any]:

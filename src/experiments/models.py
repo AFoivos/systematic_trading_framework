@@ -1,37 +1,22 @@
 from __future__ import annotations
 
-from src.experiments.modeling import (
+from src.models import (
     infer_feature_columns,
     train_garch_forecaster,
     train_lightgbm_classifier,
+    train_lstm_forecaster,
     train_logistic_regression_classifier,
+    train_patchtst_forecaster,
     train_sarimax_forecaster,
     train_tft_forecaster,
+    train_xgboost_classifier,
 )
-
-
-def train_ppo_agent(*args, **kwargs):
-    from src.experiments.modeling.rl import train_ppo_agent as _train_ppo_agent
-
-    return _train_ppo_agent(*args, **kwargs)
-
-
-def train_dqn_agent(*args, **kwargs):
-    from src.experiments.modeling.rl import train_dqn_agent as _train_dqn_agent
-
-    return _train_dqn_agent(*args, **kwargs)
-
-
-def train_ppo_portfolio_agent(*args, **kwargs):
-    from src.experiments.modeling.rl import train_ppo_portfolio_agent as _train_ppo_portfolio_agent
-
-    return _train_ppo_portfolio_agent(*args, **kwargs)
-
-
-def train_dqn_portfolio_agent(*args, **kwargs):
-    from src.experiments.modeling.rl import train_dqn_portfolio_agent as _train_dqn_portfolio_agent
-
-    return _train_dqn_portfolio_agent(*args, **kwargs)
+from src.models.rl import (
+    train_dqn_agent,
+    train_dqn_portfolio_agent,
+    train_ppo_agent,
+    train_ppo_portfolio_agent,
+)
 
 __all__ = [
     "train_dqn_agent",
@@ -39,9 +24,12 @@ __all__ = [
     "infer_feature_columns",
     "train_garch_forecaster",
     "train_lightgbm_classifier",
+    "train_lstm_forecaster",
     "train_logistic_regression_classifier",
+    "train_patchtst_forecaster",
     "train_ppo_agent",
     "train_ppo_portfolio_agent",
     "train_sarimax_forecaster",
     "train_tft_forecaster",
+    "train_xgboost_classifier",
 ]
