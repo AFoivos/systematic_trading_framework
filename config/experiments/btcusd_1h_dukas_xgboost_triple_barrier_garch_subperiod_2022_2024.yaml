@@ -1,8 +1,8 @@
 data:
   source: dukascopy_csv
   interval: 1h
-  start: "2017-05-07 23:00:00"
-  end: "2026-03-22"
+  start: "2021-01-01 00:00:00"
+  end: "2024-12-31 14:00:00"
   alignment: inner
   symbol: BTCUSD
   pit:
@@ -18,7 +18,7 @@ data:
       inactive_policy: raise
   storage:
     mode: cached_only
-    dataset_id: "btcusd_1h_dukas_xgboost_triple_barrier_garch_long_oos_v3"
+    dataset_id: "btcusd_1h_dukas_xgboost_triple_barrier_garch_subperiod_2022_2024"
     save_raw: false
     save_processed: true
     load_path: "data/raw/dukas_copy_bank/btcusd_h1.csv"
@@ -160,7 +160,7 @@ signals:
     activation_filters:
       - col: regime_vol_ratio_24_168
         op: ge
-        value: 1.0
+        value: 0.95
       - col: adx_24
         op: ge
         value: 20.0
@@ -222,7 +222,7 @@ execution:
 
 logging:
   enabled: true
-  run_name: btcusd_1h_dukas_xgboost_triple_barrier_garch_long_oos_baseline_v3
+  run_name: btcusd_1h_dukas_xgboost_triple_barrier_garch_subperiod_2022_2024
   output_dir: "logs/experiments"
   stage_tails:
     enabled: true

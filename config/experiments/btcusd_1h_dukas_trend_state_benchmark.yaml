@@ -2,7 +2,7 @@ data:
   source: dukascopy_csv
   interval: 1h
   start: "2017-05-07 23:00:00"
-  end: "2026-03-22"
+  end: "2024-12-31 14:00:00"
   alignment: inner
   symbol: BTCUSD
   pit:
@@ -18,7 +18,7 @@ data:
       inactive_policy: raise
   storage:
     mode: cached_only
-    dataset_id: "btcusd_1h_dukas_xgboost_triple_barrier_garch_long_oos_v3"
+    dataset_id: "btcusd_1h_dukas_trend_state_benchmark"
     save_raw: false
     save_processed: true
     load_path: "data/raw/dukas_copy_bank/btcusd_h1.csv"
@@ -47,9 +47,6 @@ features:
       base_sma_for_sign: 72
       short_sma: 24
       long_sma: 72
-  - step: session_context
-    params:
-      timezone: UTC
   - step: regime_context
     params:
       price_col: close
@@ -60,110 +57,16 @@ features:
       trend_slow_span: 72
       vol_ratio_high_threshold: 1.35
       vol_ratio_low_threshold: 0.8
-  - step: indicators
-    params:
-      price_col: close
-      high_col: high
-      low_col: low
-      volume_col: volume
-      bb_window: 24
-      bb_nstd: 2.0
-      roc_windows: [6, 24]
-      atr_window: 24
-      adx_window: 24
-      vol_z_window: 72
-      include_mfi: false
-  - step: oscillators
-    params:
-      price_col: close
-      high_col: high
-      low_col: low
-      rsi_windows: [2, 14]
-      stoch_windows: [14]
-      stoch_smooth: 3
-  - step: momentum
-    params:
-      price_col: close
-      returns_col: close_logret
-      vol_col: vol_rolling_24
-      windows: [6, 24]
-  - step: lags
-    params:
-      cols: [close_logret]
-      lags: [1, 2, 6, 24]
 
 model:
-  kind: xgboost_clf
-  params:
-    n_estimators: 350
-    learning_rate: 0.03
-    num_leaves: null
-    max_depth: 4
-    subsample: 0.9
-    colsample_bytree: 0.9
-    min_child_samples: null
-    random_state: 7
-    min_child_weight: 5.0
-    reg_lambda: 1.0
-    objective: binary:logistic
-    eval_metric: logloss
-    tree_method: hist
-  feature_cols:
-    - regime_vol_ratio_24_168
-    - regime_vol_ratio_z_24_168
-    - regime_trend_state_24_72
-    - regime_absret_z_24_168
-    - close_rsi_2
-    - close_rsi_14
-    - bb_percent_b_24_2.0
-    - adx_24
-    - volume_z_72
-    - volume_over_atr_24
-  target:
-    kind: triple_barrier
-    price_col: close
-    open_col: open
-    high_col: high
-    low_col: low
-    returns_col: close_logret
-    max_holding: 24
-    upper_mult: 1.5
-    lower_mult: 1.5
-    vol_window: 24
-    neutral_label: drop
-  split:
-    method: walk_forward
-    train_size: 8760
-    test_size: 336
-    step_size: 336
-    expanding: true
-    max_folds: null
-  overlay:
-    kind: garch
-    params:
-      returns_input_col: close_logret
-      mean_model: zero
+  kind: none
 
 signals:
-  kind: probability_vol_adjusted
+  kind: trend_state
   params:
-    prob_col: pred_prob
-    vol_col: pred_vol
-    signal_name: signal_prob_vol_adj
-    prob_center: 0.5
-    upper: 0.56
-    lower: 0.44
-    vol_target: 0.0015
-    clip: 0.6
-    vol_floor: 1.0e-6
-    min_signal_abs: 0.01
-    activation_filters:
-      - col: regime_vol_ratio_24_168
-        op: ge
-        value: 1.0
-      - col: adx_24
-        op: ge
-        value: 20.0
+    state_col: close_trend_state_sma_24_72
+    signal_name: signal_trend_state
+    mode: long_short_hold
 
 runtime:
   seed: 7
@@ -185,7 +88,7 @@ risk:
 
 backtest:
   returns_col: close_logret
-  signal_col: signal_prob_vol_adj
+  signal_col: signal_trend_state
   periods_per_year: 8760
   returns_type: log
   missing_return_policy: raise_if_exposed
@@ -222,7 +125,7 @@ execution:
 
 logging:
   enabled: true
-  run_name: btcusd_1h_dukas_xgboost_triple_barrier_garch_long_oos_baseline_v3
+  run_name: btcusd_1h_dukas_trend_state_benchmark
   output_dir: "logs/experiments"
   stage_tails:
     enabled: true
