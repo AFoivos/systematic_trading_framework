@@ -188,6 +188,40 @@ def test_execution_output_handles_empty_portfolio_weights() -> None:
     assert orders.empty
 
 
+def test_runner_completion_output_omits_artifact_inventory(capsys: pytest.CaptureFixture[str]) -> None:
+    """
+    CLI completion rendering should keep artifact creation silent in stdout.
+    """
+    result = runner_mod.ExperimentResult(
+        config={},
+        data=pd.DataFrame(),
+        backtest=BacktestResult(
+            equity_curve=pd.Series(dtype=float),
+            returns=pd.Series(dtype=float),
+            gross_returns=pd.Series(dtype=float),
+            costs=pd.Series(dtype=float),
+            turnover=pd.Series(dtype=float),
+            positions=pd.Series(dtype=float),
+            summary={},
+        ),
+        model=None,
+        model_meta={},
+        evaluation={"primary_summary": {"net_pnl": 0.123, "sharpe": 1.5}},
+        monitoring={},
+        execution={},
+        artifacts={"run_dir": "/tmp/demo", "report": "/tmp/demo/report.md"},
+    )
+
+    runner_mod.print_experiment_completion(result)
+    captured = capsys.readouterr()
+
+    assert "Experiment completed" in captured.out
+    assert "Primary summary:" in captured.out
+    assert "net_pnl: 0.123" in captured.out
+    assert "Artifacts:" not in captured.out
+    assert "run_dir:" not in captured.out
+
+
 def test_execution_output_can_liquidate_current_only_assets_with_current_prices() -> None:
     """
     Execution output should allow liquidation of assets present only in current_weights.

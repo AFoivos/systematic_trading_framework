@@ -7,6 +7,7 @@ from .volatility import (
     add_volatility_features,
 )
 from .lags import add_lagged_features
+from .transforms import add_feature_transforms, compute_rolling_clip_transform
 from .technical.trend import (
     compute_sma,
     compute_ema,
@@ -22,4 +23,6 @@ __all__ = [
     "compute_ewma_vol",
     "add_volatility_features",
     "add_lagged_features",
+    "add_feature_transforms",
+    "compute_rolling_clip_transform",
 ]

@@ -73,6 +73,16 @@ features:
       adx_window: 24
       vol_z_window: 72
       include_mfi: false
+  - step: feature_transforms
+    params:
+      transforms:
+        - source_col: volume_over_atr_24
+          kind: rolling_clip
+          output_col: volume_over_atr_24_rollclip_2520_q01_q99
+          window: 2520
+          lower_q: 0.01
+          upper_q: 0.99
+          shift: 1
   - step: oscillators
     params:
       price_col: close
@@ -156,7 +166,7 @@ signals:
     vol_target: 0.0015
     clip: 0.6
     vol_floor: 1.0e-6
-    min_signal_abs: 0.015
+    min_signal_abs: 0.01
     activation_filters:
       - col: regime_vol_ratio_24_168
         op: ge
@@ -222,7 +232,7 @@ execution:
 
 logging:
   enabled: true
-  run_name: btcusd_1h_dukas_xgboost_triple_barrier_garch_long_oos_v3
+  run_name: btcusd_1h_dukas_xgboost_triple_barrier_garch_long_oos_baseline
   output_dir: "logs/experiments"
   stage_tails:
     enabled: true

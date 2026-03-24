@@ -236,6 +236,40 @@ def validate_features_block(features: Any) -> None:
             raise ConfigValidationError(f"Unknown feature step: {step['step']}")
         if "params" in step and step["params"] is not None and not isinstance(step["params"], dict):
             raise ConfigValidationError("features[].params must be a mapping when provided.")
+        if step["step"] == "feature_transforms":
+            params = step.get("params") or {}
+            transforms = params.get("transforms")
+            if not isinstance(transforms, list) or not transforms:
+                raise ConfigValidationError(
+                    "features[].params.transforms must be a non-empty list for step='feature_transforms'."
+                )
+            for idx, transform in enumerate(transforms):
+                field_prefix = f"features[].params.transforms[{idx}]"
+                if not isinstance(transform, dict):
+                    raise ConfigValidationError(f"{field_prefix} must be a mapping.")
+                source_col = transform.get("source_col")
+                if not isinstance(source_col, str) or not source_col.strip():
+                    raise ConfigValidationError(f"{field_prefix}.source_col must be a non-empty string.")
+                kind = transform.get("kind")
+                if kind != "rolling_clip":
+                    raise ConfigValidationError(
+                        f"{field_prefix}.kind must be 'rolling_clip'."
+                    )
+                output_col = transform.get("output_col")
+                if not isinstance(output_col, str) or not output_col.strip():
+                    raise ConfigValidationError(f"{field_prefix}.output_col must be a non-empty string.")
+                _positive_int(transform.get("window", 2520), field=f"{field_prefix}.window")
+                lower_q = _finite_number(transform.get("lower_q", 0.01), field=f"{field_prefix}.lower_q")
+                upper_q = _finite_number(transform.get("upper_q", 0.99), field=f"{field_prefix}.upper_q")
+                if not 0.0 <= lower_q <= 1.0:
+                    raise ConfigValidationError(f"{field_prefix}.lower_q must be in [0, 1].")
+                if not 0.0 <= upper_q <= 1.0:
+                    raise ConfigValidationError(f"{field_prefix}.upper_q must be in [0, 1].")
+                if not lower_q < upper_q:
+                    raise ConfigValidationError(
+                        f"{field_prefix}.lower_q must be strictly less than {field_prefix}.upper_q."
+                    )
+                _non_negative_int(transform.get("shift", 1), field=f"{field_prefix}.shift")
 
 
 def validate_model_block(model: dict[str, Any]) -> None:

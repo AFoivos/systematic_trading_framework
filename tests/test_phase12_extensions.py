@@ -12,8 +12,9 @@ from src.experiments.models import (
     train_xgboost_classifier,
 )
 from src.experiments.registry import FEATURE_REGISTRY, MODEL_REGISTRY, SIGNAL_REGISTRY
-from src.features import add_close_returns
+from src.features import add_close_returns, add_feature_transforms
 from src.features.context import add_regime_context_features, add_session_context_features
+from src.features.technical.indicators import add_indicator_features
 
 
 def _synthetic_hourly_ohlcv(periods: int = 420, seed: int = 11) -> pd.DataFrame:
@@ -39,8 +40,93 @@ def _synthetic_hourly_ohlcv(periods: int = 420, seed: int = 11) -> pd.DataFrame:
 def test_registry_contains_phase12_extensions() -> None:
     assert "session_context" in FEATURE_REGISTRY
     assert "regime_context" in FEATURE_REGISTRY
+    assert "feature_transforms" in FEATURE_REGISTRY
     assert "xgboost_clf" in MODEL_REGISTRY
     assert "probability_vol_adjusted" in SIGNAL_REGISTRY
+
+
+def test_rolling_clip_transform_is_point_in_time_safe() -> None:
+    idx = pd.date_range("2024-01-01", periods=7, freq="H")
+    df = pd.DataFrame(
+        {
+            "volume_over_atr_24": [1.0, 1.1, 0.9, 1.05, 1.0, 100.0, -50.0],
+        },
+        index=idx,
+    )
+
+    out = add_feature_transforms(
+        df,
+        transforms=[
+            {
+                "source_col": "volume_over_atr_24",
+                "kind": "rolling_clip",
+                "output_col": "volume_over_atr_24_rollclip_4_q10_q90",
+                "window": 4,
+                "lower_q": 0.10,
+                "upper_q": 0.90,
+                "shift": 1,
+            }
+        ],
+    )
+
+    clipped = out["volume_over_atr_24_rollclip_4_q10_q90"]
+    assert clipped.iloc[:4].isna().all()
+
+    history = pd.Series([1.1, 0.9, 1.05, 1.0], index=idx[1:5])
+    expected_upper = history.quantile(0.90)
+    expected_lower = history.quantile(0.10)
+    assert clipped.iloc[5] == pytest.approx(expected_upper)
+    assert clipped.iloc[6] == pytest.approx(expected_lower)
+    assert clipped.iloc[5] != df.iloc[5]["volume_over_atr_24"]
+    assert clipped.iloc[6] != df.iloc[6]["volume_over_atr_24"]
+
+
+def test_indicator_feature_transform_preserves_original_and_adds_clipped_variant() -> None:
+    df = _synthetic_hourly_ohlcv(periods=120, seed=101)
+    df = add_indicator_features(
+        df,
+        price_col="close",
+        high_col="high",
+        low_col="low",
+        volume_col="volume",
+        bb_window=20,
+        bb_nstd=2.0,
+        roc_windows=(),
+        atr_window=24,
+        adx_window=14,
+        vol_z_window=72,
+        include_mfi=False,
+    )
+    expected_upper = (
+        df["volume_over_atr_24"]
+        .rolling(48, min_periods=48)
+        .quantile(0.99)
+        .shift(1)
+        .iloc[-1]
+    )
+    df.loc[df.index[-1], "volume_over_atr_24"] = float(expected_upper) * 5.0
+
+    out = add_feature_transforms(
+        df,
+        transforms=[
+            {
+                "source_col": "volume_over_atr_24",
+                "kind": "rolling_clip",
+                "output_col": "volume_over_atr_24_rollclip_48_q01_q99",
+                "window": 48,
+                "lower_q": 0.01,
+                "upper_q": 0.99,
+                "shift": 1,
+            }
+        ],
+    )
+
+    assert "volume_over_atr_24" in out.columns
+    assert "volume_over_atr_24_rollclip_48_q01_q99" in out.columns
+    assert pd.notna(out.iloc[-1]["volume_over_atr_24"])
+    assert pd.notna(out.iloc[-1]["volume_over_atr_24_rollclip_48_q01_q99"])
+    assert out.iloc[-1]["volume_over_atr_24_rollclip_48_q01_q99"] == pytest.approx(expected_upper)
+    assert out.iloc[-1]["volume_over_atr_24_rollclip_48_q01_q99"] < out.iloc[-1]["volume_over_atr_24"]
 
 
 def test_session_and_regime_features_emit_expected_columns() -> None:

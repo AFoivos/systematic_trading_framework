@@ -70,6 +70,19 @@ def run_experiment(config_path: str | Path) -> ExperimentResult:
     )
 
 
+def print_experiment_completion(result: ExperimentResult) -> None:
+    """
+    Render only the concise completion summary to stdout.
+
+    Artifacts are still created and returned in `result.artifacts`, but are intentionally omitted
+    from terminal output to keep interactive runs less noisy.
+    """
+    print("Experiment completed")
+    print("Primary summary:")
+    for k, v in result.evaluation.get("primary_summary", {}).items():
+        print(f"  {k}: {v}")
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -78,16 +91,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     result = run_experiment(args.config)
-
-    print("Experiment completed")
-    print("Primary summary:")
-    for k, v in result.evaluation.get("primary_summary", {}).items():
-        print(f"  {k}: {v}")
-    if result.artifacts:
-        print("")
-        print("Artifacts:")
-        for k, v in result.artifacts.items():
-            print(f"  {k}: {v}")
+    print_experiment_completion(result)
 
 
 __all__ = [
@@ -126,5 +130,6 @@ __all__ = [
     "_validate_returns_series",
     "load_ohlcv",
     "load_ohlcv_panel",
+    "print_experiment_completion",
     "run_experiment",
 ]

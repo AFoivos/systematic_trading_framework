@@ -6,6 +6,7 @@ import pandas as pd
 
 from src.features import (
     add_close_returns,
+    add_feature_transforms,
     add_lagged_features,
     add_macro_context_features,
     add_regime_context_features,
@@ -62,6 +63,7 @@ FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
     "session_context": add_session_context_features,
     "regime_context": add_regime_context_features,
     "macro_context": add_macro_context_features,
+    "feature_transforms": add_feature_transforms,
 }
 
 SIGNAL_REGISTRY: Mapping[str, SignalFn] = {

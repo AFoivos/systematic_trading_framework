@@ -7,6 +7,7 @@ from src.utils.config_validation import (
     validate_backtest_block,
     validate_execution_block,
     validate_data_block,
+    validate_features_block,
     validate_logging_block,
     validate_model_block,
     validate_portfolio_block,
@@ -138,6 +139,72 @@ def test_validate_model_block_rejects_invalid_overlay_configuration() -> None:
 
     with pytest.raises(ConfigValidationError, match="model.overlay"):
         validate_model_block(model)
+
+
+def test_validate_features_block_accepts_feature_transforms_step() -> None:
+    validate_features_block(
+        [
+            {"step": "indicators", "params": {"atr_windows": [24]}},
+            {
+                "step": "feature_transforms",
+                "params": {
+                    "transforms": [
+                        {
+                            "source_col": "volume_over_atr_24",
+                            "kind": "rolling_clip",
+                            "output_col": "volume_over_atr_24_rollclip_2520_q01_q99",
+                            "window": 2520,
+                            "lower_q": 0.01,
+                            "upper_q": 0.99,
+                            "shift": 1,
+                        }
+                    ]
+                },
+            },
+        ]
+    )
+
+
+def test_validate_features_block_rejects_invalid_feature_transform_kind() -> None:
+    with pytest.raises(ConfigValidationError, match="rolling_clip"):
+        validate_features_block(
+            [
+                {
+                    "step": "feature_transforms",
+                    "params": {
+                        "transforms": [
+                            {
+                                "source_col": "volume_over_atr_24",
+                                "kind": "bad_kind",
+                                "output_col": "volume_over_atr_24_clip",
+                            }
+                        ]
+                    },
+                }
+            ]
+        )
+
+
+def test_validate_features_block_rejects_invalid_feature_transform_quantiles() -> None:
+    with pytest.raises(ConfigValidationError, match="lower_q"):
+        validate_features_block(
+            [
+                {
+                    "step": "feature_transforms",
+                    "params": {
+                        "transforms": [
+                            {
+                                "source_col": "volume_over_atr_24",
+                                "kind": "rolling_clip",
+                                "output_col": "volume_over_atr_24_clip",
+                                "lower_q": 0.99,
+                                "upper_q": 0.01,
+                            }
+                        ]
+                    },
+                }
+            ]
+        )
 
 
 def test_validate_backtest_block_accepts_min_holding_bars() -> None:
