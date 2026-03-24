@@ -18,7 +18,7 @@ data:
       inactive_policy: raise
   storage:
     mode: cached_only
-    dataset_id: "btcusd_1h_dukas_xgboost_triple_barrier_garch_long_oos_v2_ablation"
+    dataset_id: "btcusd_1h_dukas_xgboost_triple_barrier_garch_long_oos_v3"
     save_raw: false
     save_processed: true
     load_path: "data/raw/dukas_copy_bank/btcusd_h1.csv"
@@ -156,7 +156,7 @@ signals:
     vol_target: 0.0015
     clip: 0.6
     vol_floor: 1.0e-6
-    min_signal_abs: 0.01
+    min_signal_abs: 0.015
     activation_filters:
       - col: regime_vol_ratio_24_168
         op: ge
@@ -189,6 +189,7 @@ backtest:
   periods_per_year: 8760
   returns_type: log
   missing_return_policy: raise_if_exposed
+  min_holding_bars: 2
   subset: test
   vol_col: null
 
@@ -221,7 +222,7 @@ execution:
 
 logging:
   enabled: true
-  run_name: btcusd_1h_dukas_xgboost_triple_barrier_garch_long_oos_v2_ablation
+  run_name: btcusd_1h_dukas_xgboost_triple_barrier_garch_long_oos_v3
   output_dir: "logs/experiments"
   stage_tails:
     enabled: true

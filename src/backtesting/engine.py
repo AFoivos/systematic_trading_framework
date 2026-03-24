@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 
 from src.evaluation.metrics import compute_backtest_metrics
+from src.backtesting.holding import apply_min_holding_bars_to_positions
 from src.risk.controls import drawdown_cooloff_multiplier
 from src.risk.position_sizing import scale_signal_by_vol
 
@@ -79,6 +80,7 @@ def run_backtest(
     max_drawdown: float = 0.2,
     cooloff_bars: int = 20,
     periods_per_year: int = 252,
+    min_holding_bars: int = 0,
 ) -> BacktestResult:
     """
     Simple vectorized backtest with optional vol targeting, slippage, and drawdown guard.
@@ -112,6 +114,11 @@ def run_backtest(
             max_leverage=max_leverage,
         ).fillna(0.0)
         positions = positions.clip(lower=-leverage_cap, upper=leverage_cap)
+
+    positions = apply_min_holding_bars_to_positions(
+        positions,
+        min_holding_bars=int(min_holding_bars),
+    ).clip(lower=-leverage_cap, upper=leverage_cap)
 
     prev_positions = positions.shift(1).fillna(0.0)
     returns = _apply_missing_return_policy(

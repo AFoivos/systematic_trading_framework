@@ -4,6 +4,7 @@ import pytest
 
 from src.utils.config_validation import (
     ConfigValidationError,
+    validate_backtest_block,
     validate_execution_block,
     validate_data_block,
     validate_logging_block,
@@ -137,6 +138,33 @@ def test_validate_model_block_rejects_invalid_overlay_configuration() -> None:
 
     with pytest.raises(ConfigValidationError, match="model.overlay"):
         validate_model_block(model)
+
+
+def test_validate_backtest_block_accepts_min_holding_bars() -> None:
+    validate_backtest_block(
+        {
+            "returns_col": "close_logret",
+            "signal_col": "signal",
+            "periods_per_year": 8760,
+            "returns_type": "log",
+            "missing_return_policy": "raise_if_exposed",
+            "min_holding_bars": 2,
+        }
+    )
+
+
+def test_validate_backtest_block_rejects_negative_min_holding_bars() -> None:
+    with pytest.raises(ConfigValidationError, match="backtest.min_holding_bars"):
+        validate_backtest_block(
+            {
+                "returns_col": "close_logret",
+                "signal_col": "signal",
+                "periods_per_year": 8760,
+                "returns_type": "log",
+                "missing_return_policy": "raise_if_exposed",
+                "min_holding_bars": -1,
+            }
+        )
 
 
 def test_validate_model_block_rejects_lightgbm_only_params_for_xgboost() -> None:

@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from src.backtesting.engine import BacktestResult, run_backtest
+from src.backtesting.holding import apply_min_holding_bars_to_weights
 from src.evaluation.metrics import compute_backtest_metrics
 from src.experiments.orchestration.common import align_asset_column
 from src.portfolio import (
@@ -109,6 +110,7 @@ def run_single_asset_backtest(
         max_drawdown=dd_cfg.get("max_drawdown", 0.2),
         cooloff_bars=dd_cfg.get("cooloff_bars", 20),
         periods_per_year=backtest_cfg.get("periods_per_year", 252),
+        min_holding_bars=backtest_cfg.get("min_holding_bars", 0),
     )
     if oos_mask is not None and bool(oos_mask.any()):
         aligned_oos_mask = oos_mask.reindex(result.returns.index).fillna(False).astype(bool)
@@ -173,6 +175,18 @@ def run_portfolio_backtest(
             long_short=bool(portfolio_cfg.get("long_short", True)),
             gross_target=float(portfolio_cfg.get("gross_target", 1.0)),
         )
+
+    min_holding_bars = int(backtest_cfg.get("min_holding_bars", 0) or 0)
+    if min_holding_bars > 0:
+        weights = apply_min_holding_bars_to_weights(
+            weights,
+            min_holding_bars=min_holding_bars,
+        )
+        prev_weights = weights.shift(1).fillna(0.0)
+        diagnostics = diagnostics.copy()
+        diagnostics["net_exposure"] = weights.sum(axis=1).astype(float)
+        diagnostics["gross_exposure"] = weights.abs().sum(axis=1).astype(float)
+        diagnostics["turnover"] = (weights - prev_weights).abs().sum(axis=1).astype(float)
 
     performance = compute_portfolio_performance(
         weights,

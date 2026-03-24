@@ -710,6 +710,7 @@ def validate_backtest_block(backtest: dict[str, Any]) -> None:
         raise ConfigValidationError(
             "backtest.missing_return_policy must be 'raise', 'raise_if_exposed', or 'fill_zero'."
         )
+    _non_negative_int(backtest.get("min_holding_bars", 0), field="backtest.min_holding_bars")
 
 
 def validate_portfolio_block(portfolio: dict[str, Any]) -> None:

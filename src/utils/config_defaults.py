@@ -172,6 +172,7 @@ def default_backtest_block(
     backtest.setdefault("periods_per_year", infer_periods_per_year(interval, **annualization_kwargs))
     backtest.setdefault("returns_type", "simple")
     backtest.setdefault("missing_return_policy", "raise_if_exposed")
+    backtest.setdefault("min_holding_bars", 0)
     return backtest
 
 

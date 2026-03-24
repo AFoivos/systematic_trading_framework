@@ -174,6 +174,31 @@ def test_run_backtest_charges_initial_entry_turnover() -> None:
     assert np.isclose(bt.returns.iloc[0], -0.01)
 
 
+def test_run_backtest_enforces_min_holding_bars() -> None:
+    """
+    Backtest-level minimum holding should suppress flips until the holding window expires.
+    """
+    idx = pd.date_range("2020-01-01", periods=5, freq="D")
+    df = pd.DataFrame(
+        {
+            "signal": [1.0, -1.0, -1.0, 0.0, 0.0],
+            "returns": [0.0, 0.01, -0.02, 0.03, 0.0],
+        },
+        index=idx,
+    )
+
+    bt = run_backtest(
+        df,
+        signal_col="signal",
+        returns_col="returns",
+        dd_guard=False,
+        min_holding_bars=2,
+    )
+
+    assert bt.positions.tolist() == [1.0, 1.0, -1.0, -1.0, 0.0]
+    assert bt.turnover.tolist() == [1.0, 0.0, 2.0, 0.0, 1.0]
+
+
 def test_run_backtest_raises_on_missing_return_while_exposed() -> None:
     """
     Verify that backtest raises on missing return while exposed behaves as expected under a

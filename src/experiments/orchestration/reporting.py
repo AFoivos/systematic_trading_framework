@@ -168,8 +168,10 @@ def _resolved_reward_snapshot(cfg: dict[str, Any]) -> dict[str, Any]:
 
 def _resolved_execution_snapshot(cfg: dict[str, Any]) -> dict[str, Any]:
     env_cfg = dict(cfg.get("model", {}).get("env", {}) or {})
+    backtest_cfg = dict(cfg.get("backtest", {}) or {})
     dd_cfg = dict(cfg.get("risk", {}).get("dd_guard", {}) or {})
     return {
+        "backtest_min_holding_bars": backtest_cfg.get("min_holding_bars", 0),
         "min_holding_bars": env_cfg.get("min_holding_bars", 0),
         "action_hysteresis": env_cfg.get("action_hysteresis", 0.0),
         "dd_guard_enabled": dd_cfg.get("enabled", False),

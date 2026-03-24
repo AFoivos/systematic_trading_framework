@@ -101,6 +101,42 @@ def test_signal_to_raw_weights_keeps_missing_assets_flat() -> None:
     assert np.isclose(float(weights.sum()), 0.0)
 
 
+def test_compute_portfolio_performance_respects_min_holding_bars_via_held_weights() -> None:
+    """
+    Portfolio weights can be held causally before performance so churn is reduced consistently.
+    """
+    idx = pd.date_range("2024-01-01", periods=4, freq="D")
+    weights = pd.DataFrame(
+        {
+            "A": [1.0, -1.0, -1.0, 0.0],
+            "B": [-1.0, 1.0, 1.0, 0.0],
+        },
+        index=idx,
+    )
+    asset_returns = pd.DataFrame(
+        {
+            "A": [0.0, 0.01, -0.01, 0.0],
+            "B": [0.0, -0.01, 0.01, 0.0],
+        },
+        index=idx,
+    )
+
+    from src.backtesting.holding import apply_min_holding_bars_to_weights
+
+    held = apply_min_holding_bars_to_weights(weights, min_holding_bars=2)
+    perf = compute_portfolio_performance(
+        held,
+        asset_returns,
+        cost_per_turnover=0.0,
+        slippage_per_turnover=0.0,
+        periods_per_year=252,
+    )
+
+    assert held.iloc[0].tolist() == [1.0, -1.0]
+    assert held.iloc[1].tolist() == [1.0, -1.0]
+    assert perf.turnover.tolist() == [2.0, 0.0, 4.0, 0.0]
+
+
 def test_optimize_mean_variance_respects_core_constraints() -> None:
     """
     Verify that optimize mean variance respects core constraints behaves as expected under a

@@ -231,6 +231,7 @@ class BacktestConfig:
     periods_per_year: int
     returns_type: str
     missing_return_policy: str
+    min_holding_bars: int = 0
     subset: str | None = None
     vol_col: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
@@ -243,6 +244,7 @@ class BacktestConfig:
             "periods_per_year",
             "returns_type",
             "missing_return_policy",
+            "min_holding_bars",
             "subset",
             "vol_col",
         }
@@ -252,6 +254,7 @@ class BacktestConfig:
             periods_per_year=int(data.get("periods_per_year", 252)),
             returns_type=str(data.get("returns_type", "simple")),
             missing_return_policy=str(data.get("missing_return_policy", "raise_if_exposed")),
+            min_holding_bars=int(data.get("min_holding_bars", 0)),
             subset=data.get("subset"),
             vol_col=data.get("vol_col"),
             extra=_extras(data, known),
@@ -264,6 +267,7 @@ class BacktestConfig:
             "periods_per_year": self.periods_per_year,
             "returns_type": self.returns_type,
             "missing_return_policy": self.missing_return_policy,
+            "min_holding_bars": self.min_holding_bars,
             "subset": self.subset,
             "vol_col": self.vol_col,
         }
