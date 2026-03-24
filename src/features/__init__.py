@@ -12,7 +12,11 @@ from .technical.trend import (
     compute_sma,
     compute_ema,
     add_trend_features,
+    add_trend_regime_features,
 )
+from .technical.indicators import add_indicator_features
+from .technical.momentum import add_momentum_features
+from .technical.oscillators import add_oscillator_features
 __all__ = [
     "compute_returns",
     "add_close_returns",
@@ -25,4 +29,11 @@ __all__ = [
     "add_lagged_features",
     "add_feature_transforms",
     "compute_rolling_clip_transform",
+    "compute_sma",
+    "compute_ema",
+    "add_trend_features",
+    "add_trend_regime_features",
+    "add_indicator_features",
+    "add_momentum_features",
+    "add_oscillator_features",
 ]
