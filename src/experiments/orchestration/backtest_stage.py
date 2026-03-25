@@ -137,6 +137,7 @@ def run_portfolio_backtest(
     signal_col = backtest_cfg["signal_col"]
     returns_col = backtest_cfg["returns_col"]
     returns_type = backtest_cfg.get("returns_type", "simple")
+    bt_subset = str(backtest_cfg.get("subset", "full"))
 
     signals = align_asset_column(asset_frames, column=signal_col, how=alignment)
     asset_returns = align_asset_column(asset_frames, column=returns_col, how=alignment)
@@ -175,6 +176,25 @@ def run_portfolio_backtest(
             long_short=bool(portfolio_cfg.get("long_short", True)),
             gross_target=float(portfolio_cfg.get("gross_target", 1.0)),
         )
+
+    if bt_subset == "test":
+        oos_by_asset: dict[str, pd.Series] = {}
+        for asset, frame in sorted(asset_frames.items()):
+            if "pred_is_oos" not in frame.columns:
+                continue
+            oos_by_asset[asset] = frame["pred_is_oos"].astype(float)
+        if oos_by_asset:
+            oos_df = pd.concat(oos_by_asset, axis=1, join=alignment).sort_index()
+            if isinstance(oos_df.columns, pd.MultiIndex):
+                oos_df.columns = oos_df.columns.get_level_values(0)
+            oos_mask = oos_df.reindex(weights.index).fillna(0.0).astype(bool).all(axis=1)
+            if bool(oos_mask.any()):
+                weights = weights.copy()
+                weights.loc[~oos_mask] = 0.0
+                first_oos_label = oos_mask[oos_mask].index[0]
+                weights = weights.loc[first_oos_label:]
+                asset_returns = asset_returns.reindex(weights.index)
+                diagnostics = diagnostics.reindex(weights.index)
 
     min_holding_bars = int(backtest_cfg.get("min_holding_bars", 0) or 0)
     if min_holding_bars > 0:

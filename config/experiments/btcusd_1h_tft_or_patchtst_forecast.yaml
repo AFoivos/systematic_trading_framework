@@ -118,6 +118,8 @@ model:
   target:
     kind: forward_return
     price_col: close
+    returns_col: close_logret
+    returns_type: log
     horizon: 1
   split:
     method: walk_forward
@@ -137,7 +139,7 @@ signals:
   params:
     forecast_col: pred_ret
     vol_col: pred_vol
-    signal_name: signal_forecast_vol_adj
+    signal_col: signal_forecast_vol_adj
     clip: 0.6
     vol_floor: 1.0e-6
 

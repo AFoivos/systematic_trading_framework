@@ -541,7 +541,7 @@ def test_run_experiment_supports_multi_asset_portfolio_storage_monitoring_and_ex
         },
         "signals": {
             "kind": "probability_conviction",
-            "params": {"prob_col": "pred_prob", "signal_name": "signal_prob_size", "clip": 1.0},
+            "params": {"prob_col": "pred_prob", "signal_col": "signal_prob_size", "clip": 1.0},
         },
         "portfolio": {
             "enabled": True,
@@ -582,6 +582,82 @@ def test_run_experiment_supports_multi_asset_portfolio_storage_monitoring_and_ex
     assert all("classification_metrics" in fold for fold in result.model_meta["per_asset"]["AAA"]["folds"])
     assert (tmp_path / "raw_store" / "raw" / "multi_asset_demo" / "dataset.csv").exists()
     assert len(list((tmp_path / "processed_store" / "processed").glob("*/dataset.csv"))) == 1
+
+
+def test_run_experiment_portfolio_test_subset_zeroes_pre_oos_weights(tmp_path, monkeypatch) -> None:
+    symbols = ["AAA", "BBB"]
+    synthetic_panel = {
+        "AAA": _synthetic_ohlcv(periods=180, seed=11, amplitude=0.012),
+        "BBB": _synthetic_ohlcv(periods=180, seed=19, amplitude=0.009),
+    }
+
+    def _mock_load_panel(**kwargs):
+        requested = kwargs["symbols"]
+        return {symbol: synthetic_panel[symbol].copy() for symbol in requested}
+
+    monkeypatch.setattr(runner_mod, "load_ohlcv_panel", _mock_load_panel)
+
+    config_path = tmp_path / "multi_asset_portfolio_test_subset.yaml"
+    config = {
+        "data": {
+            "symbols": symbols,
+            "source": "yahoo",
+            "interval": "1d",
+            "start": "2020-01-01",
+        },
+        "features": [
+            {"step": "returns", "params": {"log": False, "col_name": "close_ret"}},
+            {"step": "lags", "params": {"cols": ["close_ret"], "lags": [1, 2]}},
+        ],
+        "model": {
+            "kind": "logistic_regression_clf",
+            "params": {"max_iter": 400},
+            "feature_cols": ["lag_close_ret_1", "lag_close_ret_2"],
+            "target": {"kind": "forward_return", "price_col": "close", "horizon": 1},
+            "split": {
+                "method": "walk_forward",
+                "train_size": 100,
+                "test_size": 20,
+                "step_size": 20,
+                "expanding": True,
+            },
+        },
+        "signals": {
+            "kind": "probability_conviction",
+            "params": {"prob_col": "pred_prob", "signal_col": "signal_prob_size", "clip": 1.0},
+        },
+        "portfolio": {
+            "enabled": True,
+            "construction": "signal_weights",
+            "gross_target": 1.0,
+            "long_short": True,
+            "constraints": {
+                "min_weight": -0.75,
+                "max_weight": 0.75,
+                "max_gross_leverage": 1.0,
+                "target_net_exposure": 0.0,
+            },
+        },
+        "backtest": {
+            "returns_col": "close_ret",
+            "signal_col": "signal_prob_size",
+            "periods_per_year": 252,
+            "returns_type": "simple",
+            "subset": "test",
+        },
+        "logging": {"enabled": False},
+    }
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    result = runner_mod.run_experiment(config_path)
+
+    assert result.portfolio_weights is not None
+    first_oos_by_asset = [
+        frame.index[frame["pred_is_oos"].astype(bool)][0]
+        for frame in result.data.values()
+    ]
+    expected_first_oos = max(first_oos_by_asset)
+    assert result.portfolio_weights.index.min() == expected_first_oos
 
 
 def test_run_experiment_rejects_multi_asset_without_explicit_portfolio_mode(tmp_path, monkeypatch) -> None:
@@ -627,7 +703,7 @@ def test_run_experiment_rejects_multi_asset_without_explicit_portfolio_mode(tmp_
         },
         "signals": {
             "kind": "probability_conviction",
-            "params": {"prob_col": "pred_prob", "signal_name": "signal_prob_size", "clip": 1.0},
+            "params": {"prob_col": "pred_prob", "signal_col": "signal_prob_size", "clip": 1.0},
         },
         "portfolio": {"enabled": False},
         "backtest": {

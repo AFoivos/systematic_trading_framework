@@ -4,8 +4,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.experiments.support.targets import build_triple_barrier_target
-from src.experiments.orchestration.feature_stage import apply_feature_steps
+from src.experiments.support.targets import build_forward_return_target, build_triple_barrier_target
+from src.experiments.orchestration.feature_stage import apply_feature_steps, apply_signal_step
 from src.models.runtime import probe_xgboost_runtime
 from src.experiments.models import (
     train_logistic_regression_classifier,
@@ -60,6 +60,12 @@ def test_registry_contains_phase12_extensions() -> None:
     assert "probability_vol_adjusted" in SIGNAL_REGISTRY
 
 
+def test_signal_registry_points_to_signal_layer() -> None:
+    assert SIGNAL_REGISTRY["trend_state"].__module__.startswith("src.signals")
+    assert SIGNAL_REGISTRY["probability_vol_adjusted"].__module__.startswith("src.signals")
+    assert SIGNAL_REGISTRY["forecast_vol_adjusted"].__module__.startswith("src.signals")
+
+
 def test_apply_feature_steps_skips_disabled_steps() -> None:
     df = _synthetic_hourly_ohlcv(periods=72)
     out = apply_feature_steps(
@@ -74,6 +80,42 @@ def test_apply_feature_steps_skips_disabled_steps() -> None:
     assert "close_logret" in out.columns
     assert "bb_percent_b_24_2.0" in out.columns
     assert "close_rsi_14" not in out.columns
+
+
+def test_apply_signal_step_supports_signal_col_config() -> None:
+    idx = pd.date_range("2024-01-01", periods=3, freq="H")
+    df = pd.DataFrame(
+        {
+            "pred_prob": [0.9, 0.5, 0.1],
+            "pred_ret": [0.02, 0.0, -0.02],
+            "pred_vol": [0.01, 0.01, 0.01],
+        },
+        index=idx,
+    )
+
+    legacy = apply_signal_step(
+        df,
+        {
+            "kind": "probability_conviction",
+            "params": {"prob_col": "pred_prob", "signal_col": "signal_prob_size", "clip": 1.0},
+        },
+    )
+    canonical = apply_signal_step(
+        df,
+        {
+            "kind": "forecast_threshold",
+            "params": {
+                "forecast_col": "pred_ret",
+                "signal_col": "signal_forecast_custom",
+                "upper": 0.01,
+                "lower": -0.01,
+                "mode": "long_short",
+            },
+        },
+    )
+
+    assert legacy["signal_prob_size"].tolist() == [0.8, 0.0, -0.8]
+    assert canonical["signal_forecast_custom"].tolist() == [1.0, 0.0, -1.0]
 
 
 def test_rolling_clip_transform_is_point_in_time_safe() -> None:
@@ -227,6 +269,106 @@ def test_triple_barrier_target_labels_upper_and_lower_events() -> None:
     assert float(out.iloc[1][label_col]) == 0.0
     assert meta["kind"] == "triple_barrier"
     assert meta["horizon"] == 2
+
+
+def test_triple_barrier_target_records_barrier_level_event_returns() -> None:
+    idx = pd.date_range("2024-01-01", periods=6, freq="H")
+    df = pd.DataFrame(
+        {
+            "open": [100.0, 100.0, 102.0, 99.0, 100.0, 100.0],
+            "high": [100.2, 102.5, 102.5, 99.5, 100.5, 100.5],
+            "low": [99.8, 99.5, 98.0, 97.5, 99.5, 99.5],
+            "close": [100.0, 102.0, 99.0, 98.5, 100.0, 100.0],
+            "volume": [1000, 1000, 1000, 1000, 1000, 1000],
+            "tb_vol": [0.01, 0.01, 0.01, 0.01, 0.01, 0.01],
+        },
+        index=idx,
+    )
+
+    out, _, fwd_col, _ = build_triple_barrier_target(
+        df,
+        {
+            "kind": "triple_barrier",
+            "price_col": "close",
+            "open_col": "open",
+            "high_col": "high",
+            "low_col": "low",
+            "volatility_col": "tb_vol",
+            "upper_mult": 1.0,
+            "lower_mult": 1.0,
+            "max_holding": 2,
+            "neutral_label": "drop",
+        },
+    )
+
+    assert float(out.iloc[0][fwd_col]) == pytest.approx(0.01)
+    assert float(out.iloc[1][fwd_col]) == pytest.approx(-0.01)
+
+
+def test_triple_barrier_target_keeps_incomplete_tail_unlabeled() -> None:
+    idx = pd.date_range("2024-01-01", periods=6, freq="H")
+    df = pd.DataFrame(
+        {
+            "open": [100.0, 100.0, 101.0, 101.5, 102.0, 102.5],
+            "high": [100.3, 100.8, 101.4, 101.9, 102.4, 102.9],
+            "low": [99.7, 99.8, 100.6, 101.1, 101.6, 102.1],
+            "close": [100.0, 100.5, 101.0, 101.5, 102.0, 102.5],
+            "volume": [1000, 1000, 1000, 1000, 1000, 1000],
+            "tb_vol": [0.01, 0.01, 0.01, 0.01, 0.01, 0.01],
+        },
+        index=idx,
+    )
+
+    out, label_col, fwd_col, meta = build_triple_barrier_target(
+        df,
+        {
+            "kind": "triple_barrier",
+            "price_col": "close",
+            "open_col": "open",
+            "high_col": "high",
+            "low_col": "low",
+            "volatility_col": "tb_vol",
+            "upper_mult": 10.0,
+            "lower_mult": 10.0,
+            "max_holding": 3,
+            "neutral_label": "drop",
+        },
+    )
+
+    assert out[label_col].tail(3).isna().all()
+    assert out[fwd_col].tail(3).isna().all()
+    assert meta["labeled_rows"] == int(out[label_col].notna().sum())
+
+
+def test_forward_return_target_can_use_log_return_inputs() -> None:
+    idx = pd.date_range("2024-01-01", periods=4, freq="H")
+    step_logret = float(np.log(1.1))
+    df = pd.DataFrame(
+        {
+            "close": [100.0, 110.0, 121.0, 133.1],
+            "close_logret": [np.nan, step_logret, step_logret, step_logret],
+        },
+        index=idx,
+    )
+
+    out, label_col, fwd_col, meta = build_forward_return_target(
+        df,
+        {
+            "kind": "forward_return",
+            "price_col": "close",
+            "returns_col": "close_logret",
+            "returns_type": "log",
+            "horizon": 2,
+        },
+    )
+
+    expected = 2.0 * step_logret
+    assert label_col == "label"
+    assert float(out.iloc[0][fwd_col]) == pytest.approx(expected)
+    assert float(out.iloc[1][fwd_col]) == pytest.approx(expected)
+    assert pd.isna(out.iloc[2][fwd_col])
+    assert meta["returns_col"] == "close_logret"
+    assert meta["returns_type"] == "log"
 
 
 def test_xgboost_classifier_supports_triple_barrier_target() -> None:

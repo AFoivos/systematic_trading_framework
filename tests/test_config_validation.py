@@ -11,6 +11,7 @@ from src.utils.config_validation import (
     validate_logging_block,
     validate_model_block,
     validate_portfolio_block,
+    validate_resolved_config,
     validate_signals_block,
 )
 
@@ -138,6 +139,58 @@ def test_validate_model_block_rejects_invalid_overlay_configuration() -> None:
     }
 
     with pytest.raises(ConfigValidationError, match="model.overlay"):
+        validate_model_block(model)
+
+
+def test_validate_model_block_accepts_forward_return_log_target_from_returns_col() -> None:
+    model = {
+        "kind": "tft_forecaster",
+        "feature_cols": ["feat_1", "feat_2"],
+        "target": {
+            "kind": "forward_return",
+            "price_col": "close",
+            "returns_col": "close_logret",
+            "returns_type": "log",
+            "horizon": 1,
+        },
+        "split": {"method": "walk_forward", "train_size": 100, "test_size": 20},
+    }
+
+    validate_model_block(model)
+
+
+def test_validate_model_block_rejects_invalid_forward_return_returns_type() -> None:
+    model = {
+        "kind": "tft_forecaster",
+        "feature_cols": ["feat_1", "feat_2"],
+        "target": {
+            "kind": "forward_return",
+            "price_col": "close",
+            "returns_col": "close_logret",
+            "returns_type": "compound",
+            "horizon": 1,
+        },
+        "split": {"method": "walk_forward", "train_size": 100, "test_size": 20},
+    }
+
+    with pytest.raises(ConfigValidationError, match="returns_type"):
+        validate_model_block(model)
+
+
+def test_validate_model_block_rejects_log_forward_return_without_returns_col() -> None:
+    model = {
+        "kind": "tft_forecaster",
+        "feature_cols": ["feat_1", "feat_2"],
+        "target": {
+            "kind": "forward_return",
+            "price_col": "close",
+            "returns_type": "log",
+            "horizon": 1,
+        },
+        "split": {"method": "walk_forward", "train_size": 100, "test_size": 20},
+    }
+
+    with pytest.raises(ConfigValidationError, match="returns_col"):
         validate_model_block(model)
 
 
@@ -383,6 +436,19 @@ def test_validate_signals_block_rejects_invalid_probability_vol_adjusted_dead_zo
         )
 
 
+def test_validate_signals_block_rejects_legacy_signal_name() -> None:
+    with pytest.raises(ConfigValidationError, match="signal_name is no longer supported"):
+        validate_signals_block(
+            {
+                "kind": "forecast_threshold",
+                "params": {
+                    "forecast_col": "pred_ret",
+                    "signal_name": "signal_a",
+                },
+            }
+        )
+
+
 def test_validate_data_block_accepts_dukascopy_csv_with_explicit_load_path() -> None:
     validate_data_block(
         {
@@ -425,3 +491,46 @@ def test_validate_data_block_rejects_dukascopy_csv_without_load_path() -> None:
                 },
             }
         )
+
+
+def test_validate_resolved_config_rejects_test_subset_without_model() -> None:
+    cfg = {
+        "data": {
+            "source": "dukascopy_csv",
+            "interval": "1h",
+            "start": "2024-01-01 00:00:00",
+            "end": None,
+            "alignment": "inner",
+            "symbol": "BTCUSD",
+            "pit": {},
+            "storage": {
+                "mode": "cached_only",
+                "load_path": "data/raw/dukas_copy_bank/btcusd_h1.csv",
+            },
+        },
+        "features": [],
+        "model": {"kind": "none"},
+        "signals": {"kind": "none"},
+        "risk": {},
+        "backtest": {
+            "returns_col": "close_logret",
+            "signal_col": "signal",
+            "periods_per_year": 8760,
+            "returns_type": "log",
+            "subset": "test",
+        },
+        "portfolio": {"enabled": False},
+        "monitoring": {"enabled": False},
+        "execution": {"enabled": False, "capital": 100000.0, "price_col": "close"},
+        "logging": {"enabled": False, "run_name": "demo", "output_dir": "logs/experiments"},
+        "runtime": {
+            "seed": 7,
+            "deterministic": True,
+            "threads": 1,
+            "repro_mode": "strict",
+            "seed_torch": False,
+        },
+    }
+
+    with pytest.raises(ConfigValidationError, match="requires a model that emits an OOS boundary"):
+        validate_resolved_config(cfg)

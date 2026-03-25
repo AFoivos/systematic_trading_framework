@@ -1,5 +1,5 @@
 from .engine import run_backtest, BacktestResult
-from .strategies import (
+from src.signals import (
     buy_and_hold_signal,
     trend_state_long_only_signal,
     trend_state_signal,

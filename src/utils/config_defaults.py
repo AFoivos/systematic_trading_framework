@@ -121,6 +121,12 @@ def default_feature_steps(
 
 def default_model_block(model: dict[str, Any]) -> dict[str, Any]:
     model = dict(model) if model else {}
+    target = dict(model.get("target", {}) or {})
+    if target:
+        if str(target.get("kind", "forward_return")) == "forward_return":
+            target.setdefault("returns_col", None)
+            target.setdefault("returns_type", "simple")
+        model["target"] = target
     kind = str(model.get("kind", "none"))
     if kind not in {"ppo_agent", "dqn_agent", "ppo_portfolio_agent", "dqn_portfolio_agent"}:
         return model

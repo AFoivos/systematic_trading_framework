@@ -301,7 +301,7 @@ signals_catalog:
     enabled: true
     params:
       prob_col: pred_prob
-      signal_name: signal_prob_threshold
+      signal_col: signal_prob_threshold
       upper: 0.55
       lower: 0.45
       mode: long_short

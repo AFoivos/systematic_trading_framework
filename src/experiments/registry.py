@@ -27,7 +27,7 @@ from src.features import (
     add_volume_features,
 )
 from src.features.technical.trend import add_trend_features, add_trend_regime_features
-from src.backtesting.strategies import (
+from src.signals import (
     conviction_sizing_signal,
     forecast_threshold_signal,
     forecast_vol_adjusted_signal,

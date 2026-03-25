@@ -194,7 +194,7 @@ signals:
   params:
     prob_col: pred_prob
     vol_col: pred_vol
-    signal_name: signal_prob_vol_adj
+    signal_col: signal_prob_vol_adj
     prob_center: 0.5
     upper: 0.56
     lower: 0.44

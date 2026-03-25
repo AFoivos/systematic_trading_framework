@@ -406,6 +406,8 @@ models:
     target:
       kind: forward_return
       price_col: close
+      returns_col: close_logret
+      returns_type: log
       horizon: 1
     split:
       method: walk_forward
@@ -430,6 +432,8 @@ models:
     target:
       kind: forward_return
       price_col: close
+      returns_col: close_logret
+      returns_type: log
       horizon: 1
     split:
       method: walk_forward
@@ -460,6 +464,8 @@ models:
     target:
       kind: forward_return
       price_col: close
+      returns_col: close_logret
+      returns_type: log
       horizon: 1
     split:
       method: walk_forward
@@ -498,6 +504,8 @@ models:
     target:
       kind: forward_return
       price_col: close
+      returns_col: close_logret
+      returns_type: log
       horizon: 1
     split:
       method: walk_forward
@@ -537,6 +545,8 @@ models:
     target:
       kind: forward_return
       price_col: close
+      returns_col: close_logret
+      returns_type: log
       horizon: 1
     split:
       method: walk_forward
@@ -714,14 +724,14 @@ signals_catalog:
     enabled: false
     params:
       state_col: close_trend_state_sma_24_72
-      signal_name: signal_trend_state
+      signal_col: signal_trend_state
       mode: long_short_hold
 
   probability_threshold:
     enabled: false
     params:
       prob_col: pred_prob
-      signal_name: signal_prob_threshold
+      signal_col: signal_prob_threshold
       upper: 0.55
       lower: 0.45
       mode: long_short
@@ -730,7 +740,7 @@ signals_catalog:
     enabled: false
     params:
       prob_col: pred_prob
-      signal_name: signal_prob_conviction
+      signal_col: signal_prob_conviction
       prob_center: 0.5
       clip: 1.0
 
@@ -739,7 +749,7 @@ signals_catalog:
     params:
       prob_col: pred_prob
       vol_col: pred_vol
-      signal_name: signal_prob_vol_adj
+      signal_col: signal_prob_vol_adj
       prob_center: 0.5
       upper: 0.56
       lower: 0.44
@@ -759,7 +769,7 @@ signals_catalog:
     enabled: false
     params:
       forecast_col: pred_ret
-      signal_name: signal_forecast_threshold
+      signal_col: signal_forecast_threshold
       upper: 0.001
       lower: -0.001
       mode: long_short
@@ -769,7 +779,7 @@ signals_catalog:
     params:
       forecast_col: pred_ret
       vol_col: pred_vol
-      signal_name: signal_forecast_vol_adj
+      signal_col: signal_forecast_vol_adj
       vol_target: 0.0015
       clip: 0.6
       vol_floor: 1.0e-6
@@ -779,7 +789,7 @@ signals_catalog:
     enabled: false
     params:
       rsi_col: close_rsi_14
-      signal_name: signal_rsi
+      signal_col: signal_rsi
       buy_level: 30.0
       sell_level: 70.0
       mode: long_short
@@ -788,7 +798,7 @@ signals_catalog:
     enabled: false
     params:
       momentum_col: close_logret_mom_24
-      signal_name: signal_momentum
+      signal_col: signal_momentum
       upper: 0.0
       lower: 0.0
       mode: long_short
@@ -798,7 +808,7 @@ signals_catalog:
     params:
       k_col: close_stoch_k_14
       d_col: close_stoch_d_14
-      signal_name: signal_stochastic
+      signal_col: signal_stochastic
       lower_band: 20.0
       upper_band: 80.0
       mode: long_short
@@ -807,7 +817,7 @@ signals_catalog:
     enabled: false
     params:
       vol_ratio_col: regime_vol_ratio_24_168
-      signal_name: signal_volatility_regime
+      signal_col: signal_volatility_regime
       high_threshold: 1.35
       low_threshold: 0.8
       high_signal: 1.0

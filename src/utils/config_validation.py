@@ -308,6 +308,13 @@ def validate_model_block(model: dict[str, Any]) -> None:
             raise ConfigValidationError("model.target.price_col must be a string.")
         if target_kind == "forward_return":
             _positive_int(target.get("horizon", 1), field="model.target.horizon")
+            if "returns_col" in target and target["returns_col"] is not None and not isinstance(target["returns_col"], str):
+                raise ConfigValidationError("model.target.returns_col must be a string or null.")
+            returns_type = str(target.get("returns_type", "simple"))
+            if returns_type not in {"simple", "log"}:
+                raise ConfigValidationError("model.target.returns_type must be 'simple' or 'log'.")
+            if target.get("returns_col") is None and returns_type != "simple":
+                raise ConfigValidationError("model.target.returns_type='log' requires model.target.returns_col.")
         quantiles = target.get("quantiles")
         if quantiles is not None:
             if not isinstance(quantiles, (list, tuple)) or len(quantiles) != 2:
@@ -628,8 +635,12 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
     params = signals.get("params", {}) or {}
     if not isinstance(params, dict):
         raise ConfigValidationError("signals.params must be a mapping when provided.")
+    if "signal_name" in params:
+        raise ConfigValidationError("signals.params.signal_name is no longer supported; use signals.params.signal_col.")
+    if "signal_col" in params and params["signal_col"] is not None and not isinstance(params["signal_col"], str):
+        raise ConfigValidationError("signals.params.signal_col must be a string.")
     if signals["kind"] == "probability_vol_adjusted":
-        for key in ("prob_col", "vol_col", "signal_name"):
+        for key in ("prob_col", "vol_col"):
             if key in params and params[key] is not None and not isinstance(params[key], str):
                 raise ConfigValidationError(f"signals.params.{key} must be a string.")
         prob_center = _finite_number(params.get("prob_center", 0.5), field="signals.params.prob_center")
@@ -747,6 +758,9 @@ def validate_backtest_block(backtest: dict[str, Any]) -> None:
             "backtest.missing_return_policy must be 'raise', 'raise_if_exposed', or 'fill_zero'."
         )
     _non_negative_int(backtest.get("min_holding_bars", 0), field="backtest.min_holding_bars")
+    subset = str(backtest.get("subset", "full"))
+    if subset not in {"full", "test"}:
+        raise ConfigValidationError("backtest.subset must be 'full' or 'test'.")
 
 
 def validate_portfolio_block(portfolio: dict[str, Any]) -> None:
@@ -932,6 +946,8 @@ def validate_resolved_config(cfg: dict[str, Any]) -> dict[str, Any]:
                 raise ConfigValidationError("Portfolio RL model kinds currently require data.alignment='inner'.")
         if not bool(cfg["portfolio"].get("enabled", False)) and cfg["risk"].get("target_vol") is not None:
             raise ConfigValidationError("Single-asset RL backtests currently require risk.target_vol=null.")
+    if str(cfg["backtest"].get("subset", "full")) == "test" and model_kind == "none":
+        raise ConfigValidationError("backtest.subset='test' requires a model that emits an OOS boundary.")
     return cfg
 
 

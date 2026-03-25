@@ -15,21 +15,46 @@ def build_forward_return_target(
     """
     cfg = dict(target_cfg or {})
     price_col = cfg.get("price_col", "close")
+    returns_col = cfg.get("returns_col")
+    returns_type = str(cfg.get("returns_type", "simple"))
     horizon = int(cfg.get("horizon", 1))
     if horizon <= 0:
         raise ValueError("target.horizon must be a positive integer.")
+    if returns_type not in {"simple", "log"}:
+        raise ValueError("target.returns_type must be 'simple' or 'log'.")
+    if returns_col is None and returns_type != "simple":
+        raise ValueError("target.returns_type='log' requires target.returns_col.")
     fwd_col = cfg.get("fwd_col", f"target_fwd_{horizon}")
     label_col = cfg.get("label_col", "label")
     threshold = float(cfg.get("threshold", 0.0))
     quantiles = cfg.get("quantiles")
 
-    if price_col not in df.columns:
-        raise KeyError(f"price_col '{price_col}' not found in DataFrame")
-
     out = df.copy()
-    out[fwd_col] = out[price_col].pct_change(periods=horizon).shift(-horizon)
+    if returns_col is not None:
+        returns_col = str(returns_col)
+        if returns_col not in out.columns:
+            raise KeyError(f"returns_col '{returns_col}' not found in DataFrame")
+        future_returns = pd.concat(
+            [
+                out[returns_col].astype(float).shift(-step).rename(f"step_{step}")
+                for step in range(1, horizon + 1)
+            ],
+            axis=1,
+        )
+        valid_mask = future_returns.notna().all(axis=1)
+        out[fwd_col] = np.nan
+        if bool(valid_mask.any()):
+            if returns_type == "log":
+                target_values = future_returns.loc[valid_mask].sum(axis=1)
+            else:
+                target_values = (1.0 + future_returns.loc[valid_mask]).prod(axis=1) - 1.0
+            out.loc[valid_mask, fwd_col] = target_values.to_numpy(dtype=float)
+    else:
+        if price_col not in df.columns:
+            raise KeyError(f"price_col '{price_col}' not found in DataFrame")
+        out[fwd_col] = out[price_col].pct_change(periods=horizon).shift(-horizon)
+        valid_mask = out[fwd_col].notna()
 
-    valid_mask = out[fwd_col].notna()
     out[label_col] = np.nan
     if quantiles:
         if not isinstance(quantiles, (list, tuple)) or len(quantiles) != 2:
@@ -43,6 +68,8 @@ def build_forward_return_target(
     meta = {
         "kind": "forward_return",
         "price_col": price_col,
+        "returns_col": returns_col,
+        "returns_type": returns_type,
         "horizon": horizon,
         "fwd_col": fwd_col,
         "label_col": label_col,
@@ -144,9 +171,13 @@ def build_triple_barrier_target(
             return 0.0
         return 1.0 if bar_open >= (upper_level + lower_level) / 2.0 else 0.0
 
+    full_horizon_cutoff = len(out) - max_holding
     for start_idx in range(len(out)):
         entry_price = float(prices[start_idx])
         if not np.isfinite(entry_price) or entry_price <= 0.0:
+            continue
+        if start_idx >= full_horizon_cutoff:
+            # Keep tail rows unlabeled when the full vertical barrier horizon is unavailable.
             continue
 
         horizon_end = min(len(out), start_idx + max_holding + 1)
@@ -175,7 +206,10 @@ def build_triple_barrier_target(
 
             if chosen_label is not None:
                 chosen_step = step_idx - start_idx
-                chosen_return = prices[step_idx] / entry_price - 1.0
+                if chosen_label == 1.0:
+                    chosen_return = upper_level / entry_price - 1.0
+                else:
+                    chosen_return = lower_level / entry_price - 1.0
                 break
 
         if chosen_label is None:

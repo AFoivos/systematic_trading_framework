@@ -31,8 +31,11 @@ def drawdown_cooloff_multiplier(
     if cooloff_bars < 0:
         raise ValueError("cooloff_bars must be >= 0")
 
-    dd = compute_drawdown(equity)
     mult = pd.Series(1.0, index=equity.index, name="dd_cooloff_mult")
+    if cooloff_bars == 0:
+        return mult
+
+    dd = compute_drawdown(equity)
 
     cooldown = 0
     for i in range(len(dd)):
@@ -43,7 +46,7 @@ def drawdown_cooloff_multiplier(
 
         if dd.iat[i] <= -abs(max_drawdown):
             mult.iat[i] = min_exposure
-            cooldown = cooloff_bars
+            cooldown = cooloff_bars - 1
         else:
             mult.iat[i] = 1.0
 

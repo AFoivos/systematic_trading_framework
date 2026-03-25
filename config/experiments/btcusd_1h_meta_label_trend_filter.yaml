@@ -8,7 +8,7 @@ data:
   source: dukascopy_csv
   interval: 1h
   start: "2017-05-07 23:00:00"
-  end: "2026-03-22"
+  end: "2024-12-31 14:00:00"
   alignment: inner
   symbol: BTCUSD
   pit:
@@ -179,11 +179,13 @@ model:
     max_folds: null
 
 signals:
-  kind: probability_conviction
+  kind: probability_threshold
   params:
     prob_col: pred_prob
-    signal_name: signal_prob_size
-    clip: 0.6
+    signal_col: signal_prob_threshold
+    upper: 0.55
+    lower: 0.45
+    mode: long_short
 
 runtime:
   seed: 7
@@ -209,6 +211,7 @@ backtest:
   periods_per_year: 8760
   returns_type: log
   missing_return_policy: raise_if_exposed
+  min_holding_bars: 2
   subset: test
   vol_col: null
 
