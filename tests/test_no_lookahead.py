@@ -3,6 +3,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from src.experiments.orchestration.model_stage import apply_model_pipeline_to_assets
+from src.features import add_close_returns, add_shock_context_features
 from src.models.classification import _apply_fold_feature_preprocessing
 from src.experiments.models import train_logistic_regression_classifier
 
@@ -180,3 +182,129 @@ def test_standard_scaler_accepts_empty_test_fold() -> None:
 
     assert meta["scaler"] == "standard"
     assert X_test_scaled.shape == (0, 1)
+
+
+def test_multi_stage_model_pipeline_uses_upstream_oos_predictions_only() -> None:
+    df = _synthetic_price_frame(320)
+    df["feat_3"] = df["feat_1"].rolling(3, min_periods=1).mean()
+    asset_frames = {"AAA": df}
+
+    out_frames, models, meta = apply_model_pipeline_to_assets(
+        asset_frames,
+        model_cfg=None,
+        model_stages=[
+            {
+                "name": "first_pass",
+                "enabled": True,
+                "stage": 2,
+                "kind": "logistic_regression_clf",
+                "params": {"max_iter": 400, "solver": "lbfgs"},
+                "feature_cols": ["feat_1", "feat_2"],
+                "target": {"kind": "forward_return", "price_col": "close", "horizon": 1},
+                "split": {"method": "time", "train_frac": 0.5},
+                "pred_prob_col": "stage1_pred_prob",
+            },
+            {
+                "name": "disabled_middle",
+                "enabled": False,
+                "stage": 1,
+                "kind": "sarimax_forecaster",
+                "feature_cols": ["feat_1"],
+                "target": {"kind": "forward_return", "price_col": "close", "horizon": 1},
+                "split": {"method": "time", "train_frac": 0.55},
+                "pred_ret_col": "unused_pred_ret",
+            },
+            {
+                "name": "final_filter",
+                "enabled": True,
+                "stage": 3,
+                "kind": "logistic_regression_clf",
+                "params": {"max_iter": 400, "solver": "lbfgs"},
+                "feature_cols": ["stage1_pred_prob", "feat_2", "feat_3"],
+                "target": {"kind": "forward_return", "price_col": "close", "horizon": 1},
+                "split": {"method": "time", "train_frac": 0.75},
+                "pred_prob_col": "pred_prob",
+            },
+        ],
+        returns_col=None,
+    )
+
+    out = out_frames["AAA"]
+    assert isinstance(models, dict)
+    assert meta["pipeline_kind"] == "multi_stage"
+    assert meta["stage_count"] == 2
+    assert meta["stage_names"] == ["first_pass", "final_filter"]
+    assert [stage["stage"] for stage in meta["stages"]] == [2, 3]
+    assert out["stage1_pred_prob"].notna().any()
+    assert "unused_pred_ret" not in out.columns
+    assert out.loc[~out["pred_is_oos"], "pred_prob"].isna().all()
+    assert meta["prediction_diagnostics"]["non_oos_prediction_rows"] == 0
+    assert meta["stages"][0]["prediction_diagnostics"]["non_oos_prediction_rows"] == 0
+    assert meta["stages"][1]["prediction_diagnostics"]["non_oos_prediction_rows"] == 0
+
+
+def test_shock_context_is_point_in_time_safe() -> None:
+    rng = np.random.default_rng(7)
+    idx = pd.date_range("2024-01-01", periods=96, freq="h")
+    logrets = rng.normal(0.0, 0.002, size=len(idx))
+    close = 100.0 * np.exp(np.cumsum(logrets))
+    df = pd.DataFrame({"close": close}, index=idx)
+    df["open"] = df["close"].shift(1).fillna(df["close"].iloc[0])
+    intrabar = np.abs(rng.normal(0.003, 0.0005, size=len(idx)))
+    df["high"] = np.maximum(df["open"], df["close"]) * (1.0 + intrabar)
+    df["low"] = np.minimum(df["open"], df["close"]) * (1.0 - intrabar)
+    df = add_close_returns(df, log=True, col_name="close_logret")
+
+    baseline = add_shock_context_features(
+        df,
+        returns_col="close_logret",
+        ema_window=24,
+        atr_window=24,
+        short_horizon=1,
+        medium_horizon=4,
+        vol_window=24,
+    )
+
+    modified = df.copy()
+    modified.loc[idx[70]:, "close"] = modified.loc[idx[70]:, "close"] * 1.35
+    modified.loc[idx[70]:, "open"] = (
+        modified.loc[idx[70]:, "close"].shift(1).fillna(modified.loc[idx[70], "close"])
+    )
+    modified.loc[idx[70]:, "high"] = (
+        np.maximum(modified.loc[idx[70]:, "open"], modified.loc[idx[70]:, "close"]) * 1.01
+    )
+    modified.loc[idx[70]:, "low"] = (
+        np.minimum(modified.loc[idx[70]:, "open"], modified.loc[idx[70]:, "close"]) * 0.99
+    )
+    modified = add_close_returns(modified, log=True, col_name="close_logret")
+
+    future_changed = add_shock_context_features(
+        modified,
+        returns_col="close_logret",
+        ema_window=24,
+        atr_window=24,
+        short_horizon=1,
+        medium_horizon=4,
+        vol_window=24,
+    )
+
+    check_cols = [
+        "shock_ret_1h",
+        "shock_ret_4h",
+        "shock_ret_z_1h",
+        "shock_ret_z_4h",
+        "shock_atr_multiple_1h",
+        "shock_atr_multiple_4h",
+        "shock_distance_ema",
+        "shock_candidate",
+        "shock_side_contrarian",
+        "shock_side_contrarian_active",
+        "shock_active_window",
+        "shock_strength",
+        "bars_since_shock",
+    ]
+    pd.testing.assert_frame_equal(
+        baseline.loc[: idx[69], check_cols],
+        future_changed.loc[: idx[69], check_cols],
+        check_dtype=False,
+    )

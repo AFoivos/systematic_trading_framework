@@ -10,6 +10,7 @@ from src.utils.config_validation import (
     validate_features_block,
     validate_logging_block,
     validate_model_block,
+    validate_model_stages_block,
     validate_portfolio_block,
     validate_risk_block,
     validate_resolved_config,
@@ -214,6 +215,101 @@ def test_validate_model_block_rejects_log_forward_return_without_returns_col() -
         validate_model_block(model)
 
 
+def test_validate_model_stages_block_rejects_duplicate_output_columns() -> None:
+    with pytest.raises(ConfigValidationError, match="duplicate emitted column"):
+        validate_model_stages_block(
+            [
+                {
+                    "name": "forecast_a",
+                    "kind": "sarimax_forecaster",
+                    "target": {"kind": "forward_return", "price_col": "close", "horizon": 1},
+                    "split": {"method": "time", "train_frac": 0.6},
+                    "pred_ret_col": "shared_pred_ret",
+                },
+                {
+                    "name": "forecast_b",
+                    "kind": "sarimax_forecaster",
+                    "target": {"kind": "forward_return", "price_col": "close", "horizon": 1},
+                    "split": {"method": "time", "train_frac": 0.7},
+                    "pred_ret_col": "shared_pred_ret",
+                },
+            ]
+        )
+
+
+def test_validate_resolved_config_accepts_multi_stage_model_chain() -> None:
+    cfg = {
+        "data": {"symbol": "SPY", "source": "yahoo", "interval": "1d", "alignment": "inner"},
+        "features": [],
+        "model": {
+            "kind": "logistic_regression_clf",
+            "feature_cols": ["forecast_pred_ret"],
+            "target": {"kind": "forward_return", "price_col": "close", "horizon": 1},
+            "split": {"method": "time", "train_frac": 0.75},
+            "pred_prob_col": "pred_prob",
+        },
+        "model_stages": [
+            {
+                "name": "forecast",
+                "enabled": True,
+                "stage": 1,
+                "kind": "sarimax_forecaster",
+                "feature_cols": ["feat_1"],
+                "target": {"kind": "forward_return", "price_col": "close", "horizon": 1},
+                "split": {"method": "time", "train_frac": 0.6},
+                "pred_ret_col": "forecast_pred_ret",
+                "pred_prob_col": "forecast_pred_prob",
+            },
+            {
+                "name": "filter",
+                "enabled": True,
+                "stage": 2,
+                "kind": "logistic_regression_clf",
+                "feature_cols": ["forecast_pred_ret"],
+                "target": {"kind": "forward_return", "price_col": "close", "horizon": 1},
+                "split": {"method": "time", "train_frac": 0.75},
+                "pred_prob_col": "pred_prob",
+            },
+        ],
+        "signals": {"kind": "probability_threshold", "params": {"prob_col": "pred_prob", "signal_col": "signal"}},
+        "runtime": {"seed": 7, "repro_mode": "strict", "deterministic": True, "threads": 1, "seed_torch": False},
+        "risk": {"cost_per_turnover": 0.0, "slippage_per_turnover": 0.0, "target_vol": None, "max_leverage": 1.0},
+        "backtest": {
+            "returns_col": "close_ret",
+            "signal_col": "signal",
+            "periods_per_year": 252,
+            "returns_type": "simple",
+            "missing_return_policy": "raise_if_exposed",
+        },
+        "portfolio": {"enabled": False, "construction": "signal_weights", "gross_target": 1.0, "long_short": True},
+        "monitoring": {"enabled": True, "psi_threshold": 0.2, "n_bins": 10},
+        "execution": {"enabled": False, "mode": "paper", "capital": 100000.0, "price_col": "close", "min_trade_notional": 0.0},
+        "logging": {"enabled": True, "run_name": "multi_stage_test", "output_dir": "logs/experiments"},
+    }
+
+    validate_resolved_config(cfg)
+
+
+def test_validate_model_stages_block_rejects_all_disabled_stages() -> None:
+    with pytest.raises(ConfigValidationError, match="enabled=true"):
+        validate_model_stages_block(
+            [
+                {
+                    "name": "forecast",
+                    "enabled": False,
+                    "stage": 1,
+                    "kind": "sarimax_forecaster",
+                },
+                {
+                    "name": "filter",
+                    "enabled": False,
+                    "stage": 2,
+                    "kind": "logistic_regression_clf",
+                },
+            ]
+        )
+
+
 def test_validate_features_block_accepts_feature_transforms_step() -> None:
     validate_features_block(
         [
@@ -293,6 +389,69 @@ def test_validate_features_block_rejects_invalid_feature_transform_quantiles() -
                             }
                         ]
                     },
+                }
+            ]
+        )
+
+
+def test_validate_features_block_accepts_shock_context() -> None:
+    validate_features_block(
+        [
+            {"step": "returns", "enabled": True, "params": {"log": True, "col_name": "close_logret"}},
+            {
+                "step": "shock_context",
+                "enabled": True,
+                "params": {
+                    "price_col": "close",
+                    "high_col": "high",
+                    "low_col": "low",
+                    "returns_col": "close_logret",
+                    "ema_col": "close_ema_24",
+                    "atr_col": "atr_24",
+                    "short_horizon": 1,
+                    "medium_horizon": 4,
+                    "vol_window": 24,
+                    "ret_z_threshold": 2.0,
+                    "atr_mult_threshold": 1.5,
+                    "distance_from_mean_threshold": 1.0,
+                    "post_shock_active_bars": 4,
+                    "use_log_returns": True,
+                },
+            },
+        ]
+    )
+
+
+def test_validate_features_block_rejects_invalid_shock_context_params() -> None:
+    with pytest.raises(ConfigValidationError, match="medium_horizon"):
+        validate_features_block(
+            [
+                {
+                    "step": "shock_context",
+                    "enabled": True,
+                    "params": {"short_horizon": 4, "medium_horizon": 1},
+                }
+            ]
+        )
+
+    with pytest.raises(ConfigValidationError, match="ret_z_threshold"):
+        validate_features_block(
+            [
+                {
+                    "step": "shock_context",
+                    "enabled": True,
+                    "params": {"ret_z_threshold": 0.0},
+                }
+            ]
+        )
+
+    with pytest.raises(ConfigValidationError, match="post_shock_active_bars"):
+        validate_features_block(
+            [
+                {
+                    "step": "shock_context",
+                    "enabled": True,
+                    "params": {"post_shock_active_bars": 0},
                 }
             ]
         )

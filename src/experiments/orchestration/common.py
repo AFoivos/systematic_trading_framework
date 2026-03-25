@@ -138,6 +138,11 @@ def data_stats_payload(data: pd.DataFrame | dict[str, pd.DataFrame]) -> dict[str
 def resolved_feature_columns(model_meta: dict[str, Any]) -> list[str] | dict[str, list[str]] | None:
     if not model_meta:
         return None
+    if model_meta.get("pipeline_kind") == "multi_stage":
+        return {
+            str(stage.get("name")): list(dict(stage.get("meta", {}) or {}).get("feature_cols", []) or [])
+            for stage in list(model_meta.get("stages", []) or [])
+        }
     if "feature_cols" in model_meta:
         return list(model_meta.get("feature_cols", []) or [])
     if "per_asset" in model_meta:

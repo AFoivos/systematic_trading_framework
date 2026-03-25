@@ -359,6 +359,58 @@ backtest:
     assert cfg.backtest.periods_per_year == 252
 
 
+def test_typed_config_loader_exposes_model_stages(tmp_path) -> None:
+    cfg_path = tmp_path / "typed_multi_stage.yaml"
+    cfg_path.write_text(
+        """
+data:
+  symbol: "SPY"
+  interval: "1d"
+features: []
+model_stages:
+  - name: forecast
+    enabled: true
+    stage: 1
+    kind: sarimax_forecaster
+    feature_cols: ["feat_1"]
+    target:
+      kind: forward_return
+      price_col: close
+      horizon: 1
+    split:
+      method: time
+      train_frac: 0.6
+    pred_ret_col: forecast_pred_ret
+    pred_prob_col: forecast_pred_prob
+  - name: filter
+    enabled: true
+    stage: 2
+    kind: logistic_regression_clf
+    feature_cols: ["forecast_pred_ret"]
+    target:
+      kind: forward_return
+      price_col: close
+      horizon: 1
+    split:
+      method: time
+      train_frac: 0.75
+backtest:
+  returns_col: "close_ret"
+  signal_col: "signal"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    cfg = load_experiment_config_typed(cfg_path)
+
+    assert isinstance(cfg, ResolvedExperimentConfig)
+    assert len(cfg.model_stages) == 2
+    assert cfg.model_stages[0].name == "forecast"
+    assert cfg.model_stages[0].enabled is True
+    assert cfg.model_stages[0].stage == 1
+    assert cfg.model.kind == "logistic_regression_clf"
+
+
 def test_config_loader_rejects_legacy_extends(tmp_path) -> None:
     """
     Tracked experiment configs must be fully self-contained and no longer support inheritance.

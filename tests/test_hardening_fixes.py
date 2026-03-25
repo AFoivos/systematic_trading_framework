@@ -472,6 +472,67 @@ logging:
         load_experiment_config(config_path)
 
 
+def test_load_experiment_config_rejects_model_and_model_stages_together(tmp_path: Path) -> None:
+    config_path = tmp_path / "bad_multi_stage_mix.yaml"
+    config_path.write_text(
+        """
+data:
+  symbol: SPY
+  source: yahoo
+  interval: 1d
+features: []
+model:
+  kind: logistic_regression_clf
+  feature_cols: [feat_1]
+  target:
+    kind: forward_return
+    price_col: close
+    horizon: 1
+  split:
+    method: time
+    train_frac: 0.7
+model_stages:
+  - name: forecast
+    kind: sarimax_forecaster
+    feature_cols: [feat_1]
+    target:
+      kind: forward_return
+      price_col: close
+      horizon: 1
+    split:
+      method: time
+      train_frac: 0.6
+signals:
+  kind: none
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+risk: {}
+backtest:
+  returns_col: close_ret
+  signal_col: signal
+  periods_per_year: 252
+  returns_type: simple
+  missing_return_policy: raise_if_exposed
+portfolio:
+  enabled: false
+monitoring:
+  enabled: true
+execution:
+  enabled: false
+logging:
+  enabled: true
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigError, match="model_stages"):
+        load_experiment_config(config_path)
+
+
 def test_execution_output_can_liquidate_current_only_assets_with_current_prices() -> None:
     """
     Execution output should allow liquidation of assets present only in current_weights.

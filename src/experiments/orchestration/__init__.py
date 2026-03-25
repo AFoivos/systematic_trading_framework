@@ -28,7 +28,7 @@ from .feature_stage import (
     apply_signals_to_assets,
     apply_steps_to_assets,
 )
-from .model_stage import aggregate_model_meta, apply_model_step, apply_model_to_assets
+from .model_stage import aggregate_model_meta, apply_model_pipeline_to_assets, apply_model_step, apply_model_to_assets
 from .pipeline import run_experiment_pipeline
 from .reporting import (
     build_fold_backtest_summaries,
@@ -45,6 +45,7 @@ __all__ = [
     "aggregate_model_meta",
     "align_asset_column",
     "apply_feature_steps",
+    "apply_model_pipeline_to_assets",
     "apply_model_step",
     "apply_model_to_assets",
     "apply_signal_step",

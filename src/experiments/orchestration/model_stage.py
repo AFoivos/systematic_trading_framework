@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
 import pandas as pd
@@ -229,4 +230,96 @@ def apply_model_to_assets(
     return out, models, aggregate_model_meta(metas)
 
 
-__all__ = ["aggregate_model_meta", "apply_model_step", "apply_model_to_assets"]
+def _stage_record(
+    *,
+    stage_name: str,
+    stage_cfg: dict[str, Any],
+    stage_meta: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "name": stage_name,
+        "kind": str(stage_cfg.get("kind", "none")),
+        "stage": stage_cfg.get("stage"),
+        "feature_cols": list(stage_meta.get("feature_cols", []) or []),
+        "pred_prob_col": stage_meta.get("pred_prob_col"),
+        "pred_ret_col": stage_meta.get("pred_ret_col"),
+        "signal_col": stage_meta.get("signal_col"),
+        "action_col": stage_meta.get("action_col"),
+        "oos_classification_summary": dict(stage_meta.get("oos_classification_summary", {}) or {}),
+        "oos_regression_summary": dict(stage_meta.get("oos_regression_summary", {}) or {}),
+        "oos_volatility_summary": dict(stage_meta.get("oos_volatility_summary", {}) or {}),
+        "prediction_diagnostics": dict(stage_meta.get("prediction_diagnostics", {}) or {}),
+        "preprocessing": dict(stage_meta.get("preprocessing", {}) or {}),
+        "target": dict(stage_meta.get("target", {}) or {}),
+        "anti_leakage": dict(stage_meta.get("anti_leakage", {}) or {}),
+        "meta": deepcopy(stage_meta),
+    }
+
+
+def _normalize_enabled_stage_cfgs(model_stages: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    stage_cfgs: list[dict[str, Any]] = []
+    for idx, raw_stage in enumerate(list(model_stages or [])):
+        stage_cfg = dict(raw_stage)
+        if not bool(stage_cfg.get("enabled", True)):
+            continue
+        stage_cfg.setdefault("stage", idx + 1)
+        stage_cfg.setdefault("name", f"stage_{idx + 1}")
+        stage_cfgs.append(stage_cfg)
+    stage_cfgs.sort(key=lambda stage: (int(stage.get("stage", 0) or 0), str(stage.get("name", ""))))
+    return stage_cfgs
+
+
+def apply_model_pipeline_to_assets(
+    asset_frames: dict[str, pd.DataFrame],
+    *,
+    model_cfg: dict[str, Any] | None,
+    model_stages: list[dict[str, Any]] | None,
+    returns_col: str | None,
+) -> tuple[dict[str, pd.DataFrame], object | dict[str, object] | None, dict[str, Any]]:
+    stage_cfgs = _normalize_enabled_stage_cfgs(model_stages)
+    if not stage_cfgs:
+        return apply_model_to_assets(
+            asset_frames,
+            model_cfg=dict(model_cfg or {"kind": "none"}) or {"kind": "none"},
+            returns_col=returns_col,
+        )
+
+    current_frames = dict(sorted(asset_frames.items()))
+    stage_models: dict[str, object | dict[str, object] | None] = {}
+    stage_records: list[dict[str, Any]] = []
+    final_meta: dict[str, Any] = {}
+
+    for idx, raw_stage_cfg in enumerate(stage_cfgs):
+        stage_cfg = dict(raw_stage_cfg)
+        stage_name = str(stage_cfg.pop("name", f"stage_{idx + 1}"))
+        stage_order = int(stage_cfg.pop("stage", idx + 1))
+        stage_cfg.pop("enabled", None)
+        current_frames, stage_model, stage_meta = apply_model_to_assets(
+            current_frames,
+            model_cfg=stage_cfg,
+            returns_col=returns_col,
+        )
+        stage_models[stage_name] = stage_model
+        stage_records.append(
+            _stage_record(
+                stage_name=stage_name,
+                stage_cfg={"name": stage_name, "kind": stage_cfg.get("kind"), "stage": stage_order},
+                stage_meta={"stage": stage_order} | dict(stage_meta),
+            )
+        )
+        final_meta = stage_meta
+
+    pipeline_meta = dict(final_meta)
+    pipeline_meta["pipeline_kind"] = "multi_stage"
+    pipeline_meta["stage_count"] = int(len(stage_records))
+    pipeline_meta["stage_names"] = [str(stage["name"]) for stage in stage_records]
+    pipeline_meta["stages"] = stage_records
+    return current_frames, stage_models, pipeline_meta
+
+
+__all__ = [
+    "aggregate_model_meta",
+    "apply_model_pipeline_to_assets",
+    "apply_model_step",
+    "apply_model_to_assets",
+]

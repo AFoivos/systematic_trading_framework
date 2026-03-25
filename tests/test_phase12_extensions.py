@@ -13,7 +13,7 @@ from src.experiments.models import (
     train_xgboost_classifier,
 )
 from src.experiments.registry import FEATURE_REGISTRY, MODEL_REGISTRY, SIGNAL_REGISTRY
-from src.features import add_close_returns, add_feature_transforms
+from src.features import add_close_returns, add_feature_transforms, add_shock_context_features
 from src.features.regime_context import add_regime_context_features
 from src.features.session_context import add_session_context_features
 from src.features.technical.indicators import add_indicator_features
@@ -42,6 +42,7 @@ def _synthetic_hourly_ohlcv(periods: int = 420, seed: int = 11) -> pd.DataFrame:
 def test_registry_contains_phase12_extensions() -> None:
     assert "session_context" in FEATURE_REGISTRY
     assert "regime_context" in FEATURE_REGISTRY
+    assert "shock_context" in FEATURE_REGISTRY
     assert "feature_transforms" in FEATURE_REGISTRY
     assert "bollinger" in FEATURE_REGISTRY
     assert "macd" in FEATURE_REGISTRY
@@ -262,6 +263,236 @@ def test_session_and_regime_features_emit_expected_columns() -> None:
     assert float(df.loc[df.index[0], "session_asia"]) == 1.0
     overlap_ts = pd.Timestamp("2024-01-01 14:00:00")
     assert float(df.loc[overlap_ts, "session_europe_us_overlap"]) == 1.0
+
+
+def test_shock_context_feature_emits_expected_columns_and_direction() -> None:
+    idx = pd.date_range("2024-01-01", periods=18, freq="h")
+    close = [
+        100.0,
+        100.1,
+        100.0,
+        100.2,
+        100.1,
+        100.2,
+        100.1,
+        100.2,
+        108.0,
+        107.2,
+        106.8,
+        106.0,
+        96.0,
+        96.8,
+        97.2,
+        97.0,
+        97.1,
+        97.2,
+    ]
+    df = pd.DataFrame({"close": close, "atr_test": 2.0}, index=idx)
+    df["open"] = df["close"].shift(1).fillna(df["close"].iloc[0])
+    df["high"] = np.maximum(df["open"], df["close"]) + 0.25
+    df["low"] = np.minimum(df["open"], df["close"]) - 0.25
+    df["close_ema_4"] = df["close"].ewm(span=4, adjust=False).mean()
+    df = add_close_returns(df, log=True, col_name="close_logret")
+
+    out = add_shock_context_features(
+        df,
+        price_col="close",
+        high_col="high",
+        low_col="low",
+        returns_col="close_logret",
+        ema_col="close_ema_4",
+        atr_col="atr_test",
+        short_horizon=1,
+        medium_horizon=4,
+        vol_window=5,
+        ret_z_threshold=1.5,
+        atr_mult_threshold=1.0,
+        distance_from_mean_threshold=1.0,
+        post_shock_active_bars=4,
+    )
+
+    expected = {
+        "shock_ret_1h",
+        "shock_ret_4h",
+        "shock_ret_z_1h",
+        "shock_ret_z_4h",
+        "shock_atr_multiple_1h",
+        "shock_atr_multiple_4h",
+        "shock_distance_ema",
+        "shock_up_candidate",
+        "shock_down_candidate",
+        "shock_candidate",
+        "shock_side_contrarian",
+        "shock_side_contrarian_active",
+        "shock_active_window",
+        "shock_strength",
+        "bars_since_shock",
+    }
+    assert expected.issubset(out.columns)
+    assert float(out.loc[idx[8], "shock_up_candidate"]) == 1.0
+    assert float(out.loc[idx[8], "shock_side_contrarian"]) == -1.0
+    assert float(out.loc[idx[8], "shock_side_contrarian_active"]) == -1.0
+    assert float(out.loc[idx[9], "shock_side_contrarian_active"]) == -1.0
+    assert float(out.loc[idx[11], "shock_side_contrarian_active"]) == -1.0
+    assert float(out.loc[idx[12], "shock_down_candidate"]) == 1.0
+    assert float(out.loc[idx[12], "shock_side_contrarian"]) == 1.0
+    assert float(out.loc[idx[12], "shock_side_contrarian_active"]) == 1.0
+    assert float(out.loc[idx[9], "shock_active_window"]) == 1.0
+    assert float(out.loc[idx[9], "bars_since_shock"]) == 1.0
+
+
+def test_shock_context_active_window_defaults_to_event_only() -> None:
+    idx = pd.date_range("2024-01-01", periods=12, freq="h")
+    close = [100.0, 100.1, 100.0, 100.2, 100.1, 100.2, 100.1, 100.2, 108.0, 107.5, 107.4, 107.3]
+    df = pd.DataFrame({"close": close, "atr_test": 2.0}, index=idx)
+    df["open"] = df["close"].shift(1).fillna(df["close"].iloc[0])
+    df["high"] = np.maximum(df["open"], df["close"]) + 0.25
+    df["low"] = np.minimum(df["open"], df["close"]) - 0.25
+    df["close_ema_4"] = df["close"].ewm(span=4, adjust=False).mean()
+    df = add_close_returns(df, log=True, col_name="close_logret")
+
+    out = add_shock_context_features(
+        df,
+        returns_col="close_logret",
+        ema_col="close_ema_4",
+        atr_col="atr_test",
+        short_horizon=1,
+        medium_horizon=4,
+        vol_window=5,
+        ret_z_threshold=1.5,
+        atr_mult_threshold=1.0,
+        distance_from_mean_threshold=1.0,
+    )
+
+    event_ts = idx[8]
+    assert float(out.loc[event_ts, "shock_side_contrarian_active"]) == -1.0
+    assert float(out.loc[idx[9], "shock_side_contrarian_active"]) == 0.0
+    assert float(out.loc[idx[9], "shock_active_window"]) == 0.0
+
+
+def test_shock_context_candidate_requires_thresholds() -> None:
+    idx = pd.date_range("2024-01-01", periods=18, freq="h")
+    close = [
+        100.0,
+        100.1,
+        100.0,
+        100.2,
+        100.1,
+        100.2,
+        100.1,
+        100.2,
+        108.0,
+        107.2,
+        106.8,
+        106.0,
+        96.0,
+        96.8,
+        97.2,
+        97.0,
+        97.1,
+        97.2,
+    ]
+    df = pd.DataFrame({"close": close, "atr_test": 2.0}, index=idx)
+    df["open"] = df["close"].shift(1).fillna(df["close"].iloc[0])
+    df["high"] = np.maximum(df["open"], df["close"]) + 0.25
+    df["low"] = np.minimum(df["open"], df["close"]) - 0.25
+    df["close_ema_4"] = df["close"].ewm(span=4, adjust=False).mean()
+    df = add_close_returns(df, log=True, col_name="close_logret")
+
+    relaxed = add_shock_context_features(
+        df,
+        returns_col="close_logret",
+        ema_col="close_ema_4",
+        atr_col="atr_test",
+        short_horizon=1,
+        medium_horizon=4,
+        vol_window=5,
+        ret_z_threshold=1.5,
+        atr_mult_threshold=1.0,
+        distance_from_mean_threshold=1.0,
+    )
+    strict = add_shock_context_features(
+        df,
+        returns_col="close_logret",
+        ema_col="close_ema_4",
+        atr_col="atr_test",
+        short_horizon=1,
+        medium_horizon=4,
+        vol_window=5,
+        ret_z_threshold=10.0,
+        atr_mult_threshold=10.0,
+        distance_from_mean_threshold=10.0,
+    )
+
+    assert int(relaxed["shock_candidate"].sum()) >= 2
+    assert int(strict["shock_candidate"].sum()) == 0
+
+
+def test_shock_context_outputs_work_with_triple_barrier_meta_labels() -> None:
+    idx = pd.date_range("2024-01-01", periods=18, freq="h")
+    close = [
+        100.0,
+        100.1,
+        100.0,
+        100.2,
+        100.1,
+        100.2,
+        100.1,
+        100.2,
+        108.0,
+        104.0,
+        103.0,
+        102.0,
+        96.0,
+        99.0,
+        100.0,
+        100.5,
+        100.2,
+        100.0,
+    ]
+    df = pd.DataFrame({"close": close, "atr_test": 2.0}, index=idx)
+    df["open"] = df["close"].shift(1).fillna(df["close"].iloc[0])
+    df["high"] = np.maximum(df["open"], df["close"]) + 0.25
+    df["low"] = np.minimum(df["open"], df["close"]) - 0.25
+    df["close_ema_4"] = df["close"].ewm(span=4, adjust=False).mean()
+    df = add_close_returns(df, log=True, col_name="close_logret")
+    df = add_shock_context_features(
+        df,
+        returns_col="close_logret",
+        ema_col="close_ema_4",
+        atr_col="atr_test",
+        short_horizon=1,
+        medium_horizon=4,
+        vol_window=5,
+        ret_z_threshold=1.5,
+        atr_mult_threshold=1.0,
+        distance_from_mean_threshold=1.0,
+    )
+
+    out, label_col, _, meta = build_triple_barrier_target(
+        df,
+        {
+            "kind": "triple_barrier",
+            "price_col": "close",
+            "open_col": "open",
+            "high_col": "high",
+            "low_col": "low",
+            "returns_col": "close_logret",
+            "max_holding": 2,
+            "upper_mult": 1.0,
+            "lower_mult": 1.0,
+            "vol_window": 5,
+            "neutral_label": "drop",
+            "side_col": "shock_side_contrarian",
+            "candidate_col": "shock_candidate",
+            "candidate_out_col": "meta_candidate",
+        },
+    )
+
+    assert meta["meta_labeling"] is True
+    assert meta["candidate_col"] == "meta_candidate"
+    assert int(out["meta_candidate"].sum()) == int(df["shock_candidate"].sum())
+    assert label_col == "label"
 
 
 def test_triple_barrier_target_labels_upper_and_lower_events() -> None:

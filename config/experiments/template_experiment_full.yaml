@@ -8,8 +8,16 @@
 # - Classifier preprocessing supports `model.preprocessing.scaler: none|standard`.
 # - `triple_barrier` can be used as a true meta-label target with `side_col` plus
 #   either `candidate_mode` or `candidate_col`.
+# - `shock_context` emits event columns such as `shock_candidate` and
+#   `shock_side_contrarian`, plus optional post-shock gating columns such as
+#   `shock_side_contrarian_active` for contrarian mean-reversion research.
 # - `probability_threshold` supports entry/exit hysteresis through
 #   `upper_exit/lower_exit` and optional gating with `base_signal_col`.
+# - Multi-stage training is available through top-level `model_stages:` and is mutually
+#   exclusive with `model:` / `models:`.
+# - Each `model_stages[]` entry supports `enabled: true|false` and `stage: 1,2,...`.
+# - In `model_stages`, upstream stages should emit explicit stage-specific prediction columns
+#   such as `forecast_pred_ret` or `filter1_pred_prob` so later stages can reuse them safely.
 # - This template lists all currently supported feature-step families and the currently
 #   supported model/signal kinds as comments, but only one active `model.kind` and one
 #   active `signals.kind` can be selected in a valid run.
@@ -49,7 +57,7 @@ features:
       col_name: close_logret
 
   - step: volatility
-    enabled: true
+    enabled: false
     params:
       returns_col: close_logret
       rolling_windows: [24, 72, 168]
@@ -64,7 +72,7 @@ features:
       ema_spans: [12, 24, 72]
 
   - step: trend_regime
-    enabled: true
+    enabled: false
     params:
       price_col: close
       base_sma_for_sign: 72
@@ -72,7 +80,7 @@ features:
       long_sma: 72
 
   - step: session_context
-    enabled: true
+    enabled: false
     params:
       timezone: UTC
       add_cyclical_time: true
@@ -98,7 +106,7 @@ features:
       n_std: 2.0
 
   - step: macd
-    enabled: true
+    enabled: false
     params:
       price_col: close
       fast: 12
@@ -106,7 +114,7 @@ features:
       signal: 9
 
   - step: ppo
-    enabled: true
+    enabled: false
     params:
       price_col: close
       fast: 12
@@ -114,7 +122,7 @@ features:
       signal: 9
 
   - step: roc
-    enabled: true
+    enabled: false
     params:
       price_col: close
       windows: [6, 24]
@@ -128,6 +136,23 @@ features:
       window: 24
       method: wilder
       add_over_price: true
+
+  - step: shock_context
+    enabled: false
+    params:
+      price_col: close
+      high_col: high
+      low_col: low
+      returns_col: close_logret
+      ema_col: close_ema_24
+      atr_col: atr_24
+      short_horizon: 1
+      medium_horizon: 4
+      vol_window: 24
+      ret_z_threshold: 2.0
+      atr_mult_threshold: 1.5
+      distance_from_mean_threshold: 1.0
+      post_shock_active_bars: 1
 
   - step: adx
     enabled: true
@@ -174,19 +199,19 @@ features:
       smooth: 3
 
   - step: price_momentum
-    enabled: true
+    enabled: false
     params:
       price_col: close
       windows: [6, 24]
 
   - step: return_momentum
-    enabled: true
+    enabled: false
     params:
       returns_col: close_logret
       windows: [6, 24]
 
   - step: vol_normalized_momentum
-    enabled: true
+    enabled: false
     params:
       returns_col: close_logret
       vol_col: vol_rolling_24
@@ -222,12 +247,17 @@ features:
           upper_q: 0.99
           shift: 1
 
-models:
-  none:
-    enabled: false
-
-  logistic_regression_clf:
-    enabled: false
+# Multi-stage model catalog.
+# Keep only the stages you want with `enabled: true`; disabled stages are ignored.
+# The enabled stages run in ascending `stage` order.
+# If you want a single-model run, set only one stage to `enabled: true` and usually make it `stage: 1`.
+# RL agent kinds are intentionally omitted here because `model_stages` currently supports
+# only forecasting/classification chains.
+model_stages:
+  - name: logistic_regression_clf
+    enabled: true
+    stage: 1
+    kind: logistic_regression_clf
     params:
       C: 1.0
       max_iter: 1000
@@ -269,7 +299,7 @@ models:
     runtime: {}
     env: {}
     use_features: true
-    pred_prob_col: null
+    pred_prob_col: pred_prob
     pred_ret_col: null
     returns_input_col: null
     signal_col: null
@@ -280,8 +310,10 @@ models:
         returns_input_col: close_logret
         mean_model: zero
 
-  lightgbm_clf:
+  - name: lightgbm_clf
     enabled: false
+    stage: 2
+    kind: lightgbm_clf
     params:
       n_estimators: 400
       learning_rate: 0.03
@@ -334,7 +366,7 @@ models:
     runtime: {}
     env: {}
     use_features: true
-    pred_prob_col: null
+    pred_prob_col: lightgbm_pred_prob
     pred_ret_col: null
     returns_input_col: null
     signal_col: null
@@ -345,8 +377,10 @@ models:
         returns_input_col: close_logret
         mean_model: zero
 
-  xgboost_clf:
-    enabled: true
+  - name: xgboost_clf
+    enabled: false
+    stage: 3
+    kind: xgboost_clf
     params:
       n_estimators: 350
       learning_rate: 0.03
@@ -404,7 +438,7 @@ models:
     runtime: {}
     env: {}
     use_features: true
-    pred_prob_col: null
+    pred_prob_col: xgboost_pred_prob
     pred_ret_col: null
     returns_input_col: null
     signal_col: null
@@ -415,8 +449,10 @@ models:
         returns_input_col: close_logret
         mean_model: zero
 
-  sarimax_forecaster:
+  - name: sarimax_forecaster
     enabled: false
+    stage: 4
+    kind: sarimax_forecaster
     params:
       order: [1, 0, 1]
       seasonal_order: [0, 0, 0, 0]
@@ -439,14 +475,18 @@ models:
       step_size: 336
       expanding: true
       max_folds: null
+    pred_ret_col: sarimax_pred_ret
+    pred_prob_col: sarimax_pred_prob
     overlay:
       kind: garch
       params:
         returns_input_col: close_logret
         mean_model: zero
 
-  garch_forecaster:
+  - name: garch_forecaster
     enabled: false
+    stage: 5
+    kind: garch_forecaster
     params:
       returns_input_col: close_logret
       mean_model: zero
@@ -465,9 +505,13 @@ models:
       step_size: 336
       expanding: true
       max_folds: null
+    pred_ret_col: garch_pred_ret
+    pred_prob_col: garch_pred_prob
 
-  lstm_forecaster:
+  - name: lstm_forecaster
     enabled: false
+    stage: 6
+    kind: lstm_forecaster
     params:
       lookback: 48
       hidden_dim: 64
@@ -497,14 +541,18 @@ models:
       step_size: 336
       expanding: true
       max_folds: null
+    pred_ret_col: lstm_pred_ret
+    pred_prob_col: lstm_pred_prob
     overlay:
       kind: garch
       params:
         returns_input_col: close_logret
         mean_model: zero
 
-  patchtst_forecaster:
+  - name: patchtst_forecaster
     enabled: false
+    stage: 7
+    kind: patchtst_forecaster
     params:
       lookback: 64
       patch_len: 16
@@ -537,14 +585,18 @@ models:
       step_size: 336
       expanding: true
       max_folds: null
+    pred_ret_col: patchtst_pred_ret
+    pred_prob_col: patchtst_pred_prob
     overlay:
       kind: garch
       params:
         returns_input_col: close_logret
         mean_model: zero
 
-  tft_forecaster:
+  - name: tft_forecaster
     enabled: false
+    stage: 8
+    kind: tft_forecaster
     params:
       lookback: 48
       hidden_dim: 64
@@ -578,166 +630,13 @@ models:
       step_size: 336
       expanding: true
       max_folds: null
+    pred_ret_col: tft_pred_ret
+    pred_prob_col: tft_pred_prob
     overlay:
       kind: garch
       params:
         returns_input_col: close_logret
         mean_model: zero
-
-  ppo_agent:
-    enabled: false
-    params:
-      total_timesteps: 10000
-      learning_rate: 0.0003
-      batch_size: 64
-    feature_cols:
-      - close_logret
-      - vol_rolling_24
-      - close_over_ema_24
-    target:
-      kind: forward_return
-      price_col: close
-      horizon: 1
-    split:
-      method: walk_forward
-      train_size: 8760
-      test_size: 336
-      step_size: 336
-      expanding: true
-      max_folds: 8
-    env:
-      action_space: continuous
-      window_size: 32
-      execution_lag_bars: 1
-      max_signal_abs: 1.0
-      min_holding_bars: 0
-      action_hysteresis: 0.0
-      reward:
-        cost_per_turnover: 0.0
-        slippage_per_turnover: 0.0
-        inventory_penalty: 0.0
-        drawdown_penalty: 0.0
-        switching_penalty: 0.0
-
-  dqn_agent:
-    enabled: false
-    params:
-      total_timesteps: 10000
-      learning_rate: 0.0001
-      batch_size: 64
-      buffer_size: 50000
-      learning_starts: 1000
-      target_update_interval: 250
-      exploration_fraction: 0.2
-      exploration_initial_eps: 1.0
-      exploration_final_eps: 0.05
-    feature_cols:
-      - close_logret
-      - vol_rolling_24
-      - close_over_ema_24
-    target:
-      kind: forward_return
-      price_col: close
-      horizon: 1
-    split:
-      method: walk_forward
-      train_size: 8760
-      test_size: 336
-      step_size: 336
-      expanding: true
-      max_folds: 8
-    env:
-      action_space: discrete
-      window_size: 32
-      execution_lag_bars: 1
-      max_signal_abs: 1.0
-      min_holding_bars: 0
-      action_hysteresis: 0.0
-      position_grid: [-1.0, 0.0, 1.0]
-      reward:
-        cost_per_turnover: 0.0
-        slippage_per_turnover: 0.0
-        inventory_penalty: 0.0
-        drawdown_penalty: 0.0
-        switching_penalty: 0.0
-
-  ppo_portfolio_agent:
-    enabled: false
-    params:
-      total_timesteps: 10000
-      learning_rate: 0.0003
-      batch_size: 64
-    feature_cols:
-      - close_logret
-      - vol_rolling_24
-    target:
-      kind: forward_return
-      price_col: close
-      horizon: 1
-    split:
-      method: walk_forward
-      train_size: 8760
-      test_size: 336
-      step_size: 336
-      expanding: true
-      max_folds: 8
-    env:
-      action_space: continuous
-      window_size: 32
-      execution_lag_bars: 1
-      max_signal_abs: 1.0
-      min_holding_bars: 0
-      action_hysteresis: 0.0
-      reward:
-        cost_per_turnover: 0.0
-        slippage_per_turnover: 0.0
-        inventory_penalty: 0.0
-        drawdown_penalty: 0.0
-        switching_penalty: 0.0
-
-  dqn_portfolio_agent:
-    enabled: false
-    params:
-      total_timesteps: 10000
-      learning_rate: 0.0001
-      batch_size: 64
-      buffer_size: 50000
-      learning_starts: 1000
-      target_update_interval: 250
-      exploration_fraction: 0.2
-      exploration_initial_eps: 1.0
-      exploration_final_eps: 0.05
-    feature_cols:
-      - close_logret
-      - vol_rolling_24
-    target:
-      kind: forward_return
-      price_col: close
-      horizon: 1
-    split:
-      method: walk_forward
-      train_size: 8760
-      test_size: 336
-      step_size: 336
-      expanding: true
-      max_folds: 8
-    env:
-      action_space: discrete
-      window_size: 32
-      execution_lag_bars: 1
-      max_signal_abs: 1.0
-      min_holding_bars: 0
-      action_hysteresis: 0.0
-      action_templates:
-        - [1.0]
-        - [0.0]
-        - [-1.0]
-      reward:
-        cost_per_turnover: 0.0
-        slippage_per_turnover: 0.0
-        inventory_penalty: 0.0
-        drawdown_penalty: 0.0
-        switching_penalty: 0.0
 
 signals_catalog:
   none:
@@ -751,7 +650,7 @@ signals_catalog:
       mode: long_short_hold
 
   probability_threshold:
-    enabled: false
+    enabled: true
     params:
       prob_col: pred_prob
       signal_col: signal_prob_threshold
@@ -771,7 +670,7 @@ signals_catalog:
       clip: 1.0
 
   probability_vol_adjusted:
-    enabled: true
+    enabled: false
     params:
       prob_col: pred_prob
       vol_col: pred_vol
@@ -863,7 +762,6 @@ risk:
   max_leverage: 1.0
   dd_guard:
     max_drawdown: 0.12
-    # A new cooloff can trigger only after drawdown has recovered above -rearm_drawdown.
     rearm_drawdown: 0.08
     cooloff_bars: 48
     enabled: true
@@ -871,7 +769,7 @@ risk:
 
 backtest:
   returns_col: close_logret
-  signal_col: signal_prob_vol_adj
+  signal_col: signal_prob_threshold
   periods_per_year: 8760
   returns_type: log
   missing_return_policy: raise_if_exposed
@@ -893,7 +791,7 @@ portfolio:
   asset_groups: {}
 
 monitoring:
-  enabled: true
+  enabled: false
   psi_threshold: 0.15
   n_bins: 10
 
@@ -907,5 +805,6 @@ execution:
   current_prices: {}
 
 logging:
-  run_name: template_experiment_full
-  save_report: true
+  enabled: false
+  output_dir: logs/experiments
+  run_name: null

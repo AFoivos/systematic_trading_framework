@@ -101,6 +101,13 @@ def load_resolved_config(path: Path) -> dict[str, Any]:
             "Config inheritance via 'extends' is no longer supported. "
             "Each experiment YAML must be fully self-contained."
         )
+    has_model_stages = cfg.get("model_stages") not in (None, [])
+    has_single_model = cfg.get("model") not in (None, {})
+    has_model_catalog = cfg.get("models") not in (None, {})
+    if has_model_stages and (has_single_model or has_model_catalog):
+        raise ConfigPathError(
+            "Config must specify either 'model'/'models' or 'model_stages', not both."
+        )
     cfg = _resolve_enabled_catalog_entry(cfg, catalog_key="models", output_key="model")
     cfg = _resolve_enabled_catalog_entry(cfg, catalog_key="signals_catalog", output_key="signals")
     cfg["config_path"] = str(path)

@@ -12,7 +12,7 @@ from src.experiments.orchestration.backtest_stage import run_portfolio_backtest,
 from src.experiments.orchestration.common import build_storage_context, resolve_symbols
 from src.experiments.orchestration.execution_stage import build_execution_output
 from src.experiments.orchestration.feature_stage import apply_signals_to_assets, apply_steps_to_assets
-from src.experiments.orchestration.model_stage import apply_model_to_assets
+from src.experiments.orchestration.model_stage import apply_model_pipeline_to_assets
 from src.experiments.orchestration.reporting import (
     build_portfolio_evaluation,
     build_single_asset_evaluation,
@@ -121,21 +121,33 @@ def run_experiment_pipeline(
         if processed_snapshot is not None:
             storage_meta["saved_processed_snapshot"] = processed_snapshot
 
+        base_model_cfg = {
+            "runtime": cfg.get("runtime", {}),
+            "risk": cfg.get("risk", {}),
+            "portfolio": cfg.get("portfolio", {}),
+            "backtest": cfg.get("backtest", {}),
+            "data_alignment": cfg.get("data", {}).get("alignment", "inner"),
+        }
         model_cfg = dict(cfg.get("model", {"kind": "none"}) or {})
-        model_cfg.setdefault("runtime", cfg.get("runtime", {}))
-        model_cfg.setdefault("risk", cfg.get("risk", {}))
-        model_cfg.setdefault("portfolio", cfg.get("portfolio", {}))
-        model_cfg.setdefault("backtest", cfg.get("backtest", {}))
-        model_cfg.setdefault("data_alignment", cfg.get("data", {}).get("alignment", "inner"))
+        for key, value in base_model_cfg.items():
+            model_cfg.setdefault(key, value)
+        model_stages_cfg: list[dict[str, object]] = []
+        for raw_stage_cfg in list(cfg.get("model_stages", []) or []):
+            stage_cfg = dict(raw_stage_cfg)
+            for key, value in base_model_cfg.items():
+                stage_cfg.setdefault(key, value)
+            model_stages_cfg.append(stage_cfg)
+        enabled_model_stage_count = sum(1 for stage_cfg in model_stages_cfg if bool(stage_cfg.get("enabled", True)))
         returns_col = cfg.get("backtest", {}).get("returns_col")
-        model_asset_frames, model, model_meta = apply_model_to_assets(
+        model_asset_frames, model, model_meta = apply_model_pipeline_to_assets(
             feature_asset_frames,
             model_cfg=model_cfg,
+            model_stages=model_stages_cfg,
             returns_col=returns_col,
         )
         _record_stage_tail(
             traces=stage_tails,
-            stage="model_applied",
+            stage="model_applied" if enabled_model_stage_count == 0 else f"model_applied[{enabled_model_stage_count}_stages]",
             asset_frames=model_asset_frames,
             previous_asset_frames=feature_asset_frames,
             stage_tail_cfg=stage_tail_cfg,

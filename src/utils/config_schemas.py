@@ -169,6 +169,95 @@ class ModelConfig:
 
 
 @dataclass(frozen=True)
+class ModelStageConfig:
+    name: str
+    kind: str
+    enabled: bool = True
+    stage: int = 1
+    params: dict[str, Any] = field(default_factory=dict)
+    preprocessing: dict[str, Any] = field(default_factory=dict)
+    feature_cols: list[str] | None = None
+    target: dict[str, Any] = field(default_factory=dict)
+    split: dict[str, Any] = field(default_factory=dict)
+    runtime: dict[str, Any] = field(default_factory=dict)
+    env: dict[str, Any] = field(default_factory=dict)
+    use_features: bool = True
+    pred_prob_col: str | None = None
+    pred_ret_col: str | None = None
+    returns_input_col: str | None = None
+    signal_col: str | None = None
+    action_col: str | None = None
+    extra: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ModelStageConfig":
+        known = {
+            "name",
+            "enabled",
+            "stage",
+            "kind",
+            "params",
+            "preprocessing",
+            "feature_cols",
+            "target",
+            "split",
+            "runtime",
+            "env",
+            "use_features",
+            "pred_prob_col",
+            "pred_ret_col",
+            "returns_input_col",
+            "signal_col",
+            "action_col",
+        }
+        feature_cols_raw = data.get("feature_cols")
+        if feature_cols_raw is not None and not isinstance(feature_cols_raw, list):
+            raise TypeError("model_stages[].feature_cols must be a list[str].")
+        return cls(
+            name=str(data.get("name", "")),
+            enabled=bool(data.get("enabled", True)),
+            stage=int(data.get("stage", 1)),
+            kind=str(data.get("kind", "none")),
+            params=dict(data.get("params", {}) or {}),
+            preprocessing=dict(data.get("preprocessing", {}) or {}),
+            feature_cols=[str(v) for v in feature_cols_raw] if feature_cols_raw is not None else None,
+            target=dict(data.get("target", {}) or {}),
+            split=dict(data.get("split", {}) or {}),
+            runtime=dict(data.get("runtime", {}) or {}),
+            env=dict(data.get("env", {}) or {}),
+            use_features=bool(data.get("use_features", True)),
+            pred_prob_col=data.get("pred_prob_col"),
+            pred_ret_col=data.get("pred_ret_col"),
+            returns_input_col=data.get("returns_input_col"),
+            signal_col=data.get("signal_col"),
+            action_col=data.get("action_col"),
+            extra=_extras(data, known),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        payload = {
+            "name": self.name,
+            "enabled": self.enabled,
+            "stage": self.stage,
+            "kind": self.kind,
+            "params": dict(self.params),
+            "preprocessing": dict(self.preprocessing),
+            "feature_cols": list(self.feature_cols) if self.feature_cols is not None else None,
+            "target": dict(self.target),
+            "split": dict(self.split),
+            "runtime": dict(self.runtime),
+            "env": dict(self.env),
+            "use_features": self.use_features,
+            "pred_prob_col": self.pred_prob_col,
+            "pred_ret_col": self.pred_ret_col,
+            "returns_input_col": self.returns_input_col,
+            "signal_col": self.signal_col,
+            "action_col": self.action_col,
+        }
+        return payload | dict(self.extra)
+
+
+@dataclass(frozen=True)
 class SignalsConfig:
     kind: str
     params: dict[str, Any] = field(default_factory=dict)
@@ -455,6 +544,7 @@ class ResolvedExperimentConfig:
     data: DataConfig
     features: list[FeatureStep]
     model: ModelConfig
+    model_stages: list[ModelStageConfig]
     signals: SignalsConfig
     runtime: dict[str, Any]
     risk: RiskConfig
@@ -472,6 +562,7 @@ class ResolvedExperimentConfig:
             "data",
             "features",
             "model",
+            "model_stages",
             "signals",
             "runtime",
             "risk",
@@ -486,6 +577,10 @@ class ResolvedExperimentConfig:
             data=DataConfig.from_dict(dict(data.get("data", {}) or {})),
             features=[FeatureStep.from_dict(dict(step)) for step in list(data.get("features", []) or [])],
             model=ModelConfig.from_dict(dict(data.get("model", {}) or {})),
+            model_stages=[
+                ModelStageConfig.from_dict(dict(stage))
+                for stage in list(data.get("model_stages", []) or [])
+            ],
             signals=SignalsConfig.from_dict(dict(data.get("signals", {}) or {})),
             runtime=dict(data.get("runtime", {}) or {}),
             risk=RiskConfig.from_dict(dict(data.get("risk", {}) or {})),
@@ -512,6 +607,8 @@ class ResolvedExperimentConfig:
             "execution": self.execution.to_dict(),
             "logging": self.logging.to_dict(),
         }
+        if self.model_stages:
+            payload["model_stages"] = [stage.to_dict() for stage in self.model_stages]
         return payload | dict(self.extra)
 
 
@@ -522,6 +619,7 @@ __all__ = [
     "FeatureStep",
     "LoggingConfig",
     "ModelConfig",
+    "ModelStageConfig",
     "MonitoringConfig",
     "PortfolioConfig",
     "ResolvedExperimentConfig",

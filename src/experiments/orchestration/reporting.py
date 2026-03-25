@@ -199,7 +199,7 @@ def _build_pipeline_trace_markdown(
         apply_signals_to_assets,
         apply_steps_to_assets,
     )
-    from src.experiments.orchestration.model_stage import apply_model_step, apply_model_to_assets
+    from src.experiments.orchestration.model_stage import apply_model_pipeline_to_assets, apply_model_step, apply_model_to_assets
     from src.experiments.orchestration.pipeline import run_experiment_pipeline
     from src.experiments.registry import get_feature_fn, get_model_fn, get_signal_fn
     from src.experiments.runner import _load_asset_frames, run_experiment
@@ -213,6 +213,7 @@ def _build_pipeline_trace_markdown(
 
     data_cfg = dict(cfg.get("data", {}) or {})
     model_cfg = dict(cfg.get("model", {}) or {})
+    model_stages_cfg = list(cfg.get("model_stages", []) or [])
     signals_cfg = dict(cfg.get("signals", {}) or {})
     risk_cfg = dict(cfg.get("risk", {}) or {})
     backtest_cfg = dict(cfg.get("backtest", {}) or {})
@@ -287,11 +288,23 @@ def _build_pipeline_trace_markdown(
     lines.extend(
         [
             "### 4. Model And Training",
+            _interface_line("model_stage.apply_model_pipeline_to_assets", apply_model_pipeline_to_assets),
             _interface_line("model_stage.apply_model_to_assets", apply_model_to_assets),
             _interface_line("feature_stage.apply_model_step", apply_model_step),
         ]
     )
-    if model_kind != "none":
+    if model_stages_cfg:
+        for idx, stage_cfg in enumerate(model_stages_cfg, start=1):
+            stage_name = str(stage_cfg.get("name", f"stage_{idx}"))
+            stage_kind = str(stage_cfg.get("kind", "none"))
+            stage_order = int(stage_cfg.get("stage", idx) or idx)
+            enabled = bool(stage_cfg.get("enabled", True))
+            if not enabled:
+                lines.append(f"- `model_stage[{stage_name}]` -> disabled (stage={stage_order})")
+                continue
+            model_fn = get_model_fn(stage_kind)
+            lines.append(_interface_line(f"model_stage[{stage_order}:{stage_name}:{stage_kind}]", model_fn))
+    elif model_kind != "none":
         model_fn = get_model_fn(model_kind)
         lines.append(_interface_line(f"model[{model_kind}]", model_fn))
     lines.append(_interface_line("modeling.runtime.resolve_runtime_for_model", resolve_runtime_for_model))
@@ -312,6 +325,7 @@ def _build_pipeline_trace_markdown(
             _yaml_block(
                 {
                     "model": model_cfg,
+                    "model_stages": model_stages_cfg,
                     "resolved_reward_config": _resolved_reward_snapshot(cfg),
                     "resolved_execution_config": _resolved_execution_snapshot(cfg),
                 }
@@ -521,12 +535,17 @@ def build_experiment_report_markdown(
 
     symbols = data_cfg.get("symbols") or ([data_cfg.get("symbol")] if data_cfg.get("symbol") else [])
     run_name = str(cfg.get("logging", {}).get("run_name", cfg.get("config_path", "experiment")))
+    model_stages = list(model_meta.get("stages", []) or [])
+    model_label = str(model_cfg.get("kind", "none"))
+    if model_stages:
+        ordered = " -> ".join(f"{stage.get('name')}:{stage.get('kind')}" for stage in model_stages)
+        model_label = f"multi_stage ({ordered})"
     lines: list[str] = [
         f"# Experiment Report: {run_name}",
         "",
         "## Overview",
         f"- Config path: `{cfg.get('config_path', '')}`",
-        f"- Model kind: `{model_cfg.get('kind', 'none')}`",
+        f"- Model kind: `{model_label}`",
         f"- Symbols: `{', '.join(str(symbol) for symbol in symbols) if symbols else 'n/a'}`",
         f"- Data source: `{data_cfg.get('source', 'n/a')}` at interval `{data_cfg.get('interval', 'n/a')}`",
         f"- Data window: `{data_cfg.get('start', 'n/a')}` to `{data_stats.get('end', data_cfg.get('end', 'latest'))}`",
@@ -576,6 +595,32 @@ def build_experiment_report_markdown(
                 "",
                 "## Prediction Diagnostics",
                 _markdown_table(["Metric", "Value"], _dict_metric_rows(prediction_diagnostics)),
+            ]
+        )
+
+    if model_stages:
+        stage_rows = [
+            [
+                stage.get("name"),
+                stage.get("stage"),
+                stage.get("kind"),
+                dict(stage.get("prediction_diagnostics", {}) or {}).get("predicted_rows"),
+                dict(stage.get("prediction_diagnostics", {}) or {}).get("oos_prediction_coverage"),
+                dict(stage.get("oos_classification_summary", {}) or {}).get("evaluation_rows")
+                or dict(stage.get("oos_regression_summary", {}) or {}).get("evaluation_rows")
+                or dict(stage.get("oos_volatility_summary", {}) or {}).get("evaluation_rows"),
+                ", ".join(list(stage.get("feature_cols", []) or [])),
+            ]
+            for stage in model_stages
+        ]
+        lines.extend(
+            [
+                "",
+                "## Multi-Stage Summary",
+                _markdown_table(
+                    ["Stage", "Order", "Kind", "Predicted Rows", "OOS Coverage", "Eval Rows", "Feature Cols"],
+                    stage_rows,
+                ),
             ]
         )
 

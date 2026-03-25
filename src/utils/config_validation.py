@@ -18,6 +18,7 @@ _RL_PORTFOLIO_DQN_KINDS = {"dqn_portfolio_agent"}
 _RL_EXTRACTOR_KINDS = {"flatten", "cnn1d", "lstm", "transformer"}
 _CLASSIFIER_MODEL_KINDS = {"lightgbm_clf", "logistic_regression_clf", "xgboost_clf"}
 _DEEP_FORECASTER_MODEL_KINDS = {"lstm_forecaster", "patchtst_forecaster", "tft_forecaster"}
+_FORECASTER_MODEL_KINDS = {"sarimax_forecaster", "garch_forecaster", *_DEEP_FORECASTER_MODEL_KINDS}
 _GARCH_OVERLAY_COMPATIBLE_MODEL_KINDS = {
     "lightgbm_clf",
     "logistic_regression_clf",
@@ -272,6 +273,34 @@ def validate_features_block(features: Any) -> None:
                         f"{field_prefix}.lower_q must be strictly less than {field_prefix}.upper_q."
                     )
                 _non_negative_int(transform.get("shift", 1), field=f"{field_prefix}.shift")
+        if step["step"] == "shock_context":
+            params = step.get("params") or {}
+            for key in ("price_col", "high_col", "low_col", "returns_col", "ema_col", "atr_col"):
+                if key in params and params[key] is not None and not isinstance(params[key], str):
+                    raise ConfigValidationError(f"features[].params.{key} must be a string when provided.")
+            for key in (
+                "short_horizon",
+                "medium_horizon",
+                "vol_window",
+                "ema_window",
+                "atr_window",
+                "post_shock_active_bars",
+            ):
+                if key in params and params[key] is not None:
+                    _positive_int(params[key], field=f"features[].params.{key}")
+            short_horizon = int(params.get("short_horizon", 1))
+            medium_horizon = int(params.get("medium_horizon", 4))
+            if medium_horizon < short_horizon:
+                raise ConfigValidationError(
+                    "features[].params.medium_horizon must be >= features[].params.short_horizon."
+                )
+            for key in ("ret_z_threshold", "atr_mult_threshold", "distance_from_mean_threshold"):
+                if key in params and params[key] is not None:
+                    value = _finite_number(params[key], field=f"features[].params.{key}")
+                    if value <= 0.0:
+                        raise ConfigValidationError(f"features[].params.{key} must be > 0.")
+            if "use_log_returns" in params and not isinstance(params["use_log_returns"], bool):
+                raise ConfigValidationError("features[].params.use_log_returns must be boolean.")
 
 
 def validate_model_block(model: dict[str, Any]) -> None:
@@ -639,6 +668,82 @@ def validate_model_block(model: dict[str, Any]) -> None:
         _non_negative_int(split.get("embargo_bars", 0), field="model.split.embargo_bars")
 
 
+def _model_emitted_columns(model: dict[str, Any]) -> dict[str, str]:
+    kind = str(model.get("kind", "none"))
+    if kind in _CLASSIFIER_MODEL_KINDS:
+        return {"pred_prob_col": str(model.get("pred_prob_col") or "pred_prob")}
+    if kind in _FORECASTER_MODEL_KINDS:
+        return {
+            "pred_ret_col": str(model.get("pred_ret_col") or "pred_ret"),
+            "pred_prob_col": str(model.get("pred_prob_col") or "pred_prob"),
+        }
+    if kind in RL_MODEL_KINDS:
+        return {
+            "signal_col": str(model.get("signal_col") or "signal_rl"),
+            "action_col": str(model.get("action_col") or "action_rl"),
+        }
+    return {}
+
+
+def validate_model_stages_block(model_stages: Any) -> None:
+    if model_stages in (None, []):
+        return
+    if not isinstance(model_stages, list) or not model_stages:
+        raise ConfigValidationError("model_stages must be a non-empty list of model stage mappings.")
+
+    seen_names: set[str] = set()
+    seen_stage_numbers: set[int] = set()
+    seen_output_columns: dict[str, str] = {}
+    enabled_stage_count = 0
+    for idx, raw_stage in enumerate(model_stages):
+        field_prefix = f"model_stages[{idx}]"
+        if not isinstance(raw_stage, dict):
+            raise ConfigValidationError(f"{field_prefix} must be a mapping.")
+        stage = dict(raw_stage)
+        name = stage.get("name", f"stage_{idx + 1}")
+        if not isinstance(name, str) or not name.strip():
+            raise ConfigValidationError(f"{field_prefix}.name must be a non-empty string.")
+        if name in seen_names:
+            raise ConfigValidationError(f"model_stages names must be unique; duplicate name '{name}'.")
+        seen_names.add(name)
+
+        enabled = stage.get("enabled", True)
+        if not isinstance(enabled, bool):
+            raise ConfigValidationError(f"{field_prefix}.enabled must be boolean.")
+        stage_number = stage.get("stage", idx + 1)
+        _positive_int(stage_number, field=f"{field_prefix}.stage")
+        if int(stage_number) in seen_stage_numbers:
+            raise ConfigValidationError(
+                f"model_stages stage order must be unique; duplicate stage={stage_number}."
+            )
+        seen_stage_numbers.add(int(stage_number))
+        if not enabled:
+            continue
+        enabled_stage_count += 1
+
+        kind = str(stage.get("kind", "none"))
+        if kind == "none":
+            raise ConfigValidationError(f"{field_prefix}.kind must not be 'none'.")
+        if kind in RL_MODEL_KINDS or kind in PORTFOLIO_MODEL_KINDS:
+            raise ConfigValidationError(
+                "model_stages currently supports only forecasting/classification stages, "
+                f"not '{kind}'."
+            )
+
+        validate_model_block(stage)
+
+        for output_field, column in _model_emitted_columns(stage).items():
+            previous_stage = seen_output_columns.get(column)
+            if previous_stage is not None:
+                raise ConfigValidationError(
+                    f"{field_prefix}.{output_field} resolves to duplicate emitted column '{column}' "
+                    f"already used by stage '{previous_stage}'. Set explicit stage-specific output columns."
+                )
+            seen_output_columns[column] = name
+    if enabled_stage_count == 0:
+        raise ConfigValidationError("model_stages must contain at least one entry with enabled=true.")
+
+
 def validate_signals_block(signals: dict[str, Any]) -> None:
     if "kind" not in signals:
         raise ConfigValidationError("signals.kind is required.")
@@ -959,6 +1064,7 @@ def validate_resolved_config(cfg: dict[str, Any]) -> dict[str, Any]:
     """
     validate_data_block(cfg["data"])
     validate_features_block(cfg["features"])
+    validate_model_stages_block(cfg.get("model_stages"))
     validate_model_block(cfg["model"])
     validate_signals_block(cfg["signals"])
     validate_risk_block(cfg["risk"])
@@ -1003,6 +1109,7 @@ __all__ = [
     "validate_logging_block",
     "validate_features_block",
     "validate_model_block",
+    "validate_model_stages_block",
     "validate_monitoring_block",
     "validate_portfolio_block",
     "validate_resolved_config",

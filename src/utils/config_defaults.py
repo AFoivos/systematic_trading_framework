@@ -151,6 +151,51 @@ def default_model_block(model: dict[str, Any]) -> dict[str, Any]:
     return model
 
 
+def _strip_model_stage_metadata(stage_cfg: dict[str, Any]) -> dict[str, Any]:
+    out = dict(stage_cfg or {})
+    out.pop("name", None)
+    out.pop("stage", None)
+    out.pop("enabled", None)
+    return out
+
+
+def default_model_stages_block(model_stages: Any) -> list[dict[str, Any]] | Any:
+    if not isinstance(model_stages, list):
+        return model_stages
+    out: list[dict[str, Any]] = []
+    for idx, raw_stage in enumerate(model_stages):
+        if not isinstance(raw_stage, dict):
+            out.append(raw_stage)
+            continue
+        stage_cfg = dict(raw_stage)
+        stage_name = stage_cfg.get("name", f"stage_{idx + 1}")
+        defaulted_stage = default_model_block(_strip_model_stage_metadata(stage_cfg))
+        defaulted_stage["name"] = stage_name
+        defaulted_stage["enabled"] = stage_cfg.get("enabled", True)
+        defaulted_stage["stage"] = stage_cfg.get("stage", idx + 1)
+        out.append(defaulted_stage)
+    return out
+
+
+def _enabled_model_stages(model_stages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    enabled_with_pos: list[tuple[int, dict[str, Any]]] = []
+    for idx, raw_stage in enumerate(list(model_stages or [])):
+        stage = dict(raw_stage)
+        if stage.get("enabled", True) is False:
+            continue
+        enabled_with_pos.append((idx, stage))
+
+    def _sort_key(item: tuple[int, dict[str, Any]]) -> tuple[int, int, str]:
+        idx, stage = item
+        stage_value = stage.get("stage")
+        if isinstance(stage_value, int) and not isinstance(stage_value, bool):
+            return (0, int(stage_value), str(stage.get("name", "")))
+        return (1, idx, str(stage.get("name", "")))
+
+    enabled_with_pos.sort(key=_sort_key)
+    return [stage for _, stage in enabled_with_pos]
+
+
 def default_risk_block(risk: dict[str, Any]) -> dict[str, Any]:
     risk = dict(risk) if risk else {}
     risk.setdefault("cost_per_turnover", 0.0)
@@ -269,7 +314,19 @@ def apply_top_level_defaults(cfg: dict[str, Any], *, config_path: Path) -> dict[
         interval=interval,
         data=out["data"],
     )
-    out["model"] = default_model_block(out.get("model", {"kind": "none"}) or {"kind": "none"})
+    model_stages = out.get("model_stages")
+    if model_stages is not None:
+        out["model_stages"] = default_model_stages_block(model_stages)
+    enabled_stages = (
+        _enabled_model_stages(list(out.get("model_stages", []) or []))
+        if isinstance(out.get("model_stages"), list)
+        else []
+    )
+    if enabled_stages:
+        final_stage = _strip_model_stage_metadata(dict(enabled_stages[-1]))
+        out["model"] = default_model_block(final_stage)
+    else:
+        out["model"] = default_model_block(out.get("model", {"kind": "none"}) or {"kind": "none"})
     out["signals"] = dict(out.get("signals", {"kind": "none", "params": {}}) or {"kind": "none", "params": {}})
     out["runtime"] = dict(out.get("runtime", {}) or {})
     out["risk"] = default_risk_block(out.get("risk", {}))
@@ -288,6 +345,7 @@ __all__ = [
     "default_execution_block",
     "default_feature_steps",
     "default_model_block",
+    "default_model_stages_block",
     "default_monitoring_block",
     "default_portfolio_block",
     "default_risk_block",
