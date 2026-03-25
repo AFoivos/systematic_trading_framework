@@ -220,6 +220,7 @@ features:
 models:
   none:
     enabled: false
+
   logistic_regression_clf:
     enabled: false
     params:
@@ -267,6 +268,7 @@ models:
       params:
         returns_input_col: close_logret
         mean_model: zero
+
   lightgbm_clf:
     enabled: false
     params:
@@ -325,6 +327,7 @@ models:
       params:
         returns_input_col: close_logret
         mean_model: zero
+
   xgboost_clf:
     enabled: true
     params:
@@ -388,6 +391,7 @@ models:
       params:
         returns_input_col: close_logret
         mean_model: zero
+
   sarimax_forecaster:
     enabled: false
     params:
@@ -415,6 +419,7 @@ models:
       params:
         returns_input_col: close_logret
         mean_model: zero
+
   garch_forecaster:
     enabled: false
     params:
@@ -433,6 +438,7 @@ models:
       step_size: 336
       expanding: true
       max_folds: null
+
   lstm_forecaster:
     enabled: false
     params:
@@ -467,6 +473,7 @@ models:
       params:
         returns_input_col: close_logret
         mean_model: zero
+
   patchtst_forecaster:
     enabled: false
     params:
@@ -504,6 +511,7 @@ models:
       params:
         returns_input_col: close_logret
         mean_model: zero
+
   tft_forecaster:
     enabled: false
     params:
@@ -542,6 +550,7 @@ models:
       params:
         returns_input_col: close_logret
         mean_model: zero
+
   ppo_agent:
     enabled: false
     params:
@@ -576,6 +585,7 @@ models:
         inventory_penalty: 0.0
         drawdown_penalty: 0.0
         switching_penalty: 0.0
+
   dqn_agent:
     enabled: false
     params:
@@ -617,6 +627,7 @@ models:
         inventory_penalty: 0.0
         drawdown_penalty: 0.0
         switching_penalty: 0.0
+
   ppo_portfolio_agent:
     enabled: false
     params:
@@ -650,6 +661,7 @@ models:
         inventory_penalty: 0.0
         drawdown_penalty: 0.0
         switching_penalty: 0.0
+
   dqn_portfolio_agent:
     enabled: false
     params:
@@ -697,12 +709,14 @@ models:
 signals_catalog:
   none:
     enabled: false
+
   trend_state:
     enabled: false
     params:
       state_col: close_trend_state_sma_24_72
       signal_name: signal_trend_state
       mode: long_short_hold
+
   probability_threshold:
     enabled: false
     params:
@@ -711,6 +725,7 @@ signals_catalog:
       upper: 0.55
       lower: 0.45
       mode: long_short
+
   probability_conviction:
     enabled: false
     params:
@@ -718,6 +733,7 @@ signals_catalog:
       signal_name: signal_prob_conviction
       prob_center: 0.5
       clip: 1.0
+
   probability_vol_adjusted:
     enabled: true
     params:
@@ -738,6 +754,7 @@ signals_catalog:
         - col: adx_24
           op: ge
           value: 20.0
+
   forecast_threshold:
     enabled: false
     params:
@@ -746,6 +763,7 @@ signals_catalog:
       upper: 0.001
       lower: -0.001
       mode: long_short
+
   forecast_vol_adjusted:
     enabled: false
     params:
@@ -756,6 +774,7 @@ signals_catalog:
       clip: 0.6
       vol_floor: 1.0e-6
       forecast_floor: 0.0
+
   rsi:
     enabled: false
     params:
@@ -764,6 +783,7 @@ signals_catalog:
       buy_level: 30.0
       sell_level: 70.0
       mode: long_short
+
   momentum:
     enabled: false
     params:
@@ -772,6 +792,7 @@ signals_catalog:
       upper: 0.0
       lower: 0.0
       mode: long_short
+
   stochastic:
     enabled: false
     params:
@@ -781,6 +802,7 @@ signals_catalog:
       lower_band: 20.0
       upper_band: 80.0
       mode: long_short
+      
   volatility_regime:
     enabled: false
     params:
