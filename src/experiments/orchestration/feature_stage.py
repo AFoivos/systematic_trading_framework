@@ -12,6 +12,8 @@ def apply_feature_steps(df: pd.DataFrame, steps: list[dict[str, Any]]) -> pd.Dat
     for step in steps:
         if "step" not in step:
             raise ValueError("Each feature step must include a 'step' key.")
+        if step.get("enabled", True) is False:
+            continue
         name = step["step"]
         params = step.get("params", {}) or {}
         fn = get_feature_fn(name)

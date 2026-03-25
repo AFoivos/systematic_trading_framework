@@ -144,7 +144,7 @@ def test_validate_model_block_rejects_invalid_overlay_configuration() -> None:
 def test_validate_features_block_accepts_feature_transforms_step() -> None:
     validate_features_block(
         [
-            {"step": "indicators", "params": {"atr_windows": [24]}},
+            {"step": "bollinger", "enabled": True, "params": {"window": 24}},
             {
                 "step": "feature_transforms",
                 "params": {
@@ -162,7 +162,25 @@ def test_validate_features_block_accepts_feature_transforms_step() -> None:
                 },
             },
         ]
+        )
+
+
+def test_validate_features_block_accepts_boolean_enabled_flag() -> None:
+    validate_features_block(
+        [
+            {"step": "returns", "enabled": False, "params": {"log": True, "col_name": "close_logret"}},
+            {"step": "rsi", "enabled": True, "params": {"price_col": "close", "windows": [14]}},
+        ]
     )
+
+
+def test_validate_features_block_rejects_non_boolean_enabled_flag() -> None:
+    with pytest.raises(ConfigValidationError, match="features\\[\\]\\.enabled"):
+        validate_features_block(
+            [
+                {"step": "returns", "enabled": "yes", "params": {"log": True, "col_name": "close_logret"}},
+            ]
+        )
 
 
 def test_validate_features_block_rejects_invalid_feature_transform_kind() -> None:

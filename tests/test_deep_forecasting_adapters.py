@@ -9,7 +9,8 @@ import pandas as pd
 import pytest
 
 from src.features import add_close_returns
-from src.features.context import add_regime_context_features, add_session_context_features
+from src.features.regime_context import add_regime_context_features
+from src.features.session_context import add_session_context_features
 from src.features.macro import add_macro_context_features
 from src.models.sequence import build_sequence_samples, fit_sequence_scaler
 
@@ -146,7 +147,8 @@ import numpy as np
 import pandas as pd
 from src.experiments.models import train_lstm_forecaster
 from src.features import add_close_returns
-from src.features.context import add_regime_context_features, add_session_context_features
+from src.features.regime_context import add_regime_context_features
+from src.features.session_context import add_session_context_features
 from src.features.macro import add_macro_context_features
 
 rng = np.random.default_rng(23)
@@ -255,7 +257,8 @@ import numpy as np
 import pandas as pd
 from src.experiments.models import train_patchtst_forecaster
 from src.features import add_close_returns
-from src.features.context import add_regime_context_features, add_session_context_features
+from src.features.regime_context import add_regime_context_features
+from src.features.session_context import add_session_context_features
 
 rng = np.random.default_rng(31)
 periods = 320
@@ -354,7 +357,8 @@ import numpy as np
 import pandas as pd
 from src.experiments.models import train_lstm_forecaster
 from src.features import add_close_returns
-from src.features.context import add_regime_context_features, add_session_context_features
+from src.features.regime_context import add_regime_context_features
+from src.features.session_context import add_session_context_features
 
 rng = np.random.default_rng(13)
 periods = 72

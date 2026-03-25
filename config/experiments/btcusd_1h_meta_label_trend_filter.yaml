@@ -75,25 +75,59 @@ features:
       zscore_window: 168
       ema_spans: [24]
       allow_missing: true
-  - step: indicators
+  - step: bollinger
     params:
       price_col: close
+      window: 24
+      n_std: 2.0
+  - step: roc
+    params:
+      price_col: close
+      windows: [6, 24]
+  - step: atr
+    params:
       high_col: high
       low_col: low
+      close_col: close
+      window: 24
+      method: wilder
+      add_over_price: true
+  - step: adx
+    params:
+      high_col: high
+      low_col: low
+      close_col: close
+      window: 24
+  - step: volume_features
+    params:
       volume_col: volume
-      bb_window: 24
-      bb_nstd: 2.0
-      roc_windows: [6, 24]
+      atr_col: atr_24
+      high_col: high
+      low_col: low
+      close_col: close
       atr_window: 24
-      adx_window: 24
       vol_z_window: 72
-      include_mfi: true
-  - step: momentum
+  - step: mfi
+    params:
+      high_col: high
+      low_col: low
+      close_col: close
+      volume_col: volume
+      window: 24
+  - step: price_momentum
     params:
       price_col: close
+      windows: [6, 24]
+  - step: return_momentum
+    params:
+      returns_col: close_logret
+      windows: [6, 24]
+  - step: vol_normalized_momentum
+    params:
       returns_col: close_logret
       vol_col: vol_rolling_24
       windows: [6, 24]
+      eps: 1.0e-8
   - step: lags
     params:
       cols: [close_logret]

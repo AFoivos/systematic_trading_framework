@@ -3,6 +3,20 @@ from __future__ import annotations
 import pandas as pd
 
 
+def add_bollinger_features(
+    df: pd.DataFrame,
+    price_col: str = "close",
+    window: int = 20,
+    n_std: float = 2.0,
+    inplace: bool = False,
+) -> pd.DataFrame:
+    if price_col not in df.columns:
+        raise KeyError(f"price_col '{price_col}' not found in DataFrame")
+    out = df if inplace else df.copy()
+    close = out[price_col].astype(float)
+    return out.join(add_bollinger_bands(close, window=window, n_std=n_std))
+
+
 def add_bollinger_bands(close: pd.Series, window: int = 20, n_std: float = 2.0) -> pd.DataFrame:
     ma = close.rolling(window=window, min_periods=window).mean()
     sd = close.rolling(window=window, min_periods=window).std(ddof=0)
@@ -20,5 +34,4 @@ def add_bollinger_bands(close: pd.Series, window: int = 20, n_std: float = 2.0) 
         }
     )
 
-
-__all__ = ["add_bollinger_bands"]
+__all__ = ["add_bollinger_bands", "add_bollinger_features"]

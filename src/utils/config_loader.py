@@ -44,6 +44,53 @@ def load_yaml_mapping(path: Path) -> dict[str, Any]:
     return data
 
 
+def _resolve_enabled_catalog_entry(
+    cfg: dict[str, Any],
+    *,
+    catalog_key: str,
+    output_key: str,
+) -> dict[str, Any]:
+    catalog = cfg.get(catalog_key)
+    if catalog is None:
+        return cfg
+    if output_key in cfg and cfg.get(output_key) not in (None, {}):
+        raise ConfigPathError(
+            f"Config must specify either '{output_key}' or '{catalog_key}', not both."
+        )
+    if not isinstance(catalog, dict) or not catalog:
+        raise ConfigPathError(f"'{catalog_key}' must be a non-empty mapping.")
+
+    enabled_items: list[tuple[str, dict[str, Any]]] = []
+    for kind, raw_entry in catalog.items():
+        if not isinstance(kind, str) or not kind:
+            raise ConfigPathError(f"Keys under '{catalog_key}' must be non-empty strings.")
+        if raw_entry is None:
+            entry: dict[str, Any] = {}
+        elif not isinstance(raw_entry, dict):
+            raise ConfigPathError(f"'{catalog_key}.{kind}' must be a mapping.")
+        else:
+            entry = dict(raw_entry)
+        enabled = entry.get("enabled", False)
+        if not isinstance(enabled, bool):
+            raise ConfigPathError(f"'{catalog_key}.{kind}.enabled' must be boolean.")
+        if enabled:
+            enabled_items.append((kind, entry))
+
+    if len(enabled_items) != 1:
+        raise ConfigPathError(
+            f"'{catalog_key}' must have exactly one entry with enabled=true; found {len(enabled_items)}."
+        )
+
+    selected_kind, selected_entry = enabled_items[0]
+    selected_entry.pop("enabled", None)
+    resolved = {"kind": selected_kind} | selected_entry
+
+    out = dict(cfg)
+    out.pop(catalog_key, None)
+    out[output_key] = resolved
+    return out
+
+
 def load_resolved_config(path: Path) -> dict[str, Any]:
     """
     Load a self-contained experiment config and reject legacy inheritance.
@@ -54,6 +101,8 @@ def load_resolved_config(path: Path) -> dict[str, Any]:
             "Config inheritance via 'extends' is no longer supported. "
             "Each experiment YAML must be fully self-contained."
         )
+    cfg = _resolve_enabled_catalog_entry(cfg, catalog_key="models", output_key="model")
+    cfg = _resolve_enabled_catalog_entry(cfg, catalog_key="signals_catalog", output_key="signals")
     cfg["config_path"] = str(path)
     return cfg
 

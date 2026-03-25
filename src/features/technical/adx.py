@@ -6,6 +6,24 @@ import pandas as pd
 from .true_range import compute_true_range
 
 
+def add_adx_features(
+    df: pd.DataFrame,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+    window: int = 14,
+    inplace: bool = False,
+) -> pd.DataFrame:
+    missing = [c for c in (high_col, low_col, close_col) if c not in df.columns]
+    if missing:
+        raise KeyError(f"Missing columns for ADX features: {missing}")
+    out = df if inplace else df.copy()
+    high = out[high_col].astype(float)
+    low = out[low_col].astype(float)
+    close = out[close_col].astype(float)
+    return out.join(compute_adx(high, low, close, window=window))
+
+
 def compute_adx(high: pd.Series, low: pd.Series, close: pd.Series, window: int = 14) -> pd.DataFrame:
     up_move = high.diff()
     down_move = -low.diff()
@@ -28,5 +46,4 @@ def compute_adx(high: pd.Series, low: pd.Series, close: pd.Series, window: int =
         }
     )
 
-
-__all__ = ["compute_adx"]
+__all__ = ["compute_adx", "add_adx_features"]

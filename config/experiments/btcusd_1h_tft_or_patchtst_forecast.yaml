@@ -68,12 +68,20 @@ features:
       zscore_window: 168
       ema_spans: [24]
       allow_missing: true
-  - step: momentum
+  - step: price_momentum
     params:
       price_col: close
+      windows: [6, 24]
+  - step: return_momentum
+    params:
+      returns_col: close_logret
+      windows: [6, 24]
+  - step: vol_normalized_momentum
+    params:
       returns_col: close_logret
       vol_col: vol_rolling_24
       windows: [6, 24]
+      eps: 1.0e-8
 
 model:
   kind: tft_forecaster

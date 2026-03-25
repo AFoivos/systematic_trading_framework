@@ -5,6 +5,30 @@ import pandas as pd
 from .true_range import compute_true_range
 
 
+def add_atr_features(
+    df: pd.DataFrame,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+    window: int = 14,
+    method: str = "wilder",
+    add_over_price: bool = True,
+    inplace: bool = False,
+) -> pd.DataFrame:
+    missing = [c for c in (high_col, low_col, close_col) if c not in df.columns]
+    if missing:
+        raise KeyError(f"Missing columns for ATR features: {missing}")
+    out = df if inplace else df.copy()
+    high = out[high_col].astype(float)
+    low = out[low_col].astype(float)
+    close = out[close_col].astype(float)
+    atr = compute_atr(high, low, close, window=window, method=method)
+    out[f"atr_{window}"] = atr
+    if add_over_price:
+        out[f"atr_over_price_{window}"] = atr / close
+    return out
+
+
 def compute_atr(
     high: pd.Series,
     low: pd.Series,
@@ -22,5 +46,4 @@ def compute_atr(
     atr.name = f"atr_{window}"
     return atr
 
-
-__all__ = ["compute_atr"]
+__all__ = ["compute_atr", "add_atr_features"]

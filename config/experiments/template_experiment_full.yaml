@@ -1,5 +1,13 @@
 # Full self-contained experiment template covering the current supported config surface.
-# Copy this file and remove blocks/keys you do not need.
+# Every tracked experiment should stay standalone and valid without inheritance.
+#
+# Important:
+# - Feature steps support `enabled: true/false`.
+# - To disable the model path, use `model.kind: none`.
+# - To disable the signal path, use `signals.kind: none`.
+# - This template lists all currently supported feature-step families and the currently
+#   supported model/signal kinds as comments, but only one active `model.kind` and one
+#   active `signals.kind` can be selected in a valid run.
 
 data:
   source: dukascopy_csv
@@ -30,32 +38,43 @@ data:
 
 features:
   - step: returns
+    enabled: true
     params:
       log: true
       col_name: close_logret
+
   - step: volatility
+    enabled: true
     params:
       returns_col: close_logret
       rolling_windows: [24, 72, 168]
       ewma_spans: [24, 72]
       annualization_factor: 8760.0
+
   - step: trend
+    enabled: true
     params:
       price_col: close
       sma_windows: [24, 72]
       ema_spans: [12, 24, 72]
+
   - step: trend_regime
+    enabled: true
     params:
       price_col: close
       base_sma_for_sign: 72
       short_sma: 24
       long_sma: 72
+
   - step: session_context
+    enabled: true
     params:
       timezone: UTC
       add_cyclical_time: true
       include_weekend_flag: true
+
   - step: regime_context
+    enabled: true
     params:
       price_col: close
       returns_col: close_logret
@@ -65,44 +84,118 @@ features:
       trend_slow_span: 72
       vol_ratio_high_threshold: 1.35
       vol_ratio_low_threshold: 0.8
-  - step: indicators
+
+  - step: bollinger
+    enabled: true
     params:
       price_col: close
+      window: 24
+      n_std: 2.0
+
+  - step: macd
+    enabled: true
+    params:
+      price_col: close
+      fast: 12
+      slow: 26
+      signal: 9
+
+  - step: ppo
+    enabled: true
+    params:
+      price_col: close
+      fast: 12
+      slow: 26
+      signal: 9
+
+  - step: roc
+    enabled: true
+    params:
+      price_col: close
+      windows: [6, 24]
+
+  - step: atr
+    enabled: true
+    params:
       high_col: high
       low_col: low
+      close_col: close
+      window: 24
+      method: wilder
+      add_over_price: true
+
+  - step: adx
+    enabled: true
+    params:
+      high_col: high
+      low_col: low
+      close_col: close
+      window: 24
+
+  - step: volume_features
+    enabled: true
+    params:
       volume_col: volume
-      bb_window: 24
-      bb_nstd: 2.0
-      macd_fast: 12
-      macd_slow: 26
-      macd_signal: 9
-      ppo_fast: 12
-      ppo_slow: 26
-      ppo_signal: 9
-      roc_windows: [6, 24]
+      atr_col: atr_24
+      high_col: high
+      low_col: low
+      close_col: close
       atr_window: 24
-      adx_window: 24
       vol_z_window: 72
-      include_mfi: false
-  - step: oscillators
+
+  - step: mfi
+    enabled: false
+    params:
+      high_col: high
+      low_col: low
+      close_col: close
+      volume_col: volume
+      window: 24
+
+  - step: rsi
+    enabled: true
+    params:
+      price_col: close
+      windows: [2, 14]
+      method: wilder
+
+  - step: stochastic
+    enabled: false
     params:
       price_col: close
       high_col: high
       low_col: low
-      rsi_windows: [2, 14]
-      stoch_windows: [14]
-      stoch_smooth: 3
-  - step: momentum
+      window: 14
+      smooth: 3
+
+  - step: price_momentum
+    enabled: true
     params:
       price_col: close
+      windows: [6, 24]
+
+  - step: return_momentum
+    enabled: true
+    params:
+      returns_col: close_logret
+      windows: [6, 24]
+
+  - step: vol_normalized_momentum
+    enabled: true
+    params:
       returns_col: close_logret
       vol_col: vol_rolling_24
       windows: [6, 24]
+      eps: 1.0e-8
+
   - step: lags
+    enabled: true
     params:
       cols: [close_logret]
       lags: [1, 2, 6, 24]
+
   - step: macro_context
+    enabled: false
     params:
       columns: [dxy_close, spx_close]
       availability_lag: 1
@@ -111,7 +204,9 @@ features:
       zscore_window: 168
       ema_spans: [24]
       allow_missing: true
+
   - step: feature_transforms
+    enabled: true
     params:
       transforms:
         - source_col: volume_over_atr_24
@@ -122,87 +217,579 @@ features:
           upper_q: 0.99
           shift: 1
 
-model:
-  kind: xgboost_clf
-  params:
-    n_estimators: 350
-    learning_rate: 0.03
-    num_leaves: null
-    max_depth: 4
-    subsample: 0.9
-    colsample_bytree: 0.9
-    min_child_samples: null
-    random_state: 7
-    min_child_weight: 5.0
-    reg_lambda: 1.0
-    objective: binary:logistic
-    eval_metric: logloss
-    tree_method: hist
-  feature_cols:
-    - regime_vol_ratio_24_168
-    - regime_vol_ratio_z_24_168
-    - regime_trend_state_24_72
-    - regime_absret_z_24_168
-    - close_rsi_2
-    - close_rsi_14
-    - bb_percent_b_24_2.0
-    - adx_24
-    - volume_z_72
-    - volume_over_atr_24
-    - volume_over_atr_24_rollclip_2520_q01_q99
-  target:
-    kind: triple_barrier
-    price_col: close
-    open_col: open
-    high_col: high
-    low_col: low
-    returns_col: close_logret
-    max_holding: 24
-    upper_mult: 1.5
-    lower_mult: 1.5
-    vol_window: 24
-    neutral_label: drop
-  split:
-    method: walk_forward
-    train_size: 8760
-    test_size: 336
-    step_size: 336
-    expanding: true
-    max_folds: null
-  runtime: {}
-  env: {}
-  use_features: true
-  pred_prob_col: null
-  pred_ret_col: null
-  returns_input_col: null
-  signal_col: null
-  action_col: null
-  overlay:
-    kind: garch
+models:
+  none:
+    enabled: false
+  logistic_regression_clf:
+    enabled: false
+    params:
+      C: 1.0
+      max_iter: 1000
+      solver: lbfgs
+      random_state: 7
+    feature_cols:
+      - regime_vol_ratio_24_168
+      - regime_trend_state_24_72
+      - close_rsi_14
+      - bb_percent_b_24_2.0
+      - adx_24
+      - volume_z_72
+      - lag_close_logret_1
+    target:
+      kind: triple_barrier
+      price_col: close
+      open_col: open
+      high_col: high
+      low_col: low
+      returns_col: close_logret
+      max_holding: 24
+      upper_mult: 1.5
+      lower_mult: 1.5
+      vol_window: 24
+      neutral_label: drop
+    split:
+      method: walk_forward
+      train_size: 8760
+      test_size: 336
+      step_size: 336
+      expanding: true
+      max_folds: null
+    runtime: {}
+    env: {}
+    use_features: true
+    pred_prob_col: null
+    pred_ret_col: null
+    returns_input_col: null
+    signal_col: null
+    action_col: null
+    overlay:
+      kind: garch
+      params:
+        returns_input_col: close_logret
+        mean_model: zero
+  lightgbm_clf:
+    enabled: false
+    params:
+      n_estimators: 400
+      learning_rate: 0.03
+      num_leaves: 31
+      max_depth: 5
+      subsample: 0.9
+      colsample_bytree: 0.9
+      min_child_samples: 20
+      random_state: 7
+    feature_cols:
+      - regime_vol_ratio_24_168
+      - regime_vol_ratio_z_24_168
+      - regime_trend_state_24_72
+      - regime_absret_z_24_168
+      - close_rsi_2
+      - close_rsi_14
+      - bb_percent_b_24_2.0
+      - adx_24
+      - volume_z_72
+      - volume_over_atr_24
+      - volume_over_atr_24_rollclip_2520_q01_q99
+      - close_logret_mom_6
+      - close_logret_norm_mom_24
+      - lag_close_logret_1
+    target:
+      kind: triple_barrier
+      price_col: close
+      open_col: open
+      high_col: high
+      low_col: low
+      returns_col: close_logret
+      max_holding: 24
+      upper_mult: 1.5
+      lower_mult: 1.5
+      vol_window: 24
+      neutral_label: drop
+    split:
+      method: walk_forward
+      train_size: 8760
+      test_size: 336
+      step_size: 336
+      expanding: true
+      max_folds: null
+    runtime: {}
+    env: {}
+    use_features: true
+    pred_prob_col: null
+    pred_ret_col: null
+    returns_input_col: null
+    signal_col: null
+    action_col: null
+    overlay:
+      kind: garch
+      params:
+        returns_input_col: close_logret
+        mean_model: zero
+  xgboost_clf:
+    enabled: true
+    params:
+      n_estimators: 350
+      learning_rate: 0.03
+      num_leaves: null
+      max_depth: 4
+      subsample: 0.9
+      colsample_bytree: 0.9
+      min_child_samples: null
+      random_state: 7
+      min_child_weight: 5.0
+      reg_lambda: 1.0
+      objective: binary:logistic
+      eval_metric: logloss
+      tree_method: hist
+    feature_cols:
+      - regime_vol_ratio_24_168
+      - regime_vol_ratio_z_24_168
+      - regime_trend_state_24_72
+      - regime_absret_z_24_168
+      - close_rsi_2
+      - close_rsi_14
+      - bb_percent_b_24_2.0
+      - adx_24
+      - volume_z_72
+      - volume_over_atr_24
+      - volume_over_atr_24_rollclip_2520_q01_q99
+      - close_logret_mom_6
+      - close_logret_norm_mom_24
+      - lag_close_logret_1
+    target:
+      kind: triple_barrier
+      price_col: close
+      open_col: open
+      high_col: high
+      low_col: low
+      returns_col: close_logret
+      max_holding: 24
+      upper_mult: 1.5
+      lower_mult: 1.5
+      vol_window: 24
+      neutral_label: drop
+    split:
+      method: walk_forward
+      train_size: 8760
+      test_size: 336
+      step_size: 336
+      expanding: true
+      max_folds: null
+    runtime: {}
+    env: {}
+    use_features: true
+    pred_prob_col: null
+    pred_ret_col: null
+    returns_input_col: null
+    signal_col: null
+    action_col: null
+    overlay:
+      kind: garch
+      params:
+        returns_input_col: close_logret
+        mean_model: zero
+  sarimax_forecaster:
+    enabled: false
+    params:
+      order: [1, 0, 1]
+      seasonal_order: [0, 0, 0, 0]
+      trend: c
+      maxiter: 50
+    feature_cols:
+      - close_logret
+      - vol_rolling_24
+      - regime_vol_ratio_24_168
+    target:
+      kind: forward_return
+      price_col: close
+      horizon: 1
+    split:
+      method: walk_forward
+      train_size: 8760
+      test_size: 336
+      step_size: 336
+      expanding: true
+      max_folds: null
+    overlay:
+      kind: garch
+      params:
+        returns_input_col: close_logret
+        mean_model: zero
+  garch_forecaster:
+    enabled: false
     params:
       returns_input_col: close_logret
       mean_model: zero
+    feature_cols:
+      - close_logret
+    target:
+      kind: forward_return
+      price_col: close
+      horizon: 1
+    split:
+      method: walk_forward
+      train_size: 8760
+      test_size: 336
+      step_size: 336
+      expanding: true
+      max_folds: null
+  lstm_forecaster:
+    enabled: false
+    params:
+      lookback: 48
+      hidden_dim: 64
+      num_layers: 2
+      dropout: 0.1
+      epochs: 10
+      batch_size: 64
+      learning_rate: 0.001
+      weight_decay: 0.0001
+      scale_target: true
+    feature_cols:
+      - close_logret
+      - vol_rolling_24
+      - close_over_ema_24
+      - close_logret_norm_mom_24
+      - regime_vol_ratio_24_168
+    target:
+      kind: forward_return
+      price_col: close
+      horizon: 1
+    split:
+      method: walk_forward
+      train_size: 8760
+      test_size: 336
+      step_size: 336
+      expanding: true
+      max_folds: null
+    overlay:
+      kind: garch
+      params:
+        returns_input_col: close_logret
+        mean_model: zero
+  patchtst_forecaster:
+    enabled: false
+    params:
+      lookback: 64
+      patch_len: 16
+      patch_stride: 8
+      hidden_dim: 64
+      num_layers: 2
+      num_heads: 4
+      dropout: 0.1
+      epochs: 10
+      batch_size: 64
+      learning_rate: 0.001
+      weight_decay: 0.0001
+      scale_target: true
+    feature_cols:
+      - close_logret
+      - vol_rolling_24
+      - close_over_ema_24
+      - close_logret_norm_mom_24
+      - regime_vol_ratio_24_168
+    target:
+      kind: forward_return
+      price_col: close
+      horizon: 1
+    split:
+      method: walk_forward
+      train_size: 8760
+      test_size: 336
+      step_size: 336
+      expanding: true
+      max_folds: null
+    overlay:
+      kind: garch
+      params:
+        returns_input_col: close_logret
+        mean_model: zero
+  tft_forecaster:
+    enabled: false
+    params:
+      lookback: 48
+      hidden_dim: 64
+      num_heads: 4
+      num_layers: 2
+      dropout: 0.1
+      epochs: 10
+      batch_size: 64
+      learning_rate: 0.001
+      weight_decay: 0.0001
+      quantiles: [0.1, 0.5, 0.9]
+      scale_target: true
+    feature_cols:
+      - close_logret
+      - vol_rolling_24
+      - close_over_ema_24
+      - close_logret_norm_mom_24
+      - hour_sin_24
+      - hour_cos_24
+      - regime_vol_ratio_24_168
+    target:
+      kind: forward_return
+      price_col: close
+      horizon: 1
+    split:
+      method: walk_forward
+      train_size: 8760
+      test_size: 336
+      step_size: 336
+      expanding: true
+      max_folds: null
+    overlay:
+      kind: garch
+      params:
+        returns_input_col: close_logret
+        mean_model: zero
+  ppo_agent:
+    enabled: false
+    params:
+      total_timesteps: 10000
+      learning_rate: 0.0003
+      batch_size: 64
+    feature_cols:
+      - close_logret
+      - vol_rolling_24
+      - close_over_ema_24
+    target:
+      kind: forward_return
+      price_col: close
+      horizon: 1
+    split:
+      method: walk_forward
+      train_size: 8760
+      test_size: 336
+      step_size: 336
+      expanding: true
+      max_folds: 8
+    env:
+      action_space: continuous
+      window_size: 32
+      execution_lag_bars: 1
+      max_signal_abs: 1.0
+      min_holding_bars: 0
+      action_hysteresis: 0.0
+      reward:
+        cost_per_turnover: 0.0
+        slippage_per_turnover: 0.0
+        inventory_penalty: 0.0
+        drawdown_penalty: 0.0
+        switching_penalty: 0.0
+  dqn_agent:
+    enabled: false
+    params:
+      total_timesteps: 10000
+      learning_rate: 0.0001
+      batch_size: 64
+      buffer_size: 50000
+      learning_starts: 1000
+      target_update_interval: 250
+      exploration_fraction: 0.2
+      exploration_initial_eps: 1.0
+      exploration_final_eps: 0.05
+    feature_cols:
+      - close_logret
+      - vol_rolling_24
+      - close_over_ema_24
+    target:
+      kind: forward_return
+      price_col: close
+      horizon: 1
+    split:
+      method: walk_forward
+      train_size: 8760
+      test_size: 336
+      step_size: 336
+      expanding: true
+      max_folds: 8
+    env:
+      action_space: discrete
+      window_size: 32
+      execution_lag_bars: 1
+      max_signal_abs: 1.0
+      min_holding_bars: 0
+      action_hysteresis: 0.0
+      position_grid: [-1.0, 0.0, 1.0]
+      reward:
+        cost_per_turnover: 0.0
+        slippage_per_turnover: 0.0
+        inventory_penalty: 0.0
+        drawdown_penalty: 0.0
+        switching_penalty: 0.0
+  ppo_portfolio_agent:
+    enabled: false
+    params:
+      total_timesteps: 10000
+      learning_rate: 0.0003
+      batch_size: 64
+    feature_cols:
+      - close_logret
+      - vol_rolling_24
+    target:
+      kind: forward_return
+      price_col: close
+      horizon: 1
+    split:
+      method: walk_forward
+      train_size: 8760
+      test_size: 336
+      step_size: 336
+      expanding: true
+      max_folds: 8
+    env:
+      action_space: continuous
+      window_size: 32
+      execution_lag_bars: 1
+      max_signal_abs: 1.0
+      min_holding_bars: 0
+      action_hysteresis: 0.0
+      reward:
+        cost_per_turnover: 0.0
+        slippage_per_turnover: 0.0
+        inventory_penalty: 0.0
+        drawdown_penalty: 0.0
+        switching_penalty: 0.0
+  dqn_portfolio_agent:
+    enabled: false
+    params:
+      total_timesteps: 10000
+      learning_rate: 0.0001
+      batch_size: 64
+      buffer_size: 50000
+      learning_starts: 1000
+      target_update_interval: 250
+      exploration_fraction: 0.2
+      exploration_initial_eps: 1.0
+      exploration_final_eps: 0.05
+    feature_cols:
+      - close_logret
+      - vol_rolling_24
+    target:
+      kind: forward_return
+      price_col: close
+      horizon: 1
+    split:
+      method: walk_forward
+      train_size: 8760
+      test_size: 336
+      step_size: 336
+      expanding: true
+      max_folds: 8
+    env:
+      action_space: discrete
+      window_size: 32
+      execution_lag_bars: 1
+      max_signal_abs: 1.0
+      min_holding_bars: 0
+      action_hysteresis: 0.0
+      action_templates:
+        - [1.0]
+        - [0.0]
+        - [-1.0]
+      reward:
+        cost_per_turnover: 0.0
+        slippage_per_turnover: 0.0
+        inventory_penalty: 0.0
+        drawdown_penalty: 0.0
+        switching_penalty: 0.0
 
-signals:
-  kind: probability_vol_adjusted
-  params:
-    prob_col: pred_prob
-    vol_col: pred_vol
-    signal_name: signal_prob_vol_adj
-    prob_center: 0.5
-    upper: 0.56
-    lower: 0.44
-    vol_target: 0.0015
-    clip: 0.6
-    vol_floor: 1.0e-6
-    min_signal_abs: 0.01
-    activation_filters:
-      - col: regime_vol_ratio_24_168
-        op: ge
-        value: 0.95
-      - col: adx_24
-        op: ge
-        value: 20.0
+signals_catalog:
+  none:
+    enabled: false
+  trend_state:
+    enabled: false
+    params:
+      state_col: close_trend_state_sma_24_72
+      signal_name: signal_trend_state
+      mode: long_short_hold
+  probability_threshold:
+    enabled: false
+    params:
+      prob_col: pred_prob
+      signal_name: signal_prob_threshold
+      upper: 0.55
+      lower: 0.45
+      mode: long_short
+  probability_conviction:
+    enabled: false
+    params:
+      prob_col: pred_prob
+      signal_name: signal_prob_conviction
+      prob_center: 0.5
+      clip: 1.0
+  probability_vol_adjusted:
+    enabled: true
+    params:
+      prob_col: pred_prob
+      vol_col: pred_vol
+      signal_name: signal_prob_vol_adj
+      prob_center: 0.5
+      upper: 0.56
+      lower: 0.44
+      vol_target: 0.0015
+      clip: 0.6
+      vol_floor: 1.0e-6
+      min_signal_abs: 0.01
+      activation_filters:
+        - col: regime_vol_ratio_24_168
+          op: ge
+          value: 0.95
+        - col: adx_24
+          op: ge
+          value: 20.0
+  forecast_threshold:
+    enabled: false
+    params:
+      forecast_col: pred_ret
+      signal_name: signal_forecast_threshold
+      upper: 0.001
+      lower: -0.001
+      mode: long_short
+  forecast_vol_adjusted:
+    enabled: false
+    params:
+      forecast_col: pred_ret
+      vol_col: pred_vol
+      signal_name: signal_forecast_vol_adj
+      vol_target: 0.0015
+      clip: 0.6
+      vol_floor: 1.0e-6
+      forecast_floor: 0.0
+  rsi:
+    enabled: false
+    params:
+      rsi_col: close_rsi_14
+      signal_name: signal_rsi
+      buy_level: 30.0
+      sell_level: 70.0
+      mode: long_short
+  momentum:
+    enabled: false
+    params:
+      momentum_col: close_logret_mom_24
+      signal_name: signal_momentum
+      upper: 0.0
+      lower: 0.0
+      mode: long_short
+  stochastic:
+    enabled: false
+    params:
+      k_col: close_stoch_k_14
+      d_col: close_stoch_d_14
+      signal_name: signal_stochastic
+      lower_band: 20.0
+      upper_band: 80.0
+      mode: long_short
+  volatility_regime:
+    enabled: false
+    params:
+      vol_ratio_col: regime_vol_ratio_24_168
+      signal_name: signal_volatility_regime
+      high_threshold: 1.35
+      low_threshold: 0.8
+      high_signal: 1.0
+      low_signal: 0.0
 
 runtime:
   seed: 7
@@ -260,13 +847,5 @@ execution:
   current_prices: {}
 
 logging:
-  enabled: true
   run_name: template_experiment_full
-  output_dir: "logs/experiments"
-  stage_tails:
-    enabled: true
-    stdout: true
-    report: true
-    limit: 10
-    max_columns: 18
-    max_assets: 1
+  save_report: true

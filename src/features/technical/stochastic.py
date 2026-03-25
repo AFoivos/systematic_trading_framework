@@ -4,6 +4,29 @@ import numpy as np
 import pandas as pd
 
 
+def add_stochastic_features(
+    df: pd.DataFrame,
+    price_col: str = "close",
+    high_col: str = "high",
+    low_col: str = "low",
+    window: int = 14,
+    smooth: int = 3,
+    inplace: bool = False,
+) -> pd.DataFrame:
+    missing = [c for c in (price_col, high_col, low_col) if c not in df.columns]
+    if missing:
+        raise KeyError(f"Missing columns for stochastic features: {missing}")
+    out = df if inplace else df.copy()
+    close = out[price_col].astype(float)
+    high = out[high_col].astype(float)
+    low = out[low_col].astype(float)
+    k = compute_stoch_k(close, high, low, window=window)
+    d = compute_stoch_d(k, smooth=smooth)
+    out[f"{price_col}_stoch_k_{window}"] = k
+    out[f"{price_col}_stoch_d_{window}"] = d
+    return out
+
+
 def compute_stoch_k(close: pd.Series, high: pd.Series, low: pd.Series, window: int = 14) -> pd.Series:
     if not (isinstance(close, pd.Series) and isinstance(high, pd.Series) and isinstance(low, pd.Series)):
         raise TypeError("close, high, low must be pandas Series")
@@ -24,5 +47,4 @@ def compute_stoch_d(k: pd.Series, smooth: int = 3) -> pd.Series:
     d.name = f"{k.name}_d{smooth}"
     return d
 
-
-__all__ = ["compute_stoch_k", "compute_stoch_d"]
+__all__ = ["compute_stoch_k", "compute_stoch_d", "add_stochastic_features"]

@@ -222,6 +222,218 @@ def test_runner_completion_output_omits_artifact_inventory(capsys: pytest.Captur
     assert "run_dir:" not in captured.out
 
 
+def test_load_experiment_config_resolves_enabled_model_and_signal_catalogs(tmp_path: Path) -> None:
+    config_path = tmp_path / "catalog.yaml"
+    config_path.write_text(
+        """
+data:
+  source: dukascopy_csv
+  interval: 1h
+  start: "2024-01-01 00:00:00"
+  end: null
+  alignment: inner
+  symbol: BTCUSD
+  pit:
+    timestamp_alignment:
+      source_timezone: UTC
+      output_timezone: UTC
+      normalize_daily: false
+      duplicate_policy: last
+    corporate_actions:
+      policy: none
+      adj_close_col: adj_close
+    universe_snapshot:
+      inactive_policy: raise
+  storage:
+    mode: cached_only
+    dataset_id: catalog_test
+    save_raw: false
+    save_processed: true
+    load_path: data/raw/dukas_copy_bank/btcusd_h1.csv
+    raw_dir: data/raw
+    processed_dir: data/processed
+features:
+  - step: returns
+    params:
+      log: true
+      col_name: close_logret
+models:
+  none:
+    enabled: false
+  xgboost_clf:
+    enabled: true
+    params:
+      n_estimators: 10
+      max_depth: 3
+      learning_rate: 0.1
+      subsample: 1.0
+      colsample_bytree: 1.0
+      random_state: 7
+      min_child_weight: 1.0
+      reg_lambda: 1.0
+      objective: binary:logistic
+      eval_metric: logloss
+      tree_method: hist
+    feature_cols: [close_logret]
+    target:
+      kind: triple_barrier
+      price_col: close
+      open_col: open
+      high_col: high
+      low_col: low
+      returns_col: close_logret
+      max_holding: 12
+      upper_mult: 1.5
+      lower_mult: 1.5
+      vol_window: 24
+      neutral_label: drop
+    split:
+      method: walk_forward
+      train_size: 100
+      test_size: 20
+      step_size: 20
+      expanding: true
+      max_folds: 2
+signals_catalog:
+  none:
+    enabled: false
+  probability_threshold:
+    enabled: true
+    params:
+      prob_col: pred_prob
+      signal_name: signal_prob_threshold
+      upper: 0.55
+      lower: 0.45
+      mode: long_short
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+risk:
+  cost_per_turnover: 0.0005
+  slippage_per_turnover: 0.00015
+  target_vol: null
+  max_leverage: 1.0
+  dd_guard:
+    enabled: true
+    max_drawdown: 0.12
+    cooloff_bars: 48
+  vol_col: null
+backtest:
+  returns_col: close_logret
+  signal_col: signal_prob_threshold
+  periods_per_year: 8760
+  returns_type: log
+  missing_return_policy: raise_if_exposed
+  min_holding_bars: 0
+  subset: test
+  vol_col: null
+portfolio:
+  enabled: false
+  construction: signal_weights
+  gross_target: 1.0
+  long_short: true
+  expected_return_col: null
+  covariance_window: 60
+  covariance_rebalance_step: 1
+  risk_aversion: 5.0
+  trade_aversion: 0.0
+  constraints: {}
+  asset_groups: {}
+monitoring:
+  enabled: true
+  psi_threshold: 0.15
+  n_bins: 10
+execution:
+  enabled: false
+  mode: paper
+  capital: 1000000.0
+  price_col: close
+  min_trade_notional: 0.0
+  current_weights: {}
+  current_prices: {}
+logging:
+  enabled: true
+  run_name: catalog_test
+  output_dir: logs/experiments
+""",
+        encoding="utf-8",
+    )
+
+    cfg = load_experiment_config(config_path)
+
+    assert cfg["model"]["kind"] == "xgboost_clf"
+    assert cfg["signals"]["kind"] == "probability_threshold"
+    assert "models" not in cfg
+    assert "signals_catalog" not in cfg
+
+
+def test_load_experiment_config_rejects_multiple_enabled_model_catalog_entries(tmp_path: Path) -> None:
+    config_path = tmp_path / "bad_catalog.yaml"
+    config_path.write_text(
+        """
+data:
+  source: dukascopy_csv
+  interval: 1h
+  start: "2024-01-01 00:00:00"
+  end: null
+  alignment: inner
+  symbol: BTCUSD
+  pit:
+    timestamp_alignment:
+      source_timezone: UTC
+      output_timezone: UTC
+      normalize_daily: false
+      duplicate_policy: last
+    corporate_actions:
+      policy: none
+      adj_close_col: adj_close
+    universe_snapshot:
+      inactive_policy: raise
+  storage:
+    mode: cached_only
+    dataset_id: bad_catalog
+    save_raw: false
+    save_processed: true
+    load_path: data/raw/dukas_copy_bank/btcusd_h1.csv
+    raw_dir: data/raw
+    processed_dir: data/processed
+features: []
+models:
+  none:
+    enabled: true
+  xgboost_clf:
+    enabled: true
+signals:
+  kind: none
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+risk: {}
+backtest:
+  returns_col: close_logret
+  signal_col: signal
+  periods_per_year: 8760
+  returns_type: log
+  missing_return_policy: raise_if_exposed
+portfolio: {}
+monitoring: {}
+execution: {}
+logging:
+  run_name: bad_catalog
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigError, match="exactly one entry with enabled=true"):
+        load_experiment_config(config_path)
+
+
 def test_execution_output_can_liquidate_current_only_assets_with_current_prices() -> None:
     """
     Execution output should allow liquidation of assets present only in current_weights.

@@ -12,19 +12,21 @@ def _extras(data: dict[str, Any], known: set[str]) -> dict[str, Any]:
 class FeatureStep:
     step: str
     params: dict[str, Any] = field(default_factory=dict)
+    enabled: bool = True
     extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "FeatureStep":
-        known = {"step", "params"}
+        known = {"step", "params", "enabled"}
         return cls(
             step=str(data["step"]),
             params=dict(data.get("params", {}) or {}),
+            enabled=bool(data.get("enabled", True)),
             extra=_extras(data, known),
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {"step": self.step, "params": dict(self.params)} | dict(self.extra)
+        return {"step": self.step, "params": dict(self.params), "enabled": self.enabled} | dict(self.extra)
 
 
 @dataclass(frozen=True)

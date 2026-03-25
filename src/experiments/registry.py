@@ -5,17 +5,27 @@ from typing import Callable, Mapping, Optional, Union
 import pandas as pd
 
 from src.features import (
+    add_adx_features,
+    add_atr_features,
+    add_bollinger_features,
     add_close_returns,
     add_feature_transforms,
     add_lagged_features,
+    add_macd_features,
     add_macro_context_features,
+    add_mfi_features,
+    add_ppo_features,
+    add_price_momentum_features,
     add_regime_context_features,
+    add_return_momentum_features,
+    add_roc_features,
+    add_rsi_features,
     add_session_context_features,
+    add_stochastic_features,
+    add_vol_normalized_momentum_features,
     add_volatility_features,
+    add_volume_features,
 )
-from src.features.technical.indicators import add_indicator_features
-from src.features.technical.momentum import add_momentum_features
-from src.features.technical.oscillators import add_oscillator_features
 from src.features.technical.trend import add_trend_features, add_trend_regime_features
 from src.backtesting.strategies import (
     conviction_sizing_signal,
@@ -56,10 +66,20 @@ FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
     "volatility": add_volatility_features,
     "trend": add_trend_features,
     "trend_regime": add_trend_regime_features,
-    "oscillators": add_oscillator_features,
     "lags": add_lagged_features,
-    "momentum": add_momentum_features,
-    "indicators": add_indicator_features,
+    "bollinger": add_bollinger_features,
+    "macd": add_macd_features,
+    "ppo": add_ppo_features,
+    "roc": add_roc_features,
+    "atr": add_atr_features,
+    "adx": add_adx_features,
+    "volume_features": add_volume_features,
+    "mfi": add_mfi_features,
+    "rsi": add_rsi_features,
+    "stochastic": add_stochastic_features,
+    "price_momentum": add_price_momentum_features,
+    "return_momentum": add_return_momentum_features,
+    "vol_normalized_momentum": add_vol_normalized_momentum_features,
     "session_context": add_session_context_features,
     "regime_context": add_regime_context_features,
     "macro_context": add_macro_context_features,

@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from src.experiments.support.targets import build_triple_barrier_target
+from src.experiments.orchestration.feature_stage import apply_feature_steps
 from src.models.runtime import probe_xgboost_runtime
 from src.experiments.models import (
     train_logistic_regression_classifier,
@@ -13,7 +14,8 @@ from src.experiments.models import (
 )
 from src.experiments.registry import FEATURE_REGISTRY, MODEL_REGISTRY, SIGNAL_REGISTRY
 from src.features import add_close_returns, add_feature_transforms
-from src.features.context import add_regime_context_features, add_session_context_features
+from src.features.regime_context import add_regime_context_features
+from src.features.session_context import add_session_context_features
 from src.features.technical.indicators import add_indicator_features
 
 
@@ -41,8 +43,37 @@ def test_registry_contains_phase12_extensions() -> None:
     assert "session_context" in FEATURE_REGISTRY
     assert "regime_context" in FEATURE_REGISTRY
     assert "feature_transforms" in FEATURE_REGISTRY
+    assert "bollinger" in FEATURE_REGISTRY
+    assert "macd" in FEATURE_REGISTRY
+    assert "ppo" in FEATURE_REGISTRY
+    assert "roc" in FEATURE_REGISTRY
+    assert "atr" in FEATURE_REGISTRY
+    assert "adx" in FEATURE_REGISTRY
+    assert "volume_features" in FEATURE_REGISTRY
+    assert "mfi" in FEATURE_REGISTRY
+    assert "rsi" in FEATURE_REGISTRY
+    assert "stochastic" in FEATURE_REGISTRY
+    assert "price_momentum" in FEATURE_REGISTRY
+    assert "return_momentum" in FEATURE_REGISTRY
+    assert "vol_normalized_momentum" in FEATURE_REGISTRY
     assert "xgboost_clf" in MODEL_REGISTRY
     assert "probability_vol_adjusted" in SIGNAL_REGISTRY
+
+
+def test_apply_feature_steps_skips_disabled_steps() -> None:
+    df = _synthetic_hourly_ohlcv(periods=72)
+    out = apply_feature_steps(
+        df,
+        [
+            {"step": "returns", "enabled": True, "params": {"log": True, "col_name": "close_logret"}},
+            {"step": "rsi", "enabled": False, "params": {"price_col": "close", "windows": [14]}},
+            {"step": "bollinger", "enabled": True, "params": {"price_col": "close", "window": 24, "n_std": 2.0}},
+        ],
+    )
+
+    assert "close_logret" in out.columns
+    assert "bb_percent_b_24_2.0" in out.columns
+    assert "close_rsi_14" not in out.columns
 
 
 def test_rolling_clip_transform_is_point_in_time_safe() -> None:

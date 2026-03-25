@@ -3,6 +3,21 @@ from __future__ import annotations
 import pandas as pd
 
 
+def add_macd_features(
+    df: pd.DataFrame,
+    price_col: str = "close",
+    fast: int = 12,
+    slow: int = 26,
+    signal: int = 9,
+    inplace: bool = False,
+) -> pd.DataFrame:
+    if price_col not in df.columns:
+        raise KeyError(f"price_col '{price_col}' not found in DataFrame")
+    out = df if inplace else df.copy()
+    close = out[price_col].astype(float)
+    return out.join(compute_macd(close, fast=fast, slow=slow, signal=signal))
+
+
 def compute_macd(close: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9) -> pd.DataFrame:
     ema_fast = close.ewm(span=fast, adjust=False).mean()
     ema_slow = close.ewm(span=slow, adjust=False).mean()
@@ -17,5 +32,4 @@ def compute_macd(close: pd.Series, fast: int = 12, slow: int = 26, signal: int =
         }
     )
 
-
-__all__ = ["compute_macd"]
+__all__ = ["compute_macd", "add_macd_features"]

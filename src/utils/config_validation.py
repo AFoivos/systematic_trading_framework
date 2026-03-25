@@ -232,6 +232,8 @@ def validate_features_block(features: Any) -> None:
             raise ConfigValidationError("Each feature entry must be a mapping with a 'step' key.")
         if not isinstance(step["step"], str):
             raise ConfigValidationError("features[].step must be a string.")
+        if "enabled" in step and not isinstance(step["enabled"], bool):
+            raise ConfigValidationError("features[].enabled must be boolean when provided.")
         if step["step"] not in FEATURE_REGISTRY:
             raise ConfigValidationError(f"Unknown feature step: {step['step']}")
         if "params" in step and step["params"] is not None and not isinstance(step["params"], dict):

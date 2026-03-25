@@ -1,7 +1,25 @@
 from __future__ import annotations
 
+from typing import Sequence
+
 import numpy as np
 import pandas as pd
+
+
+def add_rsi_features(
+    df: pd.DataFrame,
+    price_col: str = "close",
+    windows: Sequence[int] = (14,),
+    method: str = "wilder",
+    inplace: bool = False,
+) -> pd.DataFrame:
+    if price_col not in df.columns:
+        raise KeyError(f"price_col '{price_col}' not found in DataFrame")
+    out = df if inplace else df.copy()
+    prices = out[price_col].astype(float)
+    for window in windows:
+        out[f"{price_col}_rsi_{window}"] = compute_rsi(prices, window=window, method=method)
+    return out
 
 
 def compute_rsi(prices: pd.Series, window: int = 14, method: str = "wilder") -> pd.Series:
@@ -29,5 +47,4 @@ def compute_rsi(prices: pd.Series, window: int = 14, method: str = "wilder") -> 
     rsi.name = f"{prices.name}_rsi_{window}"
     return rsi
 
-
-__all__ = ["compute_rsi"]
+__all__ = ["compute_rsi", "add_rsi_features"]
