@@ -1,6 +1,6 @@
 ## 4. Ανάλυση Modules
 
-> Σημείωση: το chapter αυτό είναι auto-generated module snapshot και μπορεί να περιέχει legacy αναφορές σε `config/base`, `extends` ή `src/experiments/modeling`. Για την authoritative σημερινή δομή χρησιμοποίησε τα κεφάλαια `02`, `03`, `07`, `08` και το `README.md`.
+> Σημείωση: το chapter αυτό είναι auto-generated module snapshot και μπορεί να περιέχει legacy αναφορές σε `config/base` ή `extends`. Για την authoritative σημερινή δομή χρησιμοποίησε τα κεφάλαια `02`, `03`, `07`, `08` και το `README.md`.
 
 Η παρούσα ενότητα ακολουθεί package-by-package και file-by-file breakdown. Για κάθε αρχείο καταγράφονται ο
 σκοπός, οι εισαγωγές, τα global constants, οι κλάσεις, οι συναρτήσεις και τα κυριότερα behavioural

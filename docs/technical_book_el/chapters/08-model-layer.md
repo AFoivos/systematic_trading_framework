@@ -25,8 +25,8 @@ experiment layer δεν κρατά πια την εσωτερική αριθμη
 - `metrics.py`: classification, regression και volatility diagnostics.
 - `diagnostics.py`: feature importance, label distributions και prediction-alignment diagnostics.
 
-Το `src/experiments/modeling/` παραμένει μόνο ως compatibility façade για legacy imports και δεν είναι πλέον
-source of truth για νέα ανάπτυξη.
+Τα legacy facades του `src/experiments/modeling/` έχουν αφαιρεθεί. Νέα model-side ανάπτυξη πρέπει να στοχεύει
+απευθείας τα canonical packages `src/models/*`, `src/targets/*` και `src/experiments/support/*`.
 
 ### 8.3 Μηχανική του Target
 

@@ -26,6 +26,36 @@ class RLExecutionConfig:
     dd_guard_enabled: bool = False
     max_drawdown: float = 0.2
     cooloff_bars: int = 20
+    rearm_drawdown: float | None = None
+
+
+def _update_drawdown_guard_state(
+    *,
+    drawdown: float,
+    execution_config: RLExecutionConfig,
+    cooloff_remaining: int,
+    guard_armed: bool,
+) -> tuple[int, bool]:
+    if not execution_config.dd_guard_enabled or int(execution_config.cooloff_bars) <= 0:
+        return 0, True
+
+    max_drawdown = abs(float(execution_config.max_drawdown))
+    rearm_drawdown = execution_config.rearm_drawdown
+    if rearm_drawdown is None:
+        rearm_drawdown = max_drawdown
+    rearm_drawdown = abs(float(rearm_drawdown))
+
+    next_guard_armed = bool(guard_armed)
+    if not next_guard_armed and drawdown >= -rearm_drawdown:
+        next_guard_armed = True
+
+    if cooloff_remaining > 0:
+        return int(cooloff_remaining - 1), next_guard_armed
+
+    if next_guard_armed and drawdown <= -max_drawdown:
+        return int(execution_config.cooloff_bars), False
+
+    return 0, next_guard_armed
 
 
 def _safe_window(
@@ -140,6 +170,7 @@ class SingleAssetTradingEnv(gym.Env):
         self.drawdown = 0.0
         self.bars_since_switch = int(self.execution_config.min_holding_bars)
         self.cooloff_remaining = 0
+        self.dd_guard_armed = True
 
     def _map_action(self, action: np.ndarray | int) -> float:
         if self.continuous_actions:
@@ -210,6 +241,7 @@ class SingleAssetTradingEnv(gym.Env):
         self.drawdown = 0.0
         self.bars_since_switch = int(self.execution_config.min_holding_bars)
         self.cooloff_remaining = 0
+        self.dd_guard_armed = True
         return self._build_observation(step=self.current_step, position=self.position, drawdown=self.drawdown), {}
 
     def step(self, action: np.ndarray | int) -> tuple[np.ndarray, float, bool, bool, dict]:
@@ -225,14 +257,12 @@ class SingleAssetTradingEnv(gym.Env):
             self.bars_since_switch = 0
         else:
             self.bars_since_switch += 1
-        if (
-            self.execution_config.dd_guard_enabled
-            and self.cooloff_remaining <= 0
-            and self.drawdown <= -abs(float(self.execution_config.max_drawdown))
-        ):
-            self.cooloff_remaining = int(self.execution_config.cooloff_bars) + 1
-        elif self.cooloff_remaining > 0:
-            self.cooloff_remaining -= 1
+        self.cooloff_remaining, self.dd_guard_armed = _update_drawdown_guard_state(
+            drawdown=self.drawdown,
+            execution_config=self.execution_config,
+            cooloff_remaining=self.cooloff_remaining,
+            guard_armed=self.dd_guard_armed,
+        )
         self.current_step += 1
 
         terminated = bool(self.current_step > self.end_step)
@@ -342,6 +372,7 @@ class PortfolioTradingEnv(gym.Env):
         self.drawdown = 0.0
         self.bars_since_switch = int(self.execution_config.min_holding_bars)
         self.cooloff_remaining = 0
+        self.dd_guard_armed = True
 
     def _map_action(self, action: np.ndarray | int) -> np.ndarray:
         if self.continuous_actions:
@@ -442,6 +473,7 @@ class PortfolioTradingEnv(gym.Env):
         self.drawdown = 0.0
         self.bars_since_switch = int(self.execution_config.min_holding_bars)
         self.cooloff_remaining = 0
+        self.dd_guard_armed = True
         return self._build_observation(step=self.current_step, weights=self.weights, drawdown=self.drawdown), {}
 
     def step(self, action: np.ndarray | int) -> tuple[np.ndarray, float, bool, bool, dict]:
@@ -458,14 +490,12 @@ class PortfolioTradingEnv(gym.Env):
             self.bars_since_switch = 0
         else:
             self.bars_since_switch += 1
-        if (
-            self.execution_config.dd_guard_enabled
-            and self.cooloff_remaining <= 0
-            and self.drawdown <= -abs(float(self.execution_config.max_drawdown))
-        ):
-            self.cooloff_remaining = int(self.execution_config.cooloff_bars) + 1
-        elif self.cooloff_remaining > 0:
-            self.cooloff_remaining -= 1
+        self.cooloff_remaining, self.dd_guard_armed = _update_drawdown_guard_state(
+            drawdown=self.drawdown,
+            execution_config=self.execution_config,
+            cooloff_remaining=self.cooloff_remaining,
+            guard_armed=self.dd_guard_armed,
+        )
         self.current_step += 1
 
         terminated = bool(self.current_step > self.end_step)

@@ -201,13 +201,14 @@ risk:
   max_leverage: 1.0
   dd_guard:
     max_drawdown: 0.12
+    rearm_drawdown: 0.08
     cooloff_bars: 48
     enabled: true
   vol_col: null
 
 backtest:
   returns_col: close_logret
-  signal_col: signal_prob_size
+  signal_col: signal_prob_threshold
   periods_per_year: 8760
   returns_type: log
   missing_return_policy: raise_if_exposed

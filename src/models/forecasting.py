@@ -30,7 +30,7 @@ from src.experiments.support.metrics import (
 )
 from src.models.overlay import resolve_garch_overlay
 from src.models.runtime import infer_feature_columns, resolve_runtime_for_model
-from src.experiments.support.targets import build_forward_return_target
+from src.targets import build_forward_return_target
 from src.models.types import ForecasterFoldPredictor
 from src.models.garch import make_garch_fold_predictor
 from src.models.lstm import make_lstm_fold_predictor

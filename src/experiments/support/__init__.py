@@ -20,7 +20,7 @@ from .metrics import (
     regression_metrics,
     volatility_metrics,
 )
-from .targets import (
+from src.targets import (
     assign_quantile_labels,
     build_classifier_target,
     build_forward_return_target,

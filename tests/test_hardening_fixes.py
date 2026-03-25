@@ -16,6 +16,7 @@ from src.features.technical.momentum import add_momentum_features
 from src.portfolio.construction import PortfolioPerformance
 from src.portfolio.covariance import build_rolling_covariance_by_date
 from src.signals.forecast_signal import compute_forecast_threshold_signal
+from src.signals.probabilistic_signal import probabilistic_signal
 from src.signals.rsi_signal import compute_rsi_signal
 from src.src_data.loaders import load_ohlcv, load_ohlcv_panel
 from src.src_data.providers.alphavantage import AlphaVantageFXProvider, _build_retry_session
@@ -72,7 +73,6 @@ def test_optional_model_modules_import_without_xgboost_or_lightgbm() -> None:
             """
 import importlib
 import sys
-sys.modules.pop("src.experiments.modeling.classification", None)
 sys.modules.pop("src.models.classification", None)
 sys.modules.pop("src.models.lightgbm_baseline", None)
 sys.modules["xgboost"] = None
@@ -122,6 +122,44 @@ def test_forecast_long_short_hold_keeps_previous_position() -> None:
         mode="long_short_hold",
     )
     assert out["forecast_threshold_signal"].tolist() == [1.0, 1.0, 1.0, -1.0]
+
+
+def test_probability_threshold_accepts_long_short_mode() -> None:
+    """
+    Probability threshold signal should support the same directional modes as other threshold
+    signal adapters.
+    """
+    idx = pd.date_range("2024-01-01", periods=4, freq="D")
+    df = pd.DataFrame({"pred_prob": [0.60, 0.50, 0.40, 0.52]}, index=idx)
+
+    out = probabilistic_signal(
+        df,
+        prob_col="pred_prob",
+        upper=0.55,
+        lower=0.45,
+        mode="long_short",
+    )
+
+    assert out.tolist() == [1.0, 0.0, -1.0, 0.0]
+
+
+def test_probability_threshold_long_short_hold_keeps_previous_position() -> None:
+    """
+    Probability threshold signal should carry the last active direction through the dead-zone
+    when long_short_hold is requested.
+    """
+    idx = pd.date_range("2024-01-01", periods=4, freq="D")
+    df = pd.DataFrame({"pred_prob": [0.60, 0.50, 0.48, 0.40]}, index=idx)
+
+    out = probabilistic_signal(
+        df,
+        prob_col="pred_prob",
+        upper=0.55,
+        lower=0.45,
+        mode="long_short_hold",
+    )
+
+    assert out.tolist() == [1.0, 1.0, 1.0, -1.0]
 
 
 def test_rsi_signal_requires_existing_column() -> None:

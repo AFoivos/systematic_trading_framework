@@ -303,6 +303,54 @@ def test_run_backtest_drawdown_guard_respects_exact_cooloff_bars() -> None:
     assert bt.positions.tolist() == [1.0, 1.0, 0.0, 0.0, 1.0]
 
 
+def test_run_backtest_drawdown_guard_does_not_permanently_retrigger_underwater() -> None:
+    idx = pd.date_range("2020-01-01", periods=5, freq="D")
+    df = pd.DataFrame(
+        {
+            "signal": [1.0, 1.0, 1.0, 1.0, 1.0],
+            "returns": [0.0, -0.20, 0.0, 0.0, 0.0],
+        },
+        index=idx,
+    )
+
+    bt = run_backtest(
+        df,
+        signal_col="signal",
+        returns_col="returns",
+        dd_guard=True,
+        max_drawdown=0.1,
+        cooloff_bars=1,
+        rearm_drawdown=0.05,
+    )
+
+    assert bt.positions.tolist() == [1.0, 1.0, 0.0, 1.0, 1.0]
+
+
+def test_run_backtest_drawdown_guard_can_rearm_after_recovery() -> None:
+    idx = pd.date_range("2020-01-01", periods=6, freq="D")
+    df = pd.DataFrame(
+        {
+            "signal": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            "returns": [0.0, -0.20, 0.25, 0.0, -0.15, 0.0],
+        },
+        index=idx,
+    )
+
+    bt = run_backtest(
+        df,
+        signal_col="signal",
+        returns_col="returns",
+        dd_guard=True,
+        max_drawdown=0.1,
+        cooloff_bars=1,
+        rearm_drawdown=0.05,
+    )
+
+    assert bt.positions.iloc[2] == 0.0
+    assert bt.positions.iloc[3] == 1.0
+    assert bt.positions.iloc[5] == 0.0
+
+
 def test_volatility_regime_signal_is_causal_by_default() -> None:
     """
     Verify that volatility regime signal is causal by default behaves as expected under a

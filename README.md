@@ -174,8 +174,8 @@ Key config blocks now supported:
 Architecture boundary:
 
 * `src/models/` contains estimator-specific fold engines such as SARIMAX, GARCH and TFT.
-* `src/experiments/support/` contains target construction, experiment metrics/diagnostics, and strict OOS support helpers.
-* `src/experiments/modeling/` is kept only as a legacy compatibility facade; it is no longer the source of truth.
+* `src/targets/` contains canonical target builders and label helpers.
+* `src/experiments/support/` contains experiment metrics/diagnostics and strict OOS support helpers.
 * `src/experiments/orchestration/` contains the end-to-end run stages: data, features, models, backtest, reporting, execution and artifacts.
 * `src/utils/config_*.py` contains loader/defaults/validation/schema modules, while `src/utils/config.py` stays as a stable façade.
 * Tracked experiment YAMLs are fully self-contained; config inheritance via `extends` is no longer supported.

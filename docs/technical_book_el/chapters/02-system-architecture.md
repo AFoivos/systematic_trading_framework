@@ -68,9 +68,9 @@
 
 Οι χαμηλότεροι layers (`src_data`, `features`, `risk`, `evaluation`, `portfolio`, `models`, `intraday`) δεν
 γνωρίζουν τίποτε για τον orchestrator. Το `src/experiments/models.py` είναι πλέον façade προς το `src/models/*`,
-ενώ τα experiment-side helpers για targets, diagnostics και split-safe summaries βρίσκονται στο
-`src/experiments/support/*`. Το `src/experiments/modeling/*` παραμένει μόνο ως compatibility façade για legacy
-imports. Αντίστοιχα, το `src/experiments/runner.py` είναι façade προς το `src/experiments/orchestration/*`, όπου
+τα canonical target builders βρίσκονται στο `src/targets/*`, ενώ τα experiment-side helpers για diagnostics και
+split-safe summaries βρίσκονται στο `src/experiments/support/*`. Αντίστοιχα, το `src/experiments/runner.py`
+είναι façade προς το `src/experiments/orchestration/*`, όπου
 βρίσκονται τα data, feature, model, backtest, reporting, execution και artifact stages. Έτσι η σύζευξη
 παραμένει κατευθυνόμενη προς τα πάνω και τα μεγάλα hotspots έχουν διασπαστεί σε μικρότερα, testable modules.
 

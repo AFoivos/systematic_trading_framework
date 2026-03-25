@@ -177,6 +177,7 @@ def _resolved_execution_snapshot(cfg: dict[str, Any]) -> dict[str, Any]:
         "dd_guard_enabled": dd_cfg.get("enabled", False),
         "max_drawdown": dd_cfg.get("max_drawdown", 0.2),
         "cooloff_bars": dd_cfg.get("cooloff_bars", 20),
+        "rearm_drawdown": dd_cfg.get("rearm_drawdown", dd_cfg.get("max_drawdown", 0.2)),
     }
 
 

@@ -156,9 +156,9 @@ backtesting, reproducibility metadata και παραγωγή execution-ready pa
 
 Οι χαμηλότεροι layers (`src_data`, `features`, `risk`, `evaluation`, `portfolio`, `models`, `intraday`) δεν
 γνωρίζουν τίποτε για τον orchestrator. Το `src/experiments/models.py` είναι façade προς το `src/models/*`,
-ενώ τα experiment-side helpers για targets, metrics και diagnostics ζουν στο `src/experiments/support/*`.
-Το `src/experiments/modeling/*` παραμένει μόνο ως compatibility façade για legacy imports. Αντίστοιχα, το
-`src/experiments/runner.py` είναι façade προς το `src/experiments/orchestration/*`. Έτσι η σύζευξη παραμένει
+τα canonical target builders ζουν στο `src/targets/*`, ενώ τα experiment-side metrics και diagnostics ζουν στο
+`src/experiments/support/*`. Αντίστοιχα, το `src/experiments/runner.py` είναι façade προς το
+`src/experiments/orchestration/*`. Έτσι η σύζευξη παραμένει
 κατευθυνόμενη προς τα πάνω και τα μεγάλα hotspots έχουν διασπαστεί σε μικρότερα, testable modules.
 
 ### 2.5 ASCII Class Diagram
@@ -256,10 +256,9 @@ equity curves, costs, orders και metadata manifests.
 | `src/experiments/models.py` | 19 | Stable façade προς το `src/models/*` ώστε registry και imports να μείνουν συμβατά. |
 | `src/experiments/registry.py` | 88 | Υλοποίηση του module `registry.py` μέσα στο package `experiments`, με ρόλο συμβατό με τη συνολική layered αρχιτεκτονική του repository. |
 | `src/experiments/runner.py` | 130 | Thin façade που κρατά stable entrypoints και legacy monkeypatch/test surfaces προς το orchestration package. |
-| `src/experiments/support/targets.py` | 264 | Experiment-side target construction για forward-return και triple-barrier labels με strict anti-leakage semantics. |
+| `src/targets/*.py` | package | Canonical target builders και label helpers με explicit anti-leakage semantics. |
 | `src/experiments/support/metrics.py` | 153 | Shared classification/regression/volatility diagnostics για fold-safe OOS evaluation. |
 | `src/experiments/support/diagnostics.py` | 233 | Feature importance, label-distribution και prediction-alignment summaries για reports και artifacts. |
-| `src/experiments/modeling/*.py` | legacy | Compatibility facades για παλιά imports. Δεν είναι πλέον source of truth για νέα model work. |
 | `src/experiments/orchestration/pipeline.py` | 189 | End-to-end pipeline assembly που καλεί τα επιμέρους data/feature/model/backtest/reporting/execution stages. |
 | `src/experiments/orchestration/reporting.py` | 257 | OOS evaluation payloads, fold summaries και monitoring report assembly. |
 | `src/features/__init__.py` | 20 | Public API surface που επανεξάγει symbols του package ώστε τα imports ανώτερου layer να μένουν σταθερά. |

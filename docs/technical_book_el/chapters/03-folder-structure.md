@@ -66,10 +66,9 @@ equity curves, costs, orders και metadata manifests.
 | `src/experiments/models.py` | 19 | Stable façade προς το `src/models/*` ώστε registry και imports να μείνουν συμβατά. |
 | `src/experiments/registry.py` | 88 | Υλοποίηση του module `registry.py` μέσα στο package `experiments`, με ρόλο συμβατό με τη συνολική layered αρχιτεκτονική του repository. |
 | `src/experiments/runner.py` | 130 | Thin façade που κρατά stable entrypoints και legacy monkeypatch/test surfaces προς το orchestration package. |
-| `src/experiments/support/targets.py` | 264 | Experiment-side target construction για forward-return και triple-barrier labels με strict anti-leakage semantics. |
+| `src/targets/*.py` | package | Canonical target builders και label helpers με explicit anti-leakage semantics. |
 | `src/experiments/support/metrics.py` | 153 | Shared classification/regression/volatility diagnostics για fold-safe OOS evaluation. |
 | `src/experiments/support/diagnostics.py` | 233 | Feature importance, label-distribution και prediction-alignment summaries για reports και artifacts. |
-| `src/experiments/modeling/*.py` | legacy | Compatibility facades για παλιά imports. Δεν είναι πλέον source of truth για νέα model work. |
 | `src/experiments/orchestration/pipeline.py` | 189 | End-to-end pipeline assembly που καλεί τα επιμέρους data/feature/model/backtest/reporting/execution stages. |
 | `src/experiments/orchestration/data_stage.py` | 143 | Data ingestion, PIT hardening, raw snapshot loading/saving και storage context handling. |
 | `src/experiments/orchestration/backtest_stage.py` | 185 | Single-asset και portfolio backtest orchestration, returns validation και portfolio constraints. |

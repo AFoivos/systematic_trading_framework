@@ -33,7 +33,7 @@ from src.models.runtime import (
     infer_feature_columns,
     resolve_runtime_for_model,
 )
-from src.experiments.support.targets import assign_quantile_labels, build_classifier_target
+from src.targets import assign_quantile_labels, build_classifier_target
 from src.models.types import EstimatorFactory
 
 

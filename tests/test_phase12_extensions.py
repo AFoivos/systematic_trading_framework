@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.experiments.support.targets import build_forward_return_target, build_triple_barrier_target
+from src.targets import build_forward_return_target, build_triple_barrier_target
 from src.experiments.orchestration.feature_stage import apply_feature_steps, apply_signal_step
 from src.models.runtime import probe_xgboost_runtime
 from src.experiments.models import (

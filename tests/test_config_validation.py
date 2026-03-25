@@ -11,6 +11,7 @@ from src.utils.config_validation import (
     validate_logging_block,
     validate_model_block,
     validate_portfolio_block,
+    validate_risk_block,
     validate_resolved_config,
     validate_signals_block,
 )
@@ -175,6 +176,25 @@ def test_validate_model_block_rejects_invalid_forward_return_returns_type() -> N
 
     with pytest.raises(ConfigValidationError, match="returns_type"):
         validate_model_block(model)
+
+
+@pytest.mark.parametrize("rearm_drawdown", [0.0, 0.13])
+def test_validate_risk_block_rejects_invalid_rearm_drawdown(rearm_drawdown: float) -> None:
+    risk = {
+        "cost_per_turnover": 0.0,
+        "slippage_per_turnover": 0.0,
+        "target_vol": None,
+        "max_leverage": 1.0,
+        "dd_guard": {
+            "enabled": True,
+            "max_drawdown": 0.12,
+            "rearm_drawdown": rearm_drawdown,
+            "cooloff_bars": 48,
+        },
+    }
+
+    with pytest.raises(ConfigValidationError, match="rearm_drawdown"):
+        validate_risk_block(risk)
 
 
 def test_validate_model_block_rejects_log_forward_return_without_returns_col() -> None:

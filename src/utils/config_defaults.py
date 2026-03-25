@@ -163,6 +163,7 @@ def default_risk_block(risk: dict[str, Any]) -> dict[str, Any]:
     dd.setdefault("enabled", True)
     dd.setdefault("max_drawdown", 0.2)
     dd.setdefault("cooloff_bars", 20)
+    dd.setdefault("rearm_drawdown", dd.get("max_drawdown", 0.2))
     risk["dd_guard"] = dd
     return risk
 

@@ -109,6 +109,7 @@ def run_single_asset_backtest(
         dd_guard=dd_guard,
         max_drawdown=dd_cfg.get("max_drawdown", 0.2),
         cooloff_bars=dd_cfg.get("cooloff_bars", 20),
+        rearm_drawdown=dd_cfg.get("rearm_drawdown"),
         periods_per_year=backtest_cfg.get("periods_per_year", 252),
         min_holding_bars=backtest_cfg.get("min_holding_bars", 0),
     )

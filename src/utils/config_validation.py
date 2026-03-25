@@ -737,9 +737,20 @@ def validate_risk_block(risk: dict[str, Any]) -> None:
         raise ConfigValidationError("risk.dd_guard must be a mapping.")
     if "enabled" in dd and not isinstance(dd.get("enabled"), bool):
         raise ConfigValidationError("risk.dd_guard.enabled must be boolean.")
-    if _finite_number(dd.get("max_drawdown", 0.2), field="risk.dd_guard.max_drawdown") <= 0:
+    max_drawdown = _finite_number(dd.get("max_drawdown", 0.2), field="risk.dd_guard.max_drawdown")
+    if max_drawdown <= 0:
         raise ConfigValidationError("risk.dd_guard.max_drawdown must be > 0.")
     _non_negative_int(dd.get("cooloff_bars", 0), field="risk.dd_guard.cooloff_bars")
+    rearm_drawdown = _finite_number(
+        dd.get("rearm_drawdown", max_drawdown),
+        field="risk.dd_guard.rearm_drawdown",
+    )
+    if rearm_drawdown <= 0:
+        raise ConfigValidationError("risk.dd_guard.rearm_drawdown must be > 0.")
+    if rearm_drawdown > max_drawdown:
+        raise ConfigValidationError(
+            "risk.dd_guard.rearm_drawdown must be <= risk.dd_guard.max_drawdown."
+        )
 
 
 def validate_backtest_block(backtest: dict[str, Any]) -> None:

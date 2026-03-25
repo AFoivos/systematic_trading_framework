@@ -253,6 +253,7 @@ def _build_execution_config(model_cfg: dict[str, Any]) -> RLExecutionConfig:
         dd_guard_enabled=bool(dd_cfg.get("enabled", False)),
         max_drawdown=float(dd_cfg.get("max_drawdown", 0.2)),
         cooloff_bars=int(dd_cfg.get("cooloff_bars", 20)),
+        rearm_drawdown=float(dd_cfg["rearm_drawdown"]) if dd_cfg.get("rearm_drawdown") is not None else None,
     )
 
 

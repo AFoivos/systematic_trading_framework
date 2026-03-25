@@ -157,6 +157,7 @@ risk:
   max_leverage: 1.0
   dd_guard:
     max_drawdown: 0.12
+    rearm_drawdown: 0.08
     cooloff_bars: 48
     enabled: true
   vol_col: null

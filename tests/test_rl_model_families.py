@@ -275,7 +275,12 @@ def test_single_asset_env_dd_guard_forces_future_flat_cooloff() -> None:
         max_signal_abs=1.0,
         discrete_action_values=[0.0, 1.0],
         reward_config=RLRewardConfig(),
-        execution_config=RLExecutionConfig(dd_guard_enabled=True, max_drawdown=0.1, cooloff_bars=1),
+        execution_config=RLExecutionConfig(
+            dd_guard_enabled=True,
+            max_drawdown=0.1,
+            cooloff_bars=1,
+            rearm_drawdown=0.05,
+        ),
     )
     env.reset()
 
@@ -285,7 +290,7 @@ def test_single_asset_env_dd_guard_forces_future_flat_cooloff() -> None:
 
     assert info_1["position"] == 1.0
     assert info_2["position"] == 0.0
-    assert info_3["position"] == 0.0
+    assert info_3["position"] == 1.0
 
 
 def test_validate_resolved_config_rejects_rl_signal_pipeline_mismatch() -> None:

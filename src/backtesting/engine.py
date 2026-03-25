@@ -79,13 +79,16 @@ def run_backtest(
     dd_guard: bool = True,
     max_drawdown: float = 0.2,
     cooloff_bars: int = 20,
+    rearm_drawdown: Optional[float] = None,
     periods_per_year: int = 252,
     min_holding_bars: int = 0,
 ) -> BacktestResult:
     """
     Simple vectorized backtest with optional vol targeting, slippage, and drawdown guard.
     Returns are interpreted as simple returns by default. If returns_type="log",
-    they are converted to simple returns via expm1 for PnL accounting.
+    they are converted to simple returns via expm1 for PnL accounting. When
+    drawdown guarding is enabled, rearm_drawdown controls how much recovery is
+    required before a new cooloff can trigger.
     """
     if signal_col not in df.columns:
         raise KeyError(f"signal_col '{signal_col}' not found in DataFrame")
@@ -138,6 +141,7 @@ def run_backtest(
             max_drawdown=max_drawdown,
             cooloff_bars=cooloff_bars,
             min_exposure=0.0,
+            rearm_drawdown=rearm_drawdown,
         ).shift(1).fillna(1.0)
         positions = positions * mult
         prev_positions = positions.shift(1).fillna(0.0)
