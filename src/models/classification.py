@@ -5,6 +5,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
 
 from src.evaluation.time_splits import (
     assert_no_forward_label_leakage,
@@ -37,6 +38,37 @@ from src.targets import assign_quantile_labels, build_classifier_target
 from src.models.types import EstimatorFactory
 
 
+def _apply_fold_feature_preprocessing(
+    X_train: pd.DataFrame,
+    X_test: pd.DataFrame,
+    *,
+    preprocessing_cfg: dict[str, Any] | None,
+) -> tuple[pd.DataFrame | np.ndarray, pd.DataFrame | np.ndarray, dict[str, Any]]:
+    cfg = dict(preprocessing_cfg or {})
+    scaler_kind = str(cfg.get("scaler", "none") or "none").strip().lower()
+    if scaler_kind in {"", "none"}:
+        return X_train, X_test, {"scaler": "none", "train_only": True}
+    if scaler_kind != "standard":
+        raise ValueError(f"Unsupported model.preprocessing.scaler: {scaler_kind}")
+
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train.to_numpy(dtype=float, copy=False))
+    X_test_values = X_test.to_numpy(dtype=float, copy=False)
+    if X_test_values.shape[0] == 0:
+        X_test_scaled = np.empty((0, X_train.shape[1]), dtype=float)
+    else:
+        X_test_scaled = scaler.transform(X_test_values)
+    return (
+        X_train_scaled,
+        X_test_scaled,
+        {
+            "scaler": "standard",
+            "train_only": True,
+            "feature_count": int(X_train.shape[1]),
+        },
+    )
+
+
 def train_forward_classifier(
     df: pd.DataFrame,
     model_cfg: dict[str, Any],
@@ -51,6 +83,7 @@ def train_forward_classifier(
     """
     model_cfg = dict(model_cfg or {})
     model_params = dict(model_cfg.get("params", {}) or {})
+    preprocessing_cfg = dict(model_cfg.get("preprocessing", {}) or {})
     work_df, overlay_predictor, overlay_params, overlay_meta = resolve_garch_overlay(
         df,
         model_cfg=model_cfg,
@@ -122,6 +155,12 @@ def train_forward_classifier(
     total_train_rows_dropped_missing = 0
     total_test_rows_missing_features = 0
     folds_with_zero_predictions = 0
+    preprocessing_meta: dict[str, Any] = {"scaler": "none", "train_only": True}
+    prediction_candidate_col = (
+        str(target_meta.get("candidate_col"))
+        if target_meta.get("candidate_col") is not None
+        else None
+    )
 
     for split in splits:
         raw_train_idx = split.train_idx
@@ -172,29 +211,49 @@ def train_forward_classifier(
         train_label_distributions.append(train_label_distribution)
 
         model = estimator_factory(model_params)
-        X_train_input: pd.DataFrame | np.ndarray = X_train
-        y_train_input: pd.Series | np.ndarray = y_train
-        if estimator_family == "xgboost":
-            X_train_input = X_train.to_numpy(dtype=np.float32, copy=False)
-            y_train_input = y_train.to_numpy(dtype=np.int32, copy=False)
-        model.fit(X_train_input, y_train_input)
-        fold_feature_importance = extract_feature_importance(model, feature_cols)
-        fold_feature_importances.append(fold_feature_importance)
-
         test_features = test_df[feature_cols]
         valid_mask = test_features.notna().all(axis=1)
+        if prediction_candidate_col is not None:
+            if prediction_candidate_col not in test_df.columns:
+                raise KeyError(
+                    f"Target candidate_col '{prediction_candidate_col}' not found in test fold DataFrame."
+                )
+            candidate_mask = test_df[prediction_candidate_col].fillna(0).astype(bool)
+            valid_mask &= candidate_mask.reindex(test_features.index).fillna(False)
         pred_rows = int(valid_mask.sum())
         if pred_rows == 0:
             folds_with_zero_predictions += 1
         total_test_rows_missing_features += int(len(test_df) - pred_rows)
         pred_index = test_features.loc[valid_mask].index
+        X_test = test_features.loc[valid_mask]
+
+        X_train_input, X_test_input, fold_preprocessing_meta = _apply_fold_feature_preprocessing(
+            X_train,
+            X_test,
+            preprocessing_cfg=preprocessing_cfg,
+        )
+        preprocessing_meta = dict(fold_preprocessing_meta)
+        y_train_input: pd.Series | np.ndarray = y_train
+        if estimator_family == "xgboost":
+            if isinstance(X_train_input, pd.DataFrame):
+                X_train_input = X_train_input.to_numpy(dtype=np.float32, copy=False)
+            else:
+                X_train_input = np.asarray(X_train_input, dtype=np.float32)
+            y_train_input = y_train.to_numpy(dtype=np.int32, copy=False)
+        model.fit(X_train_input, y_train_input)
+        fold_feature_importance = extract_feature_importance(model, feature_cols)
+        fold_feature_importances.append(fold_feature_importance)
+
         fold_eval_metrics = empty_classification_metrics()
         eval_label_distribution = summarize_label_distribution(pd.Series(dtype=float))
 
         if pred_rows > 0:
-            test_input: pd.DataFrame | np.ndarray = test_features.loc[valid_mask]
+            test_input: pd.DataFrame | np.ndarray = X_test_input
             if estimator_family == "xgboost":
-                test_input = test_input.to_numpy(dtype=np.float32, copy=False)
+                if isinstance(test_input, pd.DataFrame):
+                    test_input = test_input.to_numpy(dtype=np.float32, copy=False)
+                else:
+                    test_input = np.asarray(test_input, dtype=np.float32)
             proba = model.predict_proba(test_input)[:, 1].astype("float32")
             pred_series = pd.Series(proba, index=pred_index, dtype="float32")
             pred_prob.loc[pred_index] = pred_series
@@ -270,6 +329,7 @@ def train_forward_classifier(
                 "quantile_high_value": quantile_high_value,
                 "train_label_distribution": train_label_distribution,
                 "eval_label_distribution": eval_label_distribution,
+                "preprocessing": fold_preprocessing_meta,
                 "feature_importance": fold_feature_importance,
                 "classification_metrics": fold_eval_metrics,
                 "regression_metrics": empty_regression_metrics(),
@@ -335,6 +395,7 @@ def train_forward_classifier(
             "test_rows_missing_features": int(total_test_rows_missing_features),
             "folds_with_zero_predictions": int(folds_with_zero_predictions),
         },
+        "preprocessing": preprocessing_meta,
         "target": target_meta,
         "returns_col": returns_col,
         "overlay": overlay_meta,
@@ -379,6 +440,9 @@ def train_logistic_regression_classifier(
     params.setdefault("max_iter", 1000)
     params.setdefault("solver", "lbfgs")
     cfg["params"] = params
+    preprocessing = dict(cfg.get("preprocessing", {}) or {})
+    preprocessing.setdefault("scaler", "standard")
+    cfg["preprocessing"] = preprocessing
 
     out, model, meta = train_forward_classifier(
         df,

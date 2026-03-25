@@ -5,6 +5,11 @@
 # - Feature steps support `enabled: true/false`.
 # - To disable the model path, use `model.kind: none`.
 # - To disable the signal path, use `signals.kind: none`.
+# - Classifier preprocessing supports `model.preprocessing.scaler: none|standard`.
+# - `triple_barrier` can be used as a true meta-label target with `side_col` plus
+#   either `candidate_mode` or `candidate_col`.
+# - `probability_threshold` supports entry/exit hysteresis through
+#   `upper_exit/lower_exit` and optional gating with `base_signal_col`.
 # - This template lists all currently supported feature-step families and the currently
 #   supported model/signal kinds as comments, but only one active `model.kind` and one
 #   active `signals.kind` can be selected in a valid run.
@@ -228,6 +233,8 @@ models:
       max_iter: 1000
       solver: lbfgs
       random_state: 7
+    preprocessing:
+      scaler: standard
     feature_cols:
       - regime_vol_ratio_24_168
       - regime_trend_state_24_72
@@ -248,6 +255,10 @@ models:
       lower_mult: 1.5
       vol_window: 24
       neutral_label: drop
+      side_col: null
+      candidate_col: null
+      candidate_mode: all_nonzero
+      candidate_out_col: meta_candidate
     split:
       method: walk_forward
       train_size: 8760
@@ -280,6 +291,8 @@ models:
       colsample_bytree: 0.9
       min_child_samples: 20
       random_state: 7
+    preprocessing:
+      scaler: none
     feature_cols:
       - regime_vol_ratio_24_168
       - regime_vol_ratio_z_24_168
@@ -307,6 +320,10 @@ models:
       lower_mult: 1.5
       vol_window: 24
       neutral_label: drop
+      side_col: null
+      candidate_col: null
+      candidate_mode: all_nonzero
+      candidate_out_col: meta_candidate
     split:
       method: walk_forward
       train_size: 8760
@@ -344,6 +361,8 @@ models:
       objective: binary:logistic
       eval_metric: logloss
       tree_method: hist
+    preprocessing:
+      scaler: none
     feature_cols:
       - regime_vol_ratio_24_168
       - regime_vol_ratio_z_24_168
@@ -371,6 +390,10 @@ models:
       lower_mult: 1.5
       vol_window: 24
       neutral_label: drop
+      side_col: null
+      candidate_col: null
+      candidate_mode: all_nonzero
+      candidate_out_col: meta_candidate
     split:
       method: walk_forward
       train_size: 8760
@@ -732,8 +755,11 @@ signals_catalog:
     params:
       prob_col: pred_prob
       signal_col: signal_prob_threshold
-      upper: 0.55
-      lower: 0.45
+      base_signal_col: null
+      upper: 0.57
+      upper_exit: 0.52
+      lower: 0.43
+      lower_exit: 0.48
       mode: long_short
 
   probability_conviction:
@@ -837,6 +863,7 @@ risk:
   max_leverage: 1.0
   dd_guard:
     max_drawdown: 0.12
+    # A new cooloff can trigger only after drawdown has recovered above -rearm_drawdown.
     rearm_drawdown: 0.08
     cooloff_bars: 48
     enabled: true

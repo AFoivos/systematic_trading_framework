@@ -359,6 +359,31 @@ def test_validate_model_block_accepts_lstm_forecaster_with_garch_overlay() -> No
     validate_model_block(model)
 
 
+def test_validate_model_block_accepts_standard_preprocessing_scaler() -> None:
+    model = {
+        "kind": "logistic_regression_clf",
+        "feature_cols": ["feat_1"],
+        "target": {"kind": "forward_return", "price_col": "close", "horizon": 1},
+        "split": {"method": "walk_forward", "train_size": 100, "test_size": 20},
+        "preprocessing": {"scaler": "standard"},
+    }
+
+    validate_model_block(model)
+
+
+def test_validate_model_block_rejects_unknown_preprocessing_scaler() -> None:
+    model = {
+        "kind": "logistic_regression_clf",
+        "feature_cols": ["feat_1"],
+        "target": {"kind": "forward_return", "price_col": "close", "horizon": 1},
+        "split": {"method": "walk_forward", "train_size": 100, "test_size": 20},
+        "preprocessing": {"scaler": "robust"},
+    }
+
+    with pytest.raises(ConfigValidationError, match="model.preprocessing.scaler"):
+        validate_model_block(model)
+
+
 def test_validate_model_block_rejects_invalid_patchtst_quantiles() -> None:
     model = {
         "kind": "patchtst_forecaster",
@@ -417,6 +442,22 @@ def test_validate_signals_block_rejects_invalid_probability_vol_adjusted_dead_zo
                     "lower": 0.40,
                     "vol_target": 0.001,
                     "clip": 0.5,
+                },
+            }
+        )
+
+
+def test_validate_signals_block_rejects_invalid_probability_threshold_hysteresis() -> None:
+    with pytest.raises(ConfigValidationError, match="lower <= lower_exit <= upper_exit <= upper"):
+        validate_signals_block(
+            {
+                "kind": "probability_threshold",
+                "params": {
+                    "prob_col": "pred_prob",
+                    "upper": 0.55,
+                    "upper_exit": 0.56,
+                    "lower": 0.45,
+                    "lower_exit": 0.46,
                 },
             }
         )

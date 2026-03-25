@@ -95,6 +95,7 @@ class DataConfig:
 class ModelConfig:
     kind: str
     params: dict[str, Any] = field(default_factory=dict)
+    preprocessing: dict[str, Any] = field(default_factory=dict)
     feature_cols: list[str] | None = None
     target: dict[str, Any] = field(default_factory=dict)
     split: dict[str, Any] = field(default_factory=dict)
@@ -113,6 +114,7 @@ class ModelConfig:
         known = {
             "kind",
             "params",
+            "preprocessing",
             "feature_cols",
             "target",
             "split",
@@ -131,6 +133,7 @@ class ModelConfig:
         return cls(
             kind=str(data.get("kind", "none")),
             params=dict(data.get("params", {}) or {}),
+            preprocessing=dict(data.get("preprocessing", {}) or {}),
             feature_cols=[str(v) for v in feature_cols_raw] if feature_cols_raw is not None else None,
             target=dict(data.get("target", {}) or {}),
             split=dict(data.get("split", {}) or {}),
@@ -149,6 +152,7 @@ class ModelConfig:
         payload = {
             "kind": self.kind,
             "params": dict(self.params),
+            "preprocessing": dict(self.preprocessing),
             "feature_cols": list(self.feature_cols) if self.feature_cols is not None else None,
             "target": dict(self.target),
             "split": dict(self.split),

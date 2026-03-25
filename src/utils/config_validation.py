@@ -328,6 +328,9 @@ def validate_model_block(model: dict[str, Any]) -> None:
             for key in ("open_col", "high_col", "low_col", "returns_col", "volatility_col", "label_col"):
                 if key in target and target[key] is not None and not isinstance(target[key], str):
                     raise ConfigValidationError(f"model.target.{key} must be a string or null.")
+            for key in ("side_col", "candidate_col", "candidate_out_col"):
+                if key in target and target[key] is not None and not isinstance(target[key], str):
+                    raise ConfigValidationError(f"model.target.{key} must be a string or null.")
             _positive_int(target.get("max_holding", target.get("horizon", 24)), field="model.target.max_holding")
             for key in ("upper_mult", "lower_mult", "min_vol"):
                 value = _finite_number(target.get(key, 2.0 if key != "min_vol" else 1e-4), field=f"model.target.{key}")
@@ -341,6 +344,17 @@ def validate_model_block(model: dict[str, Any]) -> None:
             tie_break = target.get("tie_break", "closest_to_open")
             if tie_break not in {"closest_to_open", "upper", "lower"}:
                 raise ConfigValidationError("model.target.tie_break must be one of: closest_to_open, upper, lower.")
+            candidate_mode = str(target.get("candidate_mode", "all_nonzero"))
+            if candidate_mode not in {"all_nonzero", "side_change"}:
+                raise ConfigValidationError("model.target.candidate_mode must be one of: all_nonzero, side_change.")
+
+        preprocessing = model.get("preprocessing", {}) or {}
+        if preprocessing:
+            if not isinstance(preprocessing, dict):
+                raise ConfigValidationError("model.preprocessing must be a mapping when provided.")
+            scaler = str(preprocessing.get("scaler", "none"))
+            if scaler not in {"none", "standard"}:
+                raise ConfigValidationError("model.preprocessing.scaler must be 'none' or 'standard'.")
 
         overlay = model.get("overlay", {}) or {}
         if overlay:
@@ -639,6 +653,25 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
         raise ConfigValidationError("signals.params.signal_name is no longer supported; use signals.params.signal_col.")
     if "signal_col" in params and params["signal_col"] is not None and not isinstance(params["signal_col"], str):
         raise ConfigValidationError("signals.params.signal_col must be a string.")
+    if signals["kind"] == "probability_threshold":
+        for key in ("prob_col", "base_signal_col"):
+            if key in params and params[key] is not None and not isinstance(params[key], str):
+                raise ConfigValidationError(f"signals.params.{key} must be a string.")
+        bounds: dict[str, float] = {}
+        for key in ("upper", "lower", "upper_exit", "lower_exit"):
+            if key in params and params[key] is not None:
+                value = _finite_number(params[key], field=f"signals.params.{key}")
+                if not 0.0 < value < 1.0:
+                    raise ConfigValidationError(f"signals.params.{key} must be in (0,1).")
+                bounds[key] = value
+        upper = bounds.get("upper", 0.55)
+        lower = bounds.get("lower", 0.45)
+        upper_exit = bounds.get("upper_exit", upper)
+        lower_exit = bounds.get("lower_exit", lower)
+        if not lower <= lower_exit <= upper_exit <= upper:
+            raise ConfigValidationError(
+                "signals.params for probability_threshold must satisfy lower <= lower_exit <= upper_exit <= upper."
+            )
     if signals["kind"] == "probability_vol_adjusted":
         for key in ("prob_col", "vol_col"):
             if key in params and params[key] is not None and not isinstance(params[key], str):

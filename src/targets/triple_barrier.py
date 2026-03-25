@@ -34,6 +34,9 @@ def build_triple_barrier_target(
     tie_break = str(cfg.get("tie_break", "closest_to_open"))
     vol_window = int(cfg.get("vol_window", 24))
     min_vol = float(cfg.get("min_vol", 1e-4))
+    side_col = cfg.get("side_col")
+    candidate_col = cfg.get("candidate_col")
+    candidate_mode = str(cfg.get("candidate_mode", "all_nonzero"))
 
     if max_holding <= 0:
         raise ValueError("triple_barrier max_holding must be a positive integer.")
@@ -47,8 +50,18 @@ def build_triple_barrier_target(
         raise ValueError("triple_barrier neutral_label must be one of: drop, lower, upper.")
     if tie_break not in {"closest_to_open", "upper", "lower"}:
         raise ValueError("triple_barrier tie_break must be one of: closest_to_open, upper, lower.")
+    if side_col is not None and not isinstance(side_col, str):
+        raise ValueError("triple_barrier side_col must be a string when provided.")
+    if candidate_col is not None and not isinstance(candidate_col, str):
+        raise ValueError("triple_barrier candidate_col must be a string when provided.")
+    if candidate_mode not in {"all_nonzero", "side_change"}:
+        raise ValueError("triple_barrier candidate_mode must be one of: all_nonzero, side_change.")
 
     required = [price_col, open_col, high_col, low_col]
+    if side_col is not None:
+        required.append(side_col)
+    if candidate_col is not None:
+        required.append(candidate_col)
     missing = [col for col in required if col not in df.columns]
     if missing:
         raise KeyError(f"Missing required columns for triple_barrier target: {missing}")
@@ -153,6 +166,33 @@ def build_triple_barrier_target(
         hit_steps[start_idx] = float(chosen_step) if chosen_step is not None else np.nan
 
     fwd_col = str(cfg.get("fwd_col", event_ret_col))
+    raw_label_series = pd.Series(labels.copy(), index=out.index)
+    candidate_out_col = None
+    meta_label_enabled = side_col is not None
+    candidate_rows = None
+    if meta_label_enabled:
+        side_series = out[str(side_col)].astype(float).fillna(0.0).clip(lower=-1.0, upper=1.0)
+        side_sign = np.sign(side_series.to_numpy(dtype=float))
+        candidate_mask = side_series.ne(0.0)
+        if candidate_col is not None:
+            raw_candidate = out[str(candidate_col)].astype(float).fillna(0.0)
+            candidate_mask &= raw_candidate.ne(0.0)
+        elif candidate_mode == "side_change":
+            prev_side = side_series.shift(1).fillna(0.0)
+            candidate_mask &= side_series.ne(prev_side)
+
+        oriented_rets = event_rets * side_sign
+        meta_labels = np.full(len(out), np.nan, dtype=float)
+        valid_meta = candidate_mask.to_numpy(dtype=bool) & np.isfinite(oriented_rets)
+        meta_labels[valid_meta] = (oriented_rets[valid_meta] > 0.0).astype(float)
+        labels = meta_labels
+        candidate_rows = int(candidate_mask.sum())
+
+        candidate_out_col = str(cfg.get("candidate_out_col", f"{label_col}_candidate"))
+        out[candidate_out_col] = candidate_mask.astype("float32")
+        out[f"{label_col}_meta_side"] = side_sign.astype("float32")
+        out[f"{label_col}_oriented_ret"] = oriented_rets.astype("float32")
+
     out[event_ret_col] = event_rets.astype("float32")
     if event_ret_col != fwd_col:
         out[fwd_col] = out[event_ret_col]
@@ -164,9 +204,9 @@ def build_triple_barrier_target(
     label_series = pd.Series(labels, index=out.index)
     valid = label_series.notna()
     positive_rate = float(label_series.loc[valid].mean()) if bool(valid.any()) else np.nan
-    upper_count = int((label_series == 1.0).sum())
-    lower_count = int((label_series == 0.0).sum())
-    neutral_count = int(label_series.isna().sum())
+    upper_count = int((raw_label_series == 1.0).sum())
+    lower_count = int((raw_label_series == 0.0).sum())
+    neutral_count = int(raw_label_series.isna().sum())
     hit_step_series = pd.Series(hit_steps, index=out.index).dropna()
     meta = {
         "kind": "triple_barrier",
@@ -195,6 +235,11 @@ def build_triple_barrier_target(
         "neutral_count": neutral_count,
         "avg_hit_step": float(hit_step_series.mean()) if not hit_step_series.empty else None,
         "median_hit_step": float(hit_step_series.median()) if not hit_step_series.empty else None,
+        "meta_labeling": bool(meta_label_enabled),
+        "side_col": str(side_col) if side_col is not None else None,
+        "candidate_col": candidate_out_col,
+        "candidate_mode": candidate_mode if meta_label_enabled else None,
+        "candidate_rows": candidate_rows,
     }
     return out, label_col, fwd_col, meta
 

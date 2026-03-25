@@ -118,6 +118,36 @@ def test_apply_signal_step_supports_signal_col_config() -> None:
     assert canonical["signal_forecast_custom"].tolist() == [1.0, 0.0, -1.0]
 
 
+def test_probability_threshold_hysteresis_gates_base_signal() -> None:
+    idx = pd.date_range("2024-01-01", periods=6, freq="h")
+    df = pd.DataFrame(
+        {
+            "pred_prob": [0.60, np.nan, 0.51, np.nan, 0.42, np.nan],
+            "primary_side": [1.0, 1.0, 1.0, 1.0, -1.0, -1.0],
+        },
+        index=idx,
+    )
+
+    out = apply_signal_step(
+        df,
+        {
+            "kind": "probability_threshold",
+            "params": {
+                "prob_col": "pred_prob",
+                "signal_col": "signal_prob_threshold",
+                "base_signal_col": "primary_side",
+                "upper": 0.57,
+                "upper_exit": 0.52,
+                "lower": 0.43,
+                "lower_exit": 0.48,
+                "mode": "long_short",
+            },
+        },
+    )
+
+    assert out["signal_prob_threshold"].tolist() == [1.0, 1.0, 0.0, 0.0, -1.0, -1.0]
+
+
 def test_rolling_clip_transform_is_point_in_time_safe() -> None:
     idx = pd.date_range("2024-01-01", periods=7, freq="H")
     df = pd.DataFrame(
@@ -235,7 +265,7 @@ def test_session_and_regime_features_emit_expected_columns() -> None:
 
 
 def test_triple_barrier_target_labels_upper_and_lower_events() -> None:
-    idx = pd.date_range("2024-01-01", periods=6, freq="H")
+    idx = pd.date_range("2024-01-01", periods=6, freq="h")
     df = pd.DataFrame(
         {
             "open": [100.0, 100.0, 102.0, 99.0, 100.0, 100.0],
@@ -338,6 +368,47 @@ def test_triple_barrier_target_keeps_incomplete_tail_unlabeled() -> None:
     assert out[label_col].tail(3).isna().all()
     assert out[fwd_col].tail(3).isna().all()
     assert meta["labeled_rows"] == int(out[label_col].notna().sum())
+
+
+def test_triple_barrier_target_supports_side_change_meta_labels() -> None:
+    idx = pd.date_range("2024-01-01", periods=6, freq="H")
+    df = pd.DataFrame(
+        {
+            "open": [100.0, 100.0, 100.0, 100.0, 100.0, 100.0],
+            "high": [100.5, 100.5, 102.0, 100.5, 102.0, 100.5],
+            "low": [99.5, 99.5, 99.5, 99.5, 99.5, 99.5],
+            "close": [100.0, 100.0, 101.0, 100.0, 101.0, 100.0],
+            "vol": [0.01] * 6,
+            "primary_side": [0.0, 1.0, 1.0, -1.0, -1.0, 0.0],
+        },
+        index=idx,
+    )
+
+    out, label_col, _, meta = build_triple_barrier_target(
+        df,
+        {
+            "kind": "triple_barrier",
+            "price_col": "close",
+            "open_col": "open",
+            "high_col": "high",
+            "low_col": "low",
+            "volatility_col": "vol",
+            "max_holding": 1,
+            "upper_mult": 1.0,
+            "lower_mult": 1.0,
+            "neutral_label": "drop",
+            "side_col": "primary_side",
+            "candidate_mode": "side_change",
+            "candidate_out_col": "meta_candidate",
+        },
+    )
+
+    assert meta["meta_labeling"] is True
+    assert meta["candidate_col"] == "meta_candidate"
+    assert out["meta_candidate"].tolist() == [0.0, 1.0, 0.0, 1.0, 0.0, 0.0]
+    assert np.isnan(out.iloc[0][label_col])
+    assert out.iloc[1][label_col] == pytest.approx(1.0)
+    assert out.iloc[3][label_col] == pytest.approx(0.0)
 
 
 def test_forward_return_target_can_use_log_return_inputs() -> None:
@@ -548,6 +619,72 @@ def test_classifier_records_missing_test_feature_diagnostics() -> None:
     assert meta["missing_value_diagnostics"]["test_rows_missing_features"] > 0
     assert meta["prediction_diagnostics"]["oos_prediction_coverage"] < 1.0
     assert int(out.loc[~out["pred_is_oos"], "pred_prob"].notna().sum()) == 0
+
+
+def test_logistic_meta_labels_predict_only_candidate_oos_rows() -> None:
+    df = _synthetic_hourly_ohlcv(periods=420, seed=53)
+    df = add_close_returns(df, log=True, col_name="close_logret")
+    df = add_session_context_features(df)
+    df = add_regime_context_features(
+        df,
+        price_col="close",
+        returns_col="close_logret",
+        vol_short_window=12,
+        vol_long_window=48,
+        trend_fast_span=12,
+        trend_slow_span=48,
+    )
+    df["tb_vol"] = 0.01
+    df["primary_side"] = np.where(df["close_logret"].fillna(0.0) >= 0.0, 1.0, -1.0)
+
+    out, _, meta = train_logistic_regression_classifier(
+        df,
+        {
+            "feature_cols": [
+                "session_asia",
+                "session_europe",
+                "session_us",
+                "regime_vol_ratio_12_48",
+                "regime_trend_ratio_12_48",
+            ],
+            "target": {
+                "kind": "triple_barrier",
+                "price_col": "close",
+                "open_col": "open",
+                "high_col": "high",
+                "low_col": "low",
+                "volatility_col": "tb_vol",
+                "max_holding": 3,
+                "upper_mult": 1.0,
+                "lower_mult": 1.0,
+                "neutral_label": "drop",
+                "side_col": "primary_side",
+                "candidate_mode": "side_change",
+                "candidate_out_col": "meta_candidate",
+            },
+            "split": {
+                "method": "walk_forward",
+                "train_size": 220,
+                "test_size": 48,
+                "step_size": 48,
+                "expanding": False,
+                "max_folds": 2,
+            },
+            "params": {
+                "max_iter": 1000,
+                "solver": "lbfgs",
+            },
+        },
+        returns_col="close_logret",
+    )
+
+    oos_mask = out["pred_is_oos"]
+    candidate_mask = out["meta_candidate"].fillna(0.0).eq(1.0)
+    assert meta["target"]["meta_labeling"] is True
+    assert meta["target"]["candidate_col"] == "meta_candidate"
+    assert meta["preprocessing"]["scaler"] == "standard"
+    assert out.loc[oos_mask & candidate_mask, "pred_prob"].notna().any()
+    assert out.loc[oos_mask & ~candidate_mask, "pred_prob"].isna().all()
 
 
 def test_sarimax_forecaster_garch_overlay_emits_volatility_predictions() -> None:

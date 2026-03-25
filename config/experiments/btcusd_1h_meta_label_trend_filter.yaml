@@ -1,9 +1,6 @@
-# Closest valid approximation to "primary rule side + meta-labeling" in the current repo.
-# There is no explicit two-stage orchestration where a rule-based side is emitted first and
-# then filtered by a secondary model. This config uses the strongest supported directional
-# rule family (trend-state) as the primary-side proxy inside the feature set, then applies a
-# logistic_regression_clf event filter on triple-barrier labels and maps probabilities to
-# conviction-sized exposure.
+# Rule-based primary side from trend state, filtered by a secondary logistic meta-label model.
+# The target is built only on candidate side-change events and the final signal gates that
+# primary side with hysteresis thresholds on the meta probability.
 data:
   source: dukascopy_csv
   interval: 1h
@@ -140,6 +137,8 @@ model:
     max_iter: 1000
     solver: lbfgs
     random_state: 7
+  preprocessing:
+    scaler: standard
   feature_cols:
     - close_trend_state_sma_24_72
     - close_trend_regime_sma_72
@@ -170,6 +169,9 @@ model:
     lower_mult: 1.5
     vol_window: 24
     neutral_label: drop
+    side_col: close_trend_state_sma_24_72
+    candidate_mode: side_change
+    candidate_out_col: meta_candidate
   split:
     method: walk_forward
     train_size: 8760
@@ -183,8 +185,11 @@ signals:
   params:
     prob_col: pred_prob
     signal_col: signal_prob_threshold
-    upper: 0.55
-    lower: 0.45
+    base_signal_col: close_trend_state_sma_24_72
+    upper: 0.57
+    upper_exit: 0.52
+    lower: 0.43
+    lower_exit: 0.48
     mode: long_short
 
 runtime:

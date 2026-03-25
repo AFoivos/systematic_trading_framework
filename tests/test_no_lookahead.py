@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from src.models.classification import _apply_fold_feature_preprocessing
 from src.experiments.models import train_logistic_regression_classifier
 
 
@@ -148,3 +149,34 @@ def test_quantile_target_uses_train_only_distribution_per_fold() -> None:
     fold_q_high = float(first_fold["quantile_high_value"])
     global_q_high = float(out[fwd_col].dropna().quantile(0.8))
     assert fold_q_high < global_q_high
+
+
+def test_standard_scaler_uses_train_only_statistics() -> None:
+    X_train = pd.DataFrame({"feat_1": [1.0, 2.0, 3.0, 4.0]})
+    X_test = pd.DataFrame({"feat_1": [100.0]})
+
+    X_train_scaled, X_test_scaled, meta = _apply_fold_feature_preprocessing(
+        X_train,
+        X_test,
+        preprocessing_cfg={"scaler": "standard"},
+    )
+
+    assert meta["scaler"] == "standard"
+    assert meta["train_only"] is True
+    assert np.isclose(float(np.mean(X_train_scaled[:, 0])), 0.0)
+    assert np.isclose(float(np.std(X_train_scaled[:, 0], ddof=0)), 1.0)
+    assert float(X_test_scaled[0, 0]) > 50.0
+
+
+def test_standard_scaler_accepts_empty_test_fold() -> None:
+    X_train = pd.DataFrame({"feat_1": [1.0, 2.0, 3.0, 4.0]})
+    X_test = pd.DataFrame({"feat_1": pd.Series(dtype=float)})
+
+    _, X_test_scaled, meta = _apply_fold_feature_preprocessing(
+        X_train,
+        X_test,
+        preprocessing_cfg={"scaler": "standard"},
+    )
+
+    assert meta["scaler"] == "standard"
+    assert X_test_scaled.shape == (0, 1)
