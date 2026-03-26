@@ -222,6 +222,6 @@ tmp/
 plots/
 output/
 notebooks/
-# logs/
+logs/
 data/
 /pdfs/

@@ -993,6 +993,8 @@ def test_save_artifacts_writes_experiment_report(tmp_path) -> None:
             "missing_value_diagnostics": {
                 "train_rows_dropped_missing": 1,
                 "test_rows_missing_features": 0,
+                "test_rows_not_candidates": 0,
+                "test_rows_without_prediction": 0,
                 "folds_with_zero_predictions": 0,
             },
             "folds": [
@@ -1004,6 +1006,8 @@ def test_save_artifacts_writes_experiment_report(tmp_path) -> None:
                     "test_rows": 5,
                     "test_pred_rows": 5,
                     "test_rows_missing_features": 0,
+                    "test_rows_not_candidates": 0,
+                    "test_rows_without_prediction": 0,
                     "train_feature_availability": {"rows": 10, "complete_rows": 9, "missing_rows": 1},
                     "test_feature_availability": {"rows": 5, "complete_rows": 5, "missing_rows": 0},
                     "classification_metrics": {"evaluation_rows": 5, "accuracy": 0.6},
@@ -1089,6 +1093,8 @@ def test_save_artifacts_writes_experiment_report(tmp_path) -> None:
                 "missing_value_diagnostics": {
                     "train_rows_dropped_missing": 1,
                     "test_rows_missing_features": 0,
+                    "test_rows_not_candidates": 0,
+                    "test_rows_without_prediction": 0,
                     "folds_with_zero_predictions": 0,
                 },
                 "folds": [
@@ -1100,6 +1106,8 @@ def test_save_artifacts_writes_experiment_report(tmp_path) -> None:
                         "test_rows": 5,
                         "test_pred_rows": 5,
                         "test_rows_missing_features": 0,
+                        "test_rows_not_candidates": 0,
+                        "test_rows_without_prediction": 0,
                         "train_feature_availability": {"rows": 10, "complete_rows": 9, "missing_rows": 1},
                         "test_feature_availability": {"rows": 5, "complete_rows": 5, "missing_rows": 0},
                         "classification_metrics": {"evaluation_rows": 5, "accuracy": 0.6},
@@ -1177,6 +1185,9 @@ def test_save_artifacts_writes_experiment_report(tmp_path) -> None:
     assert (run_dir / "report_assets" / "label_distribution.png").exists()
     assert (run_dir / "report_assets" / "prediction_coverage_by_fold.png").exists()
     report_text = report_path.read_text(encoding="utf-8")
+    fold_summary = pd.read_csv(run_dir / "fold_model_summary.csv")
+    assert "test_rows_not_candidates" in fold_summary.columns
+    assert "test_rows_without_prediction" in fold_summary.columns
     assert "## Pipeline Trace" in report_text
     assert "## Stage Tail Trace" in report_text
     assert "### raw_loaded" in report_text
@@ -1185,6 +1196,8 @@ def test_save_artifacts_writes_experiment_report(tmp_path) -> None:
     assert "## OOS Policy Summary" in report_text
     assert "## Prediction Diagnostics" in report_text
     assert "## Missing-Value Diagnostics" in report_text
+    assert "Test Not Candidates" in report_text
+    assert "Test Without Prediction" in report_text
     assert "## Label Distribution" in report_text
     assert "## Feature Importance" in report_text
     assert "## Model Fold Diagnostics" in report_text

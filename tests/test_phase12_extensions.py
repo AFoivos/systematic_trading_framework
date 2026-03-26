@@ -847,7 +847,11 @@ def test_classifier_records_missing_test_feature_diagnostics() -> None:
         returns_col="close_logret",
     )
 
-    assert meta["missing_value_diagnostics"]["test_rows_missing_features"] > 0
+    missing_diag = meta["missing_value_diagnostics"]
+    assert missing_diag["test_rows_missing_features"] > 0
+    assert missing_diag["test_rows_not_candidates"] == 0
+    assert missing_diag["test_rows_without_prediction"] == missing_diag["test_rows_missing_features"]
+    assert meta["prediction_diagnostics"]["missing_oos_prediction_rows"] == missing_diag["test_rows_without_prediction"]
     assert meta["prediction_diagnostics"]["oos_prediction_coverage"] < 1.0
     assert int(out.loc[~out["pred_is_oos"], "pred_prob"].notna().sum()) == 0
 
@@ -914,6 +918,13 @@ def test_logistic_meta_labels_predict_only_candidate_oos_rows() -> None:
     assert meta["target"]["meta_labeling"] is True
     assert meta["target"]["candidate_col"] == "meta_candidate"
     assert meta["preprocessing"]["scaler"] == "standard"
+    missing_diag = meta["missing_value_diagnostics"]
+    assert missing_diag["test_rows_not_candidates"] > 0
+    assert (
+        missing_diag["test_rows_without_prediction"]
+        == missing_diag["test_rows_missing_features"] + missing_diag["test_rows_not_candidates"]
+    )
+    assert meta["prediction_diagnostics"]["missing_oos_prediction_rows"] == missing_diag["test_rows_without_prediction"]
     assert out.loc[oos_mask & candidate_mask, "pred_prob"].notna().any()
     assert out.loc[oos_mask & ~candidate_mask, "pred_prob"].isna().all()
 

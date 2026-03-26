@@ -393,7 +393,12 @@ def _write_model_diagnostic_artifacts(
                     "train_rows_dropped_missing": fold.get("train_rows_dropped_missing"),
                     "test_rows": fold.get("test_rows"),
                     "test_pred_rows": fold.get("test_pred_rows"),
-                    "test_rows_missing_features": fold.get("test_rows_missing_features", fold.get("test_rows_without_prediction")),
+                    "test_rows_missing_features": fold.get("test_rows_missing_features", 0),
+                    "test_rows_not_candidates": fold.get("test_rows_not_candidates", 0),
+                    "test_rows_without_prediction": fold.get(
+                        "test_rows_without_prediction",
+                        fold.get("test_rows_missing_features", 0),
+                    ),
                     "classification_eval_rows": classification.get("evaluation_rows"),
                     "regression_eval_rows": regression.get("evaluation_rows"),
                     "classification_accuracy": classification.get("accuracy"),

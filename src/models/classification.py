@@ -154,6 +154,8 @@ def train_forward_classifier(
     eval_label_distributions: list[dict[str, Any]] = []
     total_train_rows_dropped_missing = 0
     total_test_rows_missing_features = 0
+    total_test_rows_not_candidates = 0
+    total_test_rows_without_prediction = 0
     folds_with_zero_predictions = 0
     preprocessing_meta: dict[str, Any] = {"scaler": "none", "train_only": True}
     prediction_candidate_col = (
@@ -212,18 +214,25 @@ def train_forward_classifier(
 
         model = estimator_factory(model_params)
         test_features = test_df[feature_cols]
-        valid_mask = test_features.notna().all(axis=1)
+        feature_complete_mask = test_features.notna().all(axis=1)
+        candidate_mask = pd.Series(True, index=test_features.index, dtype=bool)
         if prediction_candidate_col is not None:
             if prediction_candidate_col not in test_df.columns:
                 raise KeyError(
                     f"Target candidate_col '{prediction_candidate_col}' not found in test fold DataFrame."
                 )
             candidate_mask = test_df[prediction_candidate_col].fillna(0).astype(bool)
-            valid_mask &= candidate_mask.reindex(test_features.index).fillna(False)
+            candidate_mask = candidate_mask.reindex(test_features.index).fillna(False)
+        valid_mask = feature_complete_mask & candidate_mask
+        test_rows_missing_features = int((~feature_complete_mask).sum())
+        test_rows_not_candidates = int((feature_complete_mask & ~candidate_mask).sum())
+        test_rows_without_prediction = int((~valid_mask).sum())
         pred_rows = int(valid_mask.sum())
         if pred_rows == 0:
             folds_with_zero_predictions += 1
-        total_test_rows_missing_features += int(len(test_df) - pred_rows)
+        total_test_rows_missing_features += test_rows_missing_features
+        total_test_rows_not_candidates += test_rows_not_candidates
+        total_test_rows_without_prediction += test_rows_without_prediction
         pred_index = test_features.loc[valid_mask].index
         X_test = test_features.loc[valid_mask]
 
@@ -324,7 +333,9 @@ def train_forward_classifier(
                 "test_rows": int(len(split.test_idx)),
                 "test_pred_rows": pred_rows,
                 "test_feature_availability": summarize_feature_availability(test_df, feature_cols),
-                "test_rows_missing_features": int(len(test_df) - pred_rows),
+                "test_rows_missing_features": test_rows_missing_features,
+                "test_rows_not_candidates": test_rows_not_candidates,
+                "test_rows_without_prediction": test_rows_without_prediction,
                 "quantile_low_value": quantile_low_value,
                 "quantile_high_value": quantile_high_value,
                 "train_label_distribution": train_label_distribution,
@@ -393,6 +404,8 @@ def train_forward_classifier(
         "missing_value_diagnostics": {
             "train_rows_dropped_missing": int(total_train_rows_dropped_missing),
             "test_rows_missing_features": int(total_test_rows_missing_features),
+            "test_rows_not_candidates": int(total_test_rows_not_candidates),
+            "test_rows_without_prediction": int(total_test_rows_without_prediction),
             "folds_with_zero_predictions": int(folds_with_zero_predictions),
         },
         "preprocessing": preprocessing_meta,

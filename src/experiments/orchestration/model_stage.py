@@ -159,6 +159,9 @@ def aggregate_model_meta(per_asset_meta: dict[str, dict[str, Any]]) -> dict[str,
         "test_rows_missing_features": int(
             sum(int(meta.get("missing_value_diagnostics", {}).get("test_rows_missing_features", 0) or 0) for meta in per_asset_meta.values())
         ),
+        "test_rows_not_candidates": int(
+            sum(int(meta.get("missing_value_diagnostics", {}).get("test_rows_not_candidates", 0) or 0) for meta in per_asset_meta.values())
+        ),
         "test_rows_without_prediction": int(
             sum(int(meta.get("missing_value_diagnostics", {}).get("test_rows_without_prediction", 0) or 0) for meta in per_asset_meta.values())
         ),
