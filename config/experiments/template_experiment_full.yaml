@@ -21,6 +21,9 @@
 # - This template lists all currently supported feature-step families and the currently
 #   supported model/signal kinds as comments, but only one active `model.kind` and one
 #   active `signals.kind` can be selected in a valid run.
+#
+# -Use python -m src.experiments.runner "C:\path\to\your\template_experiment_full.yaml"
+# -Or use python -m src.experiments.runner config/experiments/template_experiment_full.yaml
 
 data:
   source: dukascopy_csv
