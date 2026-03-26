@@ -1,10 +1,14 @@
+config_path: /workspace/config/experiments/btcusd_1h_shock_meta_xgboost_long_only.yaml
 data:
   source: dukascopy_csv
   interval: 1h
-  start: "2017-05-07 23:00:00"
-  end: "2024-12-31 14:00:00"
+  start: '2017-05-07 23:00:00'
+  end: '2024-12-31 14:00:00'
   alignment: inner
   symbol: BTCUSD
+  symbols: null
+  api_key: null
+  api_key_env: null
   pit:
     timestamp_alignment:
       source_timezone: UTC
@@ -18,79 +22,82 @@ data:
       inactive_policy: raise
   storage:
     mode: cached_only
-    dataset_id: "btcusd_1h_shock_meta_xgboost_long_only"
+    dataset_id: btcusd_1h_shock_meta_xgboost_long_only
     save_raw: false
     save_processed: true
-    load_path: "data/raw/dukas_copy_bank/btcusd_h1.csv"
-    raw_dir: "data/raw"
-    processed_dir: "data/processed"
-
+    load_path: /workspace/data/raw/dukas_copy_bank/btcusd_h1.csv
+    raw_dir: /workspace/data/raw
+    processed_dir: /workspace/data/processed
 features:
-  - step: returns
-    enabled: true
-    params:
-      log: true
-      col_name: close_logret
-  - step: trend
-    enabled: true
-    params:
-      price_col: close
-      sma_windows: []
-      ema_spans: [24]
-  - step: regime_context
-    enabled: true
-    params:
-      price_col: close
-      returns_col: close_logret
-      vol_short_window: 24
-      vol_long_window: 168
-      trend_fast_span: 24
-      trend_slow_span: 72
-      vol_ratio_high_threshold: 1.35
-      vol_ratio_low_threshold: 0.8
-  - step: bollinger
-    enabled: true
-    params:
-      price_col: close
-      window: 24
-      n_std: 2.0
-  - step: atr
-    enabled: true
-    params:
-      high_col: high
-      low_col: low
-      close_col: close
-      window: 24
-      method: wilder
-      add_over_price: true
-  - step: shock_context
-    enabled: true
-    params:
-      price_col: close
-      high_col: high
-      low_col: low
-      returns_col: close_logret
-      ema_col: close_ema_24
-      atr_col: atr_24
-      short_horizon: 1
-      medium_horizon: 4
-      vol_window: 24
-      ret_z_threshold: 2.5
-      atr_mult_threshold: 1.75
-      distance_from_mean_threshold: 1.10
-      post_shock_active_bars: 5
-  - step: rsi
-    enabled: true
-    params:
-      price_col: close
-      windows: [2, 14]
-      method: wilder
-  - step: lags
-    enabled: true
-    params:
-      cols: [close_logret]
-      lags: [1]
-
+- step: returns
+  params:
+    log: true
+    col_name: close_logret
+  enabled: true
+- step: trend
+  params:
+    price_col: close
+    sma_windows: []
+    ema_spans:
+    - 24
+  enabled: true
+- step: regime_context
+  params:
+    price_col: close
+    returns_col: close_logret
+    vol_short_window: 24
+    vol_long_window: 168
+    trend_fast_span: 24
+    trend_slow_span: 72
+    vol_ratio_high_threshold: 1.35
+    vol_ratio_low_threshold: 0.8
+  enabled: true
+- step: bollinger
+  params:
+    price_col: close
+    window: 24
+    n_std: 2.0
+  enabled: true
+- step: atr
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    window: 24
+    method: wilder
+    add_over_price: true
+  enabled: true
+- step: shock_context
+  params:
+    price_col: close
+    high_col: high
+    low_col: low
+    returns_col: close_logret
+    ema_col: close_ema_24
+    atr_col: atr_24
+    short_horizon: 1
+    medium_horizon: 4
+    vol_window: 24
+    ret_z_threshold: 2.5
+    atr_mult_threshold: 1.75
+    distance_from_mean_threshold: 1.1
+    post_shock_active_bars: 5
+  enabled: true
+- step: rsi
+  params:
+    price_col: close
+    windows:
+    - 2
+    - 14
+    method: wilder
+  enabled: true
+- step: lags
+  params:
+    cols:
+    - close_logret
+    lags:
+    - 1
+  enabled: true
 model:
   kind: xgboost_clf
   params:
@@ -110,20 +117,18 @@ model:
   preprocessing:
     scaler: none
   feature_cols:
-    - shock_ret_z_1h
-    - shock_ret_z_4h
-    - shock_atr_multiple_1h
-    - shock_atr_multiple_4h
-    - shock_distance_ema
-    - shock_strength
-    # - bars_since_shock
-    # - shock_active_window
-    - regime_vol_ratio_24_168
-    - regime_absret_z_24_168
-    - bb_percent_b_24_2.0
-    - close_rsi_2
-    - close_rsi_14
-    - lag_close_logret_1
+  - shock_ret_z_1h
+  - shock_ret_z_4h
+  - shock_atr_multiple_1h
+  - shock_atr_multiple_4h
+  - shock_distance_ema
+  - shock_strength
+  - regime_vol_ratio_24_168
+  - regime_absret_z_24_168
+  - bb_percent_b_24_2.0
+  - close_rsi_2
+  - close_rsi_14
+  - lag_close_logret_1
   target:
     kind: triple_barrier
     price_col: close
@@ -146,7 +151,14 @@ model:
     step_size: 336
     expanding: true
     max_folds: null
-
+  runtime: {}
+  env: {}
+  use_features: true
+  pred_prob_col: null
+  pred_ret_col: null
+  returns_input_col: null
+  signal_col: null
+  action_col: null
 signals:
   kind: probability_threshold
   params:
@@ -158,14 +170,12 @@ signals:
     lower: 0.43
     lower_exit: 0.48
     mode: long_only
-
 runtime:
   seed: 7
   repro_mode: strict
   deterministic: true
   threads: 1
   seed_torch: false
-
 risk:
   cost_per_turnover: 0.0005
   slippage_per_turnover: 0.00015
@@ -177,7 +187,6 @@ risk:
     rearm_drawdown: 0.08
     cooloff_bars: 48
   vol_col: null
-
 backtest:
   returns_col: close_logret
   signal_col: signal_prob_threshold
@@ -187,7 +196,6 @@ backtest:
   min_holding_bars: 3
   subset: test
   vol_col: null
-
 portfolio:
   enabled: false
   construction: signal_weights
@@ -200,12 +208,10 @@ portfolio:
   trade_aversion: 0.0
   constraints: {}
   asset_groups: {}
-
 monitoring:
   enabled: true
   psi_threshold: 0.15
   n_bins: 10
-
 execution:
   enabled: false
   mode: paper
@@ -214,11 +220,10 @@ execution:
   min_trade_notional: 0.0
   current_weights: {}
   current_prices: {}
-
 logging:
   enabled: true
   run_name: btcusd_1h_shock_meta_xgboost_long_only
-  output_dir: "logs/experiments"
+  output_dir: /workspace/logs/experiments
   stage_tails:
     enabled: true
     stdout: true

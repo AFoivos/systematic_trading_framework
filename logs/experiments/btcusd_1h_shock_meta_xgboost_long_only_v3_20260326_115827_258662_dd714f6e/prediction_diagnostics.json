@@ -1,0 +1,49 @@
+{
+  "oos_rows": 49426,
+  "predicted_rows": 910,
+  "non_oos_prediction_rows": 0,
+  "missing_oos_prediction_rows": 48516,
+  "oos_prediction_coverage": 0.01841136244082062,
+  "alignment_ok": true,
+  "first_prediction_index": "2018-10-23T10:00:00",
+  "last_prediction_index": "2024-12-30T21:00:00",
+  "prediction_distribution": {
+    "rows": 910,
+    "mean": 0.4494667284845651,
+    "std": 0.18681755085783158,
+    "min": 0.07941558957099915,
+    "max": 0.9649474024772644,
+    "median": 0.4336821138858795,
+    "q05": 0.1617811933159828,
+    "q95": 0.8015879064798355,
+    "positive_rate": 1.0,
+    "negative_rate": 0.0,
+    "zero_rate": 0.0
+  },
+  "target_distribution": {
+    "rows": 908,
+    "mean": 0.46255506607929514,
+    "std": 0.49887068964897563,
+    "min": 0.0,
+    "max": 1.0,
+    "median": 0.0,
+    "q05": 0.0,
+    "q95": 1.0,
+    "positive_rate": 0.46255506607929514,
+    "negative_rate": 0.0,
+    "zero_rate": 0.5374449339207048
+  },
+  "probability_distribution": {
+    "rows": 910,
+    "mean": 0.4494667284845651,
+    "std": 0.18681755085783158,
+    "min": 0.07941558957099915,
+    "max": 0.9649474024772644,
+    "median": 0.4336821138858795,
+    "q05": 0.1617811933159828,
+    "q95": 0.8015879064798355,
+    "positive_rate": 1.0,
+    "negative_rate": 0.0,
+    "zero_rate": 0.0
+  }
+}

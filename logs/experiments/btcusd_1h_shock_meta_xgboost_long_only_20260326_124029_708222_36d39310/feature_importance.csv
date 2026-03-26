@@ -1,0 +1,13 @@
+feature,mean_importance,mean_importance_normalized,fold_count,source,rank
+regime_vol_ratio_24_168,0.09965908663297021,0.09965908761469924,148,feature_importances_,1
+close_rsi_14,0.08676032092724298,0.08676032184187901,148,feature_importances_,2
+shock_atr_multiple_1h,0.08520032012382069,0.08520032100215057,148,feature_importances_,3
+bb_percent_b_24_2.0,0.08469749589425486,0.08469749677756577,148,feature_importances_,4
+lag_close_logret_1,0.08363582239159055,0.08363582327071385,148,feature_importances_,5
+regime_absret_z_24_168,0.08215709443430642,0.08215709524164604,148,feature_importances_,6
+shock_strength,0.0820036258145764,0.08200362664326248,148,feature_importances_,7
+shock_distance_ema,0.08158477969669006,0.08158478054949293,148,feature_importances_,8
+close_rsi_2,0.08123944699764252,0.08123944786988865,148,feature_importances_,9
+shock_atr_multiple_4h,0.0799734459032078,0.07997344676764508,148,feature_importances_,10
+shock_ret_z_4h,0.07676083670073264,0.07676083749017475,148,feature_importances_,11
+shock_ret_z_1h,0.07632771416290386,0.07632771493088164,148,feature_importances_,12

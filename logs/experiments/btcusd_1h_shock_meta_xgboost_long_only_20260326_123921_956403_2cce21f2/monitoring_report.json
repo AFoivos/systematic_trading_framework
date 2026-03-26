@@ -1,0 +1,171 @@
+{
+  "asset_count": 1,
+  "drifted_feature_count": 1,
+  "feature_count": 12,
+  "per_asset": {
+    "BTCUSD": {
+      "feature_count": 12,
+      "drifted_feature_count": 1,
+      "psi_threshold": 0.15,
+      "n_bins": 10,
+      "per_feature": {
+        "shock_ret_z_1h": {
+          "reference_rows": 8760,
+          "current_rows": 49426,
+          "reference_missing_rate": 0.0027397260273972603,
+          "current_missing_rate": 0.0,
+          "reference_mean": -0.014001323642186278,
+          "current_mean": -0.0022575376284913636,
+          "reference_std": 1.0001479487152984,
+          "current_std": 1.0072712011627531,
+          "abs_mean_shift_in_ref_std": 0.011742048792661068,
+          "psi": 0.005226779783390479,
+          "is_drifted": false
+        },
+        "shock_ret_z_4h": {
+          "reference_rows": 8760,
+          "current_rows": 49426,
+          "reference_missing_rate": 0.0030821917808219177,
+          "current_missing_rate": 0.0,
+          "reference_mean": -0.02238155825336835,
+          "current_mean": -0.0050716112726596,
+          "reference_std": 1.1017268075109294,
+          "current_std": 1.1078724509895077,
+          "abs_mean_shift_in_ref_std": 0.01571165089448641,
+          "psi": 0.003381347960287127,
+          "is_drifted": false
+        },
+        "shock_atr_multiple_1h": {
+          "reference_rows": 8760,
+          "current_rows": 49426,
+          "reference_missing_rate": 0.00011415525114155251,
+          "current_missing_rate": 0.0,
+          "reference_mean": 0.012618918153596366,
+          "current_mean": 0.01007207613037323,
+          "reference_std": 0.7925857340724374,
+          "current_std": 0.7238097628743322,
+          "abs_mean_shift_in_ref_std": 0.003213333162252414,
+          "psi": 0.0027505002723719457,
+          "is_drifted": false
+        },
+        "shock_atr_multiple_4h": {
+          "reference_rows": 8760,
+          "current_rows": 49426,
+          "reference_missing_rate": 0.00045662100456621003,
+          "current_missing_rate": 0.0,
+          "reference_mean": 0.05696847865697509,
+          "current_mean": 0.04076273354017509,
+          "reference_std": 1.535266327455478,
+          "current_std": 1.403757977826675,
+          "abs_mean_shift_in_ref_std": 0.01055565723483241,
+          "psi": 0.0064710855027554585,
+          "is_drifted": false
+        },
+        "shock_distance_ema": {
+          "reference_rows": 8760,
+          "current_rows": 49426,
+          "reference_missing_rate": 0.0,
+          "current_missing_rate": 0.0,
+          "reference_mean": 0.18595135391842132,
+          "current_mean": 0.1099951887010237,
+          "reference_std": 1.8530306336343187,
+          "current_std": 1.6418069046053791,
+          "abs_mean_shift_in_ref_std": 0.04099023720316271,
+          "psi": 0.03252542258638085,
+          "is_drifted": false
+        },
+        "shock_strength": {
+          "reference_rows": 8760,
+          "current_rows": 49426,
+          "reference_missing_rate": 0.0027397260273972603,
+          "current_missing_rate": 0.0,
+          "reference_mean": 0.7561257514977254,
+          "current_mean": 0.6900931843875283,
+          "reference_std": 0.5715545255789449,
+          "current_std": 0.5198370327578206,
+          "abs_mean_shift_in_ref_std": 0.11553152701102441,
+          "psi": 0.020410111225686336,
+          "is_drifted": false
+        },
+        "regime_vol_ratio_24_168": {
+          "reference_rows": 8760,
+          "current_rows": 49426,
+          "reference_missing_rate": 0.019178082191780823,
+          "current_missing_rate": 0.0,
+          "reference_mean": 0.9140289274323559,
+          "current_mean": 0.9311486413277351,
+          "reference_std": 0.4121517979567219,
+          "current_std": 0.37623460952372484,
+          "abs_mean_shift_in_ref_std": 0.041537399521855076,
+          "psi": 0.044211285262050884,
+          "is_drifted": false
+        },
+        "regime_absret_z_24_168": {
+          "reference_rows": 8760,
+          "current_rows": 49426,
+          "reference_missing_rate": 0.019178082191780823,
+          "current_missing_rate": 0.0,
+          "reference_mean": -0.008972796699627132,
+          "current_mean": -0.004249892857822108,
+          "reference_std": 0.32918514458480547,
+          "current_std": 0.31243773234607086,
+          "abs_mean_shift_in_ref_std": 0.014347256914530352,
+          "psi": 0.01669831178923379,
+          "is_drifted": false
+        },
+        "bb_percent_b_24_2.0": {
+          "reference_rows": 8760,
+          "current_rows": 49426,
+          "reference_missing_rate": 0.002625570776255708,
+          "current_missing_rate": 0.0,
+          "reference_mean": 0.5239956033499484,
+          "current_mean": 0.5144854417084387,
+          "reference_std": 0.34588891761792645,
+          "current_std": 0.3411755166268186,
+          "abs_mean_shift_in_ref_std": 0.027494843451488674,
+          "psi": 0.012488219409101114,
+          "is_drifted": false
+        },
+        "close_rsi_2": {
+          "reference_rows": 8760,
+          "current_rows": 49426,
+          "reference_missing_rate": 0.00011415525114155251,
+          "current_missing_rate": 0.0,
+          "reference_mean": 52.337347980855895,
+          "current_mean": 51.160610588380926,
+          "reference_std": 29.68537075920878,
+          "current_std": 29.627335955098932,
+          "abs_mean_shift_in_ref_std": 0.03964031313673016,
+          "psi": 0.003174722291281114,
+          "is_drifted": false
+        },
+        "close_rsi_14": {
+          "reference_rows": 8760,
+          "current_rows": 49426,
+          "reference_missing_rate": 0.00011415525114155251,
+          "current_missing_rate": 0.0,
+          "reference_mean": 51.78072369328253,
+          "current_mean": 50.8832886931114,
+          "reference_std": 13.62716774307303,
+          "current_std": 12.513564698821469,
+          "abs_mean_shift_in_ref_std": 0.06585631123733053,
+          "psi": 0.025040775566179927,
+          "is_drifted": false
+        },
+        "lag_close_logret_1": {
+          "reference_rows": 8760,
+          "current_rows": 49426,
+          "reference_missing_rate": 0.00022831050228310502,
+          "current_missing_rate": 0.0,
+          "reference_mean": 0.0001576786457243812,
+          "current_mean": 5.46789167312075e-05,
+          "reference_std": 0.0124751991645878,
+          "current_std": 0.007535928409773622,
+          "abs_mean_shift_in_ref_std": 0.00825635948847611,
+          "psi": 0.1681898049288899,
+          "is_drifted": true
+        }
+      }
+    }
+  }
+}

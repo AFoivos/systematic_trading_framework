@@ -1,0 +1,155 @@
+{
+  "created_at_utc": "2026-03-26T12:21:05.592975+00:00",
+  "files": {
+    "config": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/config_used.yaml",
+      "bytes": 4893,
+      "sha256": "4f4ddc4bf92364343cdd07d9816d3201d817b0e268459c83f728cb2b0646a568"
+    },
+    "costs": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/costs.csv",
+      "bytes": 1187876,
+      "sha256": "3b131c96b1796989e0706f89ba01c02bbc1850865724aea7df8fbb34af81221a"
+    },
+    "cumulative_cost_drag": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/report_assets/cumulative_cost_drag.png",
+      "bytes": 36823,
+      "sha256": "a3a28e8cb9ef037fd0f8e78eafb3283e7e8200863d8515af3c3040b298b2ca02"
+    },
+    "cumulative_returns": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/report_assets/cumulative_returns.png",
+      "bytes": 68641,
+      "sha256": "241c5cb9b93adedb0a77ae620b1d2212f6dedf28fa17ff7dee0aea4f9b412bfe"
+    },
+    "drawdown_curve": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/report_assets/drawdown_curve.png",
+      "bytes": 66695,
+      "sha256": "7f4e67c4f9d548b0a1fd7ac45d28612a3fab7f12dad871b52b7db13eaf871bc9"
+    },
+    "equity_curve": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/equity_curve.csv",
+      "bytes": 1914257,
+      "sha256": "02b8b213581ee596dff93ce9e9116d1ac860a8c433b06968f4e3b25cbfb92658"
+    },
+    "equity_curve_chart": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/report_assets/equity_curve.png",
+      "bytes": 45856,
+      "sha256": "53139fe9fdbdb5972589f79301500bf247b527c4dbbb8257ac0bfa4392cebc8e"
+    },
+    "feature_importance": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/feature_importance.csv",
+      "bytes": 1096,
+      "sha256": "ef36a62a3eb7f13c116c5e8b076a83b10d7c98f7653219b7e0a4c3b12feb711e"
+    },
+    "feature_importance_chart": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/report_assets/feature_importance.png",
+      "bytes": 61236,
+      "sha256": "77871e4b90e3c76e6d574503c9502c2aaf52639cee609d0389569142c6b685a9"
+    },
+    "fold_model_summary": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/fold_model_summary.csv",
+      "bytes": 6895,
+      "sha256": "442c5a5a00259abde8f4eefa3d03b0114b4e99cf4c2b1ef3df8a4eaa75fff2f8"
+    },
+    "fold_net_pnl": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/report_assets/fold_net_pnl.png",
+      "bytes": 40142,
+      "sha256": "4d19208fda79f34cdc99392d36b3bb8361bea3841bad621a332e41c1fbab59a9"
+    },
+    "gross_returns": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/gross_returns.csv",
+      "bytes": 1225238,
+      "sha256": "aace478d05822e7ba8471791e34d7373aebb308ff3ea1624185a8a636f170649"
+    },
+    "label_distribution": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/label_distribution.csv",
+      "bytes": 90,
+      "sha256": "7908602cc3ed9d478199165c7add5b399a89b3d488f7014924b488aa90d58ad1"
+    },
+    "label_distribution_chart": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/report_assets/label_distribution.png",
+      "bytes": 21091,
+      "sha256": "516192f23fd50ef004842e18a714ab02e99c8ad87565c66dd3a2bcaa11f2f7e0"
+    },
+    "missing_value_diagnostics": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/missing_value_diagnostics.json",
+      "bytes": 118,
+      "sha256": "b36270c34c65cd8c03b6bc7bb7c1bd4415734027f0a0339ee62d75a78738eb33"
+    },
+    "monitoring": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/monitoring_report.json",
+      "bytes": 6536,
+      "sha256": "b0242de5e9dee78916d1fb1e48e8c7d54a1cd9e3f0f2cda7f6a819f12ab9a647"
+    },
+    "monthly_returns": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/report_assets/monthly_returns.png",
+      "bytes": 54780,
+      "sha256": "c1c9c8937c52091fb66bc134df2e068c70ee256c28cfb250e8ded0167100bc9a"
+    },
+    "positions": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/positions.csv",
+      "bytes": 1186236,
+      "sha256": "f8a442e7a72e01339936d0efdc2574cd1e6166f7a8a9993471b481dc2871e602"
+    },
+    "positions_turnover": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/report_assets/positions_turnover.png",
+      "bytes": 97382,
+      "sha256": "9dcbd581cbc4b35e652147298d27bb0f7261b3a8a247483b365130d98caadf4e"
+    },
+    "prediction_coverage_by_fold": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/report_assets/prediction_coverage_by_fold.png",
+      "bytes": 43545,
+      "sha256": "8579756f017a71bc475117f4af420024f8b569971dfbc5543cb095d9cadc1100"
+    },
+    "prediction_diagnostics": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/prediction_diagnostics.json",
+      "bytes": 1297,
+      "sha256": "a90c521c5bb1fd4bc9e0d4f5392cb8799e29e96ba152d86ad5989598f557ece3"
+    },
+    "report": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/report.md",
+      "bytes": 67463,
+      "sha256": "d818560f540c885da1424384e442e79d6926e21b0bbffa25f56f55c4ec8f4780"
+    },
+    "returns": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/returns.csv",
+      "bytes": 1226084,
+      "sha256": "5b3b4fe8ec137211354e54f77702814f554aaa4b5f8c6eedeae9c199b577c080"
+    },
+    "rolling_behavior": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/report_assets/rolling_behavior.png",
+      "bytes": 128730,
+      "sha256": "9a651b38ec8491cc754cc943a3a318da6aebefa6ee93218f3e054d911c2ce16f"
+    },
+    "rolling_pnl": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/report_assets/rolling_pnl.png",
+      "bytes": 73312,
+      "sha256": "5b41b037ab6feb536d417fefe8f5b215f731128b9a95534999ce41c03b6a6bf3"
+    },
+    "run_metadata": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/run_metadata.json",
+      "bytes": 782005,
+      "sha256": "de062f667cac04b327547da2871ca43a3b1286c8d8da14732b145ee6a32abf81"
+    },
+    "signal_distribution": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/report_assets/signal_distribution.png",
+      "bytes": 26844,
+      "sha256": "05e1fc9718de0fb5e02e4991feb03c546ffb9139290fdae192d977fc21410816"
+    },
+    "stage_tails": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/stage_tails.json",
+      "bytes": 35469,
+      "sha256": "61122c8b9ba6818d9eb4c96812b47543346db31fbb990bf4858840c533752c02"
+    },
+    "summary": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/summary.json",
+      "bytes": 933686,
+      "sha256": "e20ceb6ba88a2e28d92dd4100290ba746a97d291063282f1d5b4c76ae837c7d3"
+    },
+    "turnover": {
+      "path": "/workspace/logs/experiments/btcusd_1h_shock_meta_xgboost_long_only_20260326_122056_143918_577899e1/turnover.csv",
+      "bytes": 1186236,
+      "sha256": "bacec53abbf6106b3ace60776624ac706c4e8f9e1fe00cc8e8355ee53a2e93e0"
+    }
+  }
+}
