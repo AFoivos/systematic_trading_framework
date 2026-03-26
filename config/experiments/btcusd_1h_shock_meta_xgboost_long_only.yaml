@@ -116,8 +116,8 @@ model:
     - shock_atr_multiple_4h
     - shock_distance_ema
     - shock_strength
-    - bars_since_shock
-    - shock_active_window
+    # - bars_since_shock
+    #- shock_active_window
     - regime_vol_ratio_24_168
     - regime_absret_z_24_168
     - bb_percent_b_24_2.0

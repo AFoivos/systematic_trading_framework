@@ -24,6 +24,7 @@
 #
 # -Use python -m src.experiments.runner "C:\path\to\your\template_experiment_full.yaml"
 # -Or use python -m src.experiments.runner config/experiments/template_experiment_full.yaml
+# -Or use docker compose exec app python -m src.experiments.runner config/experiments/template_experiment_full.yaml
 
 data:
   source: dukascopy_csv
