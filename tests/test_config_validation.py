@@ -132,6 +132,55 @@ def test_validate_model_block_rejects_triple_barrier_for_forecasters() -> None:
         validate_model_block(model)
 
 
+def test_validate_model_block_accepts_event_transformer_encoder_with_candidate_target() -> None:
+    validate_model_block(
+        {
+            "kind": "event_transformer_encoder",
+            "feature_cols": ["shock_strength", "shock_ret_z_1h"],
+            "target": {
+                "kind": "triple_barrier",
+                "price_col": "close",
+                "open_col": "open",
+                "high_col": "high",
+                "low_col": "low",
+                "max_holding": 12,
+                "side_col": "shock_side_contrarian",
+                "candidate_col": "shock_candidate",
+            },
+            "split": {"method": "walk_forward", "train_size": 100, "test_size": 20},
+            "params": {
+                "lookback": 24,
+                "hidden_dim": 16,
+                "num_heads": 4,
+                "num_layers": 1,
+                "embedding_dim": 8,
+                "embedding_prefix": "extrema_emb",
+                "min_train_samples": 16,
+            },
+        }
+    )
+
+
+def test_validate_model_block_rejects_event_transformer_without_candidate_col() -> None:
+    with pytest.raises(ConfigValidationError, match="candidate_col"):
+        validate_model_block(
+            {
+                "kind": "event_transformer_encoder",
+                "feature_cols": ["shock_strength", "shock_ret_z_1h"],
+                "target": {
+                    "kind": "triple_barrier",
+                    "price_col": "close",
+                    "open_col": "open",
+                    "high_col": "high",
+                    "low_col": "low",
+                    "max_holding": 12,
+                    "side_col": "shock_side_contrarian",
+                },
+                "split": {"method": "walk_forward", "train_size": 100, "test_size": 20},
+            }
+        )
+
+
 def test_validate_model_block_rejects_invalid_overlay_configuration() -> None:
     model = {
         "kind": "garch_forecaster",
@@ -237,6 +286,48 @@ def test_validate_model_stages_block_rejects_duplicate_output_columns() -> None:
         )
 
 
+def test_validate_model_stages_block_rejects_duplicate_embedding_columns() -> None:
+    with pytest.raises(ConfigValidationError, match="duplicate emitted column"):
+        validate_model_stages_block(
+            [
+                {
+                    "name": "encoder_a",
+                    "kind": "event_transformer_encoder",
+                    "feature_cols": ["shock_strength"],
+                    "target": {
+                        "kind": "triple_barrier",
+                        "price_col": "close",
+                        "open_col": "open",
+                        "high_col": "high",
+                        "low_col": "low",
+                        "max_holding": 12,
+                        "side_col": "shock_side_contrarian",
+                        "candidate_col": "shock_candidate",
+                    },
+                    "split": {"method": "time", "train_frac": 0.6},
+                    "params": {"embedding_dim": 2, "embedding_prefix": "shared_emb"},
+                },
+                {
+                    "name": "encoder_b",
+                    "kind": "event_transformer_encoder",
+                    "feature_cols": ["shock_strength"],
+                    "target": {
+                        "kind": "triple_barrier",
+                        "price_col": "close",
+                        "open_col": "open",
+                        "high_col": "high",
+                        "low_col": "low",
+                        "max_holding": 12,
+                        "side_col": "shock_side_contrarian",
+                        "candidate_col": "shock_candidate",
+                    },
+                    "split": {"method": "time", "train_frac": 0.7},
+                    "params": {"embedding_dim": 2, "embedding_prefix": "shared_emb"},
+                },
+            ]
+        )
+
+
 def test_validate_resolved_config_accepts_multi_stage_model_chain() -> None:
     cfg = {
         "data": {"symbol": "SPY", "source": "yahoo", "interval": "1d", "alignment": "inner"},
@@ -326,6 +417,19 @@ def test_validate_features_block_accepts_feature_transforms_step() -> None:
                             "lower_q": 0.01,
                             "upper_q": 0.99,
                             "shift": 1,
+                        },
+                        {
+                            "numerator_col": "lag_close_logret_1",
+                            "denominator_col": "vol_rolling_24",
+                            "kind": "ratio",
+                            "output_col": "lag_close_logret_1_over_vol_rolling_24",
+                        },
+                        {
+                            "source_col": "lag_close_logret_1",
+                            "kind": "rolling_zscore",
+                            "output_col": "lag_close_logret_1_z_24",
+                            "window": 24,
+                            "shift": 0,
                         }
                     ]
                 },
@@ -353,7 +457,7 @@ def test_validate_features_block_rejects_non_boolean_enabled_flag() -> None:
 
 
 def test_validate_features_block_rejects_invalid_feature_transform_kind() -> None:
-    with pytest.raises(ConfigValidationError, match="rolling_clip"):
+    with pytest.raises(ConfigValidationError, match="rolling_clip, ratio, rolling_zscore"):
         validate_features_block(
             [
                 {
@@ -364,6 +468,28 @@ def test_validate_features_block_rejects_invalid_feature_transform_kind() -> Non
                                 "source_col": "volume_over_atr_24",
                                 "kind": "bad_kind",
                                 "output_col": "volume_over_atr_24_clip",
+                            }
+                        ]
+                    },
+                }
+            ]
+        )
+
+
+def test_validate_features_block_rejects_invalid_ratio_transform_eps() -> None:
+    with pytest.raises(ConfigValidationError, match="eps"):
+        validate_features_block(
+            [
+                {
+                    "step": "feature_transforms",
+                    "params": {
+                        "transforms": [
+                            {
+                                "numerator_col": "lag_close_logret_1",
+                                "denominator_col": "vol_rolling_24",
+                                "kind": "ratio",
+                                "output_col": "lag_close_logret_1_over_vol_rolling_24",
+                                "eps": -1.0,
                             }
                         ]
                     },

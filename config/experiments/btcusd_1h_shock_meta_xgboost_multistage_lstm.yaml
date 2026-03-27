@@ -18,7 +18,7 @@ data:
       inactive_policy: raise
   storage:
     mode: cached_only
-    dataset_id: "btcusd_1h_shock_meta_xgboost_long_only_v3"
+    dataset_id: "btcusd_1h_shock_meta_xgboost_multistage_lstm"
     save_raw: false
     save_processed: true
     load_path: "data/raw/dukas_copy_bank/btcusd_h1.csv"
@@ -31,6 +31,13 @@ features:
     params:
       log: true
       col_name: close_logret
+  - step: volatility
+    enabled: true
+    params:
+      returns_col: close_logret
+      rolling_windows: [24]
+      ewma_spans: []
+      annualization_factor: 8760.0
   - step: trend
     enabled: true
     params:
@@ -90,69 +97,105 @@ features:
     params:
       cols: [close_logret]
       lags: [1]
-  - step: feature_transforms
-    enabled: true
-    params:
-      transforms:
-        - source_col: lag_close_logret_1
-          kind: rolling_zscore
-          output_col: lag_close_logret_1_z_24
-          window: 24
-          shift: 0
 
-model:
-  kind: xgboost_clf
-  params:
-    n_estimators: 350
-    learning_rate: 0.03
-    num_leaves: null
-    max_depth: 4
-    subsample: 0.9
-    colsample_bytree: 0.9
-    min_child_samples: null
-    random_state: 7
-    min_child_weight: 5.0
-    reg_lambda: 1.0
-    objective: binary:logistic
-    eval_metric: logloss
-    tree_method: hist
-  preprocessing:
-    scaler: none
-  feature_cols:
-    - shock_ret_z_1h
-    - shock_ret_z_4h
-    - shock_atr_multiple_1h
-    - shock_atr_multiple_4h
-    - shock_distance_ema
-    - shock_strength
-    - regime_vol_ratio_24_168
-    - regime_absret_z_24_168
-    - bb_percent_b_24_2.0
-    - close_rsi_2
-    - close_rsi_14
-    - lag_close_logret_1_z_24
-  target:
-    kind: triple_barrier
-    price_col: close
-    open_col: open
-    high_col: high
-    low_col: low
-    returns_col: close_logret
-    max_holding: 24
-    upper_mult: 1.5
-    lower_mult: 1.5
-    vol_window: 24
-    neutral_label: drop
-    side_col: shock_side_contrarian
-    candidate_col: shock_down_candidate
-    candidate_out_col: meta_candidate
-  split:
-    method: walk_forward
-    train_size: 8760
-    test_size: 336
-    step_size: 336
-    expanding: true
-    max_folds: null
+model_stages:
+  - name: dense_rebound_forecast
+    enabled: true
+    stage: 1
+    kind: lstm_forecaster
+    params:
+      lookback: 48
+      hidden_dim: 32
+      num_layers: 2
+      dropout: 0.1
+      epochs: 8
+      batch_size: 64
+      learning_rate: 0.001
+      weight_decay: 0.0001
+      scale_target: true
+    feature_cols:
+      - close_logret
+      - vol_rolling_24
+      - regime_vol_ratio_24_168
+      - regime_absret_z_24_168
+      - bb_percent_b_24_2.0
+      - close_rsi_14
+      - lag_close_logret_1
+    target:
+      kind: forward_return
+      price_col: close
+      returns_col: close_logret
+      returns_type: log
+      horizon: 4
+      threshold: 0.0
+    split:
+      method: walk_forward
+      train_size: 8760
+      test_size: 336
+      step_size: 336
+      expanding: true
+      max_folds: null
+    pred_ret_col: stage1_pred_ret_4h
+    pred_prob_col: stage1_pred_prob_4h
+
+  - name: shock_meta_filter
+    enabled: true
+    stage: 2
+    kind: xgboost_clf
+    params:
+      n_estimators: 350
+      learning_rate: 0.03
+      num_leaves: null
+      max_depth: 4
+      subsample: 0.9
+      colsample_bytree: 0.9
+      min_child_samples: null
+      random_state: 7
+      min_child_weight: 5.0
+      reg_lambda: 1.0
+      objective: binary:logistic
+      eval_metric: logloss
+      tree_method: hist
+    preprocessing:
+      scaler: none
+    feature_cols:
+      - stage1_pred_ret_4h
+      - stage1_pred_prob_4h
+      - shock_ret_z_1h
+      - shock_ret_z_4h
+      - shock_atr_multiple_1h
+      - shock_atr_multiple_4h
+      - shock_distance_ema
+      - shock_strength
+      - regime_vol_ratio_24_168
+      - regime_absret_z_24_168
+      - bb_percent_b_24_2.0
+      - close_rsi_2
+      - close_rsi_14
+      - lag_close_logret_1
+    target:
+      kind: triple_barrier
+      price_col: close
+      open_col: open
+      high_col: high
+      low_col: low
+      returns_col: close_logret
+      max_holding: 24
+      upper_mult: 1.5
+      lower_mult: 1.5
+      vol_window: 24
+      neutral_label: drop
+      side_col: shock_side_contrarian
+      candidate_col: shock_down_candidate
+      candidate_out_col: meta_candidate
+    split:
+      method: walk_forward
+      train_size: 8760
+      test_size: 336
+      step_size: 336
+      expanding: true
+      max_folds: null
+    pred_prob_col: pred_prob
 
 signals:
   kind: probability_threshold
@@ -224,7 +267,7 @@ execution:
 
 logging:
   enabled: true
-  run_name: btcusd_1h_shock_meta_xgboost_long_only_v3
+  run_name: btcusd_1h_shock_meta_xgboost_multistage_lstm
   output_dir: logs/experiments
   save_report: true
   stage_tails:

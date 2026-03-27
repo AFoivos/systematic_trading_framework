@@ -244,6 +244,7 @@ def _stage_record(
         "kind": str(stage_cfg.get("kind", "none")),
         "stage": stage_cfg.get("stage"),
         "feature_cols": list(stage_meta.get("feature_cols", []) or []),
+        "embedding_cols": list(stage_meta.get("embedding_cols", []) or []),
         "pred_prob_col": stage_meta.get("pred_prob_col"),
         "pred_ret_col": stage_meta.get("pred_ret_col"),
         "signal_col": stage_meta.get("signal_col"),

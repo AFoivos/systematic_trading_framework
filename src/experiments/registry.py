@@ -43,6 +43,7 @@ from src.signals import (
 from src.experiments.models import (
     train_dqn_agent,
     train_dqn_portfolio_agent,
+    train_event_transformer_encoder,
     train_garch_forecaster,
     train_lightgbm_classifier,
     train_logistic_regression_classifier,
@@ -105,6 +106,7 @@ SINGLE_ASSET_MODEL_REGISTRY: Mapping[str, SingleAssetModelFn] = {
     "lightgbm_clf": train_lightgbm_classifier,
     "logistic_regression_clf": train_logistic_regression_classifier,
     "xgboost_clf": train_xgboost_classifier,
+    "event_transformer_encoder": train_event_transformer_encoder,
     "sarimax_forecaster": train_sarimax_forecaster,
     "garch_forecaster": train_garch_forecaster,
     "lstm_forecaster": train_lstm_forecaster,

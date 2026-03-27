@@ -18,7 +18,7 @@ data:
       inactive_policy: raise
   storage:
     mode: cached_only
-    dataset_id: "btcusd_1h_shock_meta_xgboost_long_only_v3"
+    dataset_id: "btcusd_1h_shock_meta_xgboost_long_only_raw_lag_ps2"
     save_raw: false
     save_processed: true
     load_path: "data/raw/dukas_copy_bank/btcusd_h1.csv"
@@ -90,15 +90,6 @@ features:
     params:
       cols: [close_logret]
       lags: [1]
-  - step: feature_transforms
-    enabled: true
-    params:
-      transforms:
-        - source_col: lag_close_logret_1
-          kind: rolling_zscore
-          output_col: lag_close_logret_1_z_24
-          window: 24
-          shift: 0
 
 model:
   kind: xgboost_clf
@@ -130,7 +121,7 @@ model:
     - bb_percent_b_24_2.0
     - close_rsi_2
     - close_rsi_14
-    - lag_close_logret_1_z_24
+    - lag_close_logret_1
   target:
     kind: triple_barrier
     price_col: close
@@ -224,7 +215,7 @@ execution:
 
 logging:
   enabled: true
-  run_name: btcusd_1h_shock_meta_xgboost_long_only_v3
+  run_name: btcusd_1h_shock_meta_xgboost_long_only_raw_lag_ps2
   output_dir: logs/experiments
   save_report: true
   stage_tails:

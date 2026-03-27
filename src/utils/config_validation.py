@@ -17,6 +17,7 @@ _RL_SINGLE_ASSET_DQN_KINDS = {"dqn_agent"}
 _RL_PORTFOLIO_DQN_KINDS = {"dqn_portfolio_agent"}
 _RL_EXTRACTOR_KINDS = {"flatten", "cnn1d", "lstm", "transformer"}
 _CLASSIFIER_MODEL_KINDS = {"lightgbm_clf", "logistic_regression_clf", "xgboost_clf"}
+_EMBEDDING_MODEL_KINDS = {"event_transformer_encoder"}
 _DEEP_FORECASTER_MODEL_KINDS = {"lstm_forecaster", "patchtst_forecaster", "tft_forecaster"}
 _FORECASTER_MODEL_KINDS = {"sarimax_forecaster", "garch_forecaster", *_DEEP_FORECASTER_MODEL_KINDS}
 _GARCH_OVERLAY_COMPATIBLE_MODEL_KINDS = {
@@ -41,6 +42,14 @@ _DQN_ONLY_RL_PARAM_KEYS = {
     "exploration_initial_eps",
     "exploration_final_eps",
 }
+
+
+def _resolve_event_embedding_columns(model: dict[str, Any]) -> list[str]:
+    params = dict(model.get("params", {}) or {})
+    embedding_dim = int(params.get("embedding_dim", params.get("hidden_dim", 32)))
+    embedding_prefix = str(params.get("embedding_prefix", "event_emb"))
+    width = max(2, len(str(int(embedding_dim) - 1)))
+    return [f"{embedding_prefix}_{idx:0{width}d}" for idx in range(int(embedding_dim))]
 
 
 class ConfigValidationError(ValueError):
@@ -250,29 +259,46 @@ def validate_features_block(features: Any) -> None:
                 field_prefix = f"features[].params.transforms[{idx}]"
                 if not isinstance(transform, dict):
                     raise ConfigValidationError(f"{field_prefix} must be a mapping.")
-                source_col = transform.get("source_col")
-                if not isinstance(source_col, str) or not source_col.strip():
-                    raise ConfigValidationError(f"{field_prefix}.source_col must be a non-empty string.")
                 kind = transform.get("kind")
-                if kind != "rolling_clip":
+                if kind not in {"rolling_clip", "ratio", "rolling_zscore"}:
                     raise ConfigValidationError(
-                        f"{field_prefix}.kind must be 'rolling_clip'."
+                        f"{field_prefix}.kind must be one of: rolling_clip, ratio, rolling_zscore."
                     )
                 output_col = transform.get("output_col")
                 if not isinstance(output_col, str) or not output_col.strip():
                     raise ConfigValidationError(f"{field_prefix}.output_col must be a non-empty string.")
-                _positive_int(transform.get("window", 2520), field=f"{field_prefix}.window")
-                lower_q = _finite_number(transform.get("lower_q", 0.01), field=f"{field_prefix}.lower_q")
-                upper_q = _finite_number(transform.get("upper_q", 0.99), field=f"{field_prefix}.upper_q")
-                if not 0.0 <= lower_q <= 1.0:
-                    raise ConfigValidationError(f"{field_prefix}.lower_q must be in [0, 1].")
-                if not 0.0 <= upper_q <= 1.0:
-                    raise ConfigValidationError(f"{field_prefix}.upper_q must be in [0, 1].")
-                if not lower_q < upper_q:
-                    raise ConfigValidationError(
-                        f"{field_prefix}.lower_q must be strictly less than {field_prefix}.upper_q."
-                    )
-                _non_negative_int(transform.get("shift", 1), field=f"{field_prefix}.shift")
+                if kind == "rolling_clip":
+                    source_col = transform.get("source_col")
+                    if not isinstance(source_col, str) or not source_col.strip():
+                        raise ConfigValidationError(f"{field_prefix}.source_col must be a non-empty string.")
+                    _positive_int(transform.get("window", 2520), field=f"{field_prefix}.window")
+                    lower_q = _finite_number(transform.get("lower_q", 0.01), field=f"{field_prefix}.lower_q")
+                    upper_q = _finite_number(transform.get("upper_q", 0.99), field=f"{field_prefix}.upper_q")
+                    if not 0.0 <= lower_q <= 1.0:
+                        raise ConfigValidationError(f"{field_prefix}.lower_q must be in [0, 1].")
+                    if not 0.0 <= upper_q <= 1.0:
+                        raise ConfigValidationError(f"{field_prefix}.upper_q must be in [0, 1].")
+                    if not lower_q < upper_q:
+                        raise ConfigValidationError(
+                            f"{field_prefix}.lower_q must be strictly less than {field_prefix}.upper_q."
+                        )
+                    _non_negative_int(transform.get("shift", 1), field=f"{field_prefix}.shift")
+                elif kind == "ratio":
+                    numerator_col = transform.get("numerator_col")
+                    denominator_col = transform.get("denominator_col")
+                    if not isinstance(numerator_col, str) or not numerator_col.strip():
+                        raise ConfigValidationError(f"{field_prefix}.numerator_col must be a non-empty string.")
+                    if not isinstance(denominator_col, str) or not denominator_col.strip():
+                        raise ConfigValidationError(f"{field_prefix}.denominator_col must be a non-empty string.")
+                    eps = _finite_number(transform.get("eps", 1e-8), field=f"{field_prefix}.eps")
+                    if eps < 0.0:
+                        raise ConfigValidationError(f"{field_prefix}.eps must be >= 0.")
+                elif kind == "rolling_zscore":
+                    source_col = transform.get("source_col")
+                    if not isinstance(source_col, str) or not source_col.strip():
+                        raise ConfigValidationError(f"{field_prefix}.source_col must be a non-empty string.")
+                    _positive_int(transform.get("window", 2520), field=f"{field_prefix}.window")
+                    _non_negative_int(transform.get("shift", 1), field=f"{field_prefix}.shift")
         if step["step"] == "shock_context":
             params = step.get("params") or {}
             for key in ("price_col", "high_col", "low_col", "returns_col", "ema_col", "atr_col"):
@@ -330,7 +356,11 @@ def validate_model_block(model: dict[str, Any]) -> None:
         if target_kind not in {"forward_return", "triple_barrier"}:
             raise ConfigValidationError("model.target.kind must be 'forward_return' or 'triple_barrier'.")
         if target_kind == "triple_barrier" and model["kind"] not in _CLASSIFIER_MODEL_KINDS:
-            raise ConfigValidationError("model.target.kind='triple_barrier' is currently supported only for classifiers.")
+            if model["kind"] not in _EMBEDDING_MODEL_KINDS:
+                raise ConfigValidationError(
+                    "model.target.kind='triple_barrier' is currently supported only for classifiers "
+                    "and event_transformer_encoder."
+                )
         if target_kind == "forward_return" and model["kind"] in _CLASSIFIER_MODEL_KINDS:
             pass
         if "price_col" in target and not isinstance(target["price_col"], str):
@@ -376,6 +406,19 @@ def validate_model_block(model: dict[str, Any]) -> None:
             candidate_mode = str(target.get("candidate_mode", "all_nonzero"))
             if candidate_mode not in {"all_nonzero", "side_change"}:
                 raise ConfigValidationError("model.target.candidate_mode must be one of: all_nonzero, side_change.")
+        if model["kind"] in _EMBEDDING_MODEL_KINDS:
+            if target_kind != "triple_barrier":
+                raise ConfigValidationError(
+                    "event_transformer_encoder requires model.target.kind='triple_barrier'."
+                )
+            if target.get("candidate_col") is None:
+                raise ConfigValidationError(
+                    "event_transformer_encoder requires model.target.candidate_col for event-driven training."
+                )
+            if target.get("side_col") is None:
+                raise ConfigValidationError(
+                    "event_transformer_encoder requires model.target.side_col for contrarian event labeling."
+                )
 
         preprocessing = model.get("preprocessing", {}) or {}
         if preprocessing:
@@ -408,7 +451,7 @@ def validate_model_block(model: dict[str, Any]) -> None:
                     "model.overlay.params.mean_model must be one of: zero, constant, ar1."
                 )
 
-        if model["kind"] in _DEEP_FORECASTER_MODEL_KINDS:
+        if model["kind"] in (_DEEP_FORECASTER_MODEL_KINDS | _EMBEDDING_MODEL_KINDS):
             params = model.get("params", {}) or {}
             if not isinstance(params, dict):
                 raise ConfigValidationError("model.params must be a mapping.")
@@ -448,6 +491,16 @@ def validate_model_block(model: dict[str, Any]) -> None:
                 q_values = [float(q) for q in quantiles]
                 if any(not 0.0 < q < 1.0 for q in q_values):
                     raise ConfigValidationError("model.params.quantiles values must be in (0,1).")
+        if model["kind"] in _EMBEDDING_MODEL_KINDS:
+            params = dict(model.get("params", {}) or {})
+            if "embedding_dim" in params:
+                _positive_int(params["embedding_dim"], field="model.params.embedding_dim")
+            if "min_train_samples" in params:
+                _positive_int(params["min_train_samples"], field="model.params.min_train_samples")
+            if "embedding_prefix" in params:
+                prefix = params["embedding_prefix"]
+                if not isinstance(prefix, str) or not prefix.strip():
+                    raise ConfigValidationError("model.params.embedding_prefix must be a non-empty string.")
 
         params = model.get("params", {}) or {}
         if not isinstance(params, dict):
@@ -672,6 +725,14 @@ def _model_emitted_columns(model: dict[str, Any]) -> dict[str, str]:
     kind = str(model.get("kind", "none"))
     if kind in _CLASSIFIER_MODEL_KINDS:
         return {"pred_prob_col": str(model.get("pred_prob_col") or "pred_prob")}
+    if kind in _EMBEDDING_MODEL_KINDS:
+        emitted = {
+            f"embedding_col_{idx}": col
+            for idx, col in enumerate(_resolve_event_embedding_columns(model))
+        }
+        if model.get("pred_prob_col") is not None:
+            emitted["pred_prob_col"] = str(model.get("pred_prob_col"))
+        return emitted
     if kind in _FORECASTER_MODEL_KINDS:
         return {
             "pred_ret_col": str(model.get("pred_ret_col") or "pred_ret"),

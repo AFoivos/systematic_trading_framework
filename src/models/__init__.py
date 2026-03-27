@@ -19,6 +19,7 @@ _EXPORTS = {
     "resolve_garch_overlay": ("src.models.overlay", "resolve_garch_overlay"),
     "resolve_runtime_for_model": ("src.models.runtime", "resolve_runtime_for_model"),
     "train_forward_classifier": ("src.models.classification", "train_forward_classifier"),
+    "train_event_transformer_encoder": ("src.models.event_transformer", "train_event_transformer_encoder"),
     "train_forward_forecaster": ("src.models.forecasting", "train_forward_forecaster"),
     "train_garch_forecaster": ("src.models.forecasting", "train_garch_forecaster"),
     "train_lightgbm_classifier": ("src.models.classification", "train_lightgbm_classifier"),
@@ -37,6 +38,7 @@ _EXPORTS = {
     "SequenceSamples": ("src.models.sequence", "SequenceSamples"),
     "build_sequence_samples": ("src.models.sequence", "build_sequence_samples"),
     "fit_sequence_scaler": ("src.models.sequence", "fit_sequence_scaler"),
+    "resolve_event_embedding_columns": ("src.models.event_transformer", "resolve_event_embedding_columns"),
     "make_tft_fold_predictor": ("src.models.tft", "make_tft_fold_predictor"),
 }
 

@@ -58,6 +58,7 @@ def test_registry_contains_phase12_extensions() -> None:
     assert "return_momentum" in FEATURE_REGISTRY
     assert "vol_normalized_momentum" in FEATURE_REGISTRY
     assert "xgboost_clf" in MODEL_REGISTRY
+    assert "event_transformer_encoder" in MODEL_REGISTRY
     assert "probability_vol_adjusted" in SIGNAL_REGISTRY
 
 
@@ -183,6 +184,60 @@ def test_rolling_clip_transform_is_point_in_time_safe() -> None:
     assert clipped.iloc[6] == pytest.approx(expected_lower)
     assert clipped.iloc[5] != df.iloc[5]["volume_over_atr_24"]
     assert clipped.iloc[6] != df.iloc[6]["volume_over_atr_24"]
+
+
+def test_ratio_transform_emits_expected_values() -> None:
+    idx = pd.date_range("2024-01-01", periods=4, freq="H")
+    df = pd.DataFrame(
+        {
+            "lag_close_logret_1": [0.01, -0.02, 0.03, 0.04],
+            "vol_rolling_24": [0.1, 0.2, 0.3, 0.4],
+        },
+        index=idx,
+    )
+
+    out = add_feature_transforms(
+        df,
+        transforms=[
+            {
+                "numerator_col": "lag_close_logret_1",
+                "denominator_col": "vol_rolling_24",
+                "kind": "ratio",
+                "output_col": "lag_close_logret_1_over_vol_rolling_24",
+            }
+        ],
+    )
+
+    expected = (df["lag_close_logret_1"] / df["vol_rolling_24"]).astype("float32")
+    pd.testing.assert_series_equal(
+        out["lag_close_logret_1_over_vol_rolling_24"],
+        expected,
+        check_names=False,
+    )
+
+
+def test_rolling_zscore_transform_is_point_in_time_safe() -> None:
+    idx = pd.date_range("2024-01-01", periods=6, freq="H")
+    df = pd.DataFrame({"lag_close_logret_1": [1.0, 2.0, 3.0, 100.0, 5.0, 6.0]}, index=idx)
+
+    out = add_feature_transforms(
+        df,
+        transforms=[
+            {
+                "source_col": "lag_close_logret_1",
+                "kind": "rolling_zscore",
+                "output_col": "lag_close_logret_1_z_3",
+                "window": 3,
+                "shift": 1,
+            }
+        ],
+    )
+
+    z = out["lag_close_logret_1_z_3"]
+    assert z.iloc[:3].isna().all()
+    history = pd.Series([1.0, 2.0, 3.0], index=idx[:3])
+    expected = (100.0 - history.mean()) / history.std(ddof=0)
+    assert z.iloc[3] == pytest.approx(expected)
 
 
 def test_indicator_feature_transform_preserves_original_and_adds_clipped_variant() -> None:

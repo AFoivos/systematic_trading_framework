@@ -52,6 +52,50 @@ def compute_rolling_clip_transform(
     return out
 
 
+def compute_ratio_transform(
+    numerator: pd.Series,
+    denominator: pd.Series,
+    *,
+    eps: float = 1e-8,
+) -> pd.Series:
+    """
+    Point-in-time safe ratio of two already-available feature columns.
+    """
+    if not isinstance(numerator, pd.Series):
+        raise TypeError("numerator must be a pandas Series.")
+    if not isinstance(denominator, pd.Series):
+        raise TypeError("denominator must be a pandas Series.")
+    denom = denominator.astype(float)
+    out = numerator.astype(float) / denom.where(denom.abs() > float(eps), np.nan)
+    out.name = numerator.name
+    return out.astype("float32")
+
+
+def compute_rolling_zscore_transform(
+    series: pd.Series,
+    *,
+    window: int = 2520,
+    shift: int = 1,
+    ddof: int = 0,
+) -> pd.Series:
+    """
+    Point-in-time safe rolling z-score via shifted rolling moments.
+    """
+    if not isinstance(series, pd.Series):
+        raise TypeError("series must be a pandas Series.")
+    if int(window) <= 1:
+        raise ValueError("window must be > 1.")
+    if int(shift) < 0:
+        raise ValueError("shift must be >= 0.")
+
+    base = series.astype(float)
+    roll_mean = base.rolling(int(window), min_periods=int(window)).mean().shift(int(shift))
+    roll_std = base.rolling(int(window), min_periods=int(window)).std(ddof=int(ddof)).shift(int(shift))
+    out = (base - roll_mean) / roll_std.replace(0.0, np.nan)
+    out.name = series.name
+    return out.astype("float32")
+
+
 def add_feature_transforms(
     df: pd.DataFrame,
     *,
@@ -62,6 +106,8 @@ def add_feature_transforms(
 
     Supported transform kinds:
     - rolling_clip
+    - ratio
+    - rolling_zscore
     """
     if not isinstance(transforms, Sequence) or isinstance(transforms, (str, bytes)):
         raise TypeError("transforms must be a sequence of transform mappings.")
@@ -71,23 +117,52 @@ def add_feature_transforms(
         if not isinstance(raw_transform, dict):
             raise TypeError(f"transforms[{idx}] must be a mapping.")
         kind = str(raw_transform.get("kind", ""))
-        source_col = raw_transform.get("source_col")
         output_col = raw_transform.get("output_col")
-        if not isinstance(source_col, str) or not source_col:
-            raise ValueError(f"transforms[{idx}].source_col must be a non-empty string.")
-        if source_col not in out.columns:
-            raise KeyError(f"transforms[{idx}].source_col '{source_col}' not found in DataFrame.")
         if not isinstance(output_col, str) or not output_col:
             raise ValueError(f"transforms[{idx}].output_col must be a non-empty string.")
 
-        source = out[source_col].astype(float)
         if kind == "rolling_clip":
+            source_col = raw_transform.get("source_col")
+            if not isinstance(source_col, str) or not source_col:
+                raise ValueError(f"transforms[{idx}].source_col must be a non-empty string.")
+            if source_col not in out.columns:
+                raise KeyError(f"transforms[{idx}].source_col '{source_col}' not found in DataFrame.")
+            source = out[source_col].astype(float)
             out[output_col] = compute_rolling_clip_transform(
                 source,
                 window=int(raw_transform.get("window", 2520)),
                 lower_q=float(raw_transform.get("lower_q", 0.01)),
                 upper_q=float(raw_transform.get("upper_q", 0.99)),
                 shift=int(raw_transform.get("shift", 1)),
+            )
+        elif kind == "ratio":
+            numerator_col = raw_transform.get("numerator_col")
+            denominator_col = raw_transform.get("denominator_col")
+            if not isinstance(numerator_col, str) or not numerator_col:
+                raise ValueError(f"transforms[{idx}].numerator_col must be a non-empty string.")
+            if numerator_col not in out.columns:
+                raise KeyError(f"transforms[{idx}].numerator_col '{numerator_col}' not found in DataFrame.")
+            if not isinstance(denominator_col, str) or not denominator_col:
+                raise ValueError(f"transforms[{idx}].denominator_col must be a non-empty string.")
+            if denominator_col not in out.columns:
+                raise KeyError(f"transforms[{idx}].denominator_col '{denominator_col}' not found in DataFrame.")
+            out[output_col] = compute_ratio_transform(
+                out[numerator_col],
+                out[denominator_col],
+                eps=float(raw_transform.get("eps", 1e-8)),
+            )
+        elif kind == "rolling_zscore":
+            source_col = raw_transform.get("source_col")
+            if not isinstance(source_col, str) or not source_col:
+                raise ValueError(f"transforms[{idx}].source_col must be a non-empty string.")
+            if source_col not in out.columns:
+                raise KeyError(f"transforms[{idx}].source_col '{source_col}' not found in DataFrame.")
+            source = out[source_col].astype(float)
+            out[output_col] = compute_rolling_zscore_transform(
+                source,
+                window=int(raw_transform.get("window", 2520)),
+                shift=int(raw_transform.get("shift", 1)),
+                ddof=int(raw_transform.get("ddof", 0)),
             )
         else:
             raise ValueError(f"Unsupported feature transform kind: {kind}")
@@ -98,4 +173,6 @@ def add_feature_transforms(
 __all__ = [
     "add_feature_transforms",
     "compute_rolling_clip_transform",
+    "compute_ratio_transform",
+    "compute_rolling_zscore_transform",
 ]
