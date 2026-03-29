@@ -13,7 +13,12 @@ from src.experiments.models import (
     train_xgboost_classifier,
 )
 from src.experiments.registry import FEATURE_REGISTRY, MODEL_REGISTRY, SIGNAL_REGISTRY
-from src.features import add_close_returns, add_feature_transforms, add_shock_context_features
+from src.features import (
+    add_close_returns,
+    add_feature_transforms,
+    add_shock_context_features,
+    add_support_resistance_features,
+)
 from src.features.regime_context import add_regime_context_features
 from src.features.session_context import add_session_context_features
 from src.features.technical.indicators import add_indicator_features
@@ -43,6 +48,7 @@ def test_registry_contains_phase12_extensions() -> None:
     assert "session_context" in FEATURE_REGISTRY
     assert "regime_context" in FEATURE_REGISTRY
     assert "shock_context" in FEATURE_REGISTRY
+    assert "support_resistance" in FEATURE_REGISTRY
     assert "feature_transforms" in FEATURE_REGISTRY
     assert "bollinger" in FEATURE_REGISTRY
     assert "macd" in FEATURE_REGISTRY
@@ -82,6 +88,46 @@ def test_apply_feature_steps_skips_disabled_steps() -> None:
     assert "close_logret" in out.columns
     assert "bb_percent_b_24_2.0" in out.columns
     assert "close_rsi_14" not in out.columns
+
+
+def test_apply_feature_steps_supports_outputs_renaming() -> None:
+    df = _synthetic_hourly_ohlcv(periods=72)
+    out = apply_feature_steps(
+        df,
+        [
+            {
+                "step": "returns",
+                "params": {"log": True, "col_name": "close_logret"},
+                "outputs": {"close_logret": "asset_logret_1h"},
+            }
+        ],
+    )
+
+    assert "close_logret" not in out.columns
+    assert "asset_logret_1h" in out.columns
+
+
+def test_apply_signal_step_supports_outputs_renaming() -> None:
+    idx = pd.date_range("2024-01-01", periods=3, freq="H")
+    df = pd.DataFrame({"pred_prob": [0.9, 0.5, 0.1]}, index=idx)
+
+    out = apply_signal_step(
+        df,
+        {
+            "kind": "probability_threshold",
+            "params": {
+                "prob_col": "pred_prob",
+                "signal_col": "signal_prob_threshold",
+                "upper": 0.55,
+                "lower": 0.45,
+                "mode": "long_short",
+            },
+            "outputs": {"signal_prob_threshold": "shock_reversion_signal"},
+        },
+    )
+
+    assert "signal_prob_threshold" not in out.columns
+    assert out["shock_reversion_signal"].tolist() == [1.0, 0.0, -1.0]
 
 
 def test_apply_signal_step_supports_signal_col_config() -> None:
@@ -1046,3 +1092,28 @@ def test_sarimax_forecaster_garch_overlay_emits_volatility_predictions() -> None
     assert meta["prediction_diagnostics"]["alignment_ok"] is True
     assert meta["prediction_diagnostics"]["non_oos_prediction_rows"] == 0
     assert meta["target_distribution"]["oos_target"]["rows"] > 0
+
+
+def test_support_resistance_emits_expected_columns() -> None:
+    df = _synthetic_hourly_ohlcv(periods=120, seed=17)
+    df = add_support_resistance_features(
+        df,
+        price_col="close",
+        high_col="high",
+        low_col="low",
+        windows=[24],
+        include_pct_distance=True,
+        include_atr_distance=True,
+    )
+
+    expected_cols = {
+        "support_24",
+        "resistance_24",
+        "support_distance_pct_24",
+        "resistance_distance_pct_24",
+        "support_distance_atr_24",
+        "resistance_distance_atr_24",
+    }
+    assert expected_cols.issubset(df.columns)
+    assert df["support_24"].notna().sum() > 0
+    assert df["resistance_24"].notna().sum() > 0

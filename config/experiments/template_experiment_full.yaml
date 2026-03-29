@@ -11,11 +11,16 @@
 # - `shock_context` emits event columns such as `shock_candidate` and
 #   `shock_side_contrarian`, plus optional post-shock gating columns such as
 #   `shock_side_contrarian_active` for contrarian mean-reversion research.
+# - Feature steps can optionally declare `outputs:` as a rename map from emitted
+#   columns to your preferred names.
 # - `probability_threshold` supports entry/exit hysteresis through
 #   `upper_exit/lower_exit` and optional gating with `base_signal_col`.
 # - Multi-stage training is available through top-level `model_stages:` and is mutually
 #   exclusive with `model:` / `models:`.
 # - Each `model_stages[]` entry supports `enabled: true|false` and `stage: 1,2,...`.
+# - Models and signals can optionally declare `outputs:` for runtime columns such as
+#   `pred_prob_col`, `pred_ret_col`, `label_col`, `fwd_col`, `candidate_out_col`,
+#   and `signal_col`.
 # - In `model_stages`, upstream stages should emit explicit stage-specific prediction columns
 #   such as `forecast_pred_ret` or `filter1_pred_prob` so later stages can reuse them safely.
 # - This template lists all currently supported feature-step families and the currently
@@ -157,6 +162,20 @@ features:
       atr_mult_threshold: 1.5
       distance_from_mean_threshold: 1.0
       post_shock_active_bars: 1
+
+  - step: support_resistance
+    enabled: false
+    outputs:
+      support_24: close_support_24
+      resistance_24: close_resistance_24
+    params:
+      price_col: close
+      high_col: high
+      low_col: low
+      windows: [24, 72]
+      atr_col: atr_24
+      include_pct_distance: true
+      include_atr_distance: true
 
   - step: adx
     enabled: true
@@ -655,6 +674,8 @@ signals_catalog:
 
   probability_threshold:
     enabled: true
+    outputs:
+      signal_col: signal_prob_threshold
     params:
       prob_col: pred_prob
       signal_col: signal_prob_threshold

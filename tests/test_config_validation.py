@@ -49,6 +49,49 @@ def test_validate_model_block_rejects_silent_integer_coercions(field_overrides: 
         validate_model_block(model)
 
 
+def test_validate_features_block_accepts_outputs_and_support_resistance() -> None:
+    validate_features_block(
+        [
+            {
+                "step": "support_resistance",
+                "outputs": {
+                    "support_24": "btc_support_24",
+                    "resistance_24": "btc_resistance_24",
+                },
+                "params": {
+                    "price_col": "close",
+                    "high_col": "high",
+                    "low_col": "low",
+                    "windows": [24],
+                    "include_pct_distance": True,
+                    "include_atr_distance": False,
+                },
+            }
+        ]
+    )
+
+
+def test_validate_model_and_signals_outputs_reject_unknown_keys() -> None:
+    with pytest.raises(ConfigValidationError, match="model.outputs.bad_key"):
+        validate_model_block(
+            {
+                "kind": "logistic_regression_clf",
+                "outputs": {"bad_key": "foo"},
+                "target": {"kind": "forward_return", "price_col": "close", "horizon": 1},
+                "split": {"method": "walk_forward", "train_size": 100, "test_size": 20},
+            }
+        )
+
+    with pytest.raises(ConfigValidationError, match="signals.outputs.bad_key"):
+        validate_signals_block(
+            {
+                "kind": "probability_threshold",
+                "outputs": {"bad_key": "signal_custom"},
+                "params": {"prob_col": "pred_prob", "upper": 0.55, "lower": 0.45},
+            }
+        )
+
+
 def test_validate_portfolio_block_rejects_invalid_nested_constraints() -> None:
     """
     Portfolio validation should fail early on malformed or infeasible nested constraint values.

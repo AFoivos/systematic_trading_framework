@@ -408,6 +408,108 @@ logging:
     assert "signals_catalog" not in cfg
 
 
+def test_load_experiment_config_normalizes_outputs_aliases(tmp_path: Path) -> None:
+    config_path = tmp_path / "outputs_aliases.yaml"
+    config_path.write_text(
+        """
+data:
+  source: dukascopy_csv
+  interval: 1h
+  start: "2024-01-01 00:00:00"
+  end: null
+  alignment: inner
+  symbol: BTCUSD
+  pit:
+    timestamp_alignment:
+      source_timezone: UTC
+      output_timezone: UTC
+      normalize_daily: false
+      duplicate_policy: last
+    corporate_actions:
+      policy: none
+      adj_close_col: adj_close
+    universe_snapshot:
+      inactive_policy: raise
+  storage:
+    mode: cached_only
+    dataset_id: outputs_alias_test
+    save_raw: false
+    save_processed: true
+    load_path: data/raw/dukas_copy_bank/btcusd_h1.csv
+    raw_dir: data/raw
+    processed_dir: data/processed
+features:
+  - step: returns
+    outputs:
+      close_logret: asset_logret_1h
+    params:
+      log: true
+      col_name: close_logret
+model:
+  kind: logistic_regression_clf
+  outputs:
+    pred_prob_col: stage2_prob
+    label_col: trend_label
+    fwd_col: trend_fwd_4h
+    candidate_out_col: meta_candidate
+  feature_cols: [asset_logret_1h]
+  target:
+    kind: triple_barrier
+    price_col: close
+    open_col: open
+    high_col: high
+    low_col: low
+    returns_col: asset_logret_1h
+    max_holding: 12
+    upper_mult: 1.5
+    lower_mult: 1.5
+    vol_window: 24
+    neutral_label: drop
+  split:
+    method: walk_forward
+    train_size: 100
+    test_size: 20
+    step_size: 20
+signals:
+  kind: probability_threshold
+  outputs:
+    signal_col: my_signal
+  params:
+    prob_col: stage2_prob
+    upper: 0.55
+    lower: 0.45
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+risk: {}
+backtest:
+  returns_col: asset_logret_1h
+  signal_col: my_signal
+  periods_per_year: 8760
+  returns_type: log
+  missing_return_policy: raise_if_exposed
+portfolio:
+  enabled: false
+logging:
+  enabled: false
+""",
+        encoding="utf-8",
+    )
+
+    cfg = load_experiment_config(config_path)
+
+    assert cfg["model"]["outputs"]["pred_prob_col"] == "stage2_prob"
+    assert cfg["model"]["pred_prob_col"] == "stage2_prob"
+    assert cfg["model"]["target"]["label_col"] == "trend_label"
+    assert cfg["model"]["target"]["fwd_col"] == "trend_fwd_4h"
+    assert cfg["model"]["target"]["candidate_out_col"] == "meta_candidate"
+    assert cfg["signals"]["outputs"]["signal_col"] == "my_signal"
+    assert cfg["signals"]["params"]["signal_col"] == "my_signal"
+
+
 def test_load_experiment_config_rejects_multiple_enabled_model_catalog_entries(tmp_path: Path) -> None:
     config_path = tmp_path / "bad_catalog.yaml"
     config_path.write_text(

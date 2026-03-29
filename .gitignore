@@ -223,5 +223,5 @@ plots/
 output/
 notebooks/
 logs/
-data/
+processed/
 /pdfs/

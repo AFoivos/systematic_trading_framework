@@ -104,8 +104,8 @@ model_stages:
     stage: 1
     kind: lstm_forecaster
     params:
-      lookback: 48
-      hidden_dim: 32
+      lookback: 24
+      hidden_dim: 16
       num_layers: 2
       dropout: 0.1
       epochs: 8

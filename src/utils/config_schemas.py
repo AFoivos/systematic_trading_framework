@@ -12,21 +12,28 @@ def _extras(data: dict[str, Any], known: set[str]) -> dict[str, Any]:
 class FeatureStep:
     step: str
     params: dict[str, Any] = field(default_factory=dict)
+    outputs: dict[str, str] = field(default_factory=dict)
     enabled: bool = True
     extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "FeatureStep":
-        known = {"step", "params", "enabled"}
+        known = {"step", "params", "outputs", "enabled"}
         return cls(
             step=str(data["step"]),
             params=dict(data.get("params", {}) or {}),
+            outputs={str(k): str(v) for k, v in dict(data.get("outputs", {}) or {}).items()},
             enabled=bool(data.get("enabled", True)),
             extra=_extras(data, known),
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {"step": self.step, "params": dict(self.params), "enabled": self.enabled} | dict(self.extra)
+        return {
+            "step": self.step,
+            "params": dict(self.params),
+            "outputs": dict(self.outputs),
+            "enabled": self.enabled,
+        } | dict(self.extra)
 
 
 @dataclass(frozen=True)
@@ -95,6 +102,7 @@ class DataConfig:
 class ModelConfig:
     kind: str
     params: dict[str, Any] = field(default_factory=dict)
+    outputs: dict[str, str] = field(default_factory=dict)
     preprocessing: dict[str, Any] = field(default_factory=dict)
     feature_cols: list[str] | None = None
     target: dict[str, Any] = field(default_factory=dict)
@@ -114,6 +122,7 @@ class ModelConfig:
         known = {
             "kind",
             "params",
+            "outputs",
             "preprocessing",
             "feature_cols",
             "target",
@@ -133,6 +142,7 @@ class ModelConfig:
         return cls(
             kind=str(data.get("kind", "none")),
             params=dict(data.get("params", {}) or {}),
+            outputs={str(k): str(v) for k, v in dict(data.get("outputs", {}) or {}).items()},
             preprocessing=dict(data.get("preprocessing", {}) or {}),
             feature_cols=[str(v) for v in feature_cols_raw] if feature_cols_raw is not None else None,
             target=dict(data.get("target", {}) or {}),
@@ -152,6 +162,7 @@ class ModelConfig:
         payload = {
             "kind": self.kind,
             "params": dict(self.params),
+            "outputs": dict(self.outputs),
             "preprocessing": dict(self.preprocessing),
             "feature_cols": list(self.feature_cols) if self.feature_cols is not None else None,
             "target": dict(self.target),
@@ -175,6 +186,7 @@ class ModelStageConfig:
     enabled: bool = True
     stage: int = 1
     params: dict[str, Any] = field(default_factory=dict)
+    outputs: dict[str, str] = field(default_factory=dict)
     preprocessing: dict[str, Any] = field(default_factory=dict)
     feature_cols: list[str] | None = None
     target: dict[str, Any] = field(default_factory=dict)
@@ -197,6 +209,7 @@ class ModelStageConfig:
             "stage",
             "kind",
             "params",
+            "outputs",
             "preprocessing",
             "feature_cols",
             "target",
@@ -219,6 +232,7 @@ class ModelStageConfig:
             stage=int(data.get("stage", 1)),
             kind=str(data.get("kind", "none")),
             params=dict(data.get("params", {}) or {}),
+            outputs={str(k): str(v) for k, v in dict(data.get("outputs", {}) or {}).items()},
             preprocessing=dict(data.get("preprocessing", {}) or {}),
             feature_cols=[str(v) for v in feature_cols_raw] if feature_cols_raw is not None else None,
             target=dict(data.get("target", {}) or {}),
@@ -241,6 +255,7 @@ class ModelStageConfig:
             "stage": self.stage,
             "kind": self.kind,
             "params": dict(self.params),
+            "outputs": dict(self.outputs),
             "preprocessing": dict(self.preprocessing),
             "feature_cols": list(self.feature_cols) if self.feature_cols is not None else None,
             "target": dict(self.target),
@@ -261,19 +276,25 @@ class ModelStageConfig:
 class SignalsConfig:
     kind: str
     params: dict[str, Any] = field(default_factory=dict)
+    outputs: dict[str, str] = field(default_factory=dict)
     extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "SignalsConfig":
-        known = {"kind", "params"}
+        known = {"kind", "params", "outputs"}
         return cls(
             kind=str(data.get("kind", "none")),
             params=dict(data.get("params", {}) or {}),
+            outputs={str(k): str(v) for k, v in dict(data.get("outputs", {}) or {}).items()},
             extra=_extras(data, known),
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {"kind": self.kind, "params": dict(self.params)} | dict(self.extra)
+        return {
+            "kind": self.kind,
+            "params": dict(self.params),
+            "outputs": dict(self.outputs),
+        } | dict(self.extra)
 
 
 @dataclass(frozen=True)

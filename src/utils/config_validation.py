@@ -95,6 +95,29 @@ def _non_negative_int(value: Any, *, field: str) -> int:
     return value
 
 
+def _validate_string_mapping(
+    value: Any,
+    *,
+    field: str,
+    allowed_keys: set[str] | None = None,
+) -> dict[str, str]:
+    if value in (None, {}):
+        return {}
+    if not isinstance(value, dict):
+        raise ConfigValidationError(f"{field} must be a mapping when provided.")
+    out: dict[str, str] = {}
+    for key, raw_value in value.items():
+        if not isinstance(key, str) or not key.strip():
+            raise ConfigValidationError(f"{field} keys must be non-empty strings.")
+        if allowed_keys is not None and key not in allowed_keys:
+            allowed_display = ", ".join(sorted(allowed_keys))
+            raise ConfigValidationError(f"{field}.{key} is not supported. Allowed keys: {allowed_display}.")
+        if not isinstance(raw_value, str) or not raw_value.strip():
+            raise ConfigValidationError(f"{field}.{key} must be a non-empty string.")
+        out[key] = raw_value
+    return out
+
+
 def validate_runtime_block(runtime_cfg: dict[str, Any]) -> dict[str, Any]:
     try:
         return validate_runtime_config(runtime_cfg)
@@ -248,6 +271,7 @@ def validate_features_block(features: Any) -> None:
             raise ConfigValidationError(f"Unknown feature step: {step['step']}")
         if "params" in step and step["params"] is not None and not isinstance(step["params"], dict):
             raise ConfigValidationError("features[].params must be a mapping when provided.")
+        _validate_string_mapping(step.get("outputs"), field="features[].outputs")
         if step["step"] == "feature_transforms":
             params = step.get("params") or {}
             transforms = params.get("transforms")
@@ -327,6 +351,22 @@ def validate_features_block(features: Any) -> None:
                         raise ConfigValidationError(f"features[].params.{key} must be > 0.")
             if "use_log_returns" in params and not isinstance(params["use_log_returns"], bool):
                 raise ConfigValidationError("features[].params.use_log_returns must be boolean.")
+        if step["step"] == "support_resistance":
+            params = step.get("params") or {}
+            for key in ("price_col", "high_col", "low_col", "atr_col"):
+                if key in params and params[key] is not None and not isinstance(params[key], str):
+                    raise ConfigValidationError(f"features[].params.{key} must be a string when provided.")
+            windows = params.get("windows")
+            if windows is not None:
+                if not isinstance(windows, (list, tuple)) or not windows:
+                    raise ConfigValidationError("features[].params.windows must be a non-empty list of integers.")
+                for idx, window in enumerate(windows):
+                    _positive_int(window, field=f"features[].params.windows[{idx}]")
+            if "atr_window" in params and params["atr_window"] is not None:
+                _positive_int(params["atr_window"], field="features[].params.atr_window")
+            for key in ("include_pct_distance", "include_atr_distance"):
+                if key in params and not isinstance(params[key], bool):
+                    raise ConfigValidationError(f"features[].params.{key} must be boolean.")
 
 
 def validate_model_block(model: dict[str, Any]) -> None:
@@ -336,6 +376,20 @@ def validate_model_block(model: dict[str, Any]) -> None:
         raise ConfigValidationError("model.kind must be a string.")
     if model["kind"] != "none" and model["kind"] not in MODEL_REGISTRY:
         raise ConfigValidationError(f"Unknown model kind: {model['kind']}")
+    _validate_string_mapping(
+        model.get("outputs"),
+        field="model.outputs",
+        allowed_keys={
+            "pred_prob_col",
+            "pred_ret_col",
+            "returns_input_col",
+            "signal_col",
+            "action_col",
+            "label_col",
+            "fwd_col",
+            "candidate_out_col",
+        },
+    )
 
     if model["kind"] != "none":
         feature_cols = model.get("feature_cols")
@@ -815,6 +869,11 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
     params = signals.get("params", {}) or {}
     if not isinstance(params, dict):
         raise ConfigValidationError("signals.params must be a mapping when provided.")
+    _validate_string_mapping(
+        signals.get("outputs"),
+        field="signals.outputs",
+        allowed_keys={"signal_col"},
+    )
     if "signal_name" in params:
         raise ConfigValidationError("signals.params.signal_name is no longer supported; use signals.params.signal_col.")
     if "signal_col" in params and params["signal_col"] is not None and not isinstance(params["signal_col"], str):

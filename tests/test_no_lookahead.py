@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from src.experiments.orchestration.model_stage import apply_model_pipeline_to_assets
-from src.features import add_close_returns, add_shock_context_features
+from src.features import add_close_returns, add_shock_context_features, add_support_resistance_features
 from src.models.classification import _apply_fold_feature_preprocessing
 from src.experiments.models import train_logistic_regression_classifier
 
@@ -302,6 +302,47 @@ def test_shock_context_is_point_in_time_safe() -> None:
         "shock_active_window",
         "shock_strength",
         "bars_since_shock",
+    ]
+    pd.testing.assert_frame_equal(
+        baseline.loc[: idx[69], check_cols],
+        future_changed.loc[: idx[69], check_cols],
+        check_dtype=False,
+    )
+
+
+def test_support_resistance_is_point_in_time_safe() -> None:
+    rng = np.random.default_rng(9)
+    idx = pd.date_range("2024-01-01", periods=96, freq="h")
+    logrets = rng.normal(0.0, 0.002, size=len(idx))
+    close = 100.0 * np.exp(np.cumsum(logrets))
+    df = pd.DataFrame({"close": close}, index=idx)
+    df["open"] = df["close"].shift(1).fillna(df["close"].iloc[0])
+    intrabar = np.abs(rng.normal(0.003, 0.0005, size=len(idx)))
+    df["high"] = np.maximum(df["open"], df["close"]) * (1.0 + intrabar)
+    df["low"] = np.minimum(df["open"], df["close"]) * (1.0 - intrabar)
+
+    baseline = add_support_resistance_features(df, windows=[24], include_pct_distance=True, include_atr_distance=True)
+
+    modified = df.copy()
+    modified.loc[idx[70]:, "close"] = modified.loc[idx[70]:, "close"] * 1.20
+    modified.loc[idx[70]:, "open"] = modified.loc[idx[70]:, "close"].shift(1).fillna(modified.loc[idx[70], "close"])
+    modified.loc[idx[70]:, "high"] = np.maximum(modified.loc[idx[70]:, "open"], modified.loc[idx[70]:, "close"]) * 1.01
+    modified.loc[idx[70]:, "low"] = np.minimum(modified.loc[idx[70]:, "open"], modified.loc[idx[70]:, "close"]) * 0.99
+
+    future_changed = add_support_resistance_features(
+        modified,
+        windows=[24],
+        include_pct_distance=True,
+        include_atr_distance=True,
+    )
+
+    check_cols = [
+        "support_24",
+        "resistance_24",
+        "support_distance_pct_24",
+        "resistance_distance_pct_24",
+        "support_distance_atr_24",
+        "resistance_distance_atr_24",
     ]
     pd.testing.assert_frame_equal(
         baseline.loc[: idx[69], check_cols],

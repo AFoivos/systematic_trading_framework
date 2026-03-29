@@ -19,6 +19,7 @@ from src.features import (
     add_regime_context_features,
     add_return_momentum_features,
     add_shock_context_features,
+    add_support_resistance_features,
     add_roc_features,
     add_rsi_features,
     add_session_context_features,
@@ -85,6 +86,7 @@ FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
     "session_context": add_session_context_features,
     "regime_context": add_regime_context_features,
     "shock_context": add_shock_context_features,
+    "support_resistance": add_support_resistance_features,
     "macro_context": add_macro_context_features,
     "feature_transforms": add_feature_transforms,
 }

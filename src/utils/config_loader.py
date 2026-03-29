@@ -91,6 +91,72 @@ def _resolve_enabled_catalog_entry(
     return out
 
 
+def _normalize_named_outputs(outputs: Any, *, owner: str, allowed: set[str]) -> dict[str, str]:
+    if outputs in (None, {}):
+        return {}
+    if not isinstance(outputs, dict):
+        raise ConfigPathError(f"'{owner}.outputs' must be a mapping when provided.")
+    normalized: dict[str, str] = {}
+    for key, value in outputs.items():
+        if not isinstance(key, str) or not key.strip():
+            raise ConfigPathError(f"'{owner}.outputs' keys must be non-empty strings.")
+        if key not in allowed:
+            allowed_display = ", ".join(sorted(allowed))
+            raise ConfigPathError(f"'{owner}.outputs.{key}' is not supported. Allowed keys: {allowed_display}.")
+        if not isinstance(value, str) or not value.strip():
+            raise ConfigPathError(f"'{owner}.outputs.{key}' must be a non-empty string.")
+        normalized[key] = value
+    return normalized
+
+
+def _apply_model_outputs_aliases(model: Any, *, owner: str) -> dict[str, Any]:
+    if model in (None, {}):
+        return {} if model in ({}, None) else dict(model)
+    if not isinstance(model, dict):
+        raise ConfigPathError(f"'{owner}' must be a mapping.")
+
+    out = dict(model)
+    outputs = _normalize_named_outputs(
+        out.get("outputs"),
+        owner=owner,
+        allowed={
+            "pred_prob_col",
+            "pred_ret_col",
+            "returns_input_col",
+            "signal_col",
+            "action_col",
+            "label_col",
+            "fwd_col",
+            "candidate_out_col",
+        },
+    )
+    target = dict(out.get("target", {}) or {})
+    for field in ("pred_prob_col", "pred_ret_col", "returns_input_col", "signal_col", "action_col"):
+        if field in outputs and out.get(field) in (None, ""):
+            out[field] = outputs[field]
+    for field in ("label_col", "fwd_col", "candidate_out_col"):
+        if field in outputs and target.get(field) in (None, ""):
+            target[field] = outputs[field]
+    if target:
+        out["target"] = target
+    return out
+
+
+def _apply_signals_outputs_aliases(signals: Any) -> dict[str, Any]:
+    if signals in (None, {}):
+        return {} if signals in ({}, None) else dict(signals)
+    if not isinstance(signals, dict):
+        raise ConfigPathError("'signals' must be a mapping.")
+    out = dict(signals)
+    outputs = _normalize_named_outputs(out.get("outputs"), owner="signals", allowed={"signal_col"})
+    if outputs:
+        params = dict(out.get("params", {}) or {})
+        if params.get("signal_col") in (None, ""):
+            params["signal_col"] = outputs["signal_col"]
+        out["params"] = params
+    return out
+
+
 def load_resolved_config(path: Path) -> dict[str, Any]:
     """
     Load a self-contained experiment config and reject legacy inheritance.
@@ -110,6 +176,17 @@ def load_resolved_config(path: Path) -> dict[str, Any]:
         )
     cfg = _resolve_enabled_catalog_entry(cfg, catalog_key="models", output_key="model")
     cfg = _resolve_enabled_catalog_entry(cfg, catalog_key="signals_catalog", output_key="signals")
+    if cfg.get("model") not in (None, {}):
+        cfg["model"] = _apply_model_outputs_aliases(cfg["model"], owner="model")
+    if cfg.get("model_stages") not in (None, []):
+        if not isinstance(cfg["model_stages"], list):
+            raise ConfigPathError("'model_stages' must be a list when provided.")
+        cfg["model_stages"] = [
+            _apply_model_outputs_aliases(stage, owner=f"model_stages[{idx}]")
+            for idx, stage in enumerate(cfg["model_stages"])
+        ]
+    if cfg.get("signals") not in (None, {}):
+        cfg["signals"] = _apply_signals_outputs_aliases(cfg["signals"])
     cfg["config_path"] = str(path)
     return cfg
 
