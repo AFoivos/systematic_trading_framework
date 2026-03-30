@@ -4,6 +4,7 @@ from .shock_context import add_shock_context_features
 from .session_context import add_session_context_features
 from .macro import add_macro_context_features
 from .support_resistance import add_support_resistance_features
+from .support_resistance_v2 import add_support_resistance_v2_features
 from .volatility import (
     compute_rolling_vol,
     compute_ewma_vol,
@@ -43,6 +44,7 @@ __all__ = [
     "add_session_context_features",
     "add_macro_context_features",
     "add_support_resistance_features",
+    "add_support_resistance_v2_features",
     "compute_rolling_vol",
     "compute_ewma_vol",
     "add_volatility_features",

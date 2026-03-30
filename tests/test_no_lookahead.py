@@ -4,7 +4,12 @@ import numpy as np
 import pandas as pd
 
 from src.experiments.orchestration.model_stage import apply_model_pipeline_to_assets
-from src.features import add_close_returns, add_shock_context_features, add_support_resistance_features
+from src.features import (
+    add_close_returns,
+    add_shock_context_features,
+    add_support_resistance_features,
+    add_support_resistance_v2_features,
+)
 from src.models.classification import _apply_fold_feature_preprocessing
 from src.experiments.models import train_logistic_regression_classifier
 
@@ -347,5 +352,55 @@ def test_support_resistance_is_point_in_time_safe() -> None:
     pd.testing.assert_frame_equal(
         baseline.loc[: idx[69], check_cols],
         future_changed.loc[: idx[69], check_cols],
+        check_dtype=False,
+    )
+
+
+def test_support_resistance_v2_is_point_in_time_safe() -> None:
+    rng = np.random.default_rng(19)
+    idx = pd.date_range("2024-01-01", periods=140, freq="h")
+    logrets = rng.normal(0.0, 0.002, size=len(idx))
+    close = 100.0 * np.exp(np.cumsum(logrets))
+    df = pd.DataFrame({"close": close}, index=idx)
+    df["open"] = df["close"].shift(1).fillna(df["close"].iloc[0])
+    intrabar = np.abs(rng.normal(0.003, 0.0005, size=len(idx)))
+    df["high"] = np.maximum(df["open"], df["close"]) * (1.0 + intrabar)
+    df["low"] = np.minimum(df["open"], df["close"]) * (1.0 - intrabar)
+
+    baseline = add_support_resistance_v2_features(
+        df,
+        pivot_left_window=24,
+        pivot_confirm_bars=6,
+    )
+
+    modified = df.copy()
+    modified.loc[idx[100]:, "close"] = modified.loc[idx[100]:, "close"] * 1.25
+    modified.loc[idx[100]:, "open"] = modified.loc[idx[100]:, "close"].shift(1).fillna(modified.loc[idx[100], "close"])
+    modified.loc[idx[100]:, "high"] = np.maximum(modified.loc[idx[100]:, "open"], modified.loc[idx[100]:, "close"]) * 1.01
+    modified.loc[idx[100]:, "low"] = np.minimum(modified.loc[idx[100]:, "open"], modified.loc[idx[100]:, "close"]) * 0.99
+
+    future_changed = add_support_resistance_v2_features(
+        modified,
+        pivot_left_window=24,
+        pivot_confirm_bars=6,
+    )
+
+    check_cols = [
+        "pivot_high_confirmed",
+        "pivot_low_confirmed",
+        "sr_v2_resistance_level",
+        "sr_v2_support_level",
+        "sr_v2_resistance_touch_count",
+        "sr_v2_support_touch_count",
+        "sr_v2_resistance_age",
+        "sr_v2_support_age",
+        "sr_v2_breakout_up",
+        "sr_v2_breakout_down",
+        "sr_v2_retest_resistance",
+        "sr_v2_retest_support",
+    ]
+    pd.testing.assert_frame_equal(
+        baseline.loc[: idx[99], check_cols],
+        future_changed.loc[: idx[99], check_cols],
         check_dtype=False,
     )

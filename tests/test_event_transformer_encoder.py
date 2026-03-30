@@ -296,3 +296,102 @@ print(json.dumps(payload))
     assert payload["encoder_alignment_ok"] is True
     assert payload["forecast_alignment_ok"] is True
     assert payload["decision_alignment_ok"] is True
+
+
+def test_event_transformer_encoder_strict_determinism_fails_fast_when_unavailable(
+) -> None:
+    if not _torch_available_in_subprocess():
+        pytest.skip("torch is unavailable or unstable in this environment.")
+
+    script = """
+import numpy as np
+import pandas as pd
+import torch
+from src.features import add_close_returns, add_shock_context_features
+from src.models.event_transformer import train_event_transformer_encoder
+
+rng = np.random.default_rng(19)
+periods = 160
+idx = pd.date_range("2024-01-01", periods=periods, freq="h")
+returns = rng.normal(0.0, 0.0016, size=periods)
+shock_positions = np.arange(48, periods - 24, 36)
+for pos in shock_positions:
+    returns[pos] += 0.025 if (pos // 36) % 2 == 0 else -0.025
+    if pos + 1 < periods:
+        returns[pos + 1] += -0.008 if returns[pos] > 0 else 0.008
+close = 100.0 * np.exp(np.cumsum(returns))
+df = pd.DataFrame(index=idx)
+df["close"] = close
+df["open"] = df["close"].shift(1).fillna(df["close"].iloc[0] * 0.999)
+intrabar = np.abs(rng.normal(0.0014, 0.0003, size=periods))
+df["high"] = np.maximum(df["open"], df["close"]) * (1.0 + intrabar)
+df["low"] = np.minimum(df["open"], df["close"]) * (1.0 - intrabar)
+df["volume"] = 10_000.0 + rng.integers(0, 250, size=periods)
+df = add_close_returns(df, log=True, col_name="close_logret")
+df = add_shock_context_features(
+    df,
+    returns_col="close_logret",
+    ema_window=24,
+    atr_window=24,
+    short_horizon=1,
+    medium_horizon=4,
+    vol_window=24,
+    ret_z_threshold=2.1,
+    atr_mult_threshold=1.2,
+    distance_from_mean_threshold=0.8,
+    post_shock_active_bars=3,
+)
+
+def raise_det_error(flag):
+    raise RuntimeError("deterministic algorithms unavailable")
+
+torch.use_deterministic_algorithms = raise_det_error
+
+train_event_transformer_encoder(
+    df,
+    {
+        "kind": "event_transformer_encoder",
+        "feature_cols": ["close_logret", "shock_strength", "shock_ret_z_1h"],
+        "runtime": {"seed": 7, "deterministic": True, "threads": 1, "repro_mode": "strict"},
+        "target": {
+            "kind": "triple_barrier",
+            "price_col": "close",
+            "open_col": "open",
+            "high_col": "high",
+            "low_col": "low",
+            "returns_col": "close_logret",
+            "max_holding": 6,
+            "upper_mult": 1.1,
+            "lower_mult": 1.1,
+            "vol_window": 24,
+            "neutral_label": "drop",
+            "side_col": "shock_side_contrarian",
+            "candidate_col": "shock_candidate",
+            "candidate_out_col": "encoder_candidate",
+        },
+        "split": {"method": "walk_forward", "train_size": 96, "test_size": 24, "step_size": 24},
+        "params": {
+            "lookback": 12,
+            "hidden_dim": 8,
+            "num_heads": 2,
+            "num_layers": 1,
+            "dropout": 0.0,
+            "epochs": 1,
+            "batch_size": 8,
+            "learning_rate": 0.001,
+            "embedding_dim": 4,
+            "embedding_prefix": "evt_emb",
+            "min_train_samples": 8,
+        },
+    },
+    returns_col="close_logret",
+)
+"""
+    proc = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode != 0
+    assert "deterministic=True was requested" in (proc.stderr or proc.stdout)

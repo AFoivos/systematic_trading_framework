@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import fcntl
 import json
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -12,6 +11,11 @@ import pandas as pd
 
 from src.utils.paths import PROJECT_ROOT, enforce_safe_absolute_path
 from src.utils.run_metadata import compute_dataframe_fingerprint, file_sha256
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows fallback
+    fcntl = None
 
 _REQUIRED_OHLC_COLUMNS = ("open", "high", "low", "close")
 
@@ -60,11 +64,46 @@ def _snapshot_lock(snapshot_dir: Path):
     """
     lock_path = snapshot_dir / ".snapshot.lock"
     with lock_path.open("w", encoding="utf-8") as handle:
+        if fcntl is None:
+            yield
+            return
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
         try:
             yield
         finally:
             fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+def _filter_asset_frames(
+    asset_frames: dict[str, pd.DataFrame],
+    *,
+    requested_assets: list[str] | None,
+    start: str | None,
+    end: str | None,
+) -> dict[str, pd.DataFrame]:
+    out = dict(asset_frames)
+    if requested_assets:
+        missing_assets = [asset for asset in requested_assets if asset not in out]
+        if missing_assets:
+            raise ValueError(f"Dataset snapshot is missing requested assets: {missing_assets}.")
+        out = {str(asset): out[str(asset)] for asset in requested_assets}
+
+    start_ts = _coerce_time_boundary(start)
+    end_ts = _coerce_time_boundary(end)
+    filtered: dict[str, pd.DataFrame] = {}
+    for asset, asset_frame in sorted(out.items()):
+        cur = asset_frame
+        if start_ts is not None:
+            cur = cur.loc[cur.index >= start_ts]
+        if end_ts is not None:
+            cur = cur.loc[cur.index < end_ts]
+        if cur.empty:
+            raise ValueError(
+                f"Dataset snapshot has no rows left for asset '{asset}' "
+                f"after applying start={start!r}, end={end!r}."
+            )
+        filtered[str(asset)] = cur
+    return filtered
 
 
 def asset_frames_to_long_frame(asset_frames: Mapping[str, pd.DataFrame]) -> pd.DataFrame:
@@ -424,6 +463,13 @@ def load_dataset_snapshot(
     else:
         frame = pd.read_csv(data_path)
         asset_frames = long_frame_to_asset_frames(frame)
+
+    asset_frames = _filter_asset_frames(
+        asset_frames,
+        requested_assets=requested_assets,
+        start=start,
+        end=end,
+    )
 
     expected_data_sha256 = metadata.get("data_sha256")
     if expected_data_sha256 is not None:

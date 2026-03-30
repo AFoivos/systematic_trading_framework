@@ -10,7 +10,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.utils.config import load_experiment_config
+from src.models.runtime import probe_lightgbm_runtime, probe_xgboost_runtime
+from src.utils.config import ConfigError, load_experiment_config
 from src.utils.repro import (
     RuntimeConfigError,
     apply_runtime_reproducibility,
@@ -20,7 +21,7 @@ from src.utils.repro import (
 from src.utils.run_metadata import build_artifact_manifest, compute_config_hash, compute_dataframe_fingerprint
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-TRACKED_CONFIG = "experiments/btcusd_1h_dukas_lightgbm_triple_barrier_garch_long_oos.yaml"
+TRACKED_CONFIG = "experiments/btcusd_1h_dukas_xgboost_triple_barrier_garch_long_oos.yaml"
 
 
 def test_runtime_defaults_are_loaded_from_config() -> None:
@@ -173,3 +174,27 @@ def test_artifact_manifest_contains_file_hashes(tmp_path) -> None:
     assert "not_a_file" not in files
     assert files["a"]["bytes"] == 5
     assert len(files["a"]["sha256"]) == 64
+
+
+def test_load_experiment_config_wraps_missing_path_as_config_error() -> None:
+    with pytest.raises(ConfigError) as exc_info:
+        load_experiment_config("experiments/does_not_exist.yaml")
+
+    assert "Config file not found" in str(exc_info.value)
+
+
+def test_runtime_probes_report_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _raise_timeout(*args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd="python -c probe", timeout=30)
+
+    monkeypatch.setattr(subprocess, "run", _raise_timeout)
+    probe_lightgbm_runtime.cache_clear()
+    probe_xgboost_runtime.cache_clear()
+
+    available_lgbm, detail_lgbm = probe_lightgbm_runtime()
+    available_xgb, detail_xgb = probe_xgboost_runtime()
+
+    assert available_lgbm is False
+    assert available_xgb is False
+    assert "timed out" in str(detail_lgbm)
+    assert "timed out" in str(detail_xgb)

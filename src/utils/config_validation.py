@@ -367,6 +367,19 @@ def validate_features_block(features: Any) -> None:
             for key in ("include_pct_distance", "include_atr_distance"):
                 if key in params and not isinstance(params[key], bool):
                     raise ConfigValidationError(f"features[].params.{key} must be boolean.")
+        if step["step"] == "support_resistance_v2":
+            params = step.get("params") or {}
+            for key in ("price_col", "high_col", "low_col", "atr_col"):
+                if key in params and params[key] is not None and not isinstance(params[key], str):
+                    raise ConfigValidationError(f"features[].params.{key} must be a string when provided.")
+            for key in ("atr_window", "pivot_left_window", "pivot_confirm_bars"):
+                if key in params and params[key] is not None:
+                    _positive_int(params[key], field=f"features[].params.{key}")
+            for key in ("touch_tolerance_atr", "breakout_tolerance_atr"):
+                if key in params and params[key] is not None:
+                    value = _finite_number(params[key], field=f"features[].params.{key}")
+                    if value < 0.0:
+                        raise ConfigValidationError(f"features[].params.{key} must be >= 0.")
 
 
 def validate_model_block(model: dict[str, Any]) -> None:

@@ -18,6 +18,7 @@ from src.features import (
     add_feature_transforms,
     add_shock_context_features,
     add_support_resistance_features,
+    add_support_resistance_v2_features,
 )
 from src.features.regime_context import add_regime_context_features
 from src.features.session_context import add_session_context_features
@@ -49,6 +50,7 @@ def test_registry_contains_phase12_extensions() -> None:
     assert "regime_context" in FEATURE_REGISTRY
     assert "shock_context" in FEATURE_REGISTRY
     assert "support_resistance" in FEATURE_REGISTRY
+    assert "support_resistance_v2" in FEATURE_REGISTRY
     assert "feature_transforms" in FEATURE_REGISTRY
     assert "bollinger" in FEATURE_REGISTRY
     assert "macd" in FEATURE_REGISTRY
@@ -1117,3 +1119,35 @@ def test_support_resistance_emits_expected_columns() -> None:
     assert expected_cols.issubset(df.columns)
     assert df["support_24"].notna().sum() > 0
     assert df["resistance_24"].notna().sum() > 0
+
+
+def test_support_resistance_v2_emits_expected_columns() -> None:
+    df = _synthetic_hourly_ohlcv(periods=160, seed=23)
+    df = add_support_resistance_v2_features(
+        df,
+        price_col="close",
+        high_col="high",
+        low_col="low",
+        pivot_left_window=24,
+        pivot_confirm_bars=6,
+    )
+
+    expected_cols = {
+        "pivot_high_confirmed",
+        "pivot_low_confirmed",
+        "sr_v2_resistance_level",
+        "sr_v2_support_level",
+        "sr_v2_resistance_touch_count",
+        "sr_v2_support_touch_count",
+        "sr_v2_resistance_age",
+        "sr_v2_support_age",
+        "sr_v2_breakout_up",
+        "sr_v2_breakout_down",
+        "sr_v2_retest_resistance",
+        "sr_v2_retest_support",
+        "sr_v2_support_distance_atr",
+        "sr_v2_resistance_distance_atr",
+    }
+    assert expected_cols.issubset(df.columns)
+    assert df["sr_v2_resistance_level"].notna().sum() > 0
+    assert df["sr_v2_support_level"].notna().sum() > 0

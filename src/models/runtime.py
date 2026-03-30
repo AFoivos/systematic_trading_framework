@@ -30,13 +30,17 @@ model.fit(X, y)
 print("ok")
 """
     env = os.environ.copy()
-    proc = subprocess.run(
-        [sys.executable, "-c", code],
-        capture_output=True,
-        text=True,
-        check=False,
-        env=env,
-    )
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        return False, "child process probe timed out after 30s"
     if proc.returncode == 0:
         return True, None
     stderr = (proc.stderr or "").strip()
@@ -73,13 +77,17 @@ model.fit(X, y)
 print("ok")
 """
     env = os.environ.copy()
-    proc = subprocess.run(
-        [sys.executable, "-c", code],
-        capture_output=True,
-        text=True,
-        check=False,
-        env=env,
-    )
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        return False, "child process probe timed out after 30s"
     if proc.returncode == 0:
         return True, None
     stderr = (proc.stderr or "").strip()

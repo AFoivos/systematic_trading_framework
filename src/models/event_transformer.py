@@ -148,8 +148,11 @@ def train_event_transformer_encoder(
     if deterministic:
         try:
             torch.use_deterministic_algorithms(True)
-        except Exception:
-            pass
+        except Exception as exc:
+            if str(runtime_meta.get("repro_mode", "strict")) == "strict":
+                raise RuntimeError(
+                    "deterministic=True was requested but PyTorch deterministic mode could not be enabled."
+                ) from exc
         if hasattr(torch.backends, "cudnn"):
             torch.backends.cudnn.deterministic = True
             torch.backends.cudnn.benchmark = False

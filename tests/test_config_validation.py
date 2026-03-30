@@ -71,6 +71,25 @@ def test_validate_features_block_accepts_outputs_and_support_resistance() -> Non
     )
 
 
+def test_validate_features_block_accepts_support_resistance_v2() -> None:
+    validate_features_block(
+        [
+            {
+                "step": "support_resistance_v2",
+                "params": {
+                    "price_col": "close",
+                    "high_col": "high",
+                    "low_col": "low",
+                    "pivot_left_window": 24,
+                    "pivot_confirm_bars": 6,
+                    "touch_tolerance_atr": 0.25,
+                    "breakout_tolerance_atr": 0.05,
+                },
+            }
+        ]
+    )
+
+
 def test_validate_model_and_signals_outputs_reject_unknown_keys() -> None:
     with pytest.raises(ConfigValidationError, match="model.outputs.bad_key"):
         validate_model_block(

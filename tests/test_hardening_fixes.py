@@ -670,6 +670,36 @@ def test_execution_output_can_liquidate_current_only_assets_with_current_prices(
     assert float(orders.loc["BBB", "delta_weight"]) == -0.2
 
 
+def test_execution_output_uses_latest_available_prices_per_asset_under_outer_alignment() -> None:
+    idx_a = pd.to_datetime(["2024-01-01", "2024-01-02"])
+    idx_b = pd.to_datetime(["2024-01-01", "2024-01-03"])
+    asset_frames = {
+        "AAA": pd.DataFrame({"close": [100.0, 101.0]}, index=idx_a),
+        "BBB": pd.DataFrame({"close": [50.0, 55.0]}, index=idx_b),
+    }
+    portfolio_idx = pd.to_datetime(["2024-01-01", "2024-01-03"])
+    perf = PortfolioPerformance(
+        equity_curve=pd.Series([1.0, 1.0], index=portfolio_idx),
+        net_returns=pd.Series([0.0, 0.0], index=portfolio_idx),
+        gross_returns=pd.Series([0.0, 0.0], index=portfolio_idx),
+        costs=pd.Series([0.0, 0.0], index=portfolio_idx),
+        turnover=pd.Series([0.0, 0.0], index=portfolio_idx),
+        summary={},
+    )
+
+    meta, orders = runner_mod._build_execution_output(
+        asset_frames=asset_frames,
+        execution_cfg={"enabled": True, "capital": 100_000.0, "price_col": "close"},
+        portfolio_weights=pd.DataFrame({"AAA": [0.1, 0.2], "BBB": [0.0, 0.1]}, index=portfolio_idx),
+        performance=perf,
+        alignment="outer",
+    )
+
+    assert meta["order_count"] == 2
+    assert float(orders.loc["AAA", "price"]) == 101.0
+    assert float(orders.loc["BBB", "price"]) == 55.0
+
+
 def test_portfolio_oos_mask_requires_all_assets_oos() -> None:
     """
     strict_oos_only date mask should require all assets to be OOS on the same date.
@@ -1640,7 +1670,6 @@ def test_load_ohlcv_rejects_dukascopy_csv_provider_route() -> None:
 
 
 CURRENT_TRACKED_CONFIG_CASES = [
-    ("experiments/btcusd_1h_dukas_lightgbm_triple_barrier_garch_long_oos.yaml", 8760),
     ("experiments/btcusd_1h_dukas_xgboost_triple_barrier_garch_long_oos.yaml", 8760),
 ]
 

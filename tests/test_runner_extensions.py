@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 
 import src.experiments.runner as runner_mod
+import src.src_data.storage as storage_mod
 from src.execution.paper import build_rebalance_orders
 from src.experiments.models import train_logistic_regression_classifier
 from src.portfolio.construction import PortfolioPerformance
@@ -220,6 +221,50 @@ def test_load_dataset_snapshot_rejects_fingerprint_mismatch(tmp_path) -> None:
             root_dir=tmp_path,
             dataset_id="demo_dataset",
         )
+
+
+def test_load_dataset_snapshot_filters_cached_snapshot_by_assets_and_window(tmp_path) -> None:
+    asset_frames = {
+        "AAA": _synthetic_ohlcv(periods=8, seed=1),
+        "BBB": _synthetic_ohlcv(periods=8, seed=2),
+    }
+    save_dataset_snapshot(
+        asset_frames,
+        dataset_id="demo_dataset",
+        stage="raw",
+        root_dir=tmp_path,
+        context={"source": "synthetic"},
+    )
+
+    loaded_frames, metadata = load_dataset_snapshot(
+        stage="raw",
+        root_dir=tmp_path,
+        dataset_id="demo_dataset",
+        requested_assets=["BBB"],
+        start="2020-01-03",
+        end="2020-01-06",
+    )
+
+    assert sorted(loaded_frames) == ["BBB"]
+    df = loaded_frames["BBB"]
+    assert df.index.min() == pd.Timestamp("2020-01-03")
+    assert df.index.max() == pd.Timestamp("2020-01-05")
+    assert metadata["verified_fingerprint"] is True
+
+
+def test_save_dataset_snapshot_works_without_fcntl(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    asset_frames = {"AAA": _synthetic_ohlcv(periods=5, seed=1)}
+    monkeypatch.setattr(storage_mod, "fcntl", None)
+
+    saved = save_dataset_snapshot(
+        asset_frames,
+        dataset_id="demo_dataset_no_fcntl",
+        stage="raw",
+        root_dir=tmp_path,
+        context={"source": "synthetic"},
+    )
+
+    assert Path(saved["data_path"]).exists()
 
 
 def test_load_asset_frames_accepts_raw_csv_load_path_and_applies_pit(tmp_path) -> None:

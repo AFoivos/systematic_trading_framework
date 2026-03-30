@@ -32,7 +32,7 @@ def _resolve_config_path(config_path: str | Path) -> Path:
     """
     try:
         return resolve_config_path(config_path)
-    except (ConfigPathError, ValueError) as exc:
+    except (FileNotFoundError, ConfigPathError, ValueError) as exc:
         raise ConfigError(str(exc)) from exc
 
 

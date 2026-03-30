@@ -40,10 +40,16 @@ def build_execution_output(
 
     if portfolio_weights is not None:
         target_weights = portfolio_weights.iloc[-1].astype(float)
-        prices = align_asset_column(asset_frames, column=price_col, how=alignment).reindex(portfolio_weights.index)
-        latest_prices = prices.iloc[-1].astype(float)
+        as_of = portfolio_weights.index[-1]
+        prices = align_asset_column(asset_frames, column=price_col, how=alignment)
+        prices_up_to_as_of = prices.loc[prices.index <= as_of]
+        if prices_up_to_as_of.empty:
+            raise ValueError(f"No price history is available on or before execution as_of={as_of}.")
+        latest_prices = prices_up_to_as_of.ffill().iloc[-1].astype(float)
+        required_assets = target_weights.index
         if current_weights is not None:
-            missing_assets = current_weights.index.difference(latest_prices.index)
+            required_assets = required_assets.union(current_weights.index)
+            missing_assets = current_weights.index.difference(latest_prices.dropna().index)
             if len(missing_assets) > 0:
                 supplemental_prices = current_prices.reindex(missing_assets)
                 if supplemental_prices.isna().any():
@@ -53,7 +59,17 @@ def build_execution_output(
                         f"Provide execution.current_prices for: {missing}"
                     )
                 latest_prices = pd.concat([latest_prices, supplemental_prices.astype(float)])
-        as_of = portfolio_weights.index[-1]
+        missing_target_assets = required_assets.difference(latest_prices.dropna().index)
+        if len(missing_target_assets) > 0:
+            supplemental_prices = current_prices.reindex(missing_target_assets)
+            if supplemental_prices.isna().any():
+                missing = [str(asset) for asset in supplemental_prices[supplemental_prices.isna()].index]
+                raise ValueError(
+                    "Missing latest executable prices for target assets. "
+                    f"Provide execution.current_prices for: {missing}"
+                )
+            latest_prices = pd.concat([latest_prices, supplemental_prices.astype(float)])
+        latest_prices = latest_prices.reindex(required_assets)
     else:
         asset = next(iter(sorted(asset_frames)))
         bt = performance
