@@ -16,6 +16,7 @@ from .storage import (
     build_dataset_snapshot_metadata,
     save_dataset_snapshot,
     load_dataset_snapshot,
+    load_ohlcv_csv,
 )
 
 __all__ = [
@@ -35,4 +36,5 @@ __all__ = [
     "build_dataset_snapshot_metadata",
     "save_dataset_snapshot",
     "load_dataset_snapshot",
+    "load_ohlcv_csv",
 ]

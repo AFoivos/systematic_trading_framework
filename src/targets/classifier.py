@@ -37,4 +37,7 @@ def assign_quantile_labels(
     return labels
 
 
-__all__ = ["assign_quantile_labels", "build_classifier_target"]
+__all__ = [
+    "assign_quantile_labels", 
+    "build_classifier_target"
+]

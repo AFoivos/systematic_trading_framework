@@ -493,10 +493,37 @@ def load_dataset_snapshot(
     return asset_frames, metadata
 
 
+def load_ohlcv_csv(
+    path: str | Path,
+    *,
+    symbol: str = "asset",
+    start: str | None = None,
+    end: str | None = None,
+) -> pd.DataFrame:
+    """
+    Load a raw external OHLCV CSV into the project's canonical single-asset frame shape.
+
+    This is a thin public wrapper around the existing external CSV normalization path used by
+    dataset snapshots, so notebooks and ad hoc analysis can reuse the same timestamp parsing,
+    schema coercion, and start/end slicing semantics as the experiment pipeline.
+    """
+    resolved_path = _resolve_path(path)
+    asset_frames, _ = _load_external_csv_asset_frames(
+        resolved_path,
+        requested_assets=[str(symbol)],
+        start=start,
+        end=end,
+    )
+    frame = asset_frames[str(symbol)].sort_index().copy()
+    frame.index.name = "timestamp"
+    return frame
+
+
 __all__ = [
     "asset_frames_to_long_frame",
     "long_frame_to_asset_frames",
     "build_dataset_snapshot_metadata",
     "save_dataset_snapshot",
     "load_dataset_snapshot",
+    "load_ohlcv_csv",
 ]

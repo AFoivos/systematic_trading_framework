@@ -14,7 +14,7 @@ import src.src_data.storage as storage_mod
 from src.execution.paper import build_rebalance_orders
 from src.experiments.models import train_logistic_regression_classifier
 from src.portfolio.construction import PortfolioPerformance
-from src.src_data.storage import load_dataset_snapshot, save_dataset_snapshot
+from src.src_data.storage import load_dataset_snapshot, load_ohlcv_csv, save_dataset_snapshot
 
 
 def _synthetic_ohlcv(
@@ -143,6 +143,45 @@ def test_load_dataset_snapshot_applies_start_end_window_to_external_csv(tmp_path
     assert float(df.iloc[0]["volume"]) == pytest.approx(2144.8899)
     assert metadata["requested_start"] == "2015-01-02 00:00:00"
     assert metadata["requested_end"] == "2015-01-02 01:00:00"
+
+
+def test_load_ohlcv_csv_reuses_external_csv_normalization_path(tmp_path) -> None:
+    """
+    The public raw CSV helper should reuse the canonical external-CSV path so ad hoc notebook
+    loads behave like the experiment pipeline, including UTC-naive timestamps and exclusive
+    end-window slicing.
+    """
+    data_path = tmp_path / "btcusd_h1.csv"
+    pd.DataFrame(
+        {
+            "timestamp": [
+                1_420_160_400_000,
+                1_420_149_600_000,
+                1_420_156_800_000,
+                1_420_153_200_000,
+            ],
+            "open": [120.072, 119.746, 119.885, 119.824],
+            "high": [120.426, 119.841, 120.074, 119.967],
+            "low": [120.052, 119.701, 119.835, 119.804],
+            "close": [120.274, 119.824, 120.074, 119.885],
+            "volume": [3877.04, 702.65, 2144.8899, 3082.5],
+        }
+    ).to_csv(data_path, index=False)
+
+    df = load_ohlcv_csv(
+        data_path,
+        symbol="BTCUSD",
+        start="2015-01-01 23:00:00",
+        end="2015-01-02 01:00:00",
+    )
+
+    assert list(df.columns) == ["open", "high", "low", "close", "volume"]
+    assert df.index.is_monotonic_increasing
+    assert list(df.index) == [
+        pd.Timestamp("2015-01-01 23:00:00"),
+        pd.Timestamp("2015-01-02 00:00:00"),
+    ]
+    assert float(df.iloc[-1]["close"]) == pytest.approx(120.074)
 
 
 def test_dataset_snapshot_rejects_path_traversal_in_dataset_id(tmp_path) -> None:

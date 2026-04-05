@@ -25,9 +25,6 @@ tqdm
 matplotlib
 seaborn
 plotly
-streamlit
-streamlit-echarts
-streamlit-lightweight-charts-v5
 
 yfinance
 requests
