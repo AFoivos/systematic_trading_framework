@@ -4,7 +4,6 @@ services:
       context: .
       dockerfile: Dockerfile
     image: systematic-trading-framework:latest
-    container_name: systematic-trading-framework
     working_dir: /workspace
     volumes:
       - ./:/workspace

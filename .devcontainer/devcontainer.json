@@ -4,7 +4,9 @@
   "service": "app",
   "workspaceFolder": "/workspace",
   "shutdownAction": "stopCompose",
-  "overrideCommand": false,
+  "overrideCommand": true,
+  "remoteUser": "appuser",
+  "updateRemoteUserUID": false,
   "remoteEnv": {
     "PYTHONPATH": "/workspace"
   },

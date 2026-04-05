@@ -221,7 +221,16 @@ __marimo__/
 tmp/
 plots/
 output/
-notebooks/
+# notebooks/
+# !notebooks/
+# notebooks/*
+# !notebooks/__init__.py
+# !notebooks/experiment_lab_support.py
+# !notebooks/streamlit_experiment_explorer.py
+# !notebooks/feature_signal_combo_lab.ipynb
+# !notebooks/feature_indicator_visual_lab.ipynb
+# !notebooks/shock_meta_xgboost_long_only_lab.ipynb
+# !notebooks/xgboost_garch_baseline_lab.ipynb
 logs/
 processed/
 /pdfs/
