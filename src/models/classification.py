@@ -13,6 +13,7 @@ from src.evaluation.time_splits import (
     trim_train_indices_for_horizon,
 )
 from src.experiments.contracts import TargetContract, validate_feature_target_contract
+from src.experiments.optuna_runtime import report_optuna_fold
 from src.experiments.support.metrics import (
     binary_classification_metrics,
     empty_classification_metrics,
@@ -349,6 +350,7 @@ def train_forward_classifier(
         )
         if overlay_fold_meta:
             fold_meta[-1]["overlay"] = overlay_fold_meta
+        report_optuna_fold(model_kind, int(split.fold), dict(fold_meta[-1]))
 
     if model is None:
         raise ValueError("Model training failed: no valid folds were trained.")

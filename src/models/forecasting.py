@@ -11,6 +11,7 @@ from src.evaluation.time_splits import (
     trim_train_indices_for_horizon,
 )
 from src.experiments.contracts import TargetContract, validate_feature_target_contract
+from src.experiments.optuna_runtime import report_optuna_fold
 from src.experiments.support.diagnostics import (
     aggregate_feature_importance,
     extract_feature_importance,
@@ -317,6 +318,7 @@ def train_forward_forecaster(
         if overlay_fold_meta:
             fold_record["overlay"] = overlay_fold_meta
         fold_meta.append(fold_record)
+        report_optuna_fold(model_kind, int(split.fold), dict(fold_record))
 
     if model is None:
         raise ValueError("Model training failed: no valid folds were trained.")

@@ -11,6 +11,7 @@ from src.evaluation.time_splits import (
     trim_train_indices_for_horizon,
 )
 from src.experiments.contracts import TargetContract, validate_feature_target_contract
+from src.experiments.optuna_runtime import report_optuna_fold
 from src.experiments.support.diagnostics import (
     aggregate_label_distributions,
     summarize_feature_availability,
@@ -398,6 +399,7 @@ def train_event_transformer_encoder(
                 "sequence_test_samples": pred_rows,
             }
         )
+        report_optuna_fold("event_transformer_encoder", int(split.fold), dict(fold_meta[-1]))
 
     if model is None:
         raise ValueError("Event transformer encoder training failed: no valid folds were trained.")

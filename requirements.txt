@@ -25,6 +25,7 @@ tqdm
 matplotlib
 seaborn
 plotly
+optuna
 
 yfinance
 requests
