@@ -1,7 +1,7 @@
 base_config: config/experiments/btcusd_1h_shock_meta_xgboost.yaml
 
 study:
-  study_name: optuna_shock_meta_xgboost
+  study_name: optuna_shock_meta_xgboost_v2
   sampler: tpe
   seed: 7
   n_trials: 30
@@ -46,8 +46,8 @@ pruning:
   n_warmup_steps: 1
   interval_steps: 1
 
-# Keep the feature space deliberately small. Window-changing feature params are safe here because
-# the base experiment uses model.feature_selectors instead of fixed generated feature columns.
+# Keep the feature space deliberately controlled. Window-changing feature params are safe here
+# because the base experiment uses model.feature_selectors instead of fixed generated columns.
 search_space:
   - name: regime_vol_short_window
     path: features.2.params.vol_short_window
@@ -109,6 +109,54 @@ search_space:
     path: features.6.params.windows.1
     kind: categorical
     choices: [10, 14, 21]
+  - name: volume_vol_z_window
+    path: features.8.params.vol_z_window
+    kind: categorical
+    choices: [48, 72, 168]
+  - name: volume_atr_window
+    path: features.8.params.atr_window
+    kind: categorical
+    choices: [12, 24, 36]
+  - name: mfi_window
+    path: features.9.params.window
+    kind: categorical
+    choices: [14, 24, 36]
+  - name: roc_fast_window
+    path: features.10.params.windows.0
+    kind: categorical
+    choices: [3, 6, 12]
+  - name: roc_slow_window
+    path: features.10.params.windows.1
+    kind: categorical
+    choices: [24, 48, 72]
+  - name: return_mom_fast_window
+    path: features.11.params.windows.0
+    kind: categorical
+    choices: [3, 6, 12]
+  - name: return_mom_slow_window
+    path: features.11.params.windows.1
+    kind: categorical
+    choices: [24, 48, 72]
+  - name: tb_max_holding
+    path: model.target.max_holding
+    kind: categorical
+    choices: [12, 24, 36, 48]
+  - name: tb_upper_mult
+    path: model.target.upper_mult
+    kind: float
+    low: 1.0
+    high: 2.5
+    step: 0.25
+  - name: tb_lower_mult
+    path: model.target.lower_mult
+    kind: float
+    low: 1.0
+    high: 2.5
+    step: 0.25
+  - name: tb_vol_window
+    path: model.target.vol_window
+    kind: categorical
+    choices: [12, 24, 36, 48]
   - name: xgb_n_estimators
     path: model.params.n_estimators
     kind: int
@@ -156,9 +204,37 @@ search_space:
     low: 0.54
     high: 0.62
     step: 0.01
+  - name: signal_upper_exit
+    path: signals.params.upper_exit
+    kind: categorical
+    choices: [0.50, 0.52, 0.54]
   - name: signal_lower
     path: signals.params.lower
     kind: float
     low: 0.38
     high: 0.46
     step: 0.01
+  - name: signal_lower_exit
+    path: signals.params.lower_exit
+    kind: categorical
+    choices: [0.46, 0.48, 0.50]
+  - name: backtest_min_holding_bars
+    path: backtest.min_holding_bars
+    kind: categorical
+    choices: [1, 2, 4, 8, 12]
+  - name: risk_max_leverage
+    path: risk.max_leverage
+    kind: categorical
+    choices: [0.5, 0.75, 1.0]
+  - name: dd_guard_max_drawdown
+    path: risk.dd_guard.max_drawdown
+    kind: categorical
+    choices: [0.10, 0.12, 0.15, 0.20]
+  - name: dd_guard_rearm_drawdown
+    path: risk.dd_guard.rearm_drawdown
+    kind: categorical
+    choices: [0.04, 0.06, 0.08, 0.10]
+  - name: dd_guard_cooloff_bars
+    path: risk.dd_guard.cooloff_bars
+    kind: categorical
+    choices: [24, 48, 72, 96]

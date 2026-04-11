@@ -383,7 +383,11 @@ def test_repo_shock_meta_optuna_yaml_matches_base_config_contract() -> None:
     assert payload["base_config"] == "config/experiments/btcusd_1h_shock_meta_xgboost.yaml"
     assert objective.metric_path == "evaluation.primary_summary.sharpe"
     assert pruning.metric_path == "classification_metrics.roc_auc"
-    assert trial_cfg["model"]["feature_selectors"]["strict"]["min_count"] == 14
+    assert trial_cfg["model"]["feature_selectors"]["strict"]["min_count"] == 21
+    assert trial_cfg["model"]["target"]["max_holding"] == 12
+    assert trial_cfg["signals"]["params"]["upper_exit"] == 0.50
+    assert trial_cfg["backtest"]["min_holding_bars"] == 1
+    assert trial_cfg["risk"]["dd_guard"]["cooloff_bars"] == 24
     assert trial_cfg["logging"]["enabled"] is False
     assert trial_cfg["logging"]["stage_tails"]["stdout"] is False
 

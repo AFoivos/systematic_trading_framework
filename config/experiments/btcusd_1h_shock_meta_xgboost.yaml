@@ -90,6 +90,34 @@ features:
     params:
       cols: [close_logret]
       lags: [1]
+  - step: volume_features
+    enabled: true
+    params:
+      volume_col: volume
+      atr_col: null
+      high_col: high
+      low_col: low
+      close_col: close
+      atr_window: 24
+      vol_z_window: 72
+  - step: mfi
+    enabled: true
+    params:
+      high_col: high
+      low_col: low
+      close_col: close
+      volume_col: volume
+      window: 24
+  - step: roc
+    enabled: true
+    params:
+      price_col: close
+      windows: [6, 24]
+  - step: return_momentum
+    enabled: true
+    params:
+      returns_col: close_logret
+      windows: [6, 24]
 
 model:
   kind: xgboost_clf
@@ -123,12 +151,17 @@ model:
       - startswith: bb_percent_b_
       - startswith: close_rsi_
       - startswith: lag_close_logret_
+      - startswith: volume_z_
+      - startswith: volume_over_atr_
+      - startswith: mfi_
+      - startswith: roc_
+      - startswith: close_logret_mom_
     exclude:
       - startswith: target_
       - startswith: pred_
       - startswith: signal_
     strict:
-      min_count: 14
+      min_count: 21
   target:
     kind: triple_barrier
     price_col: close
