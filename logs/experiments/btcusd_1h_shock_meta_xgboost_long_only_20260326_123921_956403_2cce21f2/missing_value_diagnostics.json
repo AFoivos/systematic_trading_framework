@@ -1,5 +1,0 @@
-{
-  "train_rows_dropped_missing": 4862853,
-  "test_rows_missing_features": 48620,
-  "folds_with_zero_predictions": 1
-}

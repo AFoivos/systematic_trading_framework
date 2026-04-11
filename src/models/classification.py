@@ -114,6 +114,7 @@ def train_forward_classifier(
     feature_cols = infer_feature_columns(
         out,
         explicit_cols=model_cfg.get("feature_cols"),
+        feature_selectors=model_cfg.get("feature_selectors"),
         exclude={label_col, fwd_col, pred_prob_col},
     )
     if not feature_cols:

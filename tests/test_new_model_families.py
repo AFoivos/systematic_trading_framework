@@ -387,3 +387,40 @@ def test_probability_vol_adjusted_signal_supports_activation_filters() -> None:
     assert signal.iloc[2] == 0.0
     assert signal.iloc[3] > 0.0
     assert signal.iloc[4] > 0.0
+
+
+def test_probability_vol_adjusted_signal_resolves_activation_filter_selectors() -> None:
+    idx = pd.date_range("2024-01-01", periods=5, freq="D")
+    df = pd.DataFrame(
+        {
+            "pred_prob": [0.30, 0.30, 0.70, 0.70, 0.70],
+            "pred_vol": [0.02, 0.02, 0.02, 0.02, 0.02],
+            "regime_vol_ratio_36_144": [1.10, 0.80, 1.20, 1.10, 1.20],
+            "adx_36": [25.0, 25.0, 18.0, 22.0, 30.0],
+        },
+        index=idx,
+    )
+
+    out = compute_probability_vol_adjusted_signal(
+        df,
+        prob_col="pred_prob",
+        vol_col="pred_vol",
+        signal_col="signal_prob_vol",
+        prob_center=0.5,
+        upper=0.55,
+        lower=0.45,
+        vol_target=0.01,
+        clip=0.5,
+        min_signal_abs=0.0,
+        activation_filters=[
+            {"selector": {"regex": "^regime_vol_ratio_[0-9]+_[0-9]+$"}, "op": "ge", "value": 1.0},
+            {"selector": {"startswith": "adx_"}, "op": "ge", "value": 20.0},
+        ],
+    )
+
+    signal = out["signal_prob_vol"]
+    assert signal.iloc[0] < 0.0
+    assert signal.iloc[1] == 0.0
+    assert signal.iloc[2] == 0.0
+    assert signal.iloc[3] > 0.0
+    assert signal.iloc[4] > 0.0

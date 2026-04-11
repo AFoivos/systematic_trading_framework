@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from src.models import (
     infer_feature_columns,
+    resolve_feature_selectors,
     train_event_transformer_encoder,
     train_garch_forecaster,
     train_lightgbm_classifier,
@@ -23,6 +24,7 @@ __all__ = [
     "train_dqn_agent",
     "train_dqn_portfolio_agent",
     "infer_feature_columns",
+    "resolve_feature_selectors",
     "train_event_transformer_encoder",
     "train_garch_forecaster",
     "train_lightgbm_classifier",

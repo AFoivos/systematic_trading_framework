@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 import os
+import re
 import subprocess
 import sys
 
 import pandas as pd
 
 from src.models.lightgbm_baseline import default_feature_columns
+
+
+_FEATURE_SELECTOR_OPERATORS = {"exact", "startswith", "endswith", "contains", "regex"}
 
 
 @lru_cache(maxsize=1)
@@ -171,19 +175,157 @@ def resolve_runtime_for_model(
     }
 
 
+def _as_non_empty_string_list(value: Any, *, field: str) -> list[str]:
+    if isinstance(value, str):
+        values = [value]
+    elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        values = list(value)
+    else:
+        raise TypeError(f"{field} must be a non-empty string or list[str].")
+
+    out: list[str] = []
+    for idx, raw in enumerate(values):
+        if not isinstance(raw, str) or not raw.strip():
+            raise TypeError(f"{field}[{idx}] must be a non-empty string.")
+        out.append(raw)
+    if not out:
+        raise ValueError(f"{field} must not be empty.")
+    return out
+
+
+def _iter_selector_rules(raw_rules: Any, *, field: str) -> list[tuple[str, list[str], str]]:
+    if raw_rules in (None, []):
+        return []
+    if not isinstance(raw_rules, list):
+        raise TypeError(f"{field} must be a list of selector mappings.")
+
+    rules: list[tuple[str, list[str], str]] = []
+    for idx, raw_rule in enumerate(raw_rules):
+        rule_field = f"{field}[{idx}]"
+        if not isinstance(raw_rule, Mapping):
+            raise TypeError(f"{rule_field} must be a selector mapping.")
+        if len(raw_rule) != 1:
+            allowed = ", ".join(sorted(_FEATURE_SELECTOR_OPERATORS))
+            raise ValueError(f"{rule_field} must contain exactly one selector operator: {allowed}.")
+        operator, value = next(iter(raw_rule.items()))
+        if operator not in _FEATURE_SELECTOR_OPERATORS:
+            allowed = ", ".join(sorted(_FEATURE_SELECTOR_OPERATORS))
+            raise ValueError(f"{rule_field}.{operator} is not supported. Allowed operators: {allowed}.")
+        rules.append((str(operator), _as_non_empty_string_list(value, field=f"{rule_field}.{operator}"), rule_field))
+    return rules
+
+
+def _match_selector(columns: Sequence[str], *, operator: str, values: Sequence[str]) -> list[str]:
+    if operator == "exact":
+        return [col for col in values if col in columns]
+    if operator == "startswith":
+        return [col for col in columns if any(col.startswith(prefix) for prefix in values)]
+    if operator == "endswith":
+        return [col for col in columns if any(col.endswith(suffix) for suffix in values)]
+    if operator == "contains":
+        return [col for col in columns if any(token in col for token in values)]
+    if operator == "regex":
+        patterns = [re.compile(pattern) for pattern in values]
+        return [col for col in columns if any(pattern.search(col) for pattern in patterns)]
+    raise ValueError(f"Unsupported feature selector operator: {operator}")
+
+
+def _dedupe_preserve_order(columns: Iterable[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for col in columns:
+        if col in seen:
+            continue
+        seen.add(col)
+        out.append(col)
+    return out
+
+
+def resolve_feature_selectors(
+    df: pd.DataFrame,
+    feature_selectors: Mapping[str, Any],
+) -> list[str]:
+    """
+    Resolve model feature selectors after feature computation.
+
+    This keeps configs stable when Optuna changes feature windows and therefore changes emitted
+    column names (for example close_rsi_14 -> close_rsi_21). Explicit selector rules are resolved
+    against the current DataFrame, and missing selector matches fail fast to avoid silent feature
+    drops.
+    """
+    selectors = dict(feature_selectors or {})
+    allowed_keys = {"exact", "include", "exclude", "strict"}
+    unknown = sorted(set(selectors) - allowed_keys)
+    if unknown:
+        allowed = ", ".join(sorted(allowed_keys))
+        raise ValueError(f"feature_selectors has unsupported keys: {unknown}. Allowed keys: {allowed}.")
+
+    columns = [str(col) for col in df.columns]
+    selected: list[str] = []
+
+    exact_values = selectors.get("exact")
+    if exact_values is not None:
+        exact = _as_non_empty_string_list(exact_values, field="feature_selectors.exact")
+        missing_exact = [col for col in exact if col not in df.columns]
+        if missing_exact:
+            raise KeyError(f"Missing exact feature selector columns: {missing_exact}")
+        selected.extend(exact)
+
+    for operator, values, field in _iter_selector_rules(selectors.get("include"), field="feature_selectors.include"):
+        matches = _match_selector(columns, operator=operator, values=values)
+        if operator == "exact":
+            missing = [col for col in values if col not in df.columns]
+            if missing:
+                raise KeyError(f"{field} exact selector is missing columns: {missing}")
+        if not matches:
+            raise KeyError(f"{field} matched no feature columns.")
+        selected.extend(matches)
+
+    if not selected:
+        raise ValueError("feature_selectors must select at least one feature column.")
+
+    excluded: set[str] = set()
+    for operator, values, _ in _iter_selector_rules(selectors.get("exclude"), field="feature_selectors.exclude"):
+        excluded.update(_match_selector(columns, operator=operator, values=values))
+
+    selected = [col for col in _dedupe_preserve_order(selected) if col not in excluded]
+    if not selected:
+        raise ValueError("feature_selectors selected no feature columns after excludes.")
+
+    strict = selectors.get("strict", {}) or {}
+    if not isinstance(strict, Mapping):
+        raise TypeError("feature_selectors.strict must be a mapping when provided.")
+    min_count = strict.get("min_count")
+    if min_count is not None:
+        if isinstance(min_count, bool) or not isinstance(min_count, int) or min_count < 0:
+            raise ValueError("feature_selectors.strict.min_count must be an integer >= 0.")
+        if len(selected) < int(min_count):
+            raise ValueError(
+                "feature_selectors resolved too few feature columns: "
+                f"{len(selected)} < min_count={int(min_count)}."
+            )
+    return selected
+
+
 def infer_feature_columns(
     df: pd.DataFrame,
     explicit_cols: Sequence[str] | None = None,
+    feature_selectors: Mapping[str, Any] | None = None,
     exclude: Iterable[str] | None = None,
 ) -> list[str]:
     """
     Infer usable numeric feature columns when the config does not pin them explicitly.
     """
-    if explicit_cols:
-        missing = [c for c in explicit_cols if c not in df.columns]
+    if explicit_cols or feature_selectors:
+        explicit = list(explicit_cols or [])
+        selected: list[str] = []
+        missing = [c for c in explicit if c not in df.columns]
         if missing:
             raise KeyError(f"Missing feature columns: {missing}")
-        return list(explicit_cols)
+        selected.extend(explicit)
+        if feature_selectors:
+            selected.extend(resolve_feature_selectors(df, feature_selectors))
+        return _dedupe_preserve_order(selected)
 
     inferred = default_feature_columns(df)
     if inferred:
@@ -209,5 +351,6 @@ __all__ = [
     "infer_feature_columns",
     "probe_lightgbm_runtime",
     "probe_xgboost_runtime",
+    "resolve_feature_selectors",
     "resolve_runtime_for_model",
 ]

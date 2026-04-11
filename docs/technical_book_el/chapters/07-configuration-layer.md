@@ -100,6 +100,63 @@ signals:
     min_signal_abs: 0.01
 ```
 
+Όταν οι παράμετροι feature generation αλλάζουν από Optuna και τα output column names αλλάζουν
+(π.χ. `close_rsi_14` σε `close_rsi_21`), προτίμησε `model.feature_selectors` αντί για σταθερό
+`feature_cols`:
+
+```yaml
+model:
+  kind: xgboost_clf
+  feature_selectors:
+    exact:
+      - shock_strength
+    include:
+      - startswith: close_rsi_
+      - startswith: bb_percent_b_
+      - regex: "^regime_vol_ratio_[0-9]+_[0-9]+$"
+    exclude:
+      - startswith: target_
+      - startswith: pred_
+      - startswith: signal_
+    strict:
+      min_count: 5
+```
+
+Οι selectors γίνονται resolve μετά τον υπολογισμό των features και πριν το training. Αν ένα
+`include` rule δεν βρει columns ή το τελικό πλήθος πέσει κάτω από `strict.min_count`, το run
+αποτυγχάνει νωρίς αντί να εκπαιδεύσει σιωπηλά με λάθος feature set.
+
+Το ίδιο pattern ισχύει και για feature transforms ή signal filters που χρειάζονται generated
+feature columns. Για single-column inputs χρησιμοποίησε selector που πρέπει να κάνει match ακριβώς
+ένα column:
+
+```yaml
+features:
+  - step: vol_normalized_momentum
+    params:
+      returns_col: close_logret
+      vol_col: null
+      vol_window: 24
+      windows: [6, 24]
+  - step: feature_transforms
+    params:
+      transforms:
+        - kind: ratio
+          numerator_selector:
+            exact: lag_close_logret_1
+          denominator_selector:
+            regex: "^vol_rolling_[0-9]+$"
+          output_col: lag_close_logret_1_over_selected_vol
+signals:
+  kind: probability_vol_adjusted
+  params:
+    activation_filters:
+      - selector:
+          regex: "^regime_vol_ratio_[0-9]+_[0-9]+$"
+        op: ge
+        value: 1.0
+```
+
 Σημείωση για sources:
 
 - `yahoo`, `alpha`, `twelve_data`, `twelve`: provider-backed ingest

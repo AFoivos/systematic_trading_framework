@@ -40,10 +40,11 @@ SaveProcessedFn = Callable[..., dict[str, object] | None]
 def _stage_tail_config(cfg: dict[str, object]) -> dict[str, object]:
     logging_cfg = dict(cfg.get("logging", {}) or {})
     stage_tails = dict(logging_cfg.get("stage_tails", {}) or {})
+    logging_enabled = bool(logging_cfg.get("enabled", True))
     return {
-        "enabled": bool(stage_tails.get("enabled", False)),
-        "stdout": bool(stage_tails.get("stdout", True)),
-        "report": bool(stage_tails.get("report", True)),
+        "enabled": logging_enabled and bool(stage_tails.get("enabled", False)),
+        "stdout": logging_enabled and bool(stage_tails.get("stdout", True)),
+        "report": logging_enabled and bool(stage_tails.get("report", True)),
         "limit": int(stage_tails.get("limit", 10) or 10),
         "max_columns": int(stage_tails.get("max_columns", 16) or 16),
         "max_assets": int(stage_tails.get("max_assets", 3) or 3),

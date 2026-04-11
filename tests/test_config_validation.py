@@ -194,6 +194,37 @@ def test_validate_model_block_rejects_triple_barrier_for_forecasters() -> None:
         validate_model_block(model)
 
 
+def test_validate_model_block_accepts_feature_selectors() -> None:
+    validate_model_block(
+        {
+            "kind": "xgboost_clf",
+            "feature_selectors": {
+                "exact": ["shock_strength"],
+                "include": [
+                    {"startswith": "close_rsi_"},
+                    {"regex": "^bb_percent_b_"},
+                ],
+                "exclude": [{"startswith": "target_"}],
+                "strict": {"min_count": 3},
+            },
+            "target": {"kind": "forward_return", "horizon": 1},
+            "split": {"method": "walk_forward", "train_size": 100, "test_size": 20},
+        }
+    )
+
+
+def test_validate_model_block_rejects_invalid_feature_selectors() -> None:
+    model = {
+        "kind": "xgboost_clf",
+        "feature_selectors": {"include": [{"prefix": "close_rsi_"}]},
+        "target": {"kind": "forward_return", "horizon": 1},
+        "split": {"method": "walk_forward", "train_size": 100, "test_size": 20},
+    }
+
+    with pytest.raises(ConfigValidationError, match="feature_selectors"):
+        validate_model_block(model)
+
+
 def test_validate_model_block_accepts_event_transformer_encoder_with_candidate_target() -> None:
     validate_model_block(
         {
@@ -500,6 +531,52 @@ def test_validate_features_block_accepts_feature_transforms_step() -> None:
         )
 
 
+def test_validate_features_block_accepts_selector_based_feature_transforms() -> None:
+    validate_features_block(
+        [
+            {
+                "step": "feature_transforms",
+                "params": {
+                    "transforms": [
+                        {
+                            "source_selector": {"regex": "^volume_over_atr_[0-9]+$"},
+                            "kind": "rolling_clip",
+                            "output_col": "volume_over_atr_rollclip",
+                        },
+                        {
+                            "numerator_selector": {"exact": "lag_close_logret_1"},
+                            "denominator_selector": {"regex": "^vol_rolling_[0-9]+$"},
+                            "kind": "ratio",
+                            "output_col": "lag_close_logret_1_over_selected_vol",
+                        },
+                    ]
+                },
+            },
+        ]
+    )
+
+
+def test_validate_features_block_rejects_ambiguous_feature_transform_selector() -> None:
+    with pytest.raises(ConfigValidationError, match="source_col or source_selector"):
+        validate_features_block(
+            [
+                {
+                    "step": "feature_transforms",
+                    "params": {
+                        "transforms": [
+                            {
+                                "source_col": "volume_over_atr_24",
+                                "source_selector": {"startswith": "volume_over_atr_"},
+                                "kind": "rolling_clip",
+                                "output_col": "volume_over_atr_clip",
+                            }
+                        ]
+                    },
+                }
+            ]
+        )
+
+
 def test_validate_features_block_accepts_boolean_enabled_flag() -> None:
     validate_features_block(
         [
@@ -580,6 +657,22 @@ def test_validate_features_block_rejects_invalid_feature_transform_quantiles() -
                 }
             ]
         )
+
+
+def test_validate_features_block_accepts_vol_normalized_momentum_vol_window() -> None:
+    validate_features_block(
+        [
+            {
+                "step": "vol_normalized_momentum",
+                "params": {
+                    "returns_col": "close_logret",
+                    "vol_col": None,
+                    "vol_window": 36,
+                    "windows": [6, 24],
+                },
+            },
+        ]
+    )
 
 
 def test_validate_features_block_accepts_shock_context() -> None:
@@ -838,6 +931,51 @@ def test_validate_signals_block_rejects_invalid_probability_threshold_hysteresis
                     "clip": 0.5,
                     "activation_filters": [
                         {"col": "adx_24", "op": "neq", "value": 20.0},
+                    ],
+                },
+            }
+        )
+
+
+def test_validate_signals_block_accepts_activation_filter_selectors() -> None:
+    validate_signals_block(
+        {
+            "kind": "probability_vol_adjusted",
+            "params": {
+                "prob_col": "pred_prob",
+                "vol_col": "pred_vol",
+                "upper": 0.55,
+                "lower": 0.45,
+                "vol_target": 0.001,
+                "clip": 0.5,
+                "activation_filters": [
+                    {"selector": {"regex": "^regime_vol_ratio_[0-9]+_[0-9]+$"}, "op": "ge", "value": 1.0},
+                    {"selector": {"startswith": "adx_"}, "op": "ge", "value": 20.0},
+                ],
+            },
+        }
+    )
+
+
+def test_validate_signals_block_rejects_ambiguous_activation_filter_selector() -> None:
+    with pytest.raises(ConfigValidationError, match="col or selector"):
+        validate_signals_block(
+            {
+                "kind": "probability_vol_adjusted",
+                "params": {
+                    "prob_col": "pred_prob",
+                    "vol_col": "pred_vol",
+                    "upper": 0.55,
+                    "lower": 0.45,
+                    "vol_target": 0.001,
+                    "clip": 0.5,
+                    "activation_filters": [
+                        {
+                            "col": "adx_24",
+                            "selector": {"startswith": "adx_"},
+                            "op": "ge",
+                            "value": 20.0,
+                        },
                     ],
                 },
             }

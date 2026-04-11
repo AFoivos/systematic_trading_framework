@@ -5,6 +5,8 @@ from collections.abc import Sequence
 import numpy as np
 import pandas as pd
 
+from src.utils.column_selectors import resolve_single_column_selector
+
 
 def _validate_probability(value: float, *, field: str) -> float:
     out = float(value)
@@ -96,6 +98,33 @@ def compute_rolling_zscore_transform(
     return out.astype("float32")
 
 
+def _resolve_transform_column(
+    df: pd.DataFrame,
+    transform: dict[str, object],
+    *,
+    col_key: str,
+    selector_key: str,
+    field_prefix: str,
+) -> str:
+    raw_col = transform.get(col_key)
+    raw_selector = transform.get(selector_key)
+    has_col = raw_col is not None
+    has_selector = raw_selector is not None
+    if has_col == has_selector:
+        raise ValueError(f"{field_prefix} must define exactly one of {col_key} or {selector_key}.")
+    if has_col:
+        if not isinstance(raw_col, str) or not raw_col:
+            raise ValueError(f"{field_prefix}.{col_key} must be a non-empty string.")
+        if raw_col not in df.columns:
+            raise KeyError(f"{field_prefix}.{col_key} '{raw_col}' not found in DataFrame.")
+        return raw_col
+    return resolve_single_column_selector(
+        [str(col) for col in df.columns],
+        raw_selector,  # type: ignore[arg-type]
+        field=f"{field_prefix}.{selector_key}",
+    )
+
+
 def add_feature_transforms(
     df: pd.DataFrame,
     *,
@@ -122,11 +151,13 @@ def add_feature_transforms(
             raise ValueError(f"transforms[{idx}].output_col must be a non-empty string.")
 
         if kind == "rolling_clip":
-            source_col = raw_transform.get("source_col")
-            if not isinstance(source_col, str) or not source_col:
-                raise ValueError(f"transforms[{idx}].source_col must be a non-empty string.")
-            if source_col not in out.columns:
-                raise KeyError(f"transforms[{idx}].source_col '{source_col}' not found in DataFrame.")
+            source_col = _resolve_transform_column(
+                out,
+                raw_transform,
+                col_key="source_col",
+                selector_key="source_selector",
+                field_prefix=f"transforms[{idx}]",
+            )
             source = out[source_col].astype(float)
             out[output_col] = compute_rolling_clip_transform(
                 source,
@@ -136,27 +167,33 @@ def add_feature_transforms(
                 shift=int(raw_transform.get("shift", 1)),
             )
         elif kind == "ratio":
-            numerator_col = raw_transform.get("numerator_col")
-            denominator_col = raw_transform.get("denominator_col")
-            if not isinstance(numerator_col, str) or not numerator_col:
-                raise ValueError(f"transforms[{idx}].numerator_col must be a non-empty string.")
-            if numerator_col not in out.columns:
-                raise KeyError(f"transforms[{idx}].numerator_col '{numerator_col}' not found in DataFrame.")
-            if not isinstance(denominator_col, str) or not denominator_col:
-                raise ValueError(f"transforms[{idx}].denominator_col must be a non-empty string.")
-            if denominator_col not in out.columns:
-                raise KeyError(f"transforms[{idx}].denominator_col '{denominator_col}' not found in DataFrame.")
+            numerator_col = _resolve_transform_column(
+                out,
+                raw_transform,
+                col_key="numerator_col",
+                selector_key="numerator_selector",
+                field_prefix=f"transforms[{idx}]",
+            )
+            denominator_col = _resolve_transform_column(
+                out,
+                raw_transform,
+                col_key="denominator_col",
+                selector_key="denominator_selector",
+                field_prefix=f"transforms[{idx}]",
+            )
             out[output_col] = compute_ratio_transform(
                 out[numerator_col],
                 out[denominator_col],
                 eps=float(raw_transform.get("eps", 1e-8)),
             )
         elif kind == "rolling_zscore":
-            source_col = raw_transform.get("source_col")
-            if not isinstance(source_col, str) or not source_col:
-                raise ValueError(f"transforms[{idx}].source_col must be a non-empty string.")
-            if source_col not in out.columns:
-                raise KeyError(f"transforms[{idx}].source_col '{source_col}' not found in DataFrame.")
+            source_col = _resolve_transform_column(
+                out,
+                raw_transform,
+                col_key="source_col",
+                selector_key="source_selector",
+                field_prefix=f"transforms[{idx}]",
+            )
             source = out[source_col].astype(float)
             out[output_col] = compute_rolling_zscore_transform(
                 source,

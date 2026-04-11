@@ -3,6 +3,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from src.utils.column_selectors import resolve_single_column_selector
+
 
 _ALLOWED_MODES = {"long_only", "short_only", "long_short", "long_short_hold"}
 _ALLOWED_FILTER_OPS = {"gt", "ge", "lt", "le"}
@@ -27,11 +29,24 @@ def _resolve_activation_filter_mask(
     for idx, raw_filter in enumerate(activation_filters):
         if not isinstance(raw_filter, dict):
             raise ValueError(f"activation_filters[{idx}] must be a mapping.")
-        col = raw_filter.get("col")
-        if not isinstance(col, str) or not col:
-            raise ValueError(f"activation_filters[{idx}].col must be a non-empty string.")
-        if col not in df.columns:
-            raise KeyError(f"activation_filters[{idx}].col '{col}' not found in DataFrame")
+        raw_col = raw_filter.get("col")
+        raw_selector = raw_filter.get("selector")
+        has_col = raw_col is not None
+        has_selector = raw_selector is not None
+        if has_col == has_selector:
+            raise ValueError(f"activation_filters[{idx}] must define exactly one of col or selector.")
+        if has_col:
+            if not isinstance(raw_col, str) or not raw_col:
+                raise ValueError(f"activation_filters[{idx}].col must be a non-empty string.")
+            if raw_col not in df.columns:
+                raise KeyError(f"activation_filters[{idx}].col '{raw_col}' not found in DataFrame")
+            col = raw_col
+        else:
+            col = resolve_single_column_selector(
+                [str(column) for column in df.columns],
+                raw_selector,  # type: ignore[arg-type]
+                field=f"activation_filters[{idx}].selector",
+            )
         op = str(raw_filter.get("op", "ge"))
         if op not in _ALLOWED_FILTER_OPS:
             raise ValueError(

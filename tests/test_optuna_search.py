@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pandas as pd
 import pytest
+import yaml
 
 from src.backtesting.engine import BacktestResult
 from src.experiments.optuna_search import (
@@ -15,12 +16,16 @@ from src.experiments.optuna_search import (
     build_study_objective,
     extract_objective_value,
     load_search_space_yaml,
+    normalize_objective_spec,
+    normalize_pruning_spec,
     optimize_experiment,
     prepare_trial_config,
     score_experiment_result,
 )
 from src.experiments.optuna_runtime import report_optuna_fold
 from src.experiments.orchestration.types import ExperimentResult
+from src.utils.config import load_experiment_config
+from src.utils.config_validation import validate_resolved_config
 
 
 class _FakeTrial:
@@ -345,6 +350,42 @@ search_space:
     assert len(search_space) == 1
     assert search_space[0].name == "upper"
     assert search_space[0].path == "signals.params.upper"
+
+
+def test_repo_shock_meta_optuna_yaml_matches_base_config_contract() -> None:
+    optuna_cfg_path = Path("config/optuna/optuna_shock_meta_xgboost.yaml")
+    payload = yaml.safe_load(optuna_cfg_path.read_text(encoding="utf-8"))
+
+    search_space = load_search_space_yaml(optuna_cfg_path)
+    objective = normalize_objective_spec(payload["objective"])
+    pruning = normalize_pruning_spec(payload["pruning"])
+    base_cfg = load_experiment_config(payload["base_config"])
+
+    trial_params = {}
+    for dimension in search_space:
+        if dimension.kind == "categorical":
+            trial_params[dimension.name] = list(dimension.choices or [])[0]
+        elif dimension.kind == "int":
+            trial_params[dimension.name] = int(dimension.low)
+        elif dimension.kind == "float":
+            trial_params[dimension.name] = float(dimension.low)
+        else:
+            trial_params[dimension.name] = False
+
+    trial_cfg = prepare_trial_config(
+        base_cfg,
+        trial_params=trial_params,
+        search_space=search_space,
+        logging_enabled=False,
+    )
+
+    validate_resolved_config(trial_cfg)
+    assert payload["base_config"] == "config/experiments/btcusd_1h_shock_meta_xgboost.yaml"
+    assert objective.metric_path == "evaluation.primary_summary.sharpe"
+    assert pruning.metric_path == "classification_metrics.roc_auc"
+    assert trial_cfg["model"]["feature_selectors"]["strict"]["min_count"] == 14
+    assert trial_cfg["logging"]["enabled"] is False
+    assert trial_cfg["logging"]["stage_tails"]["stdout"] is False
 
 
 def test_optimize_experiment_wires_fake_optuna_study(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -153,8 +153,8 @@ features:
       high_col: high
       low_col: low
       returns_col: close_logret
-      ema_col: close_ema_24
-      atr_col: atr_24
+      ema_window: 24
+      atr_window: 24
       short_horizon: 1
       medium_horizon: 4
       vol_window: 24
@@ -173,7 +173,8 @@ features:
       high_col: high
       low_col: low
       windows: [24, 72]
-      atr_col: atr_24
+      atr_col: null
+      atr_window: 24
       include_pct_distance: true
       include_atr_distance: true
 
@@ -189,7 +190,7 @@ features:
     enabled: true
     params:
       volume_col: volume
-      atr_col: atr_24
+      atr_col: null
       high_col: high
       low_col: low
       close_col: close
@@ -237,7 +238,8 @@ features:
     enabled: false
     params:
       returns_col: close_logret
-      vol_col: vol_rolling_24
+      vol_col: null
+      vol_window: 24
       windows: [6, 24]
       eps: 1.0e-8
 
@@ -262,7 +264,8 @@ features:
     enabled: true
     params:
       transforms:
-        - source_col: volume_over_atr_24
+        - source_selector:
+            regex: "^volume_over_atr_[0-9]+$"
           kind: rolling_clip
           output_col: volume_over_atr_24_rollclip_2520_q01_q99
           window: 2520
@@ -708,10 +711,12 @@ signals_catalog:
       vol_floor: 1.0e-6
       min_signal_abs: 0.01
       activation_filters:
-        - col: regime_vol_ratio_24_168
+        - selector:
+            regex: "^regime_vol_ratio_[0-9]+_[0-9]+$"
           op: ge
           value: 0.95
-        - col: adx_24
+        - selector:
+            regex: "^adx_[0-9]+$"
           op: ge
           value: 20.0
 

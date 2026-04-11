@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import re
 from typing import Any
 
 from src.experiments.registry import (
@@ -42,6 +43,7 @@ _DQN_ONLY_RL_PARAM_KEYS = {
     "exploration_initial_eps",
     "exploration_final_eps",
 }
+_FEATURE_SELECTOR_OPERATORS = {"exact", "startswith", "endswith", "contains", "regex"}
 
 
 def _resolve_event_embedding_columns(model: dict[str, Any]) -> list[str]:
@@ -116,6 +118,103 @@ def _validate_string_mapping(
             raise ConfigValidationError(f"{field}.{key} must be a non-empty string.")
         out[key] = raw_value
     return out
+
+
+def _validate_string_or_list(value: Any, *, field: str) -> None:
+    if isinstance(value, str):
+        if not value.strip():
+            raise ConfigValidationError(f"{field} must be a non-empty string.")
+        return
+    if not isinstance(value, list) or not value:
+        raise ConfigValidationError(f"{field} must be a non-empty string or list[str].")
+    for idx, raw_value in enumerate(value):
+        if not isinstance(raw_value, str) or not raw_value.strip():
+            raise ConfigValidationError(f"{field}[{idx}] must be a non-empty string.")
+
+
+def _validate_selector_mapping(value: Any, *, field: str) -> None:
+    if not isinstance(value, dict):
+        raise ConfigValidationError(f"{field} must be a selector mapping.")
+    if len(value) != 1:
+        allowed = ", ".join(sorted(_FEATURE_SELECTOR_OPERATORS))
+        raise ConfigValidationError(
+            f"{field} must contain exactly one selector operator: {allowed}."
+        )
+    operator, raw_value = next(iter(value.items()))
+    if operator not in _FEATURE_SELECTOR_OPERATORS:
+        allowed = ", ".join(sorted(_FEATURE_SELECTOR_OPERATORS))
+        raise ConfigValidationError(
+            f"{field}.{operator} is not supported. Allowed operators: {allowed}."
+        )
+    _validate_string_or_list(raw_value, field=f"{field}.{operator}")
+    if operator == "regex":
+        raw_patterns = [raw_value] if isinstance(raw_value, str) else list(raw_value)
+        for pattern_idx, pattern in enumerate(raw_patterns):
+            try:
+                re.compile(pattern)
+            except re.error as exc:
+                raise ConfigValidationError(
+                    f"{field}.regex[{pattern_idx}] is not a valid regex: {exc}"
+                ) from exc
+
+
+def _validate_selector_rule_list(value: Any, *, field: str) -> None:
+    if value in (None, []):
+        return
+    if not isinstance(value, list):
+        raise ConfigValidationError(f"{field} must be a list of selector mappings.")
+    for idx, raw_rule in enumerate(value):
+        rule_field = f"{field}[{idx}]"
+        _validate_selector_mapping(raw_rule, field=rule_field)
+
+
+def _validate_column_ref_or_selector(
+    value: dict[str, Any],
+    *,
+    col_key: str,
+    selector_key: str,
+    field: str,
+) -> None:
+    raw_col = value.get(col_key)
+    raw_selector = value.get(selector_key)
+    has_col = raw_col is not None
+    has_selector = raw_selector is not None
+    if has_col == has_selector:
+        raise ConfigValidationError(f"{field} must define exactly one of {col_key} or {selector_key}.")
+    if has_col:
+        if not isinstance(raw_col, str) or not raw_col.strip():
+            raise ConfigValidationError(f"{field}.{col_key} must be a non-empty string.")
+        return
+    _validate_selector_mapping(raw_selector, field=f"{field}.{selector_key}")
+
+
+def _validate_feature_selectors(value: Any, *, field: str) -> None:
+    if value in (None, {}):
+        return
+    if not isinstance(value, dict):
+        raise ConfigValidationError(f"{field} must be a mapping when provided.")
+
+    allowed_keys = {"exact", "include", "exclude", "strict"}
+    unknown = sorted(set(value) - allowed_keys)
+    if unknown:
+        allowed = ", ".join(sorted(allowed_keys))
+        raise ConfigValidationError(f"{field} has unsupported keys: {unknown}. Allowed keys: {allowed}.")
+
+    if "exact" in value:
+        _validate_string_or_list(value["exact"], field=f"{field}.exact")
+    _validate_selector_rule_list(value.get("include"), field=f"{field}.include")
+    _validate_selector_rule_list(value.get("exclude"), field=f"{field}.exclude")
+    if "exact" not in value and value.get("include") in (None, []):
+        raise ConfigValidationError(f"{field} must define at least one exact column or include rule.")
+
+    strict = value.get("strict", {}) or {}
+    if not isinstance(strict, dict):
+        raise ConfigValidationError(f"{field}.strict must be a mapping when provided.")
+    unknown_strict = sorted(set(strict) - {"min_count"})
+    if unknown_strict:
+        raise ConfigValidationError(f"{field}.strict has unsupported keys: {unknown_strict}.")
+    if "min_count" in strict:
+        _non_negative_int(strict["min_count"], field=f"{field}.strict.min_count")
 
 
 def validate_runtime_block(runtime_cfg: dict[str, Any]) -> dict[str, Any]:
@@ -292,9 +391,12 @@ def validate_features_block(features: Any) -> None:
                 if not isinstance(output_col, str) or not output_col.strip():
                     raise ConfigValidationError(f"{field_prefix}.output_col must be a non-empty string.")
                 if kind == "rolling_clip":
-                    source_col = transform.get("source_col")
-                    if not isinstance(source_col, str) or not source_col.strip():
-                        raise ConfigValidationError(f"{field_prefix}.source_col must be a non-empty string.")
+                    _validate_column_ref_or_selector(
+                        transform,
+                        col_key="source_col",
+                        selector_key="source_selector",
+                        field=field_prefix,
+                    )
                     _positive_int(transform.get("window", 2520), field=f"{field_prefix}.window")
                     lower_q = _finite_number(transform.get("lower_q", 0.01), field=f"{field_prefix}.lower_q")
                     upper_q = _finite_number(transform.get("upper_q", 0.99), field=f"{field_prefix}.upper_q")
@@ -308,21 +410,43 @@ def validate_features_block(features: Any) -> None:
                         )
                     _non_negative_int(transform.get("shift", 1), field=f"{field_prefix}.shift")
                 elif kind == "ratio":
-                    numerator_col = transform.get("numerator_col")
-                    denominator_col = transform.get("denominator_col")
-                    if not isinstance(numerator_col, str) or not numerator_col.strip():
-                        raise ConfigValidationError(f"{field_prefix}.numerator_col must be a non-empty string.")
-                    if not isinstance(denominator_col, str) or not denominator_col.strip():
-                        raise ConfigValidationError(f"{field_prefix}.denominator_col must be a non-empty string.")
+                    _validate_column_ref_or_selector(
+                        transform,
+                        col_key="numerator_col",
+                        selector_key="numerator_selector",
+                        field=field_prefix,
+                    )
+                    _validate_column_ref_or_selector(
+                        transform,
+                        col_key="denominator_col",
+                        selector_key="denominator_selector",
+                        field=field_prefix,
+                    )
                     eps = _finite_number(transform.get("eps", 1e-8), field=f"{field_prefix}.eps")
                     if eps < 0.0:
                         raise ConfigValidationError(f"{field_prefix}.eps must be >= 0.")
                 elif kind == "rolling_zscore":
-                    source_col = transform.get("source_col")
-                    if not isinstance(source_col, str) or not source_col.strip():
-                        raise ConfigValidationError(f"{field_prefix}.source_col must be a non-empty string.")
+                    _validate_column_ref_or_selector(
+                        transform,
+                        col_key="source_col",
+                        selector_key="source_selector",
+                        field=field_prefix,
+                    )
                     _positive_int(transform.get("window", 2520), field=f"{field_prefix}.window")
                     _non_negative_int(transform.get("shift", 1), field=f"{field_prefix}.shift")
+        if step["step"] == "vol_normalized_momentum":
+            params = step.get("params") or {}
+            for key in ("returns_col", "vol_col"):
+                if key in params and params[key] is not None and not isinstance(params[key], str):
+                    raise ConfigValidationError(f"features[].params.{key} must be a string when provided.")
+            if "vol_window" in params and params["vol_window"] is not None:
+                _positive_int(params["vol_window"], field="features[].params.vol_window")
+            windows = params.get("windows")
+            if windows is not None:
+                if not isinstance(windows, (list, tuple)) or not windows:
+                    raise ConfigValidationError("features[].params.windows must be a non-empty list of integers.")
+                for idx, window in enumerate(windows):
+                    _positive_int(window, field=f"features[].params.windows[{idx}]")
         if step["step"] == "shock_context":
             params = step.get("params") or {}
             for key in ("price_col", "high_col", "low_col", "returns_col", "ema_col", "atr_col"):
@@ -415,6 +539,7 @@ def validate_model_block(model: dict[str, Any]) -> None:
                 raise ConfigValidationError(
                     "model.feature_cols must be a non-empty list[str] when provided."
                 )
+        _validate_feature_selectors(model.get("feature_selectors"), field="model.feature_selectors")
 
         target = model.get("target", {}) or {}
         if not isinstance(target, dict):
@@ -962,11 +1087,12 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
                     raise ConfigValidationError(
                         f"signals.params.activation_filters[{idx}] must be a mapping."
                     )
-                col = raw_filter.get("col")
-                if not isinstance(col, str) or not col:
-                    raise ConfigValidationError(
-                        f"signals.params.activation_filters[{idx}].col must be a non-empty string."
-                    )
+                _validate_column_ref_or_selector(
+                    raw_filter,
+                    col_key="col",
+                    selector_key="selector",
+                    field=f"signals.params.activation_filters[{idx}]",
+                )
                 op = str(raw_filter.get("op", "ge"))
                 if op not in allowed_ops:
                     raise ConfigValidationError(

@@ -8,17 +8,23 @@ import pandas as pd
 def add_vol_normalized_momentum_features(
     df: pd.DataFrame,
     returns_col: str = "close_logret",
-    vol_col: str = "vol_rolling_20",
+    vol_col: str | None = "vol_rolling_20",
+    vol_window: int | None = None,
     windows: Sequence[int] = (5, 20, 60),
     eps: float = 1e-8,
     inplace: bool = False,
 ) -> pd.DataFrame:
-    missing = [c for c in (returns_col, vol_col) if c not in df.columns]
+    if vol_window is not None and (
+        isinstance(vol_window, bool) or not isinstance(vol_window, int) or vol_window <= 0
+    ):
+        raise ValueError("vol_window must be a positive integer when provided.")
+    resolved_vol_col = vol_col or f"vol_rolling_{int(vol_window or 20)}"
+    missing = [c for c in (returns_col, resolved_vol_col) if c not in df.columns]
     if missing:
         raise KeyError(f"Missing columns for vol-normalized momentum features: {missing}")
     out = df if inplace else df.copy()
     returns = out[returns_col].astype(float)
-    volatility = out[vol_col].astype(float)
+    volatility = out[resolved_vol_col].astype(float)
     for window in windows:
         out[f"{returns_col}_norm_mom_{window}"] = compute_vol_normalized_momentum(
             returns,

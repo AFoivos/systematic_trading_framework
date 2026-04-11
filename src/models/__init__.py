@@ -16,6 +16,7 @@ _EXPORTS = {
     "prepare_forecaster_inputs": ("src.models.forecasting", "prepare_forecaster_inputs"),
     "probe_lightgbm_runtime": ("src.models.runtime", "probe_lightgbm_runtime"),
     "probe_xgboost_runtime": ("src.models.runtime", "probe_xgboost_runtime"),
+    "resolve_feature_selectors": ("src.models.runtime", "resolve_feature_selectors"),
     "resolve_garch_overlay": ("src.models.overlay", "resolve_garch_overlay"),
     "resolve_runtime_for_model": ("src.models.runtime", "resolve_runtime_for_model"),
     "train_forward_classifier": ("src.models.classification", "train_forward_classifier"),

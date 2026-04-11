@@ -94,6 +94,7 @@ def train_event_transformer_encoder(
     feature_cols = infer_feature_columns(
         out,
         explicit_cols=cfg.get("feature_cols"),
+        feature_selectors=cfg.get("feature_selectors"),
         exclude={label_col, pred_prob_col} if pred_prob_col else {label_col},
     )
     if not feature_cols:

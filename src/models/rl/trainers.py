@@ -606,6 +606,7 @@ def _train_single_asset_rl(
     feature_cols = infer_feature_columns(
         df,
         explicit_cols=model_cfg.get("feature_cols"),
+        feature_selectors=model_cfg.get("feature_selectors"),
         exclude={signal_col, action_col},
     )
     contracts = _validate_rl_feature_columns(df, feature_cols=feature_cols)
@@ -834,6 +835,7 @@ def _train_portfolio_rl(
     feature_cols = infer_feature_columns(
         first_frame,
         explicit_cols=model_cfg.get("feature_cols"),
+        feature_selectors=model_cfg.get("feature_selectors"),
         exclude={signal_col},
     )
     for asset, frame in asset_frames.items():

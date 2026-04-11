@@ -13,6 +13,7 @@ import src.experiments.runner as runner_mod
 from src.backtesting.engine import BacktestResult, run_backtest
 from src.experiments.orchestration.stage_trace import build_stage_tail_snapshot, format_stage_tail_snapshot
 from src.features.technical.momentum import add_momentum_features
+from src.models.runtime import infer_feature_columns
 from src.portfolio.construction import PortfolioPerformance
 from src.portfolio.covariance import build_rolling_covariance_by_date
 from src.signals.forecast_signal import compute_forecast_threshold_signal
@@ -924,6 +925,23 @@ backtest:
     }
 
 
+def test_stage_tail_runtime_respects_logging_disabled() -> None:
+    from src.experiments.orchestration.pipeline import _stage_tail_config
+
+    cfg = {
+        "logging": {
+            "enabled": False,
+            "stage_tails": {"enabled": True, "stdout": True, "report": True},
+        }
+    }
+
+    resolved = _stage_tail_config(cfg)
+
+    assert resolved["enabled"] is False
+    assert resolved["stdout"] is False
+    assert resolved["report"] is False
+
+
 def test_stage_tail_snapshot_formats_added_columns_and_rows() -> None:
     """
     Stage-tail snapshots should report row/column deltas and render a readable tail preview.
@@ -1707,7 +1725,11 @@ def test_tracked_experiment_configs_load_and_produce_declared_features(
     assert "vol_rolling_24" in features_df.columns
 
     model_cfg = dict(cfg.get("model", {}) or {})
-    feature_cols = list(model_cfg.get("feature_cols", []) or [])
+    feature_cols = infer_feature_columns(
+        features_df,
+        explicit_cols=model_cfg.get("feature_cols"),
+        feature_selectors=model_cfg.get("feature_selectors"),
+    )
     missing = [c for c in feature_cols if c not in features_df.columns]
     assert not missing
 
@@ -1737,8 +1759,20 @@ def test_btcusd_dukas_hourly_config_feature_pipeline_computes_expected_features(
     assert cfg["backtest"]["periods_per_year"] == 8760
     assert cfg["features"][1]["params"]["annualization_factor"] == 8760.0
 
-    missing = [c for c in cfg["model"]["feature_cols"] if c not in features_df.columns]
+    model_cfg = dict(cfg.get("model", {}) or {})
+    feature_cols = infer_feature_columns(
+        features_df,
+        explicit_cols=model_cfg.get("feature_cols"),
+        feature_selectors=model_cfg.get("feature_selectors"),
+    )
+    missing = [c for c in feature_cols if c not in features_df.columns]
     assert not missing
+
+    signal_df = features_df.copy()
+    signal_df["pred_prob"] = 0.60
+    signal_df["pred_vol"] = 0.02
+    signal_df = runner_mod._apply_signal_step(signal_df, dict(cfg.get("signals", {}) or {}))
+    assert "signal_prob_vol_adj" in signal_df.columns
 
     expected_logret = np.log(df["close"] / df["close"].shift(1))
     np.testing.assert_allclose(
@@ -1766,13 +1800,49 @@ def test_btcusd_dukas_hourly_config_feature_pipeline_computes_expected_features(
     assert "mfi_24" not in features_df.columns
 
     model_cfg = dict(cfg.get("model", {}) or {})
-    feature_cols = list(model_cfg.get("feature_cols", []) or [])
-    if feature_cols:
-        missing = [c for c in feature_cols if c not in features_df.columns]
-        assert not missing
+    feature_cols = infer_feature_columns(
+        features_df,
+        explicit_cols=model_cfg.get("feature_cols"),
+        feature_selectors=model_cfg.get("feature_selectors"),
+    )
+    missing = [c for c in feature_cols if c not in features_df.columns]
+    assert not missing
 
     if cfg["signals"]["kind"] == "volatility_regime":
         assert cfg["signals"]["params"]["vol_col"] in features_df.columns
+
+
+def test_btcusd_shock_meta_xgboost_config_feature_selectors_resolve() -> None:
+    """
+    The shock meta XGBoost config should resolve selector-based model inputs after feature generation.
+    """
+    cfg = load_experiment_config("experiments/btcusd_1h_shock_meta_xgboost.yaml")
+
+    idx = pd.date_range("2024-01-01 00:00:00", periods=400, freq="h")
+    base = np.linspace(0.0, 0.04, len(idx))
+    cyc = 0.003 * np.sin(np.arange(len(idx)) / 9.0)
+    close = 42_000.0 * np.exp(base + cyc)
+
+    df = pd.DataFrame(index=idx)
+    df["close"] = close
+    df["open"] = df["close"].shift(1).fillna(df["close"].iloc[0] * 0.9995)
+    df["high"] = np.maximum(df["open"], df["close"]) * 1.001
+    df["low"] = np.minimum(df["open"], df["close"]) * 0.999
+    df["volume"] = 1000.0 + (np.arange(len(idx)) % 24) * 10.0
+    df = df[["open", "high", "low", "close", "volume"]]
+
+    features_df = runner_mod._apply_feature_steps(df, list(cfg.get("features", []) or []))
+    model_cfg = dict(cfg.get("model", {}) or {})
+    feature_cols = infer_feature_columns(
+        features_df,
+        explicit_cols=model_cfg.get("feature_cols"),
+        feature_selectors=model_cfg.get("feature_selectors"),
+    )
+
+    assert len(feature_cols) >= 14
+    assert "close_rsi_14" in feature_cols
+    assert "bb_percent_b_24_2.0" in feature_cols
+    assert "shock_distance_ema" in feature_cols
 
 
 def test_typed_loader_accepts_null_covariance_window(tmp_path) -> None:

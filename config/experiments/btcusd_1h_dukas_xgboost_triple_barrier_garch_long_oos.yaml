@@ -86,7 +86,6 @@ features:
   - step: volume_features
     params:
       volume_col: volume
-      atr_col: atr_24
       high_col: high
       low_col: low
       close_col: close
@@ -108,7 +107,8 @@ features:
   - step: vol_normalized_momentum
     params:
       returns_col: close_logret
-      vol_col: vol_rolling_24
+      vol_col: null
+      vol_window: 24
       windows: [6, 24]
       eps: 1.0e-8
   - step: lags
@@ -132,17 +132,23 @@ model:
     objective: binary:logistic
     eval_metric: logloss
     tree_method: hist
-  feature_cols:
-    - regime_vol_ratio_24_168
-    - regime_vol_ratio_z_24_168
-    - regime_trend_state_24_72
-    - regime_absret_z_24_168
-    - close_rsi_2
-    - close_rsi_14
-    - bb_percent_b_24_2.0
-    - adx_24
-    - volume_z_72
-    - volume_over_atr_24
+  feature_selectors:
+    include:
+      - regex: "^regime_vol_ratio_[0-9]+_[0-9]+$"
+      - startswith: regime_vol_ratio_z_
+      - startswith: regime_trend_state_
+      - startswith: regime_absret_z_
+      - startswith: close_rsi_
+      - startswith: bb_percent_b_
+      - startswith: adx_
+      - startswith: volume_z_
+      - startswith: volume_over_atr_
+    exclude:
+      - startswith: target_
+      - startswith: pred_
+      - startswith: signal_
+    strict:
+      min_count: 10
   target:
     kind: triple_barrier
     price_col: close
@@ -182,10 +188,12 @@ signals:
     vol_floor: 1.0e-6
     min_signal_abs: 0.01
     activation_filters:
-      - col: regime_vol_ratio_24_168
+      - selector:
+          regex: "^regime_vol_ratio_[0-9]+_[0-9]+$"
         op: ge
         value: 1.0
-      - col: adx_24
+      - selector:
+          regex: "^adx_[0-9]+$"
         op: ge
         value: 20.0
 

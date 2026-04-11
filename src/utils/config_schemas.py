@@ -105,6 +105,7 @@ class ModelConfig:
     outputs: dict[str, str] = field(default_factory=dict)
     preprocessing: dict[str, Any] = field(default_factory=dict)
     feature_cols: list[str] | None = None
+    feature_selectors: dict[str, Any] | None = None
     target: dict[str, Any] = field(default_factory=dict)
     split: dict[str, Any] = field(default_factory=dict)
     runtime: dict[str, Any] = field(default_factory=dict)
@@ -125,6 +126,7 @@ class ModelConfig:
             "outputs",
             "preprocessing",
             "feature_cols",
+            "feature_selectors",
             "target",
             "split",
             "runtime",
@@ -139,12 +141,16 @@ class ModelConfig:
         feature_cols_raw = data.get("feature_cols")
         if feature_cols_raw is not None and not isinstance(feature_cols_raw, list):
             raise TypeError("model.feature_cols must be a list[str].")
+        feature_selectors_raw = data.get("feature_selectors")
+        if feature_selectors_raw is not None and not isinstance(feature_selectors_raw, dict):
+            raise TypeError("model.feature_selectors must be a mapping.")
         return cls(
             kind=str(data.get("kind", "none")),
             params=dict(data.get("params", {}) or {}),
             outputs={str(k): str(v) for k, v in dict(data.get("outputs", {}) or {}).items()},
             preprocessing=dict(data.get("preprocessing", {}) or {}),
             feature_cols=[str(v) for v in feature_cols_raw] if feature_cols_raw is not None else None,
+            feature_selectors=dict(feature_selectors_raw) if feature_selectors_raw is not None else None,
             target=dict(data.get("target", {}) or {}),
             split=dict(data.get("split", {}) or {}),
             runtime=dict(data.get("runtime", {}) or {}),
@@ -176,6 +182,8 @@ class ModelConfig:
             "signal_col": self.signal_col,
             "action_col": self.action_col,
         }
+        if self.feature_selectors is not None:
+            payload["feature_selectors"] = dict(self.feature_selectors)
         return payload | dict(self.extra)
 
 
@@ -189,6 +197,7 @@ class ModelStageConfig:
     outputs: dict[str, str] = field(default_factory=dict)
     preprocessing: dict[str, Any] = field(default_factory=dict)
     feature_cols: list[str] | None = None
+    feature_selectors: dict[str, Any] | None = None
     target: dict[str, Any] = field(default_factory=dict)
     split: dict[str, Any] = field(default_factory=dict)
     runtime: dict[str, Any] = field(default_factory=dict)
@@ -212,6 +221,7 @@ class ModelStageConfig:
             "outputs",
             "preprocessing",
             "feature_cols",
+            "feature_selectors",
             "target",
             "split",
             "runtime",
@@ -226,6 +236,9 @@ class ModelStageConfig:
         feature_cols_raw = data.get("feature_cols")
         if feature_cols_raw is not None and not isinstance(feature_cols_raw, list):
             raise TypeError("model_stages[].feature_cols must be a list[str].")
+        feature_selectors_raw = data.get("feature_selectors")
+        if feature_selectors_raw is not None and not isinstance(feature_selectors_raw, dict):
+            raise TypeError("model_stages[].feature_selectors must be a mapping.")
         return cls(
             name=str(data.get("name", "")),
             enabled=bool(data.get("enabled", True)),
@@ -235,6 +248,7 @@ class ModelStageConfig:
             outputs={str(k): str(v) for k, v in dict(data.get("outputs", {}) or {}).items()},
             preprocessing=dict(data.get("preprocessing", {}) or {}),
             feature_cols=[str(v) for v in feature_cols_raw] if feature_cols_raw is not None else None,
+            feature_selectors=dict(feature_selectors_raw) if feature_selectors_raw is not None else None,
             target=dict(data.get("target", {}) or {}),
             split=dict(data.get("split", {}) or {}),
             runtime=dict(data.get("runtime", {}) or {}),
@@ -269,6 +283,8 @@ class ModelStageConfig:
             "signal_col": self.signal_col,
             "action_col": self.action_col,
         }
+        if self.feature_selectors is not None:
+            payload["feature_selectors"] = dict(self.feature_selectors)
         return payload | dict(self.extra)
 
 

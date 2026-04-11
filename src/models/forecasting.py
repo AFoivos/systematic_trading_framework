@@ -78,6 +78,7 @@ def prepare_forecaster_inputs(
     feature_cols = infer_feature_columns(
         out,
         explicit_cols=model_cfg.get("feature_cols"),
+        feature_selectors=model_cfg.get("feature_selectors"),
         exclude={label_col, fwd_col, pred_ret_col, pred_prob_col},
     )
     use_exogenous_features = bool(model_cfg.get("use_features", True))

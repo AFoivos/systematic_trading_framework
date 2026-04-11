@@ -19,6 +19,7 @@ from src.features import (
     add_shock_context_features,
     add_support_resistance_features,
     add_support_resistance_v2_features,
+    add_vol_normalized_momentum_features,
 )
 from src.features.regime_context import add_regime_context_features
 from src.features.session_context import add_session_context_features
@@ -259,6 +260,72 @@ def test_ratio_transform_emits_expected_values() -> None:
     expected = (df["lag_close_logret_1"] / df["vol_rolling_24"]).astype("float32")
     pd.testing.assert_series_equal(
         out["lag_close_logret_1_over_vol_rolling_24"],
+        expected,
+        check_names=False,
+    )
+
+
+def test_feature_transforms_resolve_single_column_selectors() -> None:
+    idx = pd.date_range("2024-01-01", periods=4, freq="h")
+    df = pd.DataFrame(
+        {
+            "lag_close_logret_1": [0.01, -0.02, 0.03, 0.04],
+            "vol_rolling_36": [0.1, 0.2, 0.3, 0.4],
+            "volume_over_atr_36": [1.0, 1.1, 0.9, 1.2],
+        },
+        index=idx,
+    )
+
+    out = add_feature_transforms(
+        df,
+        transforms=[
+            {
+                "numerator_selector": {"exact": "lag_close_logret_1"},
+                "denominator_selector": {"regex": "^vol_rolling_[0-9]+$"},
+                "kind": "ratio",
+                "output_col": "lag_close_logret_1_over_selected_vol",
+            },
+            {
+                "source_selector": {"regex": "^volume_over_atr_[0-9]+$"},
+                "kind": "rolling_zscore",
+                "output_col": "volume_over_atr_selected_z_2",
+                "window": 2,
+                "shift": 1,
+            },
+        ],
+    )
+
+    expected_ratio = (df["lag_close_logret_1"] / df["vol_rolling_36"]).astype("float32")
+    pd.testing.assert_series_equal(
+        out["lag_close_logret_1_over_selected_vol"],
+        expected_ratio,
+        check_names=False,
+    )
+    assert out["volume_over_atr_selected_z_2"].iloc[:2].isna().all()
+
+
+def test_vol_normalized_momentum_resolves_vol_window_when_col_is_null() -> None:
+    idx = pd.date_range("2024-01-01", periods=4, freq="h")
+    df = pd.DataFrame(
+        {
+            "close_logret": [0.01, -0.02, 0.03, 0.04],
+            "vol_rolling_36": [0.10, 0.20, 0.30, 0.40],
+        },
+        index=idx,
+    )
+
+    out = add_vol_normalized_momentum_features(
+        df,
+        returns_col="close_logret",
+        vol_col=None,
+        vol_window=36,
+        windows=[2],
+        eps=0.0,
+    )
+
+    expected = df["close_logret"].rolling(window=2).sum() / df["vol_rolling_36"]
+    pd.testing.assert_series_equal(
+        out["close_logret_norm_mom_2"],
         expected,
         check_names=False,
     )
