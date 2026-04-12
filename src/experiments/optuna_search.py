@@ -1,17 +1,22 @@
 from __future__ import annotations
 
+import csv
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
+from datetime import datetime
+import json
 import math
 from pathlib import Path
 import tempfile
 from typing import Any, Literal, Mapping, Sequence
+from uuid import uuid4
 
 import yaml
 
 from src.experiments.optuna_runtime import optuna_fold_reporting_context
 from src.utils.config import load_experiment_config
-from src.utils.paths import PROJECT_ROOT
+from src.utils.paths import PROJECT_ROOT, enforce_safe_absolute_path
+from src.utils.run_metadata import build_artifact_manifest
 
 ParameterKind = Literal["int", "float", "categorical", "bool"]
 ObjectiveDirection = Literal["maximize", "minimize"]
@@ -721,6 +726,297 @@ def _build_pruner(pruning: PruningSpec | Mapping[str, Any] | None) -> Any:
     raise ValueError("pruning.pruner must be one of: median, percentile, none")
 
 
+def _jsonable(value: Any) -> Any:
+    if is_dataclass(value) and not isinstance(value, type):
+        return _jsonable(asdict(value))
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, Mapping):
+        return {str(key): _jsonable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(item) for item in value]
+    if hasattr(value, "item"):
+        try:
+            return value.item()
+        except Exception:
+            pass
+    if hasattr(value, "isoformat"):
+        try:
+            return value.isoformat()
+        except Exception:
+            pass
+    return value
+
+
+def _trial_state_name(trial: Any) -> str:
+    state = getattr(trial, "state", None)
+    return str(getattr(state, "name", state))
+
+
+def _trial_duration_seconds(trial: Any) -> float | None:
+    started = getattr(trial, "datetime_start", None)
+    completed = getattr(trial, "datetime_complete", None)
+    if started is None or completed is None:
+        return None
+    try:
+        return float((completed - started).total_seconds())
+    except Exception:
+        return None
+
+
+def _flat_trial_row(trial: Any) -> dict[str, Any]:
+    user_attrs = dict(getattr(trial, "user_attrs", {}) or {})
+    primary_summary = dict(user_attrs.get("primary_summary", {}) or {})
+    derived_metrics = dict(user_attrs.get("derived_metrics", {}) or {})
+
+    row: dict[str, Any] = {
+        "number": getattr(trial, "number", None),
+        "state": _trial_state_name(trial),
+        "value": getattr(trial, "value", None),
+        "datetime_start": _jsonable(getattr(trial, "datetime_start", None)),
+        "datetime_complete": _jsonable(getattr(trial, "datetime_complete", None)),
+        "duration_seconds": _trial_duration_seconds(trial),
+        "trial_failed": user_attrs.get("trial_failed"),
+        "exception": user_attrs.get("exception"),
+    }
+    for key, value in sorted(derived_metrics.items()):
+        row[f"derived_{key}"] = value
+    for key in (
+        "sharpe",
+        "sortino",
+        "calmar",
+        "annualized_return",
+        "annualized_vol",
+        "cumulative_return",
+        "net_pnl",
+        "gross_pnl",
+        "total_cost",
+        "profit_factor",
+        "hit_rate",
+        "total_turnover",
+        "max_drawdown",
+        "cost_to_gross_pnl",
+    ):
+        if key in primary_summary:
+            row[f"summary_{key}"] = primary_summary[key]
+    for key, value in sorted(dict(getattr(trial, "params", {}) or {}).items()):
+        row[f"param_{key}"] = value
+    return row
+
+
+def _trial_sort_key(trial: Any, *, direction: ObjectiveDirection) -> tuple[int, float, int]:
+    state_name = _trial_state_name(trial)
+    value = getattr(trial, "value", None)
+    is_complete = 0 if state_name == "COMPLETE" and value is not None else 1
+    numeric_value = float(value) if value is not None else math.nan
+    if not math.isfinite(numeric_value):
+        numeric_value = -math.inf if direction == "maximize" else math.inf
+    ranked_value = -numeric_value if direction == "maximize" else numeric_value
+    return (is_complete, ranked_value, int(getattr(trial, "number", 0) or 0))
+
+
+def _resolve_optuna_report_dir(output_dir: str | Path, *, run_name: str) -> Path:
+    base_dir = Path(output_dir)
+    if not base_dir.is_absolute():
+        base_dir = PROJECT_ROOT / base_dir
+    base_dir = enforce_safe_absolute_path(base_dir.resolve())
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    safe_run_name = "".join(char if char.isalnum() or char in {"-", "_"} else "_" for char in run_name).strip("_")
+    if not safe_run_name:
+        safe_run_name = "optuna_study"
+    return base_dir / f"{safe_run_name}_{timestamp}_{uuid4().hex[:8]}"
+
+
+def _study_best_trial_payload(study: Any, *, direction: ObjectiveDirection) -> dict[str, Any]:
+    trials = list(getattr(study, "trials", []) or [])
+    complete_trials = [
+        trial
+        for trial in trials
+        if _trial_state_name(trial) == "COMPLETE" and getattr(trial, "value", None) is not None
+    ]
+    if not complete_trials:
+        return {}
+    try:
+        best_trial = getattr(study, "best_trial")
+    except Exception:
+        best_trial = sorted(complete_trials, key=lambda trial: _trial_sort_key(trial, direction=direction))[0]
+    user_attrs = dict(getattr(best_trial, "user_attrs", {}) or {})
+    return {
+        "number": getattr(best_trial, "number", None),
+        "value": getattr(best_trial, "value", None),
+        "state": _trial_state_name(best_trial),
+        "params": dict(getattr(best_trial, "params", {}) or {}),
+        "primary_summary": dict(user_attrs.get("primary_summary", {}) or {}),
+        "derived_metrics": dict(user_attrs.get("derived_metrics", {}) or {}),
+        "trial_failed": user_attrs.get("trial_failed"),
+        "exception": user_attrs.get("exception"),
+    }
+
+
+def build_study_report_payload(
+    study: Any,
+    *,
+    config_path: str | Path,
+    search_space: Sequence[SearchDimension | Mapping[str, Any]],
+    objective: ObjectiveSpec | Mapping[str, Any] | None = None,
+    pruning: PruningSpec | Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """
+    Build a compact, JSON-serializable Optuna study summary for logs.
+    """
+    objective_spec = normalize_objective_spec(objective)
+    pruning_spec = normalize_pruning_spec(pruning)
+    normalized_space = normalize_search_space(search_space)
+    trials = list(getattr(study, "trials", []) or [])
+    state_counts: dict[str, int] = {}
+    for trial in trials:
+        state_name = _trial_state_name(trial)
+        state_counts[state_name] = state_counts.get(state_name, 0) + 1
+
+    clean_complete_trials = [
+        trial
+        for trial in trials
+        if _trial_state_name(trial) == "COMPLETE"
+        and getattr(trial, "value", None) is not None
+        and not bool(dict(getattr(trial, "user_attrs", {}) or {}).get("trial_failed"))
+    ]
+    top_trials = sorted(clean_complete_trials, key=lambda trial: _trial_sort_key(trial, direction=objective_spec.direction))[:10]
+
+    return _jsonable(
+        {
+            "study_name": getattr(study, "study_name", None),
+            "config_path": str(Path(config_path)),
+            "objective": objective_spec,
+            "pruning": pruning_spec,
+            "search_space": [dimension for dimension in normalized_space],
+            "state_counts": state_counts,
+            "trial_count": len(trials),
+            "clean_complete_count": len(clean_complete_trials),
+            "best_trial": _study_best_trial_payload(study, direction=objective_spec.direction),
+            "top_trials": [
+                {
+                    "number": getattr(trial, "number", None),
+                    "value": getattr(trial, "value", None),
+                    "params": dict(getattr(trial, "params", {}) or {}),
+                    "primary_summary": dict(dict(getattr(trial, "user_attrs", {}) or {}).get("primary_summary", {}) or {}),
+                    "derived_metrics": dict(dict(getattr(trial, "user_attrs", {}) or {}).get("derived_metrics", {}) or {}),
+                }
+                for trial in top_trials
+            ],
+        }
+    )
+
+
+def _build_study_report_markdown(payload: Mapping[str, Any]) -> str:
+    best_trial = dict(payload.get("best_trial", {}) or {})
+    state_counts = dict(payload.get("state_counts", {}) or {})
+    lines = [
+        "# Optuna Study Report",
+        "",
+        f"- Study: `{payload.get('study_name') or 'n/a'}`",
+        f"- Base config: `{payload.get('config_path')}`",
+        f"- Objective: `{dict(payload.get('objective', {}) or {}).get('metric_path')}` "
+        f"({dict(payload.get('objective', {}) or {}).get('direction')})",
+        f"- Trials: `{payload.get('trial_count')}`",
+        f"- Clean complete trials: `{payload.get('clean_complete_count')}`",
+        f"- State counts: `{state_counts}`",
+        "",
+        "## Best Trial",
+    ]
+    if best_trial:
+        summary = dict(best_trial.get("primary_summary", {}) or {})
+        derived = dict(best_trial.get("derived_metrics", {}) or {})
+        lines.extend(
+            [
+                f"- Number: `{best_trial.get('number')}`",
+                f"- Objective value: `{best_trial.get('value')}`",
+                f"- Sharpe: `{summary.get('sharpe', 'n/a')}`",
+                f"- Profit factor: `{summary.get('profit_factor', 'n/a')}`",
+                f"- Max drawdown: `{summary.get('max_drawdown', 'n/a')}`",
+                f"- Total turnover: `{summary.get('total_turnover', 'n/a')}`",
+                f"- Trade count: `{derived.get('trade_count', 'n/a')}`",
+                "",
+                "### Best Params",
+            ]
+        )
+        for key, value in sorted(dict(best_trial.get("params", {}) or {}).items()):
+            lines.append(f"- `{key}`: `{value}`")
+    else:
+        lines.append("No complete best trial was available.")
+
+    lines.extend(["", "## Top Trials"])
+    top_trials = list(payload.get("top_trials", []) or [])
+    if not top_trials:
+        lines.append("No clean complete trials were available.")
+    else:
+        lines.append("| trial | objective | sharpe | profit_factor | max_drawdown | trade_count | total_turnover |")
+        lines.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: |")
+        for trial in top_trials:
+            summary = dict(trial.get("primary_summary", {}) or {})
+            derived = dict(trial.get("derived_metrics", {}) or {})
+            lines.append(
+                f"| {trial.get('number')} | {trial.get('value')} | {summary.get('sharpe', '')} | "
+                f"{summary.get('profit_factor', '')} | {summary.get('max_drawdown', '')} | "
+                f"{derived.get('trade_count', '')} | {summary.get('total_turnover', '')} |"
+            )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def write_study_report(
+    study: Any,
+    *,
+    output_dir: str | Path,
+    run_name: str | None = None,
+    config_path: str | Path,
+    search_space: Sequence[SearchDimension | Mapping[str, Any]],
+    objective: ObjectiveSpec | Mapping[str, Any] | None = None,
+    pruning: PruningSpec | Mapping[str, Any] | None = None,
+) -> dict[str, str]:
+    """
+    Persist one Optuna study report under the experiment logs directory.
+    """
+    objective_spec = normalize_objective_spec(objective)
+    report_run_name = run_name or f"optuna_{getattr(study, 'study_name', None) or Path(config_path).stem}"
+    run_dir = _resolve_optuna_report_dir(output_dir, run_name=report_run_name)
+    run_dir.mkdir(parents=True, exist_ok=False)
+
+    payload = build_study_report_payload(
+        study,
+        config_path=config_path,
+        search_space=search_space,
+        objective=objective_spec,
+        pruning=pruning,
+    )
+    summary_path = run_dir / "study_summary.json"
+    with summary_path.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2, default=str)
+
+    trials_path = run_dir / "trials.csv"
+    trial_rows = [_jsonable(_flat_trial_row(trial)) for trial in list(getattr(study, "trials", []) or [])]
+    fieldnames = sorted({key for row in trial_rows for key in row})
+    with trials_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(trial_rows)
+
+    report_path = run_dir / "report.md"
+    report_path.write_text(_build_study_report_markdown(payload), encoding="utf-8")
+
+    artifacts = {
+        "run_dir": str(run_dir),
+        "study_summary": str(summary_path),
+        "trials": str(trials_path),
+        "report": str(report_path),
+    }
+    manifest = build_artifact_manifest(artifacts)
+    manifest_path = run_dir / "artifact_manifest.json"
+    with manifest_path.open("w", encoding="utf-8") as handle:
+        json.dump(manifest, handle, indent=2, default=str)
+    artifacts["manifest"] = str(manifest_path)
+    return artifacts
+
+
 def optimize_experiment(
     config_path: str | Path,
     *,
@@ -737,6 +1033,8 @@ def optimize_experiment(
     n_jobs: int = 1,
     logging_enabled: bool = False,
     catch_exceptions: bool = True,
+    report_output_dir: str | Path | None = None,
+    report_run_name: str | None = None,
 ) -> Any:
     """
     Run an Optuna study against the existing experiment runner with a config-path based search space.
@@ -777,6 +1075,19 @@ def optimize_experiment(
         timeout=timeout,
         n_jobs=int(n_jobs),
     )
+    if report_output_dir is not None:
+        study.set_user_attr(
+            "report_artifacts",
+            write_study_report(
+                study,
+                output_dir=report_output_dir,
+                run_name=report_run_name,
+                config_path=config_path,
+                search_space=search_space,
+                objective=objective_spec,
+                pruning=pruning_spec,
+            ),
+        )
     return study
 
 
@@ -806,6 +1117,7 @@ __all__ = [
     "PruningSpec",
     "SearchDimension",
     "build_study_objective",
+    "build_study_report_payload",
     "compute_derived_metrics",
     "extract_objective_value",
     "get_nested_value",
@@ -819,4 +1131,5 @@ __all__ = [
     "sample_trial_parameters",
     "score_experiment_result",
     "set_nested_value",
+    "write_study_report",
 ]

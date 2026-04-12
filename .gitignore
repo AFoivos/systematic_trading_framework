@@ -234,3 +234,4 @@ output/
 logs/
 processed/
 /pdfs/
+!AGENTS.md

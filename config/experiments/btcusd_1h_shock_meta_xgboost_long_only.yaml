@@ -70,8 +70,10 @@ features:
       high_col: high
       low_col: low
       returns_col: close_logret
-      ema_col: close_ema_24
-      atr_col: atr_24
+      ema_col: null
+      ema_window: 24
+      atr_col: null
+      atr_window: 24
       short_horizon: 1
       medium_horizon: 4
       vol_window: 24
@@ -90,6 +92,34 @@ features:
     params:
       cols: [close_logret]
       lags: [1]
+  - step: volume_features
+    enabled: true
+    params:
+      volume_col: volume
+      atr_col: null
+      high_col: high
+      low_col: low
+      close_col: close
+      atr_window: 24
+      vol_z_window: 72
+  - step: mfi
+    enabled: true
+    params:
+      high_col: high
+      low_col: low
+      close_col: close
+      volume_col: volume
+      window: 24
+  - step: roc
+    enabled: true
+    params:
+      price_col: close
+      windows: [6, 24]
+  - step: return_momentum
+    enabled: true
+    params:
+      returns_col: close_logret
+      windows: [6, 24]
 
 model:
   kind: xgboost_clf
@@ -109,21 +139,31 @@ model:
     tree_method: hist
   preprocessing:
     scaler: none
-  feature_cols:
-    - shock_ret_z_1h
-    - shock_ret_z_4h
-    - shock_atr_multiple_1h
-    - shock_atr_multiple_4h
-    - shock_distance_ema
-    - shock_strength
-    # - bars_since_shock
-    # - shock_active_window
-    - regime_vol_ratio_24_168
-    - regime_absret_z_24_168
-    - bb_percent_b_24_2.0
-    - close_rsi_2
-    - close_rsi_14
-    - lag_close_logret_1
+  feature_selectors:
+    exact:
+      - shock_distance_ema
+      - shock_strength
+      - bars_since_shock
+      - shock_active_window
+    include:
+      - startswith: shock_ret_z_
+      - startswith: shock_atr_multiple_
+      - regex: "^regime_vol_ratio_[0-9]+_[0-9]+$"
+      - startswith: regime_absret_z_
+      - startswith: bb_percent_b_
+      - startswith: close_rsi_
+      - startswith: lag_close_logret_
+      - startswith: volume_z_
+      - startswith: volume_over_atr_
+      - startswith: mfi_
+      - startswith: roc_
+      - startswith: close_logret_mom_
+    exclude:
+      - startswith: target_
+      - startswith: pred_
+      - startswith: signal_
+    strict:
+      min_count: 21
   target:
     kind: triple_barrier
     price_col: close

@@ -1,7 +1,7 @@
-base_config: config/experiments/btcusd_1h_shock_meta_xgboost.yaml
+base_config: config/experiments/btcusd_1h_shock_meta_xgboost_long_only.yaml
 
 study:
-  study_name: optuna_shock_meta_xgboost_v2
+  study_name: optuna_shock_meta_xgboost_long_only_v2
   sampler: tpe
   seed: 7
   n_trials: 30
@@ -19,6 +19,8 @@ objective:
   stability_metric_path: metrics.sharpe
   stability_std_penalty: 1.0
   fold_summary_path: evaluation.fold_backtest_summaries
+  # Hard-style feasibility filters: keep sparse/illiquid trials out of the top ranking
+  # without changing the Optuna objective schema.
   constraints:
     - metric_path: evaluation.primary_summary.max_drawdown
       op: lt
@@ -27,9 +29,14 @@ objective:
       missing_penalty: 1.0
     - metric_path: derived.trade_count
       op: lt
-      threshold: 50.0
-      penalty: 1.0
-      missing_penalty: 1.0
+      threshold: 75.0
+      penalty: 1000000000000.0
+      missing_penalty: 1000000000000.0
+    - metric_path: evaluation.primary_summary.total_turnover
+      op: lt
+      threshold: 30.0
+      penalty: 1000000000000.0
+      missing_penalty: 1000000000000.0
     - metric_path: evaluation.primary_summary.profit_factor
       op: lt
       threshold: 1.0
@@ -47,7 +54,7 @@ pruning:
   interval_steps: 1
 
 # Keep the feature space deliberately controlled. Window-changing feature params are safe here
-# because the base experiment uses model.feature_selectors instead of fixed generated columns.
+# because the long-only base experiment uses model.feature_selectors instead of fixed columns.
 search_space:
   - name: regime_vol_short_window
     path: features.2.params.vol_short_window

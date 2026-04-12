@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -21,6 +22,7 @@ from src.experiments.optuna_search import (
     optimize_experiment,
     prepare_trial_config,
     score_experiment_result,
+    write_study_report,
 )
 from src.experiments.optuna_runtime import report_optuna_fold
 from src.experiments.orchestration.types import ExperimentResult
@@ -380,19 +382,25 @@ def test_repo_shock_meta_optuna_yaml_matches_base_config_contract() -> None:
     )
 
     validate_resolved_config(trial_cfg)
-    assert payload["base_config"] == "config/experiments/btcusd_1h_shock_meta_xgboost.yaml"
+    assert payload["base_config"] == "config/experiments/btcusd_1h_shock_meta_xgboost_long_only.yaml"
     assert objective.metric_path == "evaluation.primary_summary.sharpe"
     assert pruning.metric_path == "classification_metrics.roc_auc"
+    constraints_by_path = {constraint.metric_path: constraint for constraint in objective.constraints}
+    assert constraints_by_path["derived.trade_count"].threshold == pytest.approx(75.0)
+    assert constraints_by_path["derived.trade_count"].penalty == pytest.approx(1.0e12)
+    assert constraints_by_path["evaluation.primary_summary.total_turnover"].threshold == pytest.approx(30.0)
+    assert constraints_by_path["evaluation.primary_summary.total_turnover"].penalty == pytest.approx(1.0e12)
     assert trial_cfg["model"]["feature_selectors"]["strict"]["min_count"] == 21
     assert trial_cfg["model"]["target"]["max_holding"] == 12
     assert trial_cfg["signals"]["params"]["upper_exit"] == 0.50
+    assert trial_cfg["signals"]["params"]["mode"] == "long_only"
     assert trial_cfg["backtest"]["min_holding_bars"] == 1
     assert trial_cfg["risk"]["dd_guard"]["cooloff_bars"] == 24
     assert trial_cfg["logging"]["enabled"] is False
     assert trial_cfg["logging"]["stage_tails"]["stdout"] is False
 
 
-def test_optimize_experiment_wires_fake_optuna_study(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_optimize_experiment_wires_fake_optuna_study(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from src.experiments import optuna_search as optuna_mod
 
     class _FakeTPESampler:
@@ -452,6 +460,11 @@ def test_optimize_experiment_wires_fake_optuna_study(monkeypatch: pytest.MonkeyP
     sentinel_objective = object()
     monkeypatch.setattr(optuna_mod, "_require_optuna", lambda: fake_optuna)
     monkeypatch.setattr(optuna_mod, "build_study_objective", lambda *args, **kwargs: sentinel_objective)
+    monkeypatch.setattr(
+        optuna_mod,
+        "write_study_report",
+        lambda *args, **kwargs: {"report": str(tmp_path / "report.md")},
+    )
 
     study = optimize_experiment(
         "config/experiments/example.yaml",
@@ -471,6 +484,8 @@ def test_optimize_experiment_wires_fake_optuna_study(monkeypatch: pytest.MonkeyP
         n_trials=7,
         timeout=12.5,
         n_jobs=2,
+        report_output_dir=tmp_path,
+        report_run_name="optuna_unit",
     )
 
     assert study is fake_optuna.study
@@ -481,9 +496,86 @@ def test_optimize_experiment_wires_fake_optuna_study(monkeypatch: pytest.MonkeyP
     assert study.user_attrs["config_path"] == "config/experiments/example.yaml"
     assert study.user_attrs["objective_metric"] == "evaluation.primary_summary.sharpe"
     assert study.user_attrs["pruning_metric"] == "classification_metrics.roc_auc"
+    assert study.user_attrs["report_artifacts"] == {"report": str(tmp_path / "report.md")}
     assert study.optimize_args == {
         "objective": sentinel_objective,
         "n_trials": 7,
         "timeout": 12.5,
         "n_jobs": 2,
     }
+
+
+def test_write_study_report_persists_optuna_artifacts(tmp_path: Path) -> None:
+    completed_trial = SimpleNamespace(
+        number=3,
+        state=SimpleNamespace(name="COMPLETE"),
+        value=1.25,
+        datetime_start=None,
+        datetime_complete=None,
+        params={"signal_upper": 0.57},
+        user_attrs={
+            "trial_failed": False,
+            "primary_summary": {
+                "sharpe": 1.25,
+                "profit_factor": 1.4,
+                "max_drawdown": -0.12,
+                "total_turnover": 88.0,
+            },
+            "derived_metrics": {"trade_count": 120.0},
+        },
+    )
+    failed_trial = SimpleNamespace(
+        number=4,
+        state=SimpleNamespace(name="COMPLETE"),
+        value=-1.0e12,
+        datetime_start=None,
+        datetime_complete=None,
+        params={"signal_upper": 0.61},
+        user_attrs={"trial_failed": True, "exception": "ValueError: all-NaN"},
+    )
+    study = SimpleNamespace(
+        study_name="unit_study",
+        trials=[failed_trial, completed_trial],
+        best_trial=completed_trial,
+    )
+
+    artifacts = write_study_report(
+        study,
+        output_dir=tmp_path,
+        run_name="optuna_unit",
+        config_path="config/experiments/example.yaml",
+        search_space=[
+            SearchDimension(
+                name="signal_upper",
+                path="signals.params.upper",
+                kind="float",
+                low=0.52,
+                high=0.60,
+            )
+        ],
+        objective=ObjectiveSpec(metric_path="evaluation.primary_summary.sharpe"),
+        pruning=PruningSpec(enabled=False),
+    )
+
+    run_dir = Path(artifacts["run_dir"])
+    assert run_dir.parent == tmp_path
+    assert Path(artifacts["report"]).exists()
+    assert Path(artifacts["trials"]).exists()
+    assert Path(artifacts["study_summary"]).exists()
+    assert Path(artifacts["manifest"]).exists()
+
+    payload = json.loads(Path(artifacts["study_summary"]).read_text(encoding="utf-8"))
+    assert payload["study_name"] == "unit_study"
+    assert payload["state_counts"] == {"COMPLETE": 2}
+    assert payload["best_trial"]["number"] == 3
+    assert payload["best_trial"]["derived_metrics"]["trade_count"] == pytest.approx(120.0)
+
+    trials = pd.read_csv(artifacts["trials"])
+    assert set(trials["number"]) == {3, 4}
+    assert "summary_sharpe" in trials.columns
+    assert "derived_trade_count" in trials.columns
+    assert "param_signal_upper" in trials.columns
+
+    report_text = Path(artifacts["report"]).read_text(encoding="utf-8")
+    assert "# Optuna Study Report" in report_text
+    assert "Trade count" in report_text
