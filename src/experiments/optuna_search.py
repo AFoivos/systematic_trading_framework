@@ -11,6 +11,7 @@ import tempfile
 from typing import Any, Literal, Mapping, Sequence
 from uuid import uuid4
 
+import pandas as pd
 import yaml
 
 from src.experiments.optuna_runtime import optuna_fold_reporting_context
@@ -327,34 +328,117 @@ def get_nested_value(payload: Any, path: str | Sequence[str | int]) -> Any:
     return current
 
 
-def _single_asset_oos_mask(result: Any) -> Any:
+_POSITION_EPS = 1.0e-12
+
+
+def _strict_oos_mask(result: Any, index: Any) -> Any:
+    evaluation = getattr(result, "evaluation", {}) or {}
+    if not isinstance(evaluation, Mapping) or evaluation.get("scope") != "strict_oos_only":
+        return None
+
     data = getattr(result, "data", None)
-    if not isinstance(data, Mapping) and hasattr(data, "columns") and "pred_is_oos" in data.columns:
-        return data["pred_is_oos"].astype(bool)
+    if isinstance(data, Mapping):
+        masks = [
+            frame["pred_is_oos"].astype(bool)
+            for frame in data.values()
+            if hasattr(frame, "columns") and "pred_is_oos" in frame.columns
+        ]
+        if masks:
+            return (
+                pd.concat(masks, axis=1, join="inner")
+                .reindex(index)
+                .fillna(False)
+                .astype(bool)
+                .all(axis=1)
+            )
+    elif hasattr(data, "columns") and "pred_is_oos" in data.columns:
+        return data["pred_is_oos"].reindex(index).fillna(False).astype(bool)
     return None
 
 
-def _compute_trade_count(result: Any) -> float:
+def _apply_strict_oos_filter(result: Any, values: Any) -> Any:
+    oos_mask = _strict_oos_mask(result, values.index)
+    if oos_mask is None:
+        return values
+    return values.loc[oos_mask]
+
+
+def _count_true_values(values: Any) -> float:
+    total = values.sum()
+    if hasattr(total, "sum"):
+        total = total.sum()
+    return float(total)
+
+
+def _count_true_bars(values: Any) -> float:
+    if getattr(values, "ndim", 1) == 2:
+        values = values.any(axis=1)
+    return float(values.sum())
+
+
+def _position_path(result: Any) -> Any:
+    backtest = getattr(result, "backtest", None)
+    positions = getattr(backtest, "positions", None)
+    if positions is not None:
+        return positions.astype(float)
+    portfolio_weights = getattr(result, "portfolio_weights", None)
+    if portfolio_weights is not None:
+        return portfolio_weights.astype(float)
+    return None
+
+
+def _compute_turnover_event_count(result: Any) -> float:
     backtest = getattr(result, "backtest", None)
     turnover = getattr(backtest, "turnover", None)
     if turnover is None:
         return 0.0
 
-    series = turnover.astype(float)
-    oos_mask = _single_asset_oos_mask(result)
-    if oos_mask is not None and getattr(result, "evaluation", {}).get("scope") == "strict_oos_only":
-        aligned_mask = oos_mask.reindex(series.index).fillna(False).astype(bool)
-        if bool(aligned_mask.any()):
-            series = series.loc[aligned_mask]
-    return float((series.abs() > 1.0e-12).sum())
+    series = _apply_strict_oos_filter(result, turnover.astype(float))
+    return _count_true_bars(series.abs() > _POSITION_EPS)
+
+
+def _compute_exposure_bar_count(result: Any) -> float:
+    positions = _position_path(result)
+    if positions is None:
+        return 0.0
+    positions = _apply_strict_oos_filter(result, positions)
+    return _count_true_bars(positions.abs() > _POSITION_EPS)
+
+
+def _entry_exit_counts(result: Any) -> tuple[float, float]:
+    positions = _position_path(result)
+    if positions is None:
+        return 0.0, 0.0
+    previous_positions = positions.shift(1).fillna(0.0)
+    current_exposed = positions.abs() > _POSITION_EPS
+    previous_exposed = previous_positions.abs() > _POSITION_EPS
+    sign_changed = (
+        current_exposed
+        & previous_exposed
+        & positions.gt(0.0).ne(previous_positions.gt(0.0))
+    )
+    entries = current_exposed & (~previous_exposed | sign_changed)
+    exits = previous_exposed & (~current_exposed | sign_changed)
+    entries = _apply_strict_oos_filter(result, entries)
+    exits = _apply_strict_oos_filter(result, exits)
+    return _count_true_values(entries), _count_true_values(exits)
 
 
 def compute_derived_metrics(result: Any) -> dict[str, float]:
     """
     Compute convenience metrics that are not part of the current canonical evaluation payload.
     """
+    entry_count, exit_count = _entry_exit_counts(result)
+    turnover_event_count = _compute_turnover_event_count(result)
     return {
-        "trade_count": _compute_trade_count(result),
+        "turnover_event_count": turnover_event_count,
+        # Backward-compatible alias. Historically this meant "bars with non-zero turnover",
+        # not completed trade round trips; prefer `turnover_event_count` in new YAML configs.
+        "trade_count": turnover_event_count,
+        "entry_count": entry_count,
+        "exit_count": exit_count,
+        "round_trip_count": min(entry_count, exit_count),
+        "exposure_bar_count": _compute_exposure_bar_count(result),
     }
 
 
@@ -934,7 +1018,10 @@ def _build_study_report_markdown(payload: Mapping[str, Any]) -> str:
                 f"- Profit factor: `{summary.get('profit_factor', 'n/a')}`",
                 f"- Max drawdown: `{summary.get('max_drawdown', 'n/a')}`",
                 f"- Total turnover: `{summary.get('total_turnover', 'n/a')}`",
-                f"- Trade count: `{derived.get('trade_count', 'n/a')}`",
+                "- Turnover event count: "
+                f"`{derived.get('turnover_event_count', derived.get('trade_count', 'n/a'))}`",
+                f"- Entry count: `{derived.get('entry_count', 'n/a')}`",
+                f"- Round trip count: `{derived.get('round_trip_count', 'n/a')}`",
                 "",
                 "### Best Params",
             ]
@@ -949,15 +1036,20 @@ def _build_study_report_markdown(payload: Mapping[str, Any]) -> str:
     if not top_trials:
         lines.append("No clean complete trials were available.")
     else:
-        lines.append("| trial | objective | sharpe | profit_factor | max_drawdown | trade_count | total_turnover |")
-        lines.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: |")
+        lines.append(
+            "| trial | objective | sharpe | profit_factor | max_drawdown | "
+            "turnover_events | entries | round_trips | total_turnover |"
+        )
+        lines.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
         for trial in top_trials:
             summary = dict(trial.get("primary_summary", {}) or {})
             derived = dict(trial.get("derived_metrics", {}) or {})
             lines.append(
                 f"| {trial.get('number')} | {trial.get('value')} | {summary.get('sharpe', '')} | "
                 f"{summary.get('profit_factor', '')} | {summary.get('max_drawdown', '')} | "
-                f"{derived.get('trade_count', '')} | {summary.get('total_turnover', '')} |"
+                f"{derived.get('turnover_event_count', derived.get('trade_count', ''))} | "
+                f"{derived.get('entry_count', '')} | {derived.get('round_trip_count', '')} | "
+                f"{summary.get('total_turnover', '')} |"
             )
     lines.append("")
     return "\n".join(lines)

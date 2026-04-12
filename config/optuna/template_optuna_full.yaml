@@ -1,42 +1,88 @@
+# Full self-contained Optuna template covering the current supported Optuna spec surface.
+#
+# Copy this file to config/optuna/<your_study>.yaml and set `base_config` to the
+# experiment YAML you want Optuna to run. Every `search_space[].path` must already
+# exist in that base experiment config; paths are patched per trial and missing
+# branches are rejected.
+#
+# Supported search dimension kinds:
+# - int: requires low/high, optional step, optional log
+# - float: requires low/high, optional step OR log, not both
+# - categorical: requires choices
+# - bool: samples false/true; do not provide choices
+#
+# Useful objective/constraint metric paths:
+# - evaluation.primary_summary.sharpe
+# - evaluation.primary_summary.cumulative_return
+# - evaluation.primary_summary.net_pnl
+# - evaluation.primary_summary.profit_factor
+# - evaluation.primary_summary.max_drawdown
+# - evaluation.primary_summary.total_turnover
+# - derived.turnover_event_count    # bars with non-zero position turnover
+# - derived.entry_count             # position entries; sign flips count as exit+entry
+# - derived.exit_count              # position exits; sign flips count as exit+entry
+# - derived.round_trip_count        # min(entry_count, exit_count)
+# - derived.exposure_bar_count      # bars with non-zero exposure
+# - derived.trade_count             # legacy alias for derived.turnover_event_count
+
 base_config: config/experiments/btcusd_1h_shock_meta_xgboost_long_only.yaml
 
 study:
-  study_name: optuna_shock_meta_xgboost_long_only_v2
-  sampler: tpe
+  study_name: template_optuna_full
+  storage: null                 # Example for persistent studies: sqlite:///logs/optuna/template.db
+  load_if_exists: false
+  sampler: tpe                  # tpe | random
   seed: 7
   n_trials: 30
-  timeout: null
-  n_jobs: 1
-  logging_enabled: false
-  catch_exceptions: true
+  timeout: null                 # seconds or null
+  n_jobs: 1                     # Keep 1 for deterministic/reproducible research runs
+  logging_enabled: false        # Enables per-trial experiment artifacts; expensive
+  catch_exceptions: true        # Failed trials receive failure_score instead of aborting the study
 
 objective:
   metric_path: evaluation.primary_summary.sharpe
-  direction: maximize
+  direction: maximize           # maximize | minimize
   failure_score: -1000000000000.0
   base_metric_weight: 1.0
+
+  # Stability component: mean(fold metric) - stability_std_penalty * std(fold metric).
+  # Set stability_weight: 0.0 to disable.
   stability_weight: 1.0
   stability_metric_path: metrics.sharpe
   stability_std_penalty: 1.0
   fold_summary_path: evaluation.fold_backtest_summaries
-  # Hard-style feasibility filters: keep sparse/illiquid trials out of the top ranking
-  # without changing the Optuna objective schema.
+
+  # Constraint semantics:
+  # - op: lt means "penalize when metric < threshold"
+  # - op: le means "penalize when metric <= threshold"
+  # - op: gt means "penalize when metric > threshold"
+  # - op: ge means "penalize when metric >= threshold"
+  # For direction=maximize, penalty is subtracted from the score.
   constraints:
     - metric_path: evaluation.primary_summary.max_drawdown
       op: lt
       threshold: -0.30
       penalty: 1.0
       missing_penalty: 1.0
+
     - metric_path: derived.turnover_event_count
       op: lt
       threshold: 75.0
       penalty: 1000000000000.0
       missing_penalty: 1000000000000.0
+
+    - metric_path: derived.entry_count
+      op: lt
+      threshold: 40.0
+      penalty: 1000000000000.0
+      missing_penalty: 1000000000000.0
+
     - metric_path: evaluation.primary_summary.total_turnover
       op: lt
       threshold: 30.0
       penalty: 1000000000000.0
       missing_penalty: 1000000000000.0
+
     - metric_path: evaluation.primary_summary.profit_factor
       op: lt
       threshold: 1.0
@@ -48,200 +94,147 @@ pruning:
   metric_path: classification_metrics.roc_auc
   direction: maximize
   stage_filter: [xgboost_clf]
-  pruner: median
+  pruner: median                # median | percentile | none
   n_startup_trials: 5
   n_warmup_steps: 1
   interval_steps: 1
 
-# Keep the feature space deliberately controlled. Window-changing feature params are safe here
-# because the long-only base experiment uses model.feature_selectors instead of fixed columns.
+# Report output is controlled by the caller via optimize_experiment(..., report_output_dir=...).
+# The lab notebook defaults to base_config.logging.output_dir, usually logs/experiments.
+# report:
+#   enabled: true
+#   output_dir: logs/experiments
+#   run_name: null
+
 search_space:
+  # Feature-window tuning. Safe with model.feature_selectors because generated
+  # feature names can change while model inputs are resolved by selectors.
   - name: regime_vol_short_window
     path: features.2.params.vol_short_window
     kind: categorical
     choices: [12, 24, 36]
+
   - name: regime_vol_long_window
     path: features.2.params.vol_long_window
     kind: categorical
     choices: [96, 168, 336]
+
   - name: bollinger_window
     path: features.3.params.window
-    kind: categorical
-    choices: [12, 24, 36, 48]
+    kind: int
+    low: 12
+    high: 48
+    step: 12
+
   - name: bollinger_n_std
     path: features.3.params.n_std
     kind: float
     low: 1.5
     high: 2.8
     step: 0.1
-  - name: shock_ema_window
-    path: features.5.params.ema_window
-    kind: categorical
-    choices: [12, 24, 36, 48]
-  - name: shock_atr_window
-    path: features.5.params.atr_window
-    kind: categorical
-    choices: [12, 24, 36, 48]
-  - name: shock_vol_window
-    path: features.5.params.vol_window
-    kind: categorical
-    choices: [12, 24, 36, 48]
+
   - name: shock_ret_z_threshold
     path: features.5.params.ret_z_threshold
     kind: float
     low: 1.5
     high: 3.5
     step: 0.25
-  - name: shock_atr_mult_threshold
-    path: features.5.params.atr_mult_threshold
-    kind: float
-    low: 1.0
-    high: 2.5
-    step: 0.25
-  - name: shock_distance_threshold
-    path: features.5.params.distance_from_mean_threshold
-    kind: float
-    low: 0.5
-    high: 1.75
-    step: 0.25
-  - name: post_shock_active_bars
-    path: features.5.params.post_shock_active_bars
-    kind: categorical
-    choices: [1, 2, 4, 6]
+
   - name: rsi_fast_window
     path: features.6.params.windows.0
     kind: categorical
     choices: [2, 3, 4]
-  - name: rsi_slow_window
-    path: features.6.params.windows.1
-    kind: categorical
-    choices: [10, 14, 21]
-  - name: volume_vol_z_window
-    path: features.8.params.vol_z_window
-    kind: categorical
-    choices: [48, 72, 168]
-  - name: volume_atr_window
-    path: features.8.params.atr_window
-    kind: categorical
-    choices: [12, 24, 36]
-  - name: mfi_window
-    path: features.9.params.window
-    kind: categorical
-    choices: [14, 24, 36]
-  - name: roc_fast_window
-    path: features.10.params.windows.0
-    kind: categorical
-    choices: [3, 6, 12]
-  - name: roc_slow_window
-    path: features.10.params.windows.1
-    kind: categorical
-    choices: [24, 48, 72]
-  - name: return_mom_fast_window
-    path: features.11.params.windows.0
-    kind: categorical
-    choices: [3, 6, 12]
-  - name: return_mom_slow_window
-    path: features.11.params.windows.1
-    kind: categorical
-    choices: [24, 48, 72]
+
+  # Target tuning. Keep the target horizon consistent with purge/embargo logic.
   - name: tb_max_holding
     path: model.target.max_holding
     kind: categorical
     choices: [12, 24, 36, 48]
+
   - name: tb_upper_mult
     path: model.target.upper_mult
     kind: float
     low: 1.0
     high: 2.5
     step: 0.25
+
   - name: tb_lower_mult
     path: model.target.lower_mult
     kind: float
     low: 1.0
     high: 2.5
     step: 0.25
-  - name: tb_vol_window
-    path: model.target.vol_window
-    kind: categorical
-    choices: [12, 24, 36, 48]
+
+  # Model tuning.
   - name: xgb_n_estimators
     path: model.params.n_estimators
     kind: int
     low: 150
     high: 600
     step: 50
+
   - name: xgb_learning_rate
     path: model.params.learning_rate
     kind: float
     low: 0.01
     high: 0.08
     log: true
+
   - name: xgb_max_depth
     path: model.params.max_depth
     kind: int
     low: 2
     high: 6
-  - name: xgb_min_child_weight
-    path: model.params.min_child_weight
-    kind: float
-    low: 1.0
-    high: 12.0
-    step: 1.0
+
   - name: xgb_subsample
     path: model.params.subsample
     kind: float
     low: 0.6
     high: 1.0
     step: 0.1
+
   - name: xgb_colsample_bytree
     path: model.params.colsample_bytree
     kind: float
     low: 0.6
     high: 1.0
     step: 0.1
+
   - name: xgb_reg_lambda
     path: model.params.reg_lambda
     kind: float
     low: 0.1
     high: 10.0
     log: true
+
+  # Signal/risk/backtest tuning.
   - name: signal_upper
     path: signals.params.upper
     kind: float
     low: 0.54
     high: 0.62
     step: 0.01
+
   - name: signal_upper_exit
     path: signals.params.upper_exit
     kind: categorical
-    choices: [0.50, 0.52, 0.54]
-  - name: signal_lower
-    path: signals.params.lower
-    kind: float
-    low: 0.38
-    high: 0.46
-    step: 0.01
-  - name: signal_lower_exit
-    path: signals.params.lower_exit
-    kind: categorical
-    choices: [0.46, 0.48, 0.50]
+    choices: [0.49, 0.50, 0.52, 0.54]
+
   - name: backtest_min_holding_bars
     path: backtest.min_holding_bars
     kind: categorical
     choices: [1, 2, 4, 8, 12]
+
   - name: risk_max_leverage
     path: risk.max_leverage
     kind: categorical
     choices: [0.5, 0.75, 1.0]
+
+  - name: dd_guard_enabled
+    path: risk.dd_guard.enabled
+    kind: bool
+
   - name: dd_guard_max_drawdown
     path: risk.dd_guard.max_drawdown
     kind: categorical
     choices: [0.10, 0.12, 0.15, 0.20]
-  - name: dd_guard_rearm_drawdown
-    path: risk.dd_guard.rearm_drawdown
-    kind: categorical
-    choices: [0.04, 0.06, 0.08, 0.10]
-  - name: dd_guard_cooloff_bars
-    path: risk.dd_guard.cooloff_bars
-    kind: categorical
-    choices: [24, 48, 72, 96]

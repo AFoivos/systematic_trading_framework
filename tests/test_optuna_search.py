@@ -15,6 +15,7 @@ from src.experiments.optuna_search import (
     PruningSpec,
     SearchDimension,
     build_study_objective,
+    compute_derived_metrics,
     extract_objective_value,
     load_search_space_yaml,
     normalize_objective_spec,
@@ -180,7 +181,7 @@ def test_score_experiment_result_applies_constraints_and_stability() -> None:
                     penalty=0.5,
                 ),
                 ConstraintPenalty(
-                    metric_path="derived.trade_count",
+                    metric_path="derived.turnover_event_count",
                     op="lt",
                     threshold=3.0,
                     penalty=1.0,
@@ -195,8 +196,27 @@ def test_score_experiment_result_applies_constraints_and_stability() -> None:
     # base sharpe = 2.0
     # stability = mean(1.2, 0.8) - std = 1.0 - 0.2 = 0.8
     # drawdown constraint violated => -0.5
-    # trade_count = 2 => violated => -1.0
+    # turnover_event_count = 2 => violated => -1.0
     assert score == pytest.approx(1.3)
+
+
+def test_compute_derived_metrics_separates_turnover_events_from_entries() -> None:
+    positions = pd.Series([0.0, 1.0, 1.0, 0.0, -1.0, -1.0, 0.0, 1.0, -1.0, 0.0])
+    turnover = positions.diff().abs().fillna(0.0)
+    result = SimpleNamespace(
+        evaluation={"scope": "timeline"},
+        backtest=SimpleNamespace(positions=positions, turnover=turnover),
+        data=pd.DataFrame(index=positions.index),
+    )
+
+    metrics = compute_derived_metrics(result)
+
+    assert metrics["turnover_event_count"] == pytest.approx(7.0)
+    assert metrics["trade_count"] == pytest.approx(metrics["turnover_event_count"])
+    assert metrics["entry_count"] == pytest.approx(4.0)
+    assert metrics["exit_count"] == pytest.approx(4.0)
+    assert metrics["round_trip_count"] == pytest.approx(4.0)
+    assert metrics["exposure_bar_count"] == pytest.approx(6.0)
 
 
 def test_build_study_objective_returns_failure_score_when_runner_fails(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -386,8 +406,8 @@ def test_repo_shock_meta_optuna_yaml_matches_base_config_contract() -> None:
     assert objective.metric_path == "evaluation.primary_summary.sharpe"
     assert pruning.metric_path == "classification_metrics.roc_auc"
     constraints_by_path = {constraint.metric_path: constraint for constraint in objective.constraints}
-    assert constraints_by_path["derived.trade_count"].threshold == pytest.approx(75.0)
-    assert constraints_by_path["derived.trade_count"].penalty == pytest.approx(1.0e12)
+    assert constraints_by_path["derived.turnover_event_count"].threshold == pytest.approx(75.0)
+    assert constraints_by_path["derived.turnover_event_count"].penalty == pytest.approx(1.0e12)
     assert constraints_by_path["evaluation.primary_summary.total_turnover"].threshold == pytest.approx(30.0)
     assert constraints_by_path["evaluation.primary_summary.total_turnover"].penalty == pytest.approx(1.0e12)
     assert trial_cfg["model"]["feature_selectors"]["strict"]["min_count"] == 21
@@ -398,6 +418,41 @@ def test_repo_shock_meta_optuna_yaml_matches_base_config_contract() -> None:
     assert trial_cfg["risk"]["dd_guard"]["cooloff_bars"] == 24
     assert trial_cfg["logging"]["enabled"] is False
     assert trial_cfg["logging"]["stage_tails"]["stdout"] is False
+
+
+def test_optuna_template_yaml_matches_declared_contract() -> None:
+    optuna_cfg_path = Path("config/optuna/template_optuna_full.yaml")
+    payload = yaml.safe_load(optuna_cfg_path.read_text(encoding="utf-8"))
+
+    search_space = load_search_space_yaml(optuna_cfg_path)
+    objective = normalize_objective_spec(payload["objective"])
+    pruning = normalize_pruning_spec(payload["pruning"])
+    base_cfg = load_experiment_config(payload["base_config"])
+
+    trial_params = {}
+    for dimension in search_space:
+        if dimension.kind == "categorical":
+            trial_params[dimension.name] = list(dimension.choices or [])[0]
+        elif dimension.kind == "int":
+            trial_params[dimension.name] = int(dimension.low)
+        elif dimension.kind == "float":
+            trial_params[dimension.name] = float(dimension.low)
+        else:
+            trial_params[dimension.name] = False
+
+    trial_cfg = prepare_trial_config(
+        base_cfg,
+        trial_params=trial_params,
+        search_space=search_space,
+        logging_enabled=False,
+    )
+
+    validate_resolved_config(trial_cfg)
+    assert payload["base_config"] == "config/experiments/btcusd_1h_shock_meta_xgboost_long_only.yaml"
+    assert objective.metric_path == "evaluation.primary_summary.sharpe"
+    assert objective.constraints[1].metric_path == "derived.turnover_event_count"
+    assert pruning.pruner == "median"
+    assert {dimension.kind for dimension in search_space} == {"bool", "categorical", "float", "int"}
 
 
 def test_optimize_experiment_wires_fake_optuna_study(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -521,7 +576,12 @@ def test_write_study_report_persists_optuna_artifacts(tmp_path: Path) -> None:
                 "max_drawdown": -0.12,
                 "total_turnover": 88.0,
             },
-            "derived_metrics": {"trade_count": 120.0},
+            "derived_metrics": {
+                "turnover_event_count": 120.0,
+                "trade_count": 120.0,
+                "entry_count": 64.0,
+                "round_trip_count": 63.0,
+            },
         },
     )
     failed_trial = SimpleNamespace(
@@ -568,14 +628,15 @@ def test_write_study_report_persists_optuna_artifacts(tmp_path: Path) -> None:
     assert payload["study_name"] == "unit_study"
     assert payload["state_counts"] == {"COMPLETE": 2}
     assert payload["best_trial"]["number"] == 3
-    assert payload["best_trial"]["derived_metrics"]["trade_count"] == pytest.approx(120.0)
+    assert payload["best_trial"]["derived_metrics"]["turnover_event_count"] == pytest.approx(120.0)
 
     trials = pd.read_csv(artifacts["trials"])
     assert set(trials["number"]) == {3, 4}
     assert "summary_sharpe" in trials.columns
+    assert "derived_turnover_event_count" in trials.columns
     assert "derived_trade_count" in trials.columns
     assert "param_signal_upper" in trials.columns
 
     report_text = Path(artifacts["report"]).read_text(encoding="utf-8")
     assert "# Optuna Study Report" in report_text
-    assert "Trade count" in report_text
+    assert "Turnover event count" in report_text
