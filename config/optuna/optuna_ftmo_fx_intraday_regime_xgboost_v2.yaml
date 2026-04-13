@@ -62,6 +62,16 @@ objective:
       threshold: 6.0
       penalty: 2.0
       missing_penalty: 2.0
+    - metric_path: derived.active_week_ratio
+      op: lt
+      threshold: 0.60
+      penalty: 4.0
+      missing_penalty: 4.0
+    - metric_path: derived.active_week_ratio
+      op: lt
+      threshold: 0.80
+      penalty: 1.5
+      missing_penalty: 1.5
     - metric_path: derived.entry_count
       op: lt
       threshold: 20.0

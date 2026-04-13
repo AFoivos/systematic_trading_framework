@@ -17,6 +17,7 @@ from src.experiments.optuna_search import (
     build_study_objective,
     compute_derived_metrics,
     extract_objective_value,
+    get_nested_value,
     load_search_space_yaml,
     normalize_objective_spec,
     normalize_pruning_spec,
@@ -269,6 +270,38 @@ def test_compute_derived_metrics_separates_turnover_events_from_entries() -> Non
     assert metrics["active_fold_count"] == pytest.approx(3.0)
     assert metrics["profitable_fold_count"] == pytest.approx(1.0)
     assert metrics["losing_fold_count"] == pytest.approx(1.0)
+
+
+def test_compute_derived_metrics_weekly_participation_uses_strict_oos_entries() -> None:
+    index = pd.date_range("2024-01-01", periods=26, freq="D", tz="UTC")
+    positions = pd.Series(0.0, index=index)
+    positions.loc["2024-01-02":"2024-01-08"] = 1.0
+    positions.loc["2024-01-10":"2024-01-11"] = 1.0
+    positions.loc["2024-01-15":"2024-01-17"] = -1.0
+    positions.loc["2024-01-18":"2024-01-20"] = 1.0
+    result = SimpleNamespace(
+        evaluation={"scope": "strict_oos_only"},
+        backtest=SimpleNamespace(
+            positions=positions,
+            turnover=positions.diff().abs().fillna(0.0),
+        ),
+        data=pd.DataFrame(
+            {"pred_is_oos": index >= pd.Timestamp("2024-01-08", tz="UTC")},
+            index=index,
+        ),
+    )
+
+    metrics = compute_derived_metrics(result)
+
+    assert metrics["entry_count"] == pytest.approx(3.0)
+    assert metrics["total_week_count"] == pytest.approx(3.0)
+    assert metrics["active_week_count"] == pytest.approx(2.0)
+    assert metrics["inactive_week_count"] == pytest.approx(1.0)
+    assert metrics["active_week_ratio"] == pytest.approx(2.0 / 3.0)
+    assert metrics["min_entries_per_week"] == pytest.approx(0.0)
+    assert metrics["median_entries_per_week"] == pytest.approx(1.0)
+    assert metrics["mean_entries_per_week"] == pytest.approx(1.0)
+    assert get_nested_value(result, "derived.active_week_ratio") == pytest.approx(2.0 / 3.0)
 
 
 def test_build_study_objective_returns_failure_score_when_runner_fails(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -525,6 +558,21 @@ def test_ftmo_optuna_v2_yaml_matches_base_config_contract() -> None:
     assert objective.stability_weight == pytest.approx(1.0)
     assert constraints_by_path["derived.active_fold_count"].threshold == pytest.approx(6.0)
     assert constraints_by_path["derived.active_fold_count"].penalty == pytest.approx(2.0)
+    active_week_ratio_constraints = [
+        constraint for constraint in objective.constraints if constraint.metric_path == "derived.active_week_ratio"
+    ]
+    assert any(
+        constraint.op == "lt"
+        and constraint.threshold == pytest.approx(0.60)
+        and constraint.penalty == pytest.approx(4.0)
+        for constraint in active_week_ratio_constraints
+    )
+    assert any(
+        constraint.op == "lt"
+        and constraint.threshold == pytest.approx(0.80)
+        and constraint.penalty == pytest.approx(1.5)
+        for constraint in active_week_ratio_constraints
+    )
     entry_count_constraints = [
         constraint for constraint in objective.constraints if constraint.metric_path == "derived.entry_count"
     ]
@@ -860,4 +908,5 @@ def test_write_study_report_persists_optuna_artifacts(tmp_path: Path) -> None:
     report_text = Path(artifacts["report"]).read_text(encoding="utf-8")
     assert "# Optuna Study Report" in report_text
     assert "Turnover event count" in report_text
+    assert "Active week ratio" in report_text
     assert "Experiment run dir" in report_text

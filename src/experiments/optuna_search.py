@@ -330,6 +330,7 @@ def get_nested_value(payload: Any, path: str | Sequence[str | int]) -> Any:
 
 
 _POSITION_EPS = 1.0e-12
+_WEEKLY_PARTICIPATION_FREQ = "W-FRI"
 
 
 def _strict_oos_mask(result: Any, index: Any) -> Any:
@@ -406,10 +407,10 @@ def _compute_exposure_bar_count(result: Any) -> float:
     return _count_true_bars(positions.abs() > _POSITION_EPS)
 
 
-def _entry_exit_counts(result: Any) -> tuple[float, float]:
+def _entry_exit_events(result: Any) -> tuple[Any | None, Any | None]:
     positions = _position_path(result)
     if positions is None:
-        return 0.0, 0.0
+        return None, None
     previous_positions = positions.shift(1).fillna(0.0)
     current_exposed = positions.abs() > _POSITION_EPS
     previous_exposed = previous_positions.abs() > _POSITION_EPS
@@ -422,7 +423,52 @@ def _entry_exit_counts(result: Any) -> tuple[float, float]:
     exits = previous_exposed & (~current_exposed | sign_changed)
     entries = _apply_strict_oos_filter(result, entries)
     exits = _apply_strict_oos_filter(result, exits)
+    return entries, exits
+
+
+def _entry_exit_counts(result: Any) -> tuple[float, float]:
+    entries, exits = _entry_exit_events(result)
+    if entries is None or exits is None:
+        return 0.0, 0.0
     return _count_true_values(entries), _count_true_values(exits)
+
+
+def _weekly_entry_participation_metrics(result: Any) -> dict[str, float]:
+    entries, _ = _entry_exit_events(result)
+    if entries is None or not isinstance(entries.index, pd.DatetimeIndex) or entries.empty:
+        return {
+            "total_week_count": 0.0,
+            "active_week_count": 0.0,
+            "inactive_week_count": 0.0,
+            "active_week_ratio": 0.0,
+            "min_entries_per_week": 0.0,
+            "median_entries_per_week": 0.0,
+            "mean_entries_per_week": 0.0,
+        }
+
+    entries = entries.sort_index()
+    if getattr(entries, "ndim", 1) == 2:
+        entry_counts_by_bar = entries.astype(int).sum(axis=1)
+    else:
+        entry_counts_by_bar = entries.astype(int)
+
+    weekly_counts = entry_counts_by_bar.resample(_WEEKLY_PARTICIPATION_FREQ).sum().fillna(0.0)
+    total_week_count = float(len(weekly_counts))
+    if total_week_count <= 0.0:
+        active_week_count = 0.0
+    else:
+        active_week_count = float((weekly_counts > 0.0).sum())
+    inactive_week_count = max(total_week_count - active_week_count, 0.0)
+    active_week_ratio = active_week_count / total_week_count if total_week_count > 0.0 else 0.0
+    return {
+        "total_week_count": total_week_count,
+        "active_week_count": active_week_count,
+        "inactive_week_count": inactive_week_count,
+        "active_week_ratio": float(active_week_ratio),
+        "min_entries_per_week": float(weekly_counts.min()) if total_week_count > 0.0 else 0.0,
+        "median_entries_per_week": float(weekly_counts.median()) if total_week_count > 0.0 else 0.0,
+        "mean_entries_per_week": float(weekly_counts.mean()) if total_week_count > 0.0 else 0.0,
+    }
 
 
 def _fold_activity_counts(result: Any) -> tuple[float, float, float]:
@@ -466,7 +512,7 @@ def compute_derived_metrics(result: Any) -> dict[str, float]:
     entry_count, exit_count = _entry_exit_counts(result)
     turnover_event_count = _compute_turnover_event_count(result)
     active_fold_count, profitable_fold_count, losing_fold_count = _fold_activity_counts(result)
-    return {
+    metrics = {
         "turnover_event_count": turnover_event_count,
         # Backward-compatible alias. Historically this meant "bars with non-zero turnover",
         # not completed trade round trips; prefer `turnover_event_count` in new YAML configs.
@@ -479,6 +525,8 @@ def compute_derived_metrics(result: Any) -> dict[str, float]:
         "profitable_fold_count": profitable_fold_count,
         "losing_fold_count": losing_fold_count,
     }
+    metrics.update(_weekly_entry_participation_metrics(result))
+    return metrics
 
 
 def _extract_fold_metric_values(
@@ -1087,6 +1135,9 @@ def _build_study_report_markdown(payload: Mapping[str, Any]) -> str:
                 f"`{derived.get('turnover_event_count', derived.get('trade_count', 'n/a'))}`",
                 f"- Entry count: `{derived.get('entry_count', 'n/a')}`",
                 f"- Round trip count: `{derived.get('round_trip_count', 'n/a')}`",
+                "- Active weeks: "
+                f"`{derived.get('active_week_count', 'n/a')}/{derived.get('total_week_count', 'n/a')}`",
+                f"- Active week ratio: `{derived.get('active_week_ratio', 'n/a')}`",
                 f"- Experiment run name: `{best_trial.get('experiment_run_name', 'n/a')}`",
                 f"- Experiment run dir: `{best_trial.get('experiment_run_dir', 'n/a')}`",
                 "",
