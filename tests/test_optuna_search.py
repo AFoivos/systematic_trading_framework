@@ -560,6 +560,89 @@ def test_optimize_experiment_wires_fake_optuna_study(monkeypatch: pytest.MonkeyP
     }
 
 
+def test_optuna_search_cli_runs_yaml_spec_without_real_study(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from src.experiments import optuna_search as optuna_mod
+
+    spec_path = tmp_path / "optuna_cli.yaml"
+    spec_path.write_text(
+        """
+base_config: config/experiments/example.yaml
+study:
+  study_name: cli_spec
+  sampler: random
+  seed: 3
+  n_trials: 5
+  n_jobs: 1
+  logging_enabled: false
+  catch_exceptions: true
+objective:
+  metric_path: evaluation.primary_summary.sharpe
+  direction: maximize
+pruning:
+  enabled: false
+search_space:
+  - name: upper
+    path: signals.params.upper
+    kind: float
+    low: 0.52
+    high: 0.60
+        """.strip(),
+        encoding="utf-8",
+    )
+    captured: dict[str, object] = {}
+
+    def _fake_optimize_experiment(config_path: str, **kwargs: object) -> SimpleNamespace:
+        captured["config_path"] = config_path
+        captured.update(kwargs)
+        return SimpleNamespace(
+            study_name=kwargs.get("study_name"),
+            best_trial=SimpleNamespace(number=2, value=1.25, params={"upper": 0.57}),
+            user_attrs={"report_artifacts": {"report": str(tmp_path / "report.md")}},
+        )
+
+    monkeypatch.setattr(optuna_mod, "optimize_experiment", _fake_optimize_experiment)
+
+    exit_code = optuna_mod.main(
+        [
+            str(spec_path),
+            "--n-trials",
+            "2",
+            "--timeout",
+            "12.5",
+            "--sampler",
+            "tpe",
+            "--seed",
+            "11",
+            "--study-name",
+            "cli_override",
+            "--report-output-dir",
+            str(tmp_path),
+            "--report-run-name",
+            "cli_report",
+        ]
+    )
+
+    assert exit_code == 0
+    assert captured["config_path"] == "config/experiments/example.yaml"
+    assert captured["n_trials"] == 2
+    assert captured["timeout"] == pytest.approx(12.5)
+    assert captured["sampler"] == "tpe"
+    assert captured["seed"] == 11
+    assert captured["study_name"] == "cli_override"
+    assert captured["report_output_dir"] == str(tmp_path)
+    assert captured["report_run_name"] == "cli_report"
+    assert captured["search_space"][0].name == "upper"  # type: ignore[index,union-attr]
+    assert captured["objective"].metric_path == "evaluation.primary_summary.sharpe"  # type: ignore[union-attr]
+    assert captured["pruning"].enabled is False  # type: ignore[union-attr]
+    out = capsys.readouterr().out
+    assert "Optuna study completed" in out
+    assert "Best trial: 2" in out
+
+
 def test_write_study_report_persists_optuna_artifacts(tmp_path: Path) -> None:
     completed_trial = SimpleNamespace(
         number=3,

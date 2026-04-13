@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import csv
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field, is_dataclass
@@ -1203,6 +1204,154 @@ def load_search_space_yaml(path: str | Path) -> list[SearchDimension]:
     return normalize_search_space(raw_dimensions)
 
 
+def load_optuna_spec_yaml(path: str | Path) -> dict[str, Any]:
+    """
+    Load a full Optuna YAML spec containing a base experiment config and search metadata.
+    """
+    resolved_path = Path(path).resolve()
+    with resolved_path.open("r", encoding="utf-8") as handle:
+        payload = yaml.safe_load(handle) or {}
+    if not isinstance(payload, Mapping):
+        raise ValueError("Optuna spec YAML must be a mapping.")
+    spec = dict(payload)
+    base_config = spec.get("base_config")
+    if not isinstance(base_config, str) or not base_config.strip():
+        raise ValueError("Optuna spec YAML must define a non-empty 'base_config'.")
+    study = spec.get("study", {}) or {}
+    if not isinstance(study, Mapping):
+        raise ValueError("Optuna spec 'study' must be a mapping when provided.")
+    report = spec.get("report", {}) or {}
+    if not isinstance(report, Mapping):
+        raise ValueError("Optuna spec 'report' must be a mapping when provided.")
+    spec["study"] = dict(study)
+    spec["report"] = dict(report)
+    spec["search_space"] = load_search_space_yaml(resolved_path)
+    spec["objective"] = normalize_objective_spec(spec.get("objective"))
+    spec["pruning"] = normalize_pruning_spec(spec.get("pruning"))
+    return spec
+
+
+def run_optuna_spec(
+    spec_path: str | Path,
+    *,
+    n_trials: int | None = None,
+    timeout: float | None = None,
+    n_jobs: int | None = None,
+    sampler: str | None = None,
+    seed: int | None = None,
+    study_name: str | None = None,
+    storage: str | None = None,
+    load_if_exists: bool | None = None,
+    logging_enabled: bool | None = None,
+    report_output_dir: str | Path | None = None,
+    report_run_name: str | None = None,
+    no_report: bool = False,
+) -> Any:
+    """
+    Run an Optuna study from a repository Optuna spec YAML.
+    """
+    spec = load_optuna_spec_yaml(spec_path)
+    study_cfg = dict(spec.get("study", {}) or {})
+    overrides = {
+        "n_trials": n_trials,
+        "timeout": timeout,
+        "n_jobs": n_jobs,
+        "sampler": sampler,
+        "seed": seed,
+        "study_name": study_name,
+        "storage": storage,
+        "load_if_exists": load_if_exists,
+        "logging_enabled": logging_enabled,
+    }
+    for key, value in overrides.items():
+        if value is not None:
+            study_cfg[key] = value
+
+    report_cfg = dict(spec.get("report", {}) or {})
+    report_enabled = bool(report_cfg.get("enabled", True)) and not bool(no_report)
+    resolved_report_output_dir: str | Path | None = None
+    resolved_report_run_name: str | None = None
+    if report_enabled:
+        resolved_report_output_dir = (
+            report_output_dir
+            or report_cfg.get("output_dir")
+            or load_experiment_config(spec["base_config"])["logging"]["output_dir"]
+        )
+        resolved_report_run_name = (
+            report_run_name
+            or report_cfg.get("run_name")
+            or f"optuna_{study_cfg.get('study_name') or Path(str(spec['base_config'])).stem}"
+        )
+
+    return optimize_experiment(
+        spec["base_config"],
+        search_space=spec["search_space"],
+        objective=spec["objective"],
+        pruning=spec["pruning"],
+        report_output_dir=resolved_report_output_dir,
+        report_run_name=resolved_report_run_name,
+        **study_cfg,
+    )
+
+
+def _print_cli_summary(study: Any) -> None:
+    print("Optuna study completed")
+    print(f"Study: {getattr(study, 'study_name', 'n/a')}")
+    try:
+        best_trial = getattr(study, "best_trial")
+    except Exception:
+        best_trial = None
+    if best_trial is not None:
+        print(f"Best trial: {getattr(best_trial, 'number', 'n/a')}")
+        print(f"Best value: {getattr(best_trial, 'value', 'n/a')}")
+        print(f"Best params: {dict(getattr(best_trial, 'params', {}) or {})}")
+    user_attrs = dict(getattr(study, "user_attrs", {}) or {})
+    report_artifacts = dict(user_attrs.get("report_artifacts", {}) or {})
+    if report_artifacts.get("report"):
+        print(f"Report: {report_artifacts['report']}")
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Run an Optuna study from a repository Optuna YAML spec.")
+    parser.add_argument("spec", help="Path to an Optuna YAML spec.")
+    parser.add_argument("--n-trials", type=int, default=None, help="Override study.n_trials.")
+    parser.add_argument("--timeout", type=float, default=None, help="Override study.timeout in seconds.")
+    parser.add_argument("--n-jobs", type=int, default=None, help="Override study.n_jobs.")
+    parser.add_argument("--sampler", choices=("tpe", "random"), default=None, help="Override study.sampler.")
+    parser.add_argument("--seed", type=int, default=None, help="Override study.seed.")
+    parser.add_argument("--study-name", default=None, help="Override study.study_name.")
+    parser.add_argument("--storage", default=None, help="Override study.storage.")
+    parser.add_argument("--load-if-exists", action="store_true", default=None, help="Override study.load_if_exists=true.")
+    parser.add_argument(
+        "--logging-enabled",
+        action="store_true",
+        default=None,
+        help="Enable per-trial experiment logging artifacts.",
+    )
+    parser.add_argument("--report-output-dir", default=None, help="Directory for the Optuna study report.")
+    parser.add_argument("--report-run-name", default=None, help="Run name for the Optuna study report.")
+    parser.add_argument("--no-report", action="store_true", help="Do not write the Optuna study report.")
+    args = parser.parse_args(argv)
+
+    study = run_optuna_spec(
+        args.spec,
+        n_trials=args.n_trials,
+        timeout=args.timeout,
+        n_jobs=args.n_jobs,
+        sampler=args.sampler,
+        seed=args.seed,
+        study_name=args.study_name,
+        storage=args.storage,
+        load_if_exists=args.load_if_exists,
+        logging_enabled=args.logging_enabled,
+        report_output_dir=args.report_output_dir,
+        report_run_name=args.report_run_name,
+        no_report=args.no_report,
+    )
+    _print_cli_summary(study)
+    return 0
+
+
 __all__ = [
     "ConstraintPenalty",
     "ObjectiveSpec",
@@ -1213,15 +1362,22 @@ __all__ = [
     "compute_derived_metrics",
     "extract_objective_value",
     "get_nested_value",
+    "load_optuna_spec_yaml",
     "load_search_space_yaml",
+    "main",
     "normalize_config_path",
     "normalize_objective_spec",
     "normalize_pruning_spec",
     "normalize_search_space",
     "optimize_experiment",
     "prepare_trial_config",
+    "run_optuna_spec",
     "sample_trial_parameters",
     "score_experiment_result",
     "set_nested_value",
     "write_study_report",
 ]
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,186 @@
+base_config: config/experiments/ftmo_fx_intraday_regime_xgboost_v1.yaml
+
+study:
+  study_name: optuna_ftmo_fx_intraday_regime_xgboost_v1
+  storage: null
+  load_if_exists: false
+  sampler: tpe
+  seed: 7
+  n_trials: 40
+  timeout: null
+  n_jobs: 1
+  logging_enabled: false
+  catch_exceptions: true
+
+objective:
+  metric_path: evaluation.primary_summary.sharpe
+  direction: maximize
+  failure_score: -1000000000000.0
+  base_metric_weight: 1.0
+  stability_weight: 0.75
+  stability_metric_path: metrics.sharpe
+  stability_std_penalty: 1.25
+  fold_summary_path: evaluation.fold_backtest_summaries
+  constraints:
+    - metric_path: evaluation.primary_summary.max_drawdown
+      op: lt
+      threshold: -0.10
+      penalty: 1000000000000.0
+      missing_penalty: 1000000000000.0
+    - metric_path: evaluation.primary_summary.max_drawdown
+      op: lt
+      threshold: -0.07
+      penalty: 3.0
+      missing_penalty: 3.0
+    - metric_path: evaluation.primary_summary.calmar
+      op: lt
+      threshold: 0.50
+      penalty: 1.0
+      missing_penalty: 1.0
+    - metric_path: evaluation.primary_summary.profit_factor
+      op: lt
+      threshold: 1.05
+      penalty: 1.0
+      missing_penalty: 1.0
+    - metric_path: evaluation.primary_summary.cost_to_gross_pnl
+      op: gt
+      threshold: 0.40
+      penalty: 1.0
+      missing_penalty: 0.5
+    - metric_path: evaluation.primary_summary.total_turnover
+      op: gt
+      threshold: 250.0
+      penalty: 1.0
+      missing_penalty: 0.5
+    - metric_path: derived.entry_count
+      op: lt
+      threshold: 50.0
+      penalty: 0.5
+      missing_penalty: 0.5
+    - metric_path: derived.entry_count
+      op: gt
+      threshold: 1200.0
+      penalty: 1.0
+      missing_penalty: 0.5
+
+pruning:
+  enabled: true
+  metric_path: classification_metrics.roc_auc
+  direction: maximize
+  stage_filter: [xgboost_clf]
+  pruner: median
+  n_startup_trials: 8
+  n_warmup_steps: 2
+  interval_steps: 1
+
+search_space:
+  - name: tb_max_holding
+    path: model.target.max_holding
+    kind: categorical
+    choices: [12, 16, 18, 24]
+  - name: tb_upper_mult
+    path: model.target.upper_mult
+    kind: float
+    low: 1.2
+    high: 2.0
+    step: 0.1
+  - name: tb_lower_mult
+    path: model.target.lower_mult
+    kind: float
+    low: 1.0
+    high: 1.8
+    step: 0.1
+
+  - name: signal_upper
+    path: signals.params.upper
+    kind: float
+    low: 0.55
+    high: 0.63
+    step: 0.01
+  - name: signal_lower
+    path: signals.params.lower
+    kind: float
+    low: 0.37
+    high: 0.45
+    step: 0.01
+  - name: signal_clip
+    path: signals.params.clip
+    kind: categorical
+    choices: [0.15, 0.20, 0.25, 0.30, 0.35]
+  - name: signal_min_abs
+    path: signals.params.min_signal_abs
+    kind: categorical
+    choices: [0.0, 0.01, 0.02, 0.03, 0.05]
+  - name: activation_adx_min
+    path: signals.params.activation_filters.2.value
+    kind: categorical
+    choices: [16.0, 18.0, 20.0, 22.0, 24.0, 28.0]
+  - name: activation_vol_ratio_min
+    path: signals.params.activation_filters.3.value
+    kind: float
+    low: 0.65
+    high: 0.95
+    step: 0.05
+  - name: activation_vol_ratio_max
+    path: signals.params.activation_filters.4.value
+    kind: float
+    low: 1.40
+    high: 2.20
+    step: 0.10
+
+  - name: dd_guard_max_drawdown
+    path: risk.dd_guard.max_drawdown
+    kind: categorical
+    choices: [0.06, 0.07, 0.08, 0.09]
+  - name: dd_guard_rearm_drawdown
+    path: risk.dd_guard.rearm_drawdown
+    kind: categorical
+    choices: [0.03, 0.04, 0.05]
+  - name: dd_guard_cooloff_bars
+    path: risk.dd_guard.cooloff_bars
+    kind: categorical
+    choices: [48, 72, 96, 120]
+  - name: backtest_min_holding_bars
+    path: backtest.min_holding_bars
+    kind: categorical
+    choices: [2, 3, 4, 6, 8, 12]
+  - name: risk_max_leverage
+    path: risk.max_leverage
+    kind: categorical
+    choices: [0.25, 0.50, 0.75]
+
+  - name: xgb_n_estimators
+    path: model.params.n_estimators
+    kind: int
+    low: 150
+    high: 500
+    step: 50
+  - name: xgb_learning_rate
+    path: model.params.learning_rate
+    kind: float
+    low: 0.01
+    high: 0.07
+    log: true
+  - name: xgb_max_depth
+    path: model.params.max_depth
+    kind: int
+    low: 2
+    high: 5
+  - name: xgb_subsample
+    path: model.params.subsample
+    kind: float
+    low: 0.6
+    high: 1.0
+    step: 0.1
+  - name: xgb_colsample_bytree
+    path: model.params.colsample_bytree
+    kind: float
+    low: 0.6
+    high: 1.0
+    step: 0.1
+  - name: xgb_min_child_weight
+    path: model.params.min_child_weight
+    kind: float
+    low: 3.0
+    high: 15.0
+    step: 1.0
