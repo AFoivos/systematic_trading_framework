@@ -32,7 +32,8 @@ from src.utils.config_validation import validate_resolved_config
 
 
 class _FakeTrial:
-    def __init__(self) -> None:
+    def __init__(self, *, number: int = 0) -> None:
+        self.number = number
         self.user_attrs: dict[str, object] = {}
 
     def suggest_int(self, name: str, **kwargs) -> int:
@@ -112,6 +113,46 @@ def test_prepare_trial_config_updates_nested_paths_and_disables_logging() -> Non
     assert trial_cfg["features"][0]["params"]["ema_spans"][0] == 16
     assert trial_cfg["model"]["params"]["learning_rate"] == pytest.approx(0.05)
     assert trial_cfg["logging"]["enabled"] is False
+    assert trial_cfg["logging"]["stage_tails"] == {
+        "enabled": False,
+        "stdout": False,
+        "report": False,
+    }
+
+
+def test_prepare_trial_config_appends_trial_number_to_logged_run_name() -> None:
+    base_config = {
+        "model": {"params": {"learning_rate": 0.03}},
+        "logging": {
+            "enabled": True,
+            "run_name": "ftmo_fx_intraday_regime_xgboost_v1",
+            "stage_tails": {
+                "enabled": True,
+                "stdout": True,
+                "report": True,
+            },
+        },
+    }
+    search_space = [
+        SearchDimension(
+            name="learning_rate",
+            path="model.params.learning_rate",
+            kind="float",
+            low=0.01,
+            high=0.10,
+        )
+    ]
+
+    trial_cfg = prepare_trial_config(
+        base_config,
+        trial_params={"learning_rate": 0.05},
+        search_space=search_space,
+        logging_enabled=True,
+        trial_number=32,
+    )
+
+    assert trial_cfg["logging"]["enabled"] is True
+    assert trial_cfg["logging"]["run_name"] == "ftmo_fx_intraday_regime_xgboost_v1_trial_0032"
     assert trial_cfg["logging"]["stage_tails"] == {
         "enabled": False,
         "stdout": False,
@@ -204,7 +245,15 @@ def test_compute_derived_metrics_separates_turnover_events_from_entries() -> Non
     positions = pd.Series([0.0, 1.0, 1.0, 0.0, -1.0, -1.0, 0.0, 1.0, -1.0, 0.0])
     turnover = positions.diff().abs().fillna(0.0)
     result = SimpleNamespace(
-        evaluation={"scope": "timeline"},
+        evaluation={
+            "scope": "timeline",
+            "fold_backtest_summaries": [
+                {"fold": 0, "metrics": {"total_turnover": 0.0, "net_pnl": 0.0, "gross_pnl": 0.0}},
+                {"fold": 1, "metrics": {"total_turnover": 1.0, "net_pnl": 0.2, "gross_pnl": 0.3}},
+                {"fold": 2, "metrics": {"total_turnover": 0.5, "net_pnl": -0.1, "gross_pnl": -0.05}},
+                {"fold": 3, "metrics": {"total_turnover": 0.0, "net_pnl": 0.0, "gross_pnl": 0.2}},
+            ],
+        },
         backtest=SimpleNamespace(positions=positions, turnover=turnover),
         data=pd.DataFrame(index=positions.index),
     )
@@ -217,6 +266,9 @@ def test_compute_derived_metrics_separates_turnover_events_from_entries() -> Non
     assert metrics["exit_count"] == pytest.approx(4.0)
     assert metrics["round_trip_count"] == pytest.approx(4.0)
     assert metrics["exposure_bar_count"] == pytest.approx(6.0)
+    assert metrics["active_fold_count"] == pytest.approx(3.0)
+    assert metrics["profitable_fold_count"] == pytest.approx(1.0)
+    assert metrics["losing_fold_count"] == pytest.approx(1.0)
 
 
 def test_build_study_objective_returns_failure_score_when_runner_fails(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -255,12 +307,20 @@ def test_build_study_objective_returns_failure_score_when_runner_fails(monkeypat
 def test_build_study_objective_records_primary_summary_on_success(monkeypatch: pytest.MonkeyPatch) -> None:
     from src.experiments import optuna_search as optuna_mod
 
-    monkeypatch.setattr(optuna_mod, "load_experiment_config", lambda path: {"logging": {"enabled": True}})
+    monkeypatch.setattr(
+        optuna_mod,
+        "load_experiment_config",
+        lambda path: {"logging": {"enabled": True, "run_name": "unit_optuna"}},
+    )
     monkeypatch.setattr(
         optuna_mod,
         "_run_experiment_from_config",
         lambda cfg, config_path: SimpleNamespace(
-            evaluation={"primary_summary": {"sharpe": 2.25, "profit_factor": 1.8}}
+            evaluation={"primary_summary": {"sharpe": 2.25, "profit_factor": 1.8}},
+            artifacts={
+                "run_dir": "logs/experiments/unit_optuna_trial_0032_20260413_000000_deadbee",
+                "report": "logs/experiments/unit_optuna_trial_0032_20260413_000000_deadbee/report.md",
+            },
         ),
     )
     objective = build_study_objective(
@@ -273,15 +333,22 @@ def test_build_study_objective_records_primary_summary_on_success(monkeypatch: p
             )
         ],
         objective=ObjectiveSpec(metric_path="evaluation.primary_summary.sharpe"),
+        logging_enabled=True,
         catch_exceptions=False,
     )
 
-    trial = _FakeTrial()
+    trial = _FakeTrial(number=32)
     score = objective(trial)
 
     assert score == pytest.approx(2.25)
     assert trial.user_attrs["trial_failed"] is False
     assert trial.user_attrs["primary_summary"] == {"sharpe": 2.25, "profit_factor": 1.8}
+    assert trial.user_attrs["experiment_run_name"] == "unit_optuna_trial_0032"
+    assert trial.user_attrs["experiment_run_dir"] == "logs/experiments/unit_optuna_trial_0032_20260413_000000_deadbee"
+    assert (
+        trial.user_attrs["experiment_report"]
+        == "logs/experiments/unit_optuna_trial_0032_20260413_000000_deadbee/report.md"
+    )
 
 
 def test_build_study_objective_supports_pruning(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -418,6 +485,70 @@ def test_repo_shock_meta_optuna_yaml_matches_base_config_contract() -> None:
     assert trial_cfg["risk"]["dd_guard"]["cooloff_bars"] == 24
     assert trial_cfg["logging"]["enabled"] is False
     assert trial_cfg["logging"]["stage_tails"]["stdout"] is False
+
+
+def test_ftmo_optuna_v2_yaml_matches_base_config_contract() -> None:
+    optuna_cfg_path = Path("config/optuna/optuna_ftmo_fx_intraday_regime_xgboost_v2.yaml")
+    payload = yaml.safe_load(optuna_cfg_path.read_text(encoding="utf-8"))
+
+    search_space = load_search_space_yaml(optuna_cfg_path)
+    objective = normalize_objective_spec(payload["objective"])
+    pruning = normalize_pruning_spec(payload["pruning"])
+    base_cfg = load_experiment_config(payload["base_config"])
+
+    trial_params = {}
+    for dimension in search_space:
+        if dimension.kind == "categorical":
+            trial_params[dimension.name] = list(dimension.choices or [])[0]
+        elif dimension.kind == "int":
+            trial_params[dimension.name] = int(dimension.low)
+        elif dimension.kind == "float":
+            trial_params[dimension.name] = float(dimension.low)
+        else:
+            trial_params[dimension.name] = False
+
+    trial_cfg = prepare_trial_config(
+        base_cfg,
+        trial_params=trial_params,
+        search_space=search_space,
+        logging_enabled=False,
+    )
+
+    validate_resolved_config(trial_cfg)
+    constraints_by_path = {constraint.metric_path: constraint for constraint in objective.constraints}
+    risk_leverage = {dimension.name: dimension for dimension in search_space}["risk_max_leverage"]
+    signal_clip = {dimension.name: dimension for dimension in search_space}["signal_clip"]
+    assert payload["base_config"] == "config/experiments/ftmo_fx_intraday_regime_xgboost_v1.yaml"
+    assert payload["study"]["study_name"] == "optuna_ftmo_fx_intraday_regime_xgboost_v2"
+    assert payload["report"]["run_name"] == "optuna_ftmo_fx_intraday_regime_xgboost_v2"
+    assert objective.metric_path == "evaluation.primary_summary.sharpe"
+    assert objective.stability_weight == pytest.approx(1.0)
+    assert constraints_by_path["derived.active_fold_count"].threshold == pytest.approx(6.0)
+    assert constraints_by_path["derived.active_fold_count"].penalty == pytest.approx(2.0)
+    entry_count_constraints = [
+        constraint for constraint in objective.constraints if constraint.metric_path == "derived.entry_count"
+    ]
+    assert any(
+        constraint.op == "lt"
+        and constraint.threshold == pytest.approx(20.0)
+        and constraint.penalty == pytest.approx(5.0)
+        for constraint in entry_count_constraints
+    )
+    assert any(
+        constraint.op == "lt"
+        and constraint.threshold == pytest.approx(50.0)
+        and constraint.penalty == pytest.approx(1.5)
+        for constraint in entry_count_constraints
+    )
+    assert risk_leverage.choices == [0.25]
+    assert max(signal_clip.choices or []) == pytest.approx(0.25)
+    assert pruning.metric_path == "classification_metrics.roc_auc"
+    assert trial_cfg["model"]["split"]["max_folds"] == 24
+    assert trial_cfg["model"]["target"]["max_holding"] == 18
+    assert trial_cfg["data"]["storage"]["dataset_id"] == "ftmo_fx_intraday_regime_xgboost_v2"
+    assert trial_cfg["risk"]["max_leverage"] == pytest.approx(0.25)
+    assert trial_cfg["logging"]["run_name"] == "ftmo_fx_intraday_regime_xgboost_v2"
+    assert trial_cfg["logging"]["enabled"] is False
 
 
 def test_optuna_template_yaml_matches_declared_contract() -> None:
@@ -665,6 +796,9 @@ def test_write_study_report_persists_optuna_artifacts(tmp_path: Path) -> None:
                 "entry_count": 64.0,
                 "round_trip_count": 63.0,
             },
+            "experiment_run_name": "unit_trial_0003",
+            "experiment_run_dir": str(tmp_path / "unit_trial_0003"),
+            "experiment_report": str(tmp_path / "unit_trial_0003" / "report.md"),
         },
     )
     failed_trial = SimpleNamespace(
@@ -719,7 +853,11 @@ def test_write_study_report_persists_optuna_artifacts(tmp_path: Path) -> None:
     assert "derived_turnover_event_count" in trials.columns
     assert "derived_trade_count" in trials.columns
     assert "param_signal_upper" in trials.columns
+    assert "experiment_run_name" in trials.columns
+    assert "experiment_run_dir" in trials.columns
+    assert "experiment_report" in trials.columns
 
     report_text = Path(artifacts["report"]).read_text(encoding="utf-8")
     assert "# Optuna Study Report" in report_text
     assert "Turnover event count" in report_text
+    assert "Experiment run dir" in report_text

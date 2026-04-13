@@ -425,12 +425,47 @@ def _entry_exit_counts(result: Any) -> tuple[float, float]:
     return _count_true_values(entries), _count_true_values(exits)
 
 
+def _fold_activity_counts(result: Any) -> tuple[float, float, float]:
+    evaluation = getattr(result, "evaluation", {}) or {}
+    if not isinstance(evaluation, Mapping):
+        return 0.0, 0.0, 0.0
+    fold_summaries = evaluation.get("fold_backtest_summaries", []) or []
+    if not isinstance(fold_summaries, Sequence) or isinstance(fold_summaries, (str, bytes)):
+        return 0.0, 0.0, 0.0
+
+    active_count = 0
+    profitable_count = 0
+    losing_count = 0
+    for fold_summary in fold_summaries:
+        if not isinstance(fold_summary, Mapping):
+            continue
+        metrics = fold_summary.get("metrics", {}) or {}
+        if not isinstance(metrics, Mapping):
+            continue
+        numeric_metrics: dict[str, float] = {}
+        for key in ("total_turnover", "net_pnl", "gross_pnl"):
+            try:
+                value = float(metrics.get(key, 0.0) or 0.0)
+            except Exception:
+                value = 0.0
+            numeric_metrics[key] = value
+        if any(abs(value) > _POSITION_EPS for value in numeric_metrics.values()):
+            active_count += 1
+        net_pnl = numeric_metrics["net_pnl"]
+        if net_pnl > _POSITION_EPS:
+            profitable_count += 1
+        elif net_pnl < -_POSITION_EPS:
+            losing_count += 1
+    return float(active_count), float(profitable_count), float(losing_count)
+
+
 def compute_derived_metrics(result: Any) -> dict[str, float]:
     """
     Compute convenience metrics that are not part of the current canonical evaluation payload.
     """
     entry_count, exit_count = _entry_exit_counts(result)
     turnover_event_count = _compute_turnover_event_count(result)
+    active_fold_count, profitable_fold_count, losing_fold_count = _fold_activity_counts(result)
     return {
         "turnover_event_count": turnover_event_count,
         # Backward-compatible alias. Historically this meant "bars with non-zero turnover",
@@ -440,6 +475,9 @@ def compute_derived_metrics(result: Any) -> dict[str, float]:
         "exit_count": exit_count,
         "round_trip_count": min(entry_count, exit_count),
         "exposure_bar_count": _compute_exposure_bar_count(result),
+        "active_fold_count": active_fold_count,
+        "profitable_fold_count": profitable_fold_count,
+        "losing_fold_count": losing_fold_count,
     }
 
 
@@ -612,6 +650,7 @@ def prepare_trial_config(
     trial_params: Mapping[str, Any],
     search_space: Sequence[SearchDimension | Mapping[str, Any]],
     logging_enabled: bool = False,
+    trial_number: int | str | None = None,
 ) -> dict[str, Any]:
     """
     Materialize one trial-specific config by applying sampled values onto the validated base config.
@@ -631,6 +670,14 @@ def prepare_trial_config(
     stage_tails["report"] = False
     logging_cfg["enabled"] = bool(logging_enabled)
     logging_cfg["stage_tails"] = stage_tails
+    if logging_enabled and trial_number is not None:
+        trial_token = (
+            f"trial_{trial_number:04d}"
+            if isinstance(trial_number, int)
+            else f"trial_{str(trial_number).strip()}"
+        )
+        base_run_name = str(logging_cfg.get("run_name") or "optuna_trial").strip() or "optuna_trial"
+        logging_cfg["run_name"] = f"{base_run_name}_{trial_token}"
     cfg["logging"] = logging_cfg
     return cfg
 
@@ -741,7 +788,10 @@ def build_study_objective(
             trial_params=trial_params,
             search_space=normalized_space,
             logging_enabled=logging_enabled,
+            trial_number=getattr(trial, "number", None),
         )
+        if logging_enabled:
+            trial.set_user_attr("experiment_run_name", trial_config.get("logging", {}).get("run_name"))
         try:
             with optuna_fold_reporting_context(_fold_reporter if pruning_spec.enabled else None):
                 result = _run_experiment_from_config(trial_config, config_path=config_path)
@@ -769,6 +819,11 @@ def build_study_objective(
             "derived_metrics",
             compute_derived_metrics(result),
         )
+        result_artifacts = dict(getattr(result, "artifacts", {}) or {})
+        if result_artifacts.get("run_dir"):
+            trial.set_user_attr("experiment_run_dir", result_artifacts["run_dir"])
+        if result_artifacts.get("report"):
+            trial.set_user_attr("experiment_report", result_artifacts["report"])
         if report_state["reports"]:
             trial.set_user_attr("pruning_reports", list(report_state["reports"]))
         return score
@@ -863,6 +918,9 @@ def _flat_trial_row(trial: Any) -> dict[str, Any]:
         "duration_seconds": _trial_duration_seconds(trial),
         "trial_failed": user_attrs.get("trial_failed"),
         "exception": user_attrs.get("exception"),
+        "experiment_run_name": user_attrs.get("experiment_run_name"),
+        "experiment_run_dir": user_attrs.get("experiment_run_dir"),
+        "experiment_report": user_attrs.get("experiment_report"),
     }
     for key, value in sorted(derived_metrics.items()):
         row[f"derived_{key}"] = value
@@ -933,6 +991,9 @@ def _study_best_trial_payload(study: Any, *, direction: ObjectiveDirection) -> d
         "params": dict(getattr(best_trial, "params", {}) or {}),
         "primary_summary": dict(user_attrs.get("primary_summary", {}) or {}),
         "derived_metrics": dict(user_attrs.get("derived_metrics", {}) or {}),
+        "experiment_run_name": user_attrs.get("experiment_run_name"),
+        "experiment_run_dir": user_attrs.get("experiment_run_dir"),
+        "experiment_report": user_attrs.get("experiment_report"),
         "trial_failed": user_attrs.get("trial_failed"),
         "exception": user_attrs.get("exception"),
     }
@@ -985,6 +1046,9 @@ def build_study_report_payload(
                     "params": dict(getattr(trial, "params", {}) or {}),
                     "primary_summary": dict(dict(getattr(trial, "user_attrs", {}) or {}).get("primary_summary", {}) or {}),
                     "derived_metrics": dict(dict(getattr(trial, "user_attrs", {}) or {}).get("derived_metrics", {}) or {}),
+                    "experiment_run_name": dict(getattr(trial, "user_attrs", {}) or {}).get("experiment_run_name"),
+                    "experiment_run_dir": dict(getattr(trial, "user_attrs", {}) or {}).get("experiment_run_dir"),
+                    "experiment_report": dict(getattr(trial, "user_attrs", {}) or {}).get("experiment_report"),
                 }
                 for trial in top_trials
             ],
@@ -1023,6 +1087,8 @@ def _build_study_report_markdown(payload: Mapping[str, Any]) -> str:
                 f"`{derived.get('turnover_event_count', derived.get('trade_count', 'n/a'))}`",
                 f"- Entry count: `{derived.get('entry_count', 'n/a')}`",
                 f"- Round trip count: `{derived.get('round_trip_count', 'n/a')}`",
+                f"- Experiment run name: `{best_trial.get('experiment_run_name', 'n/a')}`",
+                f"- Experiment run dir: `{best_trial.get('experiment_run_dir', 'n/a')}`",
                 "",
                 "### Best Params",
             ]
