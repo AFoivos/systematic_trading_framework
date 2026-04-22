@@ -270,10 +270,28 @@ def validate_data_block(data: dict[str, Any]) -> None:
         if not isinstance(storage_for_external_csv, dict):
             raise ConfigValidationError("data.storage must be a mapping when data.source='dukascopy_csv'.")
         load_path = storage_for_external_csv.get("load_path")
-        if not isinstance(load_path, str) or not load_path.strip():
+        load_paths = storage_for_external_csv.get("load_paths")
+        if load_path is not None and load_paths is not None:
+            raise ConfigValidationError("Specify either data.storage.load_path or data.storage.load_paths, not both.")
+        has_load_path = isinstance(load_path, str) and bool(load_path.strip())
+        has_load_paths = isinstance(load_paths, dict) and bool(load_paths)
+        if not has_load_path and not has_load_paths:
             raise ConfigValidationError(
-                "data.storage.load_path is required when data.source='dukascopy_csv'."
+                "data.storage.load_path or data.storage.load_paths is required when data.source='dukascopy_csv'."
             )
+        if load_paths is not None:
+            if not isinstance(load_paths, dict) or not load_paths:
+                raise ConfigValidationError("data.storage.load_paths must be a non-empty mapping.")
+            for asset, path in load_paths.items():
+                if not isinstance(asset, str) or not asset.strip():
+                    raise ConfigValidationError("data.storage.load_paths keys must be non-empty strings.")
+                if not isinstance(path, str) or not path.strip():
+                    raise ConfigValidationError("data.storage.load_paths values must be non-empty strings.")
+            missing_load_paths = [symbol for symbol in requested_symbols if symbol not in load_paths]
+            if missing_load_paths:
+                raise ConfigValidationError(
+                    f"data.storage.load_paths is missing configured symbols: {missing_load_paths}."
+                )
     alignment = data.get("alignment", "inner")
     if alignment not in {"inner", "outer"}:
         raise ConfigValidationError("data.alignment must be 'inner' or 'outer'.")
@@ -348,6 +366,17 @@ def validate_data_block(data: dict[str, Any]) -> None:
         load_path = storage.get("load_path")
         if load_path is not None and not isinstance(load_path, str):
             raise ConfigValidationError("data.storage.load_path must be a string or null.")
+        load_paths = storage.get("load_paths")
+        if load_path is not None and load_paths is not None:
+            raise ConfigValidationError("Specify either data.storage.load_path or data.storage.load_paths, not both.")
+        if load_paths is not None:
+            if not isinstance(load_paths, dict) or not load_paths:
+                raise ConfigValidationError("data.storage.load_paths must be a non-empty mapping.")
+            for asset, path in load_paths.items():
+                if not isinstance(asset, str) or not asset.strip():
+                    raise ConfigValidationError("data.storage.load_paths keys must be non-empty strings.")
+                if not isinstance(path, str) or not path.strip():
+                    raise ConfigValidationError("data.storage.load_paths values must be non-empty strings.")
         for key in ("raw_dir", "processed_dir"):
             if key in storage and not isinstance(storage[key], str):
                 raise ConfigValidationError(f"data.storage.{key} must be a string.")

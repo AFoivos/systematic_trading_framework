@@ -40,6 +40,7 @@ def load_asset_frames(
     dataset_id = str(storage_cfg.get("dataset_id") or default_dataset_id(data_cfg))
     raw_dir = storage_cfg.get("raw_dir", "data/raw")
     load_path = storage_cfg.get("load_path")
+    load_paths = storage_cfg.get("load_paths")
     pit_cfg = dict(data_cfg.get("pit", {}) or {})
     expected_context_obj = build_storage_context(data_cfg, symbols=symbols, pit_cfg=pit_cfg)
     expected_context = expected_context_obj.to_dict()
@@ -58,6 +59,7 @@ def load_asset_frames(
                 root_dir=raw_dir,
                 dataset_id=dataset_id,
                 load_path=load_path,
+                load_paths=load_paths,
                 requested_assets=symbols,
                 start=data_cfg.get("start"),
                 end=data_cfg.get("end"),

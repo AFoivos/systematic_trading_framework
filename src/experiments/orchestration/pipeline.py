@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
@@ -35,6 +36,16 @@ from src.src_data.storage import asset_frames_to_long_frame
 
 LoadAssetFramesFn = Callable[[dict[str, object]], tuple[dict[str, pd.DataFrame], dict[str, object]]]
 SaveProcessedFn = Callable[..., dict[str, object] | None]
+_RUN_DIR_TZ = ZoneInfo("Europe/Athens")
+
+
+def _run_dir_timestamp(now: datetime | None = None) -> str:
+    timestamp = now if now is not None else datetime.now(_RUN_DIR_TZ)
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=_RUN_DIR_TZ)
+    else:
+        timestamp = timestamp.astimezone(_RUN_DIR_TZ)
+    return timestamp.strftime("%Y%m%d_%H%M%S_%f")
 
 
 def _stage_tail_config(cfg: dict[str, object]) -> dict[str, object]:
@@ -240,7 +251,7 @@ def run_experiment_pipeline(
             )
             base_dir = Path(logging_cfg.get("output_dir", "logs/experiments")).resolve()
             run_name = str(logging_cfg.get("run_name", Path(config_path).stem))
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            timestamp = _run_dir_timestamp()
             run_dir = base_dir / f"{run_name}_{timestamp}_{uuid4().hex[:8]}"
             artifacts = save_artifacts(
                 run_dir=run_dir,

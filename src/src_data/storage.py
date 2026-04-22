@@ -325,6 +325,55 @@ def _load_external_csv_asset_frames(
     return asset_frames, metadata
 
 
+def _load_external_csv_asset_frame_mapping(
+    paths_by_asset: Mapping[str, str | Path],
+    *,
+    requested_assets: list[str] | None,
+    start: str | None = None,
+    end: str | None = None,
+) -> tuple[dict[str, pd.DataFrame], dict[str, Any]]:
+    """
+    Load a mapped set of per-asset external OHLCV CSV files without forcing callers to create
+    an intermediate long panel artifact.
+    """
+    if not paths_by_asset:
+        raise ValueError("load_paths cannot be empty.")
+
+    normalized_paths = {str(asset): path for asset, path in paths_by_asset.items()}
+    assets = list(requested_assets or sorted(normalized_paths))
+    missing_assets = [asset for asset in assets if asset not in normalized_paths]
+    if missing_assets:
+        raise ValueError(f"load_paths is missing requested assets: {missing_assets}.")
+
+    asset_frames: dict[str, pd.DataFrame] = {}
+    metadata_by_asset: dict[str, Any] = {}
+    data_paths: dict[str, str] = {}
+    for asset in assets:
+        resolved_path = _resolve_path(normalized_paths[asset])
+        frames, asset_metadata = _load_external_csv_asset_frames(
+            resolved_path,
+            requested_assets=[asset],
+            start=start,
+            end=end,
+        )
+        asset_frames[asset] = frames[asset]
+        metadata_by_asset[asset] = asset_metadata
+        data_paths[asset] = str(resolved_path)
+
+    metadata = {
+        "data_paths": data_paths,
+        "format": "external_mapped_ohlcv_csv",
+        "explicit_load_path": True,
+        "explicit_load_paths": True,
+        "requires_pit_hardening": True,
+        "assets": sorted(asset_frames),
+        "requested_start": start,
+        "requested_end": end,
+        "per_asset": metadata_by_asset,
+    }
+    return asset_frames, metadata
+
+
 def build_dataset_snapshot_metadata(
     asset_frames: Mapping[str, pd.DataFrame],
     *,
@@ -418,6 +467,7 @@ def load_dataset_snapshot(
     root_dir: str | Path | None = None,
     dataset_id: str | None = None,
     load_path: str | Path | None = None,
+    load_paths: Mapping[str, str | Path] | None = None,
     requested_assets: list[str] | None = None,
     start: str | None = None,
     end: str | None = None,
@@ -427,6 +477,19 @@ def load_dataset_snapshot(
     shape expected by the rest of the project. The helper centralizes path or provider handling
     so callers do not duplicate I/O logic.
     """
+    if load_path is not None and load_paths is not None:
+        raise ValueError("Specify either load_path or load_paths, not both.")
+
+    if load_paths is not None:
+        asset_frames, metadata = _load_external_csv_asset_frame_mapping(
+            load_paths,
+            requested_assets=requested_assets,
+            start=start,
+            end=end,
+        )
+        metadata.setdefault("verified_fingerprint", False)
+        return asset_frames, metadata
+
     if load_path is not None:
         p = _resolve_path(load_path)
         if p.is_dir():

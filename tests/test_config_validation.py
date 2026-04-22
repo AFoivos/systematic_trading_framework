@@ -1009,8 +1009,25 @@ def test_validate_data_block_accepts_dukascopy_csv_with_explicit_load_path() -> 
     )
 
 
+def test_validate_data_block_accepts_dukascopy_csv_with_explicit_load_paths() -> None:
+    validate_data_block(
+        {
+            "source": "dukascopy_csv",
+            "symbols": ["EURUSD", "GBPUSD"],
+            "interval": "1h",
+            "storage": {
+                "mode": "cached_only",
+                "load_paths": {
+                    "EURUSD": "data/raw/dukas_copy_bank/eurusd_h1.csv",
+                    "GBPUSD": "data/raw/dukas_copy_bank/gbpusd_h1.csv",
+                },
+            },
+        }
+    )
+
+
 def test_validate_data_block_rejects_dukascopy_csv_without_load_path() -> None:
-    with pytest.raises(ConfigValidationError, match="data.storage.load_path is required"):
+    with pytest.raises(ConfigValidationError, match="data.storage.load_path or data.storage.load_paths is required"):
         validate_data_block(
             {
                 "source": "dukascopy_csv",

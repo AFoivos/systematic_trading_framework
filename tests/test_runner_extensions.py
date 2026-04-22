@@ -145,6 +145,50 @@ def test_load_dataset_snapshot_applies_start_end_window_to_external_csv(tmp_path
     assert metadata["requested_end"] == "2015-01-02 01:00:00"
 
 
+def test_load_dataset_snapshot_accepts_mapped_external_csv_paths(tmp_path) -> None:
+    """
+    Multi-asset Dukascopy-style inputs may be provided as per-symbol raw CSV files without
+    first materializing an intermediate long panel CSV.
+    """
+    timestamps = [
+        1_420_149_600_000,
+        1_420_153_200_000,
+        1_420_156_800_000,
+        1_420_160_400_000,
+    ]
+    paths: dict[str, Path] = {}
+    for symbol, offset in {"EURUSD": 0.0, "GBPUSD": 0.1}.items():
+        data_path = tmp_path / f"{symbol.lower()}_h1.csv"
+        pd.DataFrame(
+            {
+                "timestamp": timestamps,
+                "open": [1.20 + offset, 1.21 + offset, 1.22 + offset, 1.23 + offset],
+                "high": [1.25 + offset, 1.26 + offset, 1.27 + offset, 1.28 + offset],
+                "low": [1.19 + offset, 1.20 + offset, 1.21 + offset, 1.22 + offset],
+                "close": [1.23 + offset, 1.24 + offset, 1.25 + offset, 1.26 + offset],
+                "volume": [100.0, 120.0, 140.0, 160.0],
+            }
+        ).to_csv(data_path, index=False)
+        paths[symbol] = data_path
+
+    loaded_frames, metadata = load_dataset_snapshot(
+        stage="raw",
+        load_paths=paths,
+        requested_assets=["EURUSD", "GBPUSD"],
+        start="2015-01-02 00:00:00",
+        end="2015-01-02 02:00:00",
+    )
+
+    assert sorted(loaded_frames) == ["EURUSD", "GBPUSD"]
+    assert len(loaded_frames["EURUSD"]) == 2
+    assert loaded_frames["EURUSD"].index[0] == pd.Timestamp("2015-01-02 00:00:00")
+    assert loaded_frames["GBPUSD"].index[-1] == pd.Timestamp("2015-01-02 01:00:00")
+    assert metadata["format"] == "external_mapped_ohlcv_csv"
+    assert metadata["explicit_load_paths"] is True
+    assert metadata["requested_start"] == "2015-01-02 00:00:00"
+    assert metadata["requested_end"] == "2015-01-02 02:00:00"
+
+
 def test_load_ohlcv_csv_reuses_external_csv_normalization_path(tmp_path) -> None:
     """
     The public raw CSV helper should reuse the canonical external-CSV path so ad hoc notebook

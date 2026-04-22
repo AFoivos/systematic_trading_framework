@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -26,7 +27,9 @@ from src.experiments.optuna_search import (
     score_experiment_result,
     write_study_report,
 )
+from src.experiments.optuna_search import _run_dir_timestamp as _optuna_run_dir_timestamp
 from src.experiments.optuna_runtime import report_optuna_fold
+from src.experiments.orchestration.pipeline import _run_dir_timestamp as _experiment_run_dir_timestamp
 from src.experiments.orchestration.types import ExperimentResult
 from src.utils.config import load_experiment_config
 from src.utils.config_validation import validate_resolved_config
@@ -55,6 +58,16 @@ class _FakeTrial:
 
     def set_user_attr(self, key: str, value: object) -> None:
         self.user_attrs[key] = value
+
+
+def test_run_dir_timestamps_use_athens_timezone() -> None:
+    winter_utc = datetime(2024, 1, 1, 21, 30, 0, tzinfo=timezone.utc)
+    summer_utc = datetime(2024, 7, 1, 21, 30, 0, tzinfo=timezone.utc)
+
+    assert _experiment_run_dir_timestamp(winter_utc) == "20240101_233000_000000"
+    assert _optuna_run_dir_timestamp(winter_utc) == "20240101_233000_000000"
+    assert _experiment_run_dir_timestamp(summer_utc) == "20240702_003000_000000"
+    assert _optuna_run_dir_timestamp(summer_utc) == "20240702_003000_000000"
 
 
 def test_prepare_trial_config_updates_nested_paths_and_disables_logging() -> None:
@@ -302,6 +315,33 @@ def test_compute_derived_metrics_weekly_participation_uses_strict_oos_entries() 
     assert metrics["median_entries_per_week"] == pytest.approx(1.0)
     assert metrics["mean_entries_per_week"] == pytest.approx(1.0)
     assert get_nested_value(result, "derived.active_week_ratio") == pytest.approx(2.0 / 3.0)
+
+
+def test_compute_derived_metrics_weekly_participation_uses_portfolio_weights() -> None:
+    index = pd.date_range("2024-01-01", periods=26, freq="D", tz="UTC")
+    weights = pd.DataFrame(0.0, index=index, columns=["EURUSD", "GBPUSD"])
+    weights.loc["2024-01-02":"2024-01-05", "EURUSD"] = 0.10
+    weights.loc["2024-01-10":"2024-01-11", "EURUSD"] = 0.10
+    weights.loc["2024-01-15":"2024-01-17", "GBPUSD"] = -0.10
+    weights.loc["2024-01-18":"2024-01-20", "EURUSD"] = 0.10
+    oos = pd.Series(index >= pd.Timestamp("2024-01-08", tz="UTC"), index=index)
+    result = SimpleNamespace(
+        evaluation={"scope": "strict_oos_only"},
+        backtest=SimpleNamespace(turnover=weights.diff().abs().sum(axis=1).fillna(0.0)),
+        portfolio_weights=weights,
+        data={
+            "EURUSD": pd.DataFrame({"pred_is_oos": oos}, index=index),
+            "GBPUSD": pd.DataFrame({"pred_is_oos": oos}, index=index),
+        },
+    )
+
+    metrics = compute_derived_metrics(result)
+
+    assert metrics["entry_count"] == pytest.approx(3.0)
+    assert metrics["exposure_bar_count"] == pytest.approx(8.0)
+    assert metrics["total_week_count"] == pytest.approx(3.0)
+    assert metrics["active_week_count"] == pytest.approx(2.0)
+    assert metrics["active_week_ratio"] == pytest.approx(2.0 / 3.0)
 
 
 def test_build_study_objective_returns_failure_score_when_runner_fails(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -556,6 +596,27 @@ def test_ftmo_optuna_v2_yaml_matches_base_config_contract() -> None:
     assert payload["report"]["run_name"] == "optuna_ftmo_fx_intraday_regime_xgboost_v2"
     assert objective.metric_path == "evaluation.primary_summary.sharpe"
     assert objective.stability_weight == pytest.approx(1.0)
+    assert constraints_by_path["evaluation.primary_summary.cumulative_return"].threshold == pytest.approx(0.0)
+    assert constraints_by_path["evaluation.primary_summary.cumulative_return"].penalty == pytest.approx(1.0e12)
+    assert constraints_by_path["evaluation.primary_summary.sharpe"].threshold == pytest.approx(0.0)
+    assert constraints_by_path["evaluation.primary_summary.sharpe"].penalty == pytest.approx(10.0)
+    profit_factor_constraints = [
+        constraint
+        for constraint in objective.constraints
+        if constraint.metric_path == "evaluation.primary_summary.profit_factor"
+    ]
+    assert any(
+        constraint.op == "lt"
+        and constraint.threshold == pytest.approx(1.0)
+        and constraint.penalty == pytest.approx(5.0)
+        for constraint in profit_factor_constraints
+    )
+    assert any(
+        constraint.op == "lt"
+        and constraint.threshold == pytest.approx(1.10)
+        and constraint.penalty == pytest.approx(1.25)
+        for constraint in profit_factor_constraints
+    )
     assert constraints_by_path["derived.active_fold_count"].threshold == pytest.approx(6.0)
     assert constraints_by_path["derived.active_fold_count"].penalty == pytest.approx(2.0)
     active_week_ratio_constraints = [
@@ -596,6 +657,88 @@ def test_ftmo_optuna_v2_yaml_matches_base_config_contract() -> None:
     assert trial_cfg["data"]["storage"]["dataset_id"] == "ftmo_fx_intraday_regime_xgboost_v2"
     assert trial_cfg["risk"]["max_leverage"] == pytest.approx(0.25)
     assert trial_cfg["logging"]["run_name"] == "ftmo_fx_intraday_regime_xgboost_v2"
+    assert trial_cfg["logging"]["enabled"] is False
+
+
+def test_ftmo_panel_optuna_yaml_matches_base_config_contract() -> None:
+    optuna_cfg_path = Path("config/optuna/optuna_ftmo_fx_intraday_panel_4pair_xgboost_garch_2y_v1.yaml")
+    payload = yaml.safe_load(optuna_cfg_path.read_text(encoding="utf-8"))
+
+    search_space = load_search_space_yaml(optuna_cfg_path)
+    objective = normalize_objective_spec(payload["objective"])
+    pruning = normalize_pruning_spec(payload["pruning"])
+    base_cfg = load_experiment_config(payload["base_config"])
+
+    trial_params = {}
+    for dimension in search_space:
+        if dimension.kind == "categorical":
+            trial_params[dimension.name] = list(dimension.choices or [])[0]
+        elif dimension.kind == "int":
+            trial_params[dimension.name] = int(dimension.low)
+        elif dimension.kind == "float":
+            trial_params[dimension.name] = float(dimension.low)
+        else:
+            trial_params[dimension.name] = False
+
+    trial_cfg = prepare_trial_config(
+        base_cfg,
+        trial_params=trial_params,
+        search_space=search_space,
+        logging_enabled=False,
+    )
+
+    validate_resolved_config(trial_cfg)
+    constraints_by_path = {constraint.metric_path: constraint for constraint in objective.constraints}
+    search_dims_by_name = {dimension.name: dimension for dimension in search_space}
+    search_names = set(search_dims_by_name)
+    assert payload["base_config"] == "config/experiments/ftmo_fx_intraday_panel_4pair_xgboost_garch_2y_v1.yaml"
+    assert payload["study"]["study_name"] == "optuna_ftmo_fx_intraday_panel_4pair_xgboost_garch_2y_v1"
+    assert payload["report"]["run_name"] == "optuna_ftmo_fx_intraday_panel_4pair_xgboost_garch_2y_v1"
+    assert objective.metric_path == "evaluation.primary_summary.sharpe"
+    assert objective.failure_score == pytest.approx(-1.0e15)
+    assert objective.stability_weight == pytest.approx(1.0)
+    assert constraints_by_path["evaluation.primary_summary.cumulative_return"].threshold == pytest.approx(0.0)
+    assert constraints_by_path["evaluation.primary_summary.cumulative_return"].penalty == pytest.approx(1.0e12)
+    assert constraints_by_path["evaluation.primary_summary.max_drawdown"].threshold == pytest.approx(-0.05)
+    active_week_ratio_constraints = [
+        constraint for constraint in objective.constraints if constraint.metric_path == "derived.active_week_ratio"
+    ]
+    assert any(
+        constraint.op == "lt"
+        and constraint.threshold == pytest.approx(0.55)
+        and constraint.penalty == pytest.approx(4.0)
+        for constraint in active_week_ratio_constraints
+    )
+    assert any(
+        constraint.op == "lt"
+        and constraint.threshold == pytest.approx(0.75)
+        and constraint.penalty == pytest.approx(1.5)
+        for constraint in active_week_ratio_constraints
+    )
+    total_turnover_constraints = [
+        constraint
+        for constraint in objective.constraints
+        if constraint.metric_path == "evaluation.primary_summary.total_turnover"
+    ]
+    assert any(
+        constraint.op == "gt"
+        and constraint.threshold == pytest.approx(600.0)
+        and constraint.penalty == pytest.approx(1.0e12)
+        for constraint in total_turnover_constraints
+    )
+    assert all(not name.startswith("dd_guard_") for name in search_names)
+    assert pruning.metric_path == "classification_metrics.roc_auc"
+    assert trial_cfg["data"]["symbols"] == ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD"]
+    assert sorted(trial_cfg["data"]["storage"]["load_paths"]) == ["AUDUSD", "EURUSD", "GBPUSD", "USDJPY"]
+    assert trial_cfg["model"]["split"]["max_folds"] == 20
+    assert trial_cfg["model"]["target"]["max_holding"] == 24
+    assert trial_cfg["portfolio"]["enabled"] is True
+    assert trial_cfg["portfolio"]["gross_target"] == pytest.approx(0.20)
+    assert trial_cfg["portfolio"]["constraints"]["max_gross_leverage"] == pytest.approx(0.35)
+    assert trial_cfg["portfolio"]["constraints"]["max_weight"] == pytest.approx(0.10)
+    assert trial_cfg["portfolio"]["constraints"]["min_weight"] == pytest.approx(-0.10)
+    assert trial_cfg["backtest"]["min_holding_bars"] == 3
+    assert trial_cfg["logging"]["run_name"] == "ftmo_fx_intraday_panel_4pair_xgboost_garch_2y_v1"
     assert trial_cfg["logging"]["enabled"] is False
 
 

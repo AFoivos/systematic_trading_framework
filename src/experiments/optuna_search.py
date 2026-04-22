@@ -11,6 +11,7 @@ from pathlib import Path
 import tempfile
 from typing import Any, Literal, Mapping, Sequence
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import yaml
@@ -26,6 +27,16 @@ ConstraintOperator = Literal["lt", "le", "gt", "ge"]
 
 _DEFAULT_OBJECTIVE_PATH = "evaluation.primary_summary.sharpe"
 _DEFAULT_SAMPLER = "tpe"
+_RUN_DIR_TZ = ZoneInfo("Europe/Athens")
+
+
+def _run_dir_timestamp(now: datetime | None = None) -> str:
+    timestamp = now if now is not None else datetime.now(_RUN_DIR_TZ)
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=_RUN_DIR_TZ)
+    else:
+        timestamp = timestamp.astimezone(_RUN_DIR_TZ)
+    return timestamp.strftime("%Y%m%d_%H%M%S_%f")
 
 
 @dataclass(frozen=True)
@@ -1011,7 +1022,7 @@ def _resolve_optuna_report_dir(output_dir: str | Path, *, run_name: str) -> Path
     if not base_dir.is_absolute():
         base_dir = PROJECT_ROOT / base_dir
     base_dir = enforce_safe_absolute_path(base_dir.resolve())
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    timestamp = _run_dir_timestamp()
     safe_run_name = "".join(char if char.isalnum() or char in {"-", "_"} else "_" for char in run_name).strip("_")
     if not safe_run_name:
         safe_run_name = "optuna_study"

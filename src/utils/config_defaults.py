@@ -80,6 +80,7 @@ def default_data_block(data: dict[str, Any]) -> dict[str, Any]:
     storage.setdefault("mode", "live")
     storage.setdefault("dataset_id", None)
     storage.setdefault("load_path", None)
+    storage.setdefault("load_paths", None)
     storage.setdefault("save_raw", False)
     storage.setdefault("save_processed", False)
     raw_dir = storage.get("raw_dir", "data/raw")
@@ -91,6 +92,12 @@ def default_data_block(data: dict[str, Any]) -> dict[str, Any]:
     load_path = storage.get("load_path")
     if isinstance(load_path, str):
         storage["load_path"] = str(in_project(load_path))
+    load_paths = storage.get("load_paths")
+    if isinstance(load_paths, dict):
+        storage["load_paths"] = {
+            str(asset): str(in_project(path)) if isinstance(path, str) else path
+            for asset, path in load_paths.items()
+        }
     data["storage"] = storage
     return data
 
