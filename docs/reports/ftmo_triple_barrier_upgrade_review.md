@@ -320,15 +320,19 @@ leverage = leverage.replace([np.inf, -np.inf], np.nan).fillna(0.0).clip(
 )
 ```
 
-Το confidence adjustment είναι directional: για short signal και `confidence_col: pred_prob`, χρησιμοποιείται `1 - pred_prob`, ώστε τα short trades να μη μηδενίζονται επειδή το class-1 probability είναι χαμηλό.
+Το confidence adjustment υποστηρίζει δύο modes:
+
+- `directional_class1`: για short signal και `confidence_col: pred_prob`, χρησιμοποιείται `1 - pred_prob`, ώστε τα short trades να μη μηδενίζονται επειδή το class-1 probability είναι χαμηλό.
+- `meta_success`: το `pred_prob` ερμηνεύεται ως probability ότι το candidate trade θα πετύχει, άρα χρησιμοποιείται αυτούσιο και για long και για short trades.
 
 ```text
 File: src/risk/position_sizing.py
-Purpose: Direction-aware confidence floor.
+Purpose: Support both directional class-1 confidence and meta success confidence.
 ```
 
 ```python
-conf = conf.where(sig >= 0.0, 1.0 - conf)
+if confidence_mode == "directional_class1":
+    conf = conf.where(sig >= 0.0, 1.0 - conf)
 if confidence_floor is not None:
     floor = float(confidence_floor)
     confidence_adj = ((conf - floor).clip(lower=0.0) / max(1.0 - floor, float(eps))).clip(
@@ -336,6 +340,8 @@ if confidence_floor is not None:
         upper=1.0,
     )
 ```
+
+Το FTMO meta config χρησιμοποιεί ρητά `confidence_mode: meta_success`, οπότε δεν γίνεται inversion στα short signals.
 
 Το YAML integration γίνεται στο backtest stage.
 
