@@ -3,6 +3,9 @@ import numpy as np
 import pytest
 
 from src.features.returns import compute_returns
+from src.features.regime_context import add_regime_context_features
+from src.features.technical.adx import add_adx_features
+from src.features.technical.atr import add_atr_features
 from src.features.technical.trend import add_trend_features
 from src.src_data.validation import validate_ohlcv
 from src.backtesting.engine import run_backtest
@@ -37,6 +40,38 @@ def test_add_trend_features_columns() -> None:
     assert "close_ema_2" in out.columns
     assert "close_over_sma_2" in out.columns
     assert "close_over_ema_2" in out.columns
+
+
+def test_range_features_support_superset_windows() -> None:
+    df = pd.DataFrame(
+        {
+            "high": [2.0, 2.2, 2.4, 2.8, 3.0, 3.3],
+            "low": [1.0, 1.1, 1.3, 1.7, 1.9, 2.0],
+            "close": [1.5, 1.8, 2.0, 2.4, 2.5, 2.9],
+        }
+    )
+
+    out = add_atr_features(df, windows=[2, 3])
+    out = add_adx_features(out, windows=[2, 3])
+
+    assert {"atr_2", "atr_over_price_2", "atr_3", "atr_over_price_3"}.issubset(out.columns)
+    assert {"adx_2", "plus_di_2", "minus_di_2", "adx_3", "plus_di_3", "minus_di_3"}.issubset(out.columns)
+
+
+def test_regime_context_supports_superset_vol_window_pairs() -> None:
+    idx = pd.date_range("2024-01-01", periods=8, freq="h")
+    df = pd.DataFrame({"close": [1.0, 1.1, 1.0, 1.2, 1.25, 1.2, 1.3, 1.35]}, index=idx)
+
+    out = add_regime_context_features(
+        df,
+        returns_col="close_ret",
+        vol_window_pairs=[(2, 4), (3, 5)],
+    )
+
+    assert "regime_vol_ratio_2_4" in out.columns
+    assert "regime_vol_ratio_3_5" in out.columns
+    assert "regime_absret_z_2_4" in out.columns
+    assert "regime_absret_z_3_5" in out.columns
 
 
 def test_validate_ohlcv_flags_invalid_high_low() -> None:

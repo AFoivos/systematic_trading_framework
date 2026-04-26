@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Sequence
+
 import pandas as pd
 
 from .true_range import compute_true_range
@@ -11,6 +13,7 @@ def add_atr_features(
     low_col: str = "low",
     close_col: str = "close",
     window: int = 14,
+    windows: Sequence[int] | None = None,
     method: str = "wilder",
     add_over_price: bool = True,
     inplace: bool = False,
@@ -22,11 +25,26 @@ def add_atr_features(
     high = out[high_col].astype(float)
     low = out[low_col].astype(float)
     close = out[close_col].astype(float)
-    atr = compute_atr(high, low, close, window=window, method=method)
-    out[f"atr_{window}"] = atr
-    if add_over_price:
-        out[f"atr_over_price_{window}"] = atr / close
+    for resolved_window in _resolve_windows(window=window, windows=windows):
+        atr = compute_atr(high, low, close, window=resolved_window, method=method)
+        out[f"atr_{resolved_window}"] = atr
+        if add_over_price:
+            out[f"atr_over_price_{resolved_window}"] = atr / close
     return out
+
+
+def _resolve_windows(*, window: int, windows: Sequence[int] | None) -> list[int]:
+    raw_windows = list(windows) if windows is not None else [window]
+    resolved: list[int] = []
+    for raw_window in raw_windows:
+        if isinstance(raw_window, bool) or int(raw_window) <= 0:
+            raise ValueError("ATR windows must be positive integers.")
+        value = int(raw_window)
+        if value not in resolved:
+            resolved.append(value)
+    if not resolved:
+        raise ValueError("ATR windows must not be empty.")
+    return resolved
 
 
 def compute_atr(

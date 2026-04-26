@@ -12,11 +12,13 @@ from src.experiments.orchestration.common import align_asset_column
 from src.portfolio import (
     PortfolioConstraints,
     PortfolioPerformance,
+    build_constrained_weights_from_exposures_over_time,
     build_optimized_weights_over_time,
     build_rolling_covariance_by_date,
     build_weights_from_signals_over_time,
     compute_portfolio_performance,
 )
+from src.risk.position_sizing import scale_signal_for_ftmo
 from src.experiments.schemas import PortfolioMetaPayload
 
 
@@ -59,6 +61,97 @@ def build_portfolio_constraints(portfolio_cfg: dict[str, Any]) -> PortfolioConst
     )
 
 
+def _ftmo_sizing_config(risk_cfg: dict[str, Any]) -> dict[str, Any]:
+    sizing = dict(risk_cfg.get("sizing", {}) or {})
+    if str(sizing.get("kind", "none")) != "ftmo_risk_per_trade":
+        return {}
+    return sizing
+
+
+def _scale_single_asset_signal_for_ftmo(
+    df: pd.DataFrame,
+    *,
+    signal_col: str,
+    sizing_cfg: dict[str, Any],
+) -> tuple[pd.DataFrame, str]:
+    vol_col = str(sizing_cfg.get("vol_col") or "")
+    if not vol_col:
+        raise ValueError("risk.sizing.vol_col is required for ftmo_risk_per_trade sizing.")
+    if vol_col not in df.columns:
+        raise KeyError(f"risk.sizing.vol_col '{vol_col}' not found in DataFrame")
+    confidence_col = sizing_cfg.get("confidence_col")
+    confidence = None
+    if confidence_col is not None:
+        confidence_col = str(confidence_col)
+        if confidence_col not in df.columns:
+            raise KeyError(f"risk.sizing.confidence_col '{confidence_col}' not found in DataFrame")
+        confidence = df[confidence_col].astype(float)
+
+    output_col = str(sizing_cfg.get("output_col") or f"{signal_col}_ftmo_sized")
+    out = df.copy()
+    out[output_col] = scale_signal_for_ftmo(
+        signal=out[signal_col].astype(float),
+        vol=out[vol_col].astype(float),
+        target_vol=sizing_cfg.get("target_vol"),
+        risk_per_trade=float(sizing_cfg.get("risk_per_trade", 0.0025)),
+        stop_mult=float(sizing_cfg.get("stop_mult", 1.0)),
+        max_leverage=float(sizing_cfg.get("max_leverage", 3.0)),
+        min_leverage=float(sizing_cfg.get("min_leverage", 0.0)),
+        min_abs_signal=float(sizing_cfg.get("min_abs_signal", 0.0)),
+        confidence=confidence,
+        confidence_floor=sizing_cfg.get("confidence_floor"),
+        confidence_mode=str(sizing_cfg.get("confidence_mode", "directional_class1") or "directional_class1"),
+        confidence_power=float(sizing_cfg.get("confidence_power", 1.0)),
+    ).astype(float)
+    return out, output_col
+
+
+def _build_ftmo_sized_exposures(
+    asset_frames: dict[str, pd.DataFrame],
+    *,
+    signal_col: str,
+    sizing_cfg: dict[str, Any],
+    alignment: str,
+) -> pd.DataFrame:
+    vol_col = str(sizing_cfg.get("vol_col") or "")
+    if not vol_col:
+        raise ValueError("risk.sizing.vol_col is required for ftmo_risk_per_trade sizing.")
+    confidence_col = sizing_cfg.get("confidence_col")
+    exposures: dict[str, pd.Series] = {}
+    for asset, frame in sorted(asset_frames.items()):
+        if signal_col not in frame.columns:
+            raise KeyError(f"Column '{signal_col}' not found for asset '{asset}'.")
+        if vol_col not in frame.columns:
+            raise KeyError(f"risk.sizing.vol_col '{vol_col}' not found for asset '{asset}'.")
+        confidence = None
+        if confidence_col is not None:
+            confidence_col_name = str(confidence_col)
+            if confidence_col_name not in frame.columns:
+                raise KeyError(
+                    f"risk.sizing.confidence_col '{confidence_col_name}' not found for asset '{asset}'."
+                )
+            confidence = frame[confidence_col_name].astype(float)
+        exposures[asset] = scale_signal_for_ftmo(
+            signal=frame[signal_col].astype(float),
+            vol=frame[vol_col].astype(float),
+            target_vol=sizing_cfg.get("target_vol"),
+            risk_per_trade=float(sizing_cfg.get("risk_per_trade", 0.0025)),
+            stop_mult=float(sizing_cfg.get("stop_mult", 1.0)),
+            max_leverage=float(sizing_cfg.get("max_leverage", 3.0)),
+            min_leverage=float(sizing_cfg.get("min_leverage", 0.0)),
+            min_abs_signal=float(sizing_cfg.get("min_abs_signal", 0.0)),
+            confidence=confidence,
+            confidence_floor=sizing_cfg.get("confidence_floor"),
+            confidence_mode=str(sizing_cfg.get("confidence_mode", "directional_class1") or "directional_class1"),
+            confidence_power=float(sizing_cfg.get("confidence_power", 1.0)),
+        ).astype(float)
+    out = pd.concat(exposures, axis=1, join=alignment).sort_index()
+    if isinstance(out.columns, pd.MultiIndex):
+        out.columns = out.columns.get_level_values(0)
+    out.columns = [str(col) for col in out.columns]
+    return out
+
+
 def run_single_asset_backtest(
     asset: str,
     df: pd.DataFrame,
@@ -81,6 +174,15 @@ def run_single_asset_backtest(
         raise ValueError("target_vol is set but no vol_col was found or configured.")
 
     bt_df = df
+    bt_signal_col = signal_col
+    sizing_cfg = _ftmo_sizing_config(risk_cfg)
+    if sizing_cfg:
+        bt_df, bt_signal_col = _scale_single_asset_signal_for_ftmo(
+            bt_df,
+            signal_col=signal_col,
+            sizing_cfg=sizing_cfg,
+        )
+        target_vol = None
     oos_mask: pd.Series | None = None
     if model_meta:
         bt_subset = backtest_cfg.get("subset", "test")
@@ -88,7 +190,7 @@ def run_single_asset_backtest(
             oos_mask = df["pred_is_oos"].fillna(False).astype(bool)
             if bool(oos_mask.any()):
                 bt_df = df.copy()
-                bt_df.loc[~oos_mask, signal_col] = 0.0
+                bt_df.loc[~oos_mask, bt_signal_col] = 0.0
                 first_oos_label = oos_mask[oos_mask].index[0]
                 bt_df = bt_df.loc[first_oos_label:]
                 oos_mask = oos_mask.reindex(bt_df.index).fillna(False).astype(bool)
@@ -97,7 +199,7 @@ def run_single_asset_backtest(
 
     result = run_backtest(
         bt_df,
-        signal_col=signal_col,
+        signal_col=bt_signal_col,
         returns_col=returns_col,
         returns_type=returns_type,
         missing_return_policy=backtest_cfg.get("missing_return_policy", "raise_if_exposed"),
@@ -151,8 +253,23 @@ def run_portfolio_backtest(
     constraints = build_portfolio_constraints(portfolio_cfg)
     asset_groups = {str(k): str(v) for k, v in dict(portfolio_cfg.get("asset_groups", {}) or {}).items()}
     construction = str(portfolio_cfg.get("construction", "signal_weights"))
+    sizing_cfg = _ftmo_sizing_config(risk_cfg)
 
-    if construction == "mean_variance":
+    if sizing_cfg:
+        expected_return_col = None
+        exposures = _build_ftmo_sized_exposures(
+            asset_frames,
+            signal_col=signal_col,
+            sizing_cfg=sizing_cfg,
+            alignment=alignment,
+        )
+        weights, diagnostics = build_constrained_weights_from_exposures_over_time(
+            exposures,
+            constraints=constraints,
+            asset_to_group=asset_groups or None,
+        )
+        construction = "ftmo_risk_per_trade"
+    elif construction == "mean_variance":
         expected_return_col = str(portfolio_cfg.get("expected_return_col") or signal_col)
         expected_returns = align_asset_column(asset_frames, column=expected_return_col, how=alignment)
         covariance_by_date = build_rolling_covariance_by_date(
@@ -216,7 +333,13 @@ def run_portfolio_backtest(
         cost_per_turnover=risk_cfg.get("cost_per_turnover", 0.0),
         slippage_per_turnover=risk_cfg.get("slippage_per_turnover", 0.0),
         periods_per_year=backtest_cfg.get("periods_per_year", 252),
+        portfolio_guard=risk_cfg.get("portfolio_guard"),
+        drawdown_sizing=risk_cfg.get("drawdown_sizing"),
     )
+    if performance.applied_weights is not None:
+        weights = performance.applied_weights.copy()
+    if performance.risk_guard_timeline is not None and not performance.risk_guard_timeline.empty:
+        diagnostics = diagnostics.join(performance.risk_guard_timeline, how="left")
 
     portfolio_meta = PortfolioMetaPayload(
         construction=construction,
@@ -226,6 +349,10 @@ def run_portfolio_backtest(
         avg_gross_exposure=float(diagnostics["gross_exposure"].mean()) if not diagnostics.empty else 0.0,
         avg_net_exposure=float(diagnostics["net_exposure"].mean()) if not diagnostics.empty else 0.0,
         avg_turnover=float(diagnostics["turnover"].mean()) if not diagnostics.empty else 0.0,
+        extra={
+            "risk_guard_summary": dict(performance.risk_guard_summary or {}),
+            "sizing": dict(sizing_cfg or {}),
+        },
     )
     return performance, weights, diagnostics, portfolio_meta.to_dict()
 

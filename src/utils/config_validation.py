@@ -44,6 +44,21 @@ _DQN_ONLY_RL_PARAM_KEYS = {
     "exploration_final_eps",
 }
 _FEATURE_SELECTOR_OPERATORS = {"exact", "startswith", "endswith", "contains", "regex"}
+_FEATURE_SELECTOR_FAMILIES = {
+    "returns_lags",
+    "volatility",
+    "trend",
+    "momentum",
+    "regime",
+    "session_time",
+    "atr_adx_range",
+    "cross_asset",
+}
+_FEATURE_SELECTOR_PROFILES = {
+    "ftmo_fx_intraday_balanced_v1",
+    "ftmo_fx_intraday_regime_v1",
+    "ftmo_fx_intraday_momentum_v1",
+}
 
 
 def _resolve_event_embedding_columns(model: dict[str, Any]) -> list[str]:
@@ -194,17 +209,44 @@ def _validate_feature_selectors(value: Any, *, field: str) -> None:
     if not isinstance(value, dict):
         raise ConfigValidationError(f"{field} must be a mapping when provided.")
 
-    allowed_keys = {"exact", "include", "exclude", "strict"}
+    allowed_keys = {"profile", "families", "exact", "include", "exclude", "strict", "drift_filter"}
     unknown = sorted(set(value) - allowed_keys)
     if unknown:
         allowed = ", ".join(sorted(allowed_keys))
         raise ConfigValidationError(f"{field} has unsupported keys: {unknown}. Allowed keys: {allowed}.")
 
+    if "profile" in value:
+        profile = value["profile"]
+        if not isinstance(profile, str) or not profile.strip():
+            raise ConfigValidationError(f"{field}.profile must be a non-empty string.")
+        if profile not in _FEATURE_SELECTOR_PROFILES:
+            allowed = ", ".join(sorted(_FEATURE_SELECTOR_PROFILES))
+            raise ConfigValidationError(
+                f"{field}.profile is not supported. Allowed profiles: {allowed}."
+            )
+    families = value.get("families")
+    if families is not None:
+        if not isinstance(families, dict):
+            raise ConfigValidationError(f"{field}.families must be a mapping when provided.")
+        for family, enabled in families.items():
+            if family not in _FEATURE_SELECTOR_FAMILIES:
+                allowed = ", ".join(sorted(_FEATURE_SELECTOR_FAMILIES))
+                raise ConfigValidationError(
+                    f"{field}.families.{family} is not supported. Allowed families: {allowed}."
+                )
+            if not isinstance(enabled, bool):
+                raise ConfigValidationError(f"{field}.families.{family} must be boolean.")
+
     if "exact" in value:
         _validate_string_or_list(value["exact"], field=f"{field}.exact")
     _validate_selector_rule_list(value.get("include"), field=f"{field}.include")
     _validate_selector_rule_list(value.get("exclude"), field=f"{field}.exclude")
-    if "exact" not in value and value.get("include") in (None, []):
+    if (
+        "profile" not in value
+        and value.get("families") in (None, {})
+        and "exact" not in value
+        and value.get("include") in (None, [])
+    ):
         raise ConfigValidationError(f"{field} must define at least one exact column or include rule.")
 
     strict = value.get("strict", {}) or {}
@@ -215,6 +257,40 @@ def _validate_feature_selectors(value: Any, *, field: str) -> None:
         raise ConfigValidationError(f"{field}.strict has unsupported keys: {unknown_strict}.")
     if "min_count" in strict:
         _non_negative_int(strict["min_count"], field=f"{field}.strict.min_count")
+
+    drift_filter = value.get("drift_filter", {}) or {}
+    if drift_filter:
+        if not isinstance(drift_filter, dict):
+            raise ConfigValidationError(f"{field}.drift_filter must be a mapping when provided.")
+        unknown_drift_keys = sorted(
+            set(drift_filter)
+            - {"enabled", "max_psi", "action", "apply_scope", "family_drift_ratio_threshold"}
+        )
+        if unknown_drift_keys:
+            raise ConfigValidationError(f"{field}.drift_filter has unsupported keys: {unknown_drift_keys}.")
+        if "enabled" in drift_filter and not isinstance(drift_filter.get("enabled"), bool):
+            raise ConfigValidationError(f"{field}.drift_filter.enabled must be boolean.")
+        if "max_psi" in drift_filter:
+            max_psi = _finite_number(drift_filter.get("max_psi"), field=f"{field}.drift_filter.max_psi")
+            if max_psi <= 0:
+                raise ConfigValidationError(f"{field}.drift_filter.max_psi must be > 0.")
+        action = str(drift_filter.get("action", "warn"))
+        if action not in {"warn", "drop"}:
+            raise ConfigValidationError(f"{field}.drift_filter.action must be one of: warn, drop.")
+        apply_scope = str(drift_filter.get("apply_scope", "train_only_report"))
+        if apply_scope not in {"train_only_report", "train_and_model"}:
+            raise ConfigValidationError(
+                f"{field}.drift_filter.apply_scope must be one of: train_only_report, train_and_model."
+            )
+        if "family_drift_ratio_threshold" in drift_filter:
+            ratio = _finite_number(
+                drift_filter.get("family_drift_ratio_threshold"),
+                field=f"{field}.drift_filter.family_drift_ratio_threshold",
+            )
+            if not 0.0 <= ratio <= 1.0:
+                raise ConfigValidationError(
+                    f"{field}.drift_filter.family_drift_ratio_threshold must be in [0,1]."
+                )
 
 
 def validate_runtime_block(runtime_cfg: dict[str, Any]) -> dict[str, Any]:
@@ -476,6 +552,32 @@ def validate_features_block(features: Any) -> None:
                     raise ConfigValidationError("features[].params.windows must be a non-empty list of integers.")
                 for idx, window in enumerate(windows):
                     _positive_int(window, field=f"features[].params.windows[{idx}]")
+        if step["step"] in {"atr", "adx"}:
+            params = step.get("params") or {}
+            if "window" in params and params["window"] is not None:
+                _positive_int(params["window"], field="features[].params.window")
+            windows = params.get("windows")
+            if windows is not None:
+                if not isinstance(windows, (list, tuple)) or not windows:
+                    raise ConfigValidationError("features[].params.windows must be a non-empty list of integers.")
+                for idx, window in enumerate(windows):
+                    _positive_int(window, field=f"features[].params.windows[{idx}]")
+        if step["step"] == "regime_context":
+            params = step.get("params") or {}
+            for key in ("vol_short_window", "vol_long_window", "trend_fast_span", "trend_slow_span"):
+                if key in params and params[key] is not None:
+                    _positive_int(params[key], field=f"features[].params.{key}")
+            vol_window_pairs = params.get("vol_window_pairs")
+            if vol_window_pairs is not None:
+                if not isinstance(vol_window_pairs, (list, tuple)) or not vol_window_pairs:
+                    raise ConfigValidationError("features[].params.vol_window_pairs must be a non-empty list.")
+                for pair_idx, pair in enumerate(vol_window_pairs):
+                    if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+                        raise ConfigValidationError(
+                            f"features[].params.vol_window_pairs[{pair_idx}] must contain exactly two integers."
+                        )
+                    for value_idx, value in enumerate(pair):
+                        _positive_int(value, field=f"features[].params.vol_window_pairs[{pair_idx}][{value_idx}]")
         if step["step"] == "shock_context":
             params = step.get("params") or {}
             for key in ("price_col", "high_col", "low_col", "returns_col", "ema_col", "atr_col"):
@@ -577,11 +679,22 @@ def validate_model_block(model: dict[str, Any]) -> None:
         if target_kind not in {"forward_return", "triple_barrier"}:
             raise ConfigValidationError("model.target.kind must be 'forward_return' or 'triple_barrier'.")
         if target_kind == "triple_barrier" and model["kind"] not in _CLASSIFIER_MODEL_KINDS:
-            if model["kind"] not in _EMBEDDING_MODEL_KINDS:
+            if model["kind"] not in _EMBEDDING_MODEL_KINDS and model["kind"] not in _FORECASTER_MODEL_KINDS:
                 raise ConfigValidationError(
                     "model.target.kind='triple_barrier' is currently supported only for classifiers "
-                    "and event_transformer_encoder."
+                    "event_transformer_encoder, and regression forecasters with a target_col."
                 )
+            if model["kind"] in _FORECASTER_MODEL_KINDS:
+                regression_target_col = target.get("target_col", target.get("regression_target_col"))
+                if regression_target_col is None:
+                    raise ConfigValidationError(
+                        "regression forecasters using target.kind='triple_barrier' must set "
+                        "model.target.target_col or model.target.regression_target_col."
+                    )
+                if not isinstance(regression_target_col, str) or not regression_target_col.strip():
+                    raise ConfigValidationError(
+                        "model.target.target_col must be a non-empty string when provided."
+                    )
         if target_kind == "forward_return" and model["kind"] in _CLASSIFIER_MODEL_KINDS:
             pass
         if "price_col" in target and not isinstance(target["price_col"], str):
@@ -605,7 +718,20 @@ def validate_model_block(model: dict[str, Any]) -> None:
             if target_kind != "forward_return":
                 raise ConfigValidationError("model.target.quantiles are only supported for target.kind='forward_return'.")
         if target_kind == "triple_barrier":
-            for key in ("open_col", "high_col", "low_col", "returns_col", "volatility_col", "label_col"):
+            for key in (
+                "open_col",
+                "high_col",
+                "low_col",
+                "returns_col",
+                "volatility_col",
+                "label_col",
+                "event_ret_col",
+                "fwd_col",
+                "r_col",
+                "oriented_r_col",
+                "target_col",
+                "regression_target_col",
+            ):
                 if key in target and target[key] is not None and not isinstance(target[key], str):
                     raise ConfigValidationError(f"model.target.{key} must be a string or null.")
             for key in ("side_col", "candidate_col", "candidate_out_col"):
@@ -624,6 +750,32 @@ def validate_model_block(model: dict[str, Any]) -> None:
             tie_break = target.get("tie_break", "closest_to_open")
             if tie_break not in {"closest_to_open", "upper", "lower"}:
                 raise ConfigValidationError("model.target.tie_break must be one of: closest_to_open, upper, lower.")
+            entry_price_mode = target.get("entry_price_mode", "current_close")
+            if entry_price_mode not in {"current_close", "next_open"}:
+                raise ConfigValidationError(
+                    "model.target.entry_price_mode must be one of: current_close, next_open."
+                )
+            label_mode = target.get("label_mode")
+            if label_mode is not None and label_mode not in {"binary", "ternary", "meta"}:
+                raise ConfigValidationError("model.target.label_mode must be one of: binary, ternary, meta.")
+            if label_mode == "meta" and target.get("side_col") is None:
+                raise ConfigValidationError("model.target.label_mode='meta' requires model.target.side_col.")
+            if "add_r_multiple" in target and not isinstance(target.get("add_r_multiple"), bool):
+                raise ConfigValidationError("model.target.add_r_multiple must be boolean.")
+            if target.get("r_clip") is not None:
+                r_clip = target.get("r_clip")
+                if isinstance(r_clip, bool):
+                    raise ConfigValidationError("model.target.r_clip must be a finite number or [low, high] pair.")
+                if isinstance(r_clip, (int, float)):
+                    if _finite_number(r_clip, field="model.target.r_clip") <= 0:
+                        raise ConfigValidationError("model.target.r_clip must be > 0 when scalar.")
+                elif isinstance(r_clip, (list, tuple)) and len(r_clip) == 2:
+                    low = _finite_number(r_clip[0], field="model.target.r_clip[0]")
+                    high = _finite_number(r_clip[1], field="model.target.r_clip[1]")
+                    if low >= high:
+                        raise ConfigValidationError("model.target.r_clip must satisfy low < high.")
+                else:
+                    raise ConfigValidationError("model.target.r_clip must be a finite number or [low, high] pair.")
             candidate_mode = str(target.get("candidate_mode", "all_nonzero"))
             if candidate_mode not in {"all_nonzero", "side_change"}:
                 raise ConfigValidationError("model.target.candidate_mode must be one of: all_nonzero, side_change.")
@@ -1071,8 +1223,10 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
         prob_center = _finite_number(params.get("prob_center", 0.5), field="signals.params.prob_center")
         if not 0.0 < prob_center < 1.0:
             raise ConfigValidationError("signals.params.prob_center must be in (0,1).")
-        vol_target = _finite_number(params.get("vol_target", 0.001), field="signals.params.vol_target")
-        if vol_target <= 0:
+        vol_target = params.get("vol_target", 0.001)
+        if vol_target is not None:
+            vol_target = _finite_number(vol_target, field="signals.params.vol_target")
+        if vol_target is not None and vol_target <= 0:
             raise ConfigValidationError("signals.params.vol_target must be > 0.")
         clip = _finite_number(params.get("clip", 1.0), field="signals.params.clip")
         if clip <= 0:
@@ -1088,6 +1242,15 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
             raise ConfigValidationError("signals.params.min_signal_abs must be >= 0.")
         if min_signal_abs > clip:
             raise ConfigValidationError("signals.params.min_signal_abs must be <= signals.params.clip.")
+        for key in ("top_quantile", "max_trade_rate"):
+            if params.get(key) is not None:
+                value = _finite_number(params.get(key), field=f"signals.params.{key}")
+                if not 0.0 < value <= 1.0:
+                    raise ConfigValidationError(f"signals.params.{key} must be in (0,1].")
+        if params.get("top_quantile_window") is not None:
+            _positive_int(params.get("top_quantile_window"), field="signals.params.top_quantile_window")
+            if int(params.get("top_quantile_window")) <= 1:
+                raise ConfigValidationError("signals.params.top_quantile_window must be > 1.")
         upper = params.get("upper")
         lower = params.get("lower")
         if upper is not None:
@@ -1140,6 +1303,21 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
                     raise ConfigValidationError(
                         f"signals.params.activation_filters[{idx}].use_abs must be boolean."
                     )
+    if signals["kind"] == "meta_probability_side":
+        for key in ("prob_col", "side_col", "candidate_col", "signal_col"):
+            if key in params and params[key] is not None and not isinstance(params[key], str):
+                raise ConfigValidationError(f"signals.params.{key} must be a string or null.")
+        threshold = params.get("threshold", params.get("upper", 0.5))
+        threshold = _finite_number(threshold, field="signals.params.threshold")
+        if not 0.0 < threshold < 1.0:
+            raise ConfigValidationError("signals.params.threshold must be in (0,1).")
+        if "upper" in params and params.get("upper") is not None:
+            upper = _finite_number(params.get("upper"), field="signals.params.upper")
+            if not 0.0 < upper < 1.0:
+                raise ConfigValidationError("signals.params.upper must be in (0,1).")
+        clip = _finite_number(params.get("clip", 1.0), field="signals.params.clip")
+        if clip <= 0:
+            raise ConfigValidationError("signals.params.clip must be > 0.")
 
 
 def validate_risk_block(risk: dict[str, Any]) -> None:
@@ -1177,6 +1355,118 @@ def validate_risk_block(risk: dict[str, Any]) -> None:
         raise ConfigValidationError(
             "risk.dd_guard.rearm_drawdown must be <= risk.dd_guard.max_drawdown."
         )
+    portfolio_guard = risk.get("portfolio_guard", {})
+    if not isinstance(portfolio_guard, dict):
+        raise ConfigValidationError("risk.portfolio_guard must be a mapping.")
+    if "enabled" in portfolio_guard and not isinstance(portfolio_guard.get("enabled"), bool):
+        raise ConfigValidationError("risk.portfolio_guard.enabled must be boolean.")
+    for key in ("weekly_return_target", "max_daily_loss", "weekly_drawdown", "max_total_loss"):
+        value = portfolio_guard.get(key)
+        if value is None:
+            continue
+        numeric = _finite_number(value, field=f"risk.portfolio_guard.{key}")
+        if numeric <= 0:
+            raise ConfigValidationError(f"risk.portfolio_guard.{key} must be > 0 when provided.")
+    if "cooloff_bars" in portfolio_guard:
+        _non_negative_int(portfolio_guard.get("cooloff_bars", 0), field="risk.portfolio_guard.cooloff_bars")
+    if "rearm_on_new_period" in portfolio_guard and not isinstance(
+        portfolio_guard.get("rearm_on_new_period"),
+        bool,
+    ):
+        raise ConfigValidationError("risk.portfolio_guard.rearm_on_new_period must be boolean.")
+    for key in ("daily_soft_stop", "daily_hard_stop", "weekly_profit_lock"):
+        value = portfolio_guard.get(key)
+        if value is None:
+            continue
+        numeric = _finite_number(value, field=f"risk.portfolio_guard.{key}")
+        if numeric <= 0:
+            raise ConfigValidationError(f"risk.portfolio_guard.{key} must be > 0 when provided.")
+    for key in ("after_target_risk_multiplier", "daily_soft_stop_risk_multiplier"):
+        value = portfolio_guard.get(key)
+        if value is None:
+            continue
+        numeric = _finite_number(value, field=f"risk.portfolio_guard.{key}")
+        if not 0.0 <= numeric <= 1.0:
+            raise ConfigValidationError(f"risk.portfolio_guard.{key} must be in [0,1].")
+    after_target_mode = str(portfolio_guard.get("after_target_mode", "reduce_risk"))
+    if after_target_mode not in {"reduce_risk", "flatten"}:
+        raise ConfigValidationError("risk.portfolio_guard.after_target_mode must be reduce_risk or flatten.")
+    weekly_anchor = portfolio_guard.get("weekly_anchor", "W-FRI")
+    if not isinstance(weekly_anchor, str) or not weekly_anchor.strip():
+        raise ConfigValidationError("risk.portfolio_guard.weekly_anchor must be a non-empty string.")
+
+    sizing = risk.get("sizing", {}) or {}
+    if sizing:
+        if not isinstance(sizing, dict):
+            raise ConfigValidationError("risk.sizing must be a mapping when provided.")
+        kind = str(sizing.get("kind", "none"))
+        if kind not in {"none", "ftmo_risk_per_trade"}:
+            raise ConfigValidationError("risk.sizing.kind must be one of: none, ftmo_risk_per_trade.")
+        if kind == "ftmo_risk_per_trade":
+            for key in ("vol_col", "confidence_col", "output_col"):
+                if key in sizing and sizing[key] is not None and not isinstance(sizing[key], str):
+                    raise ConfigValidationError(f"risk.sizing.{key} must be a string or null.")
+            confidence_mode = str(sizing.get("confidence_mode", "directional_class1"))
+            if confidence_mode not in {"directional_class1", "meta_success"}:
+                raise ConfigValidationError(
+                    "risk.sizing.confidence_mode must be one of: directional_class1, meta_success."
+                )
+            if not isinstance(sizing.get("vol_col"), str) or not sizing.get("vol_col", "").strip():
+                raise ConfigValidationError("risk.sizing.vol_col is required for ftmo_risk_per_trade.")
+            for key, default in (
+                ("risk_per_trade", 0.0025),
+                ("stop_mult", 1.0),
+                ("max_leverage", 3.0),
+                ("min_leverage", 0.0),
+                ("min_abs_signal", 0.0),
+                ("confidence_power", 1.0),
+            ):
+                value = _finite_number(sizing.get(key, default), field=f"risk.sizing.{key}")
+                if key in {"risk_per_trade", "stop_mult", "confidence_power"} and value <= 0:
+                    raise ConfigValidationError(f"risk.sizing.{key} must be > 0.")
+                if key in {"max_leverage", "min_leverage", "min_abs_signal"} and value < 0:
+                    raise ConfigValidationError(f"risk.sizing.{key} must be >= 0.")
+            if (
+                _finite_number(sizing.get("min_leverage", 0.0), field="risk.sizing.min_leverage")
+                > _finite_number(sizing.get("max_leverage", 3.0), field="risk.sizing.max_leverage")
+            ):
+                raise ConfigValidationError("risk.sizing.min_leverage must be <= risk.sizing.max_leverage.")
+            target_vol_sizing = sizing.get("target_vol")
+            if target_vol_sizing is not None and _finite_number(target_vol_sizing, field="risk.sizing.target_vol") <= 0:
+                raise ConfigValidationError("risk.sizing.target_vol must be > 0 or null.")
+            confidence_floor = sizing.get("confidence_floor")
+            if confidence_floor is not None:
+                floor = _finite_number(confidence_floor, field="risk.sizing.confidence_floor")
+                if not 0.0 <= floor < 1.0:
+                    raise ConfigValidationError("risk.sizing.confidence_floor must be in [0,1).")
+
+    drawdown_sizing = risk.get("drawdown_sizing", {}) or {}
+    if drawdown_sizing:
+        if not isinstance(drawdown_sizing, dict):
+            raise ConfigValidationError("risk.drawdown_sizing must be a mapping when provided.")
+        if "enabled" in drawdown_sizing and not isinstance(drawdown_sizing.get("enabled"), bool):
+            raise ConfigValidationError("risk.drawdown_sizing.enabled must be boolean.")
+        levels = drawdown_sizing.get("levels", []) or []
+        if levels and not isinstance(levels, list):
+            raise ConfigValidationError("risk.drawdown_sizing.levels must be a list.")
+        last_dd = -1.0
+        for idx, raw_level in enumerate(levels):
+            if not isinstance(raw_level, dict):
+                raise ConfigValidationError(f"risk.drawdown_sizing.levels[{idx}] must be a mapping.")
+            max_dd = _finite_number(raw_level.get("max_dd"), field=f"risk.drawdown_sizing.levels[{idx}].max_dd")
+            multiplier = _finite_number(
+                raw_level.get("multiplier"),
+                field=f"risk.drawdown_sizing.levels[{idx}].multiplier",
+            )
+            if max_dd <= 0:
+                raise ConfigValidationError(f"risk.drawdown_sizing.levels[{idx}].max_dd must be > 0.")
+            if max_dd <= last_dd:
+                raise ConfigValidationError("risk.drawdown_sizing.levels must be sorted by increasing max_dd.")
+            if not 0.0 <= multiplier <= 1.0:
+                raise ConfigValidationError(
+                    f"risk.drawdown_sizing.levels[{idx}].multiplier must be in [0,1]."
+                )
+            last_dd = max_dd
 
 
 def validate_backtest_block(backtest: dict[str, Any]) -> None:

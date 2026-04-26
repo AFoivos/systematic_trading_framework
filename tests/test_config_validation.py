@@ -213,6 +213,24 @@ def test_validate_model_block_accepts_feature_selectors() -> None:
     )
 
 
+def test_validate_model_block_accepts_feature_selector_profile_and_families() -> None:
+    validate_model_block(
+        {
+            "kind": "xgboost_clf",
+            "feature_selectors": {
+                "profile": "ftmo_fx_intraday_balanced_v1",
+                "families": {
+                    "momentum": False,
+                    "cross_asset": True,
+                },
+                "strict": {"min_count": 3},
+            },
+            "target": {"kind": "forward_return", "horizon": 1},
+            "split": {"method": "walk_forward", "train_size": 100, "test_size": 20},
+        }
+    )
+
+
 def test_validate_model_block_rejects_invalid_feature_selectors() -> None:
     model = {
         "kind": "xgboost_clf",
@@ -222,6 +240,18 @@ def test_validate_model_block_rejects_invalid_feature_selectors() -> None:
     }
 
     with pytest.raises(ConfigValidationError, match="feature_selectors"):
+        validate_model_block(model)
+
+
+def test_validate_model_block_rejects_invalid_feature_selector_profile() -> None:
+    model = {
+        "kind": "xgboost_clf",
+        "feature_selectors": {"profile": "unknown_profile_v1"},
+        "target": {"kind": "forward_return", "horizon": 1},
+        "split": {"method": "walk_forward", "train_size": 100, "test_size": 20},
+    }
+
+    with pytest.raises(ConfigValidationError, match="profile"):
         validate_model_block(model)
 
 
@@ -338,6 +368,33 @@ def test_validate_risk_block_rejects_invalid_rearm_drawdown(rearm_drawdown: floa
 
     with pytest.raises(ConfigValidationError, match="rearm_drawdown"):
         validate_risk_block(risk)
+
+
+def test_validate_risk_block_accepts_portfolio_guard() -> None:
+    validate_risk_block(
+        {
+            "cost_per_turnover": 0.0,
+            "slippage_per_turnover": 0.0,
+            "target_vol": None,
+            "max_leverage": 1.0,
+            "dd_guard": {
+                "enabled": True,
+                "max_drawdown": 0.12,
+                "rearm_drawdown": 0.08,
+                "cooloff_bars": 48,
+            },
+            "portfolio_guard": {
+                "enabled": True,
+                "weekly_return_target": 0.015,
+                "max_daily_loss": 0.025,
+                "weekly_drawdown": 0.04,
+                "max_total_loss": 0.08,
+                "cooloff_bars": 24,
+                "rearm_on_new_period": True,
+                "weekly_anchor": "W-FRI",
+            },
+        }
+    )
 
 
 def test_validate_model_block_rejects_log_forward_return_without_returns_col() -> None:
@@ -669,6 +726,23 @@ def test_validate_features_block_accepts_vol_normalized_momentum_vol_window() ->
                     "vol_col": None,
                     "vol_window": 36,
                     "windows": [6, 24],
+                },
+            },
+        ]
+    )
+
+
+def test_validate_features_block_accepts_superset_window_features() -> None:
+    validate_features_block(
+        [
+            {"step": "atr", "params": {"window": 24, "windows": [14, 18, 24, 30]}},
+            {"step": "adx", "params": {"window": 24, "windows": [14, 18, 24, 30]}},
+            {
+                "step": "regime_context",
+                "params": {
+                    "vol_short_window": 24,
+                    "vol_long_window": 168,
+                    "vol_window_pairs": [[12, 120], [24, 168], [36, 240]],
                 },
             },
         ]

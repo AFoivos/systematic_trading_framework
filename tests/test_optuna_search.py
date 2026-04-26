@@ -16,6 +16,7 @@ from src.experiments.optuna_search import (
     PruningSpec,
     SearchDimension,
     build_study_objective,
+    build_study_report_payload,
     compute_derived_metrics,
     extract_objective_value,
     get_nested_value,
@@ -25,6 +26,7 @@ from src.experiments.optuna_search import (
     optimize_experiment,
     prepare_trial_config,
     score_experiment_result,
+    validate_search_space_feature_contract,
     write_study_report,
 )
 from src.experiments.optuna_search import _run_dir_timestamp as _optuna_run_dir_timestamp
@@ -393,6 +395,7 @@ def test_build_study_objective_records_primary_summary_on_success(monkeypatch: p
             artifacts={
                 "run_dir": "logs/experiments/unit_optuna_trial_0032_20260413_000000_deadbee",
                 "report": "logs/experiments/unit_optuna_trial_0032_20260413_000000_deadbee/report.md",
+                "report_html": "logs/experiments/unit_optuna_trial_0032_20260413_000000_deadbee/report.html",
             },
         ),
     )
@@ -421,6 +424,10 @@ def test_build_study_objective_records_primary_summary_on_success(monkeypatch: p
     assert (
         trial.user_attrs["experiment_report"]
         == "logs/experiments/unit_optuna_trial_0032_20260413_000000_deadbee/report.md"
+    )
+    assert (
+        trial.user_attrs["experiment_report_html"]
+        == "logs/experiments/unit_optuna_trial_0032_20260413_000000_deadbee/report.html"
     )
 
 
@@ -522,6 +529,7 @@ def test_repo_shock_meta_optuna_yaml_matches_base_config_contract() -> None:
     objective = normalize_objective_spec(payload["objective"])
     pruning = normalize_pruning_spec(payload["pruning"])
     base_cfg = load_experiment_config(payload["base_config"])
+    validate_search_space_feature_contract(base_cfg, search_space)
 
     trial_params = {}
     for dimension in search_space:
@@ -694,12 +702,18 @@ def test_ftmo_panel_optuna_yaml_matches_base_config_contract() -> None:
     assert payload["base_config"] == "config/experiments/ftmo_fx_intraday_panel_4pair_xgboost_garch_2y_v1.yaml"
     assert payload["study"]["study_name"] == "optuna_ftmo_fx_intraday_panel_4pair_xgboost_garch_2y_v1"
     assert payload["report"]["run_name"] == "optuna_ftmo_fx_intraday_panel_4pair_xgboost_garch_2y_v1"
-    assert objective.metric_path == "evaluation.primary_summary.sharpe"
+    assert objective.metric_path == "evaluation.ftmo_objective.score"
     assert objective.failure_score == pytest.approx(-1.0e15)
     assert objective.stability_weight == pytest.approx(1.0)
     assert constraints_by_path["evaluation.primary_summary.cumulative_return"].threshold == pytest.approx(0.0)
     assert constraints_by_path["evaluation.primary_summary.cumulative_return"].penalty == pytest.approx(1.0e12)
-    assert constraints_by_path["evaluation.primary_summary.max_drawdown"].threshold == pytest.approx(-0.05)
+    assert constraints_by_path["evaluation.primary_summary.max_drawdown"].threshold == pytest.approx(-0.08)
+    assert constraints_by_path["evaluation.ftmo_metrics.worst_weekly_drawdown"].threshold == pytest.approx(-0.04)
+    assert constraints_by_path["evaluation.ftmo_metrics.weekly_drawdown_breach_count"].penalty == pytest.approx(1.0e12)
+    assert constraints_by_path["evaluation.ftmo_metrics.daily_loss_breach_count"].penalty == pytest.approx(1.0e12)
+    assert constraints_by_path["evaluation.ftmo_metrics.max_total_loss_breach_count"].penalty == pytest.approx(1.0e12)
+    assert constraints_by_path["derived.active_fold_count"].threshold == pytest.approx(8.0)
+    assert constraints_by_path["derived.profitable_fold_count"].threshold == pytest.approx(5.0)
     active_week_ratio_constraints = [
         constraint for constraint in objective.constraints if constraint.metric_path == "derived.active_week_ratio"
     ]
@@ -715,31 +729,82 @@ def test_ftmo_panel_optuna_yaml_matches_base_config_contract() -> None:
         and constraint.penalty == pytest.approx(1.5)
         for constraint in active_week_ratio_constraints
     )
-    total_turnover_constraints = [
+    weekly_target_hit_ratio_constraints = [
         constraint
         for constraint in objective.constraints
-        if constraint.metric_path == "evaluation.primary_summary.total_turnover"
+        if constraint.metric_path == "evaluation.ftmo_metrics.weekly_target_hit_ratio"
     ]
     assert any(
-        constraint.op == "gt"
-        and constraint.threshold == pytest.approx(600.0)
-        and constraint.penalty == pytest.approx(1.0e12)
-        for constraint in total_turnover_constraints
+        constraint.op == "lt"
+        and constraint.threshold == pytest.approx(0.25)
+        and constraint.penalty == pytest.approx(4.0)
+        for constraint in weekly_target_hit_ratio_constraints
     )
-    assert all(not name.startswith("dd_guard_") for name in search_names)
+    assert all(not name.startswith("tb_") for name in search_names)
     assert pruning.metric_path == "classification_metrics.roc_auc"
     assert trial_cfg["data"]["symbols"] == ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD"]
     assert sorted(trial_cfg["data"]["storage"]["load_paths"]) == ["AUDUSD", "EURUSD", "GBPUSD", "USDJPY"]
+    assert trial_cfg["data"]["end"] == "2024-10-01 00:00:00"
     assert trial_cfg["model"]["split"]["max_folds"] == 20
-    assert trial_cfg["model"]["target"]["max_holding"] == 24
+    assert trial_cfg["model"]["target"]["kind"] == "forward_return"
+    assert trial_cfg["model"]["target"]["horizon"] == 18
+    assert trial_cfg["model"]["feature_selectors"]["profile"] == "ftmo_fx_intraday_balanced_v1"
+    assert "vol_window_short" not in search_names
+    assert "trend_sma_fast" not in search_names
+    assert "trend_sma_slow" not in search_names
+    assert "adx_window" not in search_names
+    assert "regime_vol_short" not in search_names
+    assert "regime_vol_long" not in search_names
+    assert search_dims_by_name["vol_norm_vol_col"].choices == [
+        "vol_rolling_12",
+        "vol_rolling_24",
+        "vol_rolling_48",
+        "vol_rolling_72",
+        "vol_rolling_96",
+        "vol_rolling_120",
+        "vol_rolling_168",
+    ]
+    assert search_dims_by_name["activation_adx_selector"].choices == ["adx_14", "adx_18", "adx_24", "adx_30"]
+    assert trial_cfg["features"][13]["params"]["vol_col"] == "vol_rolling_12"
+    assert trial_cfg["features"][3]["params"]["base_sma_for_sign"] == 72
+    assert trial_cfg["features"][3]["params"]["short_sma"] == 24
+    assert trial_cfg["features"][3]["params"]["long_sma"] == 72
+    assert trial_cfg["signals"]["params"]["activation_filters"][2]["selector"]["exact"] == "adx_14"
+    assert (
+        trial_cfg["signals"]["params"]["activation_filters"][3]["selector"]["exact"]
+        == "regime_vol_ratio_12_120"
+    )
     assert trial_cfg["portfolio"]["enabled"] is True
     assert trial_cfg["portfolio"]["gross_target"] == pytest.approx(0.20)
     assert trial_cfg["portfolio"]["constraints"]["max_gross_leverage"] == pytest.approx(0.35)
-    assert trial_cfg["portfolio"]["constraints"]["max_weight"] == pytest.approx(0.10)
-    assert trial_cfg["portfolio"]["constraints"]["min_weight"] == pytest.approx(-0.10)
-    assert trial_cfg["backtest"]["min_holding_bars"] == 3
+    assert trial_cfg["portfolio"]["constraints"]["max_weight"] == pytest.approx(0.08)
+    assert trial_cfg["portfolio"]["constraints"]["min_weight"] == pytest.approx(-0.08)
+    assert trial_cfg["backtest"]["min_holding_bars"] == 4
     assert trial_cfg["logging"]["run_name"] == "ftmo_fx_intraday_panel_4pair_xgboost_garch_2y_v1"
     assert trial_cfg["logging"]["enabled"] is False
+
+
+def test_optuna_feature_contract_rejects_unguaranteed_downstream_columns() -> None:
+    base_cfg = load_experiment_config(
+        "config/experiments/ftmo_fx_intraday_panel_4pair_xgboost_garch_2y_v1.yaml"
+    )
+    search_space = [
+        SearchDimension(
+            name="trend_sma_fast",
+            path="features.2.params.sma_windows.0",
+            kind="categorical",
+            choices=[36, 48],
+        ),
+        SearchDimension(
+            name="adx_window",
+            path="features.9.params.windows.2",
+            kind="categorical",
+            choices=[14, 18],
+        ),
+    ]
+
+    with pytest.raises(ValueError, match="Optuna search_space feature contract is invalid"):
+        validate_search_space_feature_contract(base_cfg, search_space)
 
 
 def test_optuna_template_yaml_matches_declared_contract() -> None:
@@ -840,7 +905,10 @@ def test_optimize_experiment_wires_fake_optuna_study(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(
         optuna_mod,
         "write_study_report",
-        lambda *args, **kwargs: {"report": str(tmp_path / "report.md")},
+        lambda *args, **kwargs: {
+            "report": str(tmp_path / "report.md"),
+            "report_html": str(tmp_path / "report.html"),
+        },
     )
 
     study = optimize_experiment(
@@ -873,7 +941,10 @@ def test_optimize_experiment_wires_fake_optuna_study(monkeypatch: pytest.MonkeyP
     assert study.user_attrs["config_path"] == "config/experiments/example.yaml"
     assert study.user_attrs["objective_metric"] == "evaluation.primary_summary.sharpe"
     assert study.user_attrs["pruning_metric"] == "classification_metrics.roc_auc"
-    assert study.user_attrs["report_artifacts"] == {"report": str(tmp_path / "report.md")}
+    assert study.user_attrs["report_artifacts"] == {
+        "report": str(tmp_path / "report.md"),
+        "report_html": str(tmp_path / "report.html"),
+    }
     assert study.optimize_args == {
         "objective": sentinel_objective,
         "n_trials": 7,
@@ -923,7 +994,12 @@ search_space:
         return SimpleNamespace(
             study_name=kwargs.get("study_name"),
             best_trial=SimpleNamespace(number=2, value=1.25, params={"upper": 0.57}),
-            user_attrs={"report_artifacts": {"report": str(tmp_path / "report.md")}},
+            user_attrs={
+                "report_artifacts": {
+                    "report": str(tmp_path / "report.md"),
+                    "report_html": str(tmp_path / "report.html"),
+                }
+            },
         )
 
     monkeypatch.setattr(optuna_mod, "optimize_experiment", _fake_optimize_experiment)
@@ -963,6 +1039,7 @@ search_space:
     out = capsys.readouterr().out
     assert "Optuna study completed" in out
     assert "Best trial: 2" in out
+    assert f"HTML report: {tmp_path / 'report.html'}" in out
 
 
 def test_write_study_report_persists_optuna_artifacts(tmp_path: Path) -> None:
@@ -990,6 +1067,7 @@ def test_write_study_report_persists_optuna_artifacts(tmp_path: Path) -> None:
             "experiment_run_name": "unit_trial_0003",
             "experiment_run_dir": str(tmp_path / "unit_trial_0003"),
             "experiment_report": str(tmp_path / "unit_trial_0003" / "report.md"),
+            "experiment_report_html": str(tmp_path / "unit_trial_0003" / "report.html"),
         },
     )
     failed_trial = SimpleNamespace(
@@ -1028,6 +1106,7 @@ def test_write_study_report_persists_optuna_artifacts(tmp_path: Path) -> None:
     run_dir = Path(artifacts["run_dir"])
     assert run_dir.parent == tmp_path
     assert Path(artifacts["report"]).exists()
+    assert Path(artifacts["report_html"]).exists()
     assert Path(artifacts["trials"]).exists()
     assert Path(artifacts["study_summary"]).exists()
     assert Path(artifacts["manifest"]).exists()
@@ -1047,9 +1126,50 @@ def test_write_study_report_persists_optuna_artifacts(tmp_path: Path) -> None:
     assert "experiment_run_name" in trials.columns
     assert "experiment_run_dir" in trials.columns
     assert "experiment_report" in trials.columns
+    assert "experiment_report_html" in trials.columns
 
     report_text = Path(artifacts["report"]).read_text(encoding="utf-8")
     assert "# Optuna Study Report" in report_text
     assert "Turnover event count" in report_text
     assert "Active week ratio" in report_text
     assert "Experiment run dir" in report_text
+    assert "Experiment HTML report" in report_text
+    report_html_text = Path(artifacts["report_html"]).read_text(encoding="utf-8")
+    assert "<!DOCTYPE html>" in report_html_text
+    assert "<h1>Optuna Study Report</h1>" in report_html_text
+
+
+def test_study_report_payload_omits_failed_trials_from_best_trial() -> None:
+    failed_trial = SimpleNamespace(
+        number=1,
+        state=SimpleNamespace(name="COMPLETE"),
+        value=-1.0e15,
+        datetime_start=None,
+        datetime_complete=None,
+        params={"x": 1},
+        user_attrs={"trial_failed": True, "exception": "KeyError: missing feature"},
+    )
+    study = SimpleNamespace(
+        study_name="all_failed",
+        trials=[failed_trial],
+        best_trial=failed_trial,
+    )
+
+    payload = build_study_report_payload(
+        study,
+        config_path="config/experiments/example.yaml",
+        search_space=[
+            SearchDimension(
+                name="x",
+                path="signals.params.upper",
+                kind="categorical",
+                choices=[1],
+            )
+        ],
+        objective=ObjectiveSpec(metric_path="evaluation.ftmo_objective.score"),
+        pruning=PruningSpec(enabled=False),
+    )
+
+    assert payload["clean_complete_count"] == 0
+    assert payload["best_trial"] == {}
+    assert payload["top_trials"] == []

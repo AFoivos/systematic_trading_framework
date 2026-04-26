@@ -14,11 +14,14 @@ def probability_vol_adjusted_signal(
     prob_center: float = 0.5,
     upper: float | None = None,
     lower: float | None = None,
-    vol_target: float = 0.001,
+    vol_target: float | None = 0.001,
     clip: float = 1.0,
     vol_floor: float = 1e-6,
     min_signal_abs: float = 0.0,
     activation_filters: list[dict[str, object]] | None = None,
+    top_quantile: float | None = None,
+    top_quantile_window: int | None = None,
+    max_trade_rate: float | None = None,
 ) -> pd.Series:
     output_col = resolve_signal_output_name(
         signal_col=signal_col,
@@ -37,6 +40,9 @@ def probability_vol_adjusted_signal(
         vol_floor=vol_floor,
         min_signal_abs=min_signal_abs,
         activation_filters=activation_filters,
+        top_quantile=top_quantile,
+        top_quantile_window=top_quantile_window,
+        max_trade_rate=max_trade_rate,
     )
     return out[output_col]
 

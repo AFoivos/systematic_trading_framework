@@ -4,7 +4,9 @@ import warnings
 
 import numpy as np
 import pandas as pd
+import pytest
 
+from src.evaluation.metrics import compute_ftmo_style_metrics
 from src.portfolio import (
     PortfolioConstraints,
     apply_constraints,
@@ -358,6 +360,99 @@ def test_compute_portfolio_performance_charges_initial_turnover() -> None:
     assert np.isclose(perf.turnover.iloc[0], 1.0)
     assert np.isclose(perf.costs.iloc[0], 0.01)
     assert np.isclose(perf.net_returns.iloc[0], -0.01)
+
+
+def test_compute_portfolio_performance_portfolio_guard_flattens_future_weights_after_daily_loss() -> None:
+    idx = pd.date_range("2024-01-01 00:00:00", periods=6, freq="h", tz="UTC")
+    weights = pd.DataFrame({"A": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]}, index=idx)
+    returns = pd.DataFrame({"A": [0.0, -0.03, 0.01, 0.01, 0.0, 0.0]}, index=idx)
+
+    perf = compute_portfolio_performance(
+        weights,
+        returns,
+        cost_per_turnover=0.0,
+        slippage_per_turnover=0.0,
+        portfolio_guard={
+            "enabled": True,
+            "max_daily_loss": 0.02,
+            "cooloff_bars": 2,
+            "rearm_on_new_period": True,
+            "weekly_anchor": "W-FRI",
+        },
+    )
+
+    assert perf.applied_weights is not None
+    assert perf.applied_weights.iloc[2:4, 0].eq(0.0).all()
+    assert perf.risk_guard_summary["daily_loss_trigger_count"] == 1
+    assert perf.risk_guard_summary["flattened_bar_count"] == 2
+    assert perf.risk_guard_timeline is not None
+    assert bool(perf.risk_guard_timeline["risk_guard_triggered"].iloc[1]) is True
+
+
+def test_compute_portfolio_performance_supports_soft_stop_hard_stop_and_weekly_lock() -> None:
+    idx = pd.date_range("2024-01-01 00:00:00", periods=6, freq="h", tz="UTC")
+    weights = pd.DataFrame({"A": [1.0] * 6}, index=idx)
+
+    soft_perf = compute_portfolio_performance(
+        weights,
+        pd.DataFrame({"A": [0.0, -0.011, 0.0, 0.0, 0.0, 0.0]}, index=idx),
+        portfolio_guard={
+            "enabled": True,
+            "daily_soft_stop": 0.01,
+            "daily_soft_stop_risk_multiplier": 0.5,
+            "weekly_anchor": "W-FRI",
+        },
+    )
+    assert soft_perf.applied_weights is not None
+    assert soft_perf.applied_weights.iloc[2, 0] == pytest.approx(0.5)
+    assert soft_perf.risk_guard_summary["soft_stop_trigger_count"] == 1
+
+    hard_perf = compute_portfolio_performance(
+        weights,
+        pd.DataFrame({"A": [0.0, -0.03, 0.0, 0.0, 0.0, 0.0]}, index=idx),
+        portfolio_guard={
+            "enabled": True,
+            "daily_hard_stop": 0.025,
+            "weekly_anchor": "W-FRI",
+        },
+    )
+    assert hard_perf.applied_weights is not None
+    assert hard_perf.applied_weights.iloc[2:, 0].eq(0.0).all()
+    assert hard_perf.risk_guard_summary["hard_stop_trigger_count"] == 1
+
+    lock_perf = compute_portfolio_performance(
+        weights,
+        pd.DataFrame({"A": [0.0, 0.02, 0.0, 0.0, 0.0, 0.0]}, index=idx),
+        portfolio_guard={
+            "enabled": True,
+            "weekly_profit_lock": 0.015,
+            "after_target_mode": "flatten",
+            "weekly_anchor": "W-FRI",
+        },
+    )
+    assert lock_perf.applied_weights is not None
+    assert lock_perf.applied_weights.iloc[2:, 0].eq(0.0).all()
+    assert lock_perf.risk_guard_summary["weekly_lock_trigger_count"] == 1
+
+
+def test_compute_ftmo_style_metrics_counts_weekly_and_daily_breaches() -> None:
+    idx = pd.date_range("2024-01-01 00:00:00", periods=8, freq="12h", tz="UTC")
+    returns = pd.Series([0.0, -0.03, 0.01, 0.02, 0.0, -0.05, 0.02, 0.01], index=idx, dtype=float)
+
+    metrics = compute_ftmo_style_metrics(
+        net_returns=returns,
+        weekly_return_target=0.015,
+        max_daily_loss=0.02,
+        weekly_drawdown_limit=0.04,
+        max_total_loss=0.05,
+        weekly_anchor="W-FRI",
+    )
+
+    assert metrics["week_count"] == pytest.approx(1.0)
+    assert metrics["daily_loss_breach_count"] == pytest.approx(2.0)
+    assert metrics["weekly_drawdown_breach_count"] == pytest.approx(1.0)
+    assert metrics["max_total_loss_breach_count"] == pytest.approx(1.0)
+    assert metrics["weekly_target_hit_ratio"] == pytest.approx(0.0)
 
 
 def test_optimize_mean_variance_fallback_respects_max_gross_leverage() -> None:

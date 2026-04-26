@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Sequence
+
 import numpy as np
 import pandas as pd
 
@@ -12,6 +14,7 @@ def add_adx_features(
     low_col: str = "low",
     close_col: str = "close",
     window: int = 14,
+    windows: Sequence[int] | None = None,
     inplace: bool = False,
 ) -> pd.DataFrame:
     missing = [c for c in (high_col, low_col, close_col) if c not in df.columns]
@@ -21,7 +24,26 @@ def add_adx_features(
     high = out[high_col].astype(float)
     low = out[low_col].astype(float)
     close = out[close_col].astype(float)
-    return out.join(compute_adx(high, low, close, window=window))
+    resolved_windows = _resolve_windows(window=window, windows=windows)
+    for resolved_window in resolved_windows:
+        adx = compute_adx(high, low, close, window=resolved_window)
+        for column in adx.columns:
+            out[column] = adx[column]
+    return out
+
+
+def _resolve_windows(*, window: int, windows: Sequence[int] | None) -> list[int]:
+    raw_windows = list(windows) if windows is not None else [window]
+    resolved: list[int] = []
+    for raw_window in raw_windows:
+        if isinstance(raw_window, bool) or int(raw_window) <= 0:
+            raise ValueError("ADX windows must be positive integers.")
+        value = int(raw_window)
+        if value not in resolved:
+            resolved.append(value)
+    if not resolved:
+        raise ValueError("ADX windows must not be empty.")
+    return resolved
 
 
 def compute_adx(high: pd.Series, low: pd.Series, close: pd.Series, window: int = 14) -> pd.DataFrame:

@@ -209,6 +209,8 @@ def default_risk_block(risk: dict[str, Any]) -> dict[str, Any]:
     risk.setdefault("slippage_per_turnover", 0.0)
     risk.setdefault("target_vol", None)
     risk.setdefault("max_leverage", 3.0)
+    risk.setdefault("sizing", {})
+    risk.setdefault("drawdown_sizing", {})
     dd = risk.get("dd_guard") or {}
     if not isinstance(dd, dict):
         raise ValueError("risk.dd_guard must be a mapping.")

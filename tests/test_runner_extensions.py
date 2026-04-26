@@ -671,6 +671,23 @@ def test_run_experiment_supports_multi_asset_portfolio_storage_monitoring_and_ex
             "kind": "probability_conviction",
             "params": {"prob_col": "pred_prob", "signal_col": "signal_prob_size", "clip": 1.0},
         },
+        "risk": {
+            "cost_per_turnover": 0.0,
+            "slippage_per_turnover": 0.0,
+            "target_vol": None,
+            "max_leverage": 1.0,
+            "dd_guard": {"enabled": False, "max_drawdown": 0.2, "cooloff_bars": 5},
+            "portfolio_guard": {
+                "enabled": True,
+                "weekly_return_target": 0.01,
+                "max_daily_loss": 0.03,
+                "weekly_drawdown": 0.04,
+                "max_total_loss": 0.08,
+                "cooloff_bars": 2,
+                "rearm_on_new_period": True,
+                "weekly_anchor": "W-FRI",
+            },
+        },
         "portfolio": {
             "enabled": True,
             "construction": "signal_weights",
@@ -704,6 +721,12 @@ def test_run_experiment_supports_multi_asset_portfolio_storage_monitoring_and_ex
     assert isinstance(result.backtest, PortfolioPerformance)
     assert result.portfolio_weights is not None
     assert result.evaluation["scope"] == "strict_oos_only"
+    assert "fold_backtest_summaries" in result.evaluation
+    assert len(result.evaluation["fold_backtest_summaries"]) > 0
+    assert "ftmo_metrics" in result.evaluation
+    assert "ftmo_objective" in result.evaluation
+    assert "feature_diagnostics" in result.evaluation
+    assert result.evaluation["feature_diagnostics"]["per_asset"]["AAA"]["resolved_feature_count"] >= 2
     assert result.monitoring["asset_count"] == 2
     assert result.execution["order_count"] > 0
     assert "per_asset" in result.model_meta
@@ -846,3 +869,59 @@ def test_run_experiment_rejects_multi_asset_without_explicit_portfolio_mode(tmp_
 
     with pytest.raises(ValueError, match="portfolio.enabled=false"):
         runner_mod.run_experiment(config_path)
+
+
+def test_build_portfolio_evaluation_uses_common_oos_fold_index() -> None:
+    idx = pd.date_range("2024-01-01", periods=6, freq="D", tz="UTC")
+    asset_frames = {
+        "AAA": pd.DataFrame({"pred_is_oos": [False, False, True, True, True, True]}, index=idx),
+        "BBB": pd.DataFrame({"pred_is_oos": [False, False, False, True, True, True]}, index=idx),
+    }
+    net_returns = pd.Series([0.01, -0.005, 0.004], index=idx[3:], dtype=float)
+    performance = PortfolioPerformance(
+        equity_curve=(1.0 + net_returns).cumprod(),
+        net_returns=net_returns,
+        gross_returns=net_returns,
+        costs=pd.Series(0.0, index=idx[3:], dtype=float),
+        turnover=pd.Series([0.2, 0.1, 0.0], index=idx[3:], dtype=float),
+        summary={"sharpe": 1.0, "total_turnover": 0.3},
+    )
+    model_meta = {
+        "per_asset": {
+            "AAA": {
+                "folds": [
+                    {"fold": 0, "test_start": 2, "test_end": 4},
+                    {"fold": 1, "test_start": 4, "test_end": 6},
+                ]
+            },
+            "BBB": {
+                "folds": [
+                    {"fold": 0, "test_start": 3, "test_end": 4},
+                    {"fold": 1, "test_start": 4, "test_end": 6},
+                ]
+            },
+        }
+    }
+
+    evaluation = runner_mod._build_portfolio_evaluation(
+        asset_frames,
+        performance=performance,
+        model_meta=model_meta,
+        periods_per_year=252,
+        alignment="inner",
+        risk_cfg={
+            "portfolio_guard": {
+                "enabled": True,
+                "weekly_return_target": 0.015,
+                "max_daily_loss": 0.025,
+                "weekly_drawdown": 0.04,
+                "max_total_loss": 0.08,
+                "weekly_anchor": "W-FRI",
+            }
+        },
+    )
+
+    fold_summaries = evaluation["fold_backtest_summaries"]
+    assert [fold["fold"] for fold in fold_summaries] == [0, 1]
+    assert [fold["test_rows"] for fold in fold_summaries] == [1, 2]
+    assert evaluation["ftmo_metrics"]["week_count"] >= 1.0

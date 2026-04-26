@@ -1315,7 +1315,9 @@ def test_save_artifacts_writes_experiment_report(tmp_path) -> None:
     )
 
     report_path = Path(artifacts["report"])
+    report_html_path = Path(artifacts["report_html"])
     assert report_path.exists()
+    assert report_html_path.exists()
     assert artifacts["equity_curve"].endswith("equity_curve.csv")
     assert artifacts["equity_curve_chart"].endswith("report_assets/equity_curve.png")
     assert artifacts["feature_importance"].endswith("feature_importance.csv")
@@ -1353,6 +1355,10 @@ def test_save_artifacts_writes_experiment_report(tmp_path) -> None:
     assert "## Model Fold Diagnostics" in report_text
     assert "## Cost / Exposure / Turnover" in report_text
     assert "## Diagnostics" in report_text
+    report_html_text = report_html_path.read_text(encoding="utf-8")
+    assert "<!DOCTYPE html>" in report_html_text
+    assert "<h1>Experiment Report: demo_report</h1>" in report_html_text
+    assert "report_assets/equity_curve.png" in report_html_text
 
 
 def test_run_backtest_caps_positions_at_max_leverage() -> None:

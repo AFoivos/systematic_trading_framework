@@ -109,6 +109,40 @@ def aggregate_model_meta(per_asset_meta: dict[str, dict[str, Any]]) -> dict[str,
                 out[key] = float(numerator / weight_total)
         return out
 
+    def aggregate_target_meta() -> dict[str, Any]:
+        target_items = [dict(meta.get("target", {}) or {}) for meta in per_asset_meta.values()]
+        target_items = [item for item in target_items if item]
+        if not target_items:
+            return {}
+        target = dict(target_items[0])
+        for key in (
+            "labeled_rows",
+            "upper_barrier_count",
+            "lower_barrier_count",
+            "neutral_count",
+            "candidate_rows",
+            "unavailable_tail_count",
+        ):
+            if any(item.get(key) is not None for item in target_items):
+                target[key] = int(sum(int(item.get(key, 0) or 0) for item in target_items))
+        labeled_rows = int(target.get("labeled_rows", 0) or 0)
+        if labeled_rows > 0:
+            positive_sum = 0.0
+            positive_weight = 0
+            for item in target_items:
+                rows = int(item.get("labeled_rows", 0) or 0)
+                rate = item.get("positive_rate")
+                if rows > 0 and rate is not None:
+                    positive_sum += float(rate) * rows
+                    positive_weight += rows
+            if positive_weight > 0:
+                target["positive_rate"] = float(positive_sum / positive_weight)
+        for key in ("avg_hit_step", "median_hit_step"):
+            values = [float(item[key]) for item in target_items if item.get(key) is not None]
+            if values:
+                target[key] = float(sum(values) / len(values))
+        return target
+
     first = next(iter(per_asset_meta.values()))
     weighted_classification_summary = weighted_summary(
         summary_key="oos_classification_summary",
@@ -191,6 +225,7 @@ def aggregate_model_meta(per_asset_meta: dict[str, dict[str, Any]]) -> dict[str,
         "oos_policy_summary": weighted_policy_summary(),
         "feature_importance": feature_importance,
         "label_distribution": label_distribution,
+        "target": aggregate_target_meta(),
         "prediction_diagnostics": {
             "oos_rows": int(oos_rows),
             "predicted_rows": int(prediction_rows),

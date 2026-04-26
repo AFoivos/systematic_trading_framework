@@ -200,6 +200,8 @@ def run_experiment_pipeline(
                 model_meta=model_meta,
                 periods_per_year=cfg["backtest"].get("periods_per_year", 252),
                 alignment=cfg["data"].get("alignment", "inner"),
+                risk_cfg=dict(cfg.get("risk", {}) or {}),
+                backtest_cfg=dict(cfg.get("backtest", {}) or {}),
             )
         else:
             asset = next(iter(sorted(asset_frames)))
@@ -215,6 +217,7 @@ def run_experiment_pipeline(
                 performance=performance,
                 model_meta=model_meta,
                 periods_per_year=cfg["backtest"].get("periods_per_year", 252),
+                backtest_cfg=dict(cfg.get("backtest", {}) or {}),
             )
 
         monitoring = compute_monitoring_report(

@@ -31,7 +31,7 @@ from src.experiments.support.metrics import (
 )
 from src.models.overlay import resolve_garch_overlay
 from src.models.runtime import infer_feature_columns, resolve_runtime_for_model
-from src.targets import build_forward_return_target
+from src.targets import build_forward_return_target, build_triple_barrier_target
 from src.models.types import ForecasterFoldPredictor
 from src.models.garch import make_garch_fold_predictor
 from src.models.lstm import make_lstm_fold_predictor
@@ -66,21 +66,39 @@ def prepare_forecaster_inputs(
     )
     target_cfg = dict(model_cfg.get("target", {}) or {})
     target_kind = target_cfg.get("kind", "forward_return")
-    if target_kind != "forward_return":
+    if target_kind == "forward_return":
+        out, label_col, fwd_col, target_meta = build_forward_return_target(df=df, target_cfg=target_cfg)
+    elif target_kind == "triple_barrier":
+        out, label_col, event_col, target_meta = build_triple_barrier_target(df=df, target_cfg=target_cfg)
+        regression_target_col = str(
+            target_cfg.get("target_col")
+            or target_cfg.get("regression_target_col")
+            or target_meta.get("oriented_r_col")
+            or target_meta.get("r_col")
+            or event_col
+        )
+        if regression_target_col not in out.columns:
+            raise KeyError(
+                f"Configured triple_barrier regression target_col '{regression_target_col}' was not emitted."
+            )
+        fwd_col = regression_target_col
+        target_meta = dict(target_meta)
+        target_meta["regression_target_col"] = regression_target_col
+    else:
         raise ValueError(f"Unsupported target.kind: {target_kind}")
-
-    out, label_col, fwd_col, target_meta = build_forward_return_target(df=df, target_cfg=target_cfg)
     split_cfg = dict(model_cfg.get("split", {}) or {})
     split_method = split_cfg.get("method", "time")
     if split_method not in {"time", "walk_forward", "purged"}:
         raise ValueError(f"Unsupported split.method: {split_method}")
 
+    target_output_cols = set(str(col) for col in list(target_meta.get("output_cols", []) or []))
     feature_cols = infer_feature_columns(
         out,
         explicit_cols=model_cfg.get("feature_cols"),
         feature_selectors=model_cfg.get("feature_selectors"),
-        exclude={label_col, fwd_col, pred_ret_col, pred_prob_col},
+        exclude={label_col, fwd_col, pred_ret_col, pred_prob_col, *target_output_cols},
     )
+    feature_cols = [col for col in feature_cols if col not in target_output_cols]
     use_exogenous_features = bool(model_cfg.get("use_features", True))
     active_feature_cols = feature_cols if use_exogenous_features else []
     if required_features and not active_feature_cols:

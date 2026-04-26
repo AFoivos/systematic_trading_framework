@@ -6,6 +6,8 @@ from typing import Any, Iterable, Mapping, Sequence
 import numpy as np
 import pandas as pd
 
+from src.models.runtime import classify_feature_family
+
 
 def summarize_label_distribution(values: Iterable[Any]) -> dict[str, Any]:
     series = pd.Series(list(values) if not isinstance(values, pd.Series) else values, copy=False)
@@ -226,6 +228,95 @@ def aggregate_feature_importance(
     }
 
 
+def summarize_feature_family_counts(feature_cols: Sequence[str]) -> dict[str, int]:
+    counts: dict[str, int] = defaultdict(int)
+    for feature in feature_cols:
+        family = classify_feature_family(str(feature)) or "unclassified"
+        counts[family] += 1
+    return dict(sorted(counts.items(), key=lambda kv: kv[0]))
+
+
+def summarize_feature_importance_stability(
+    fold_importances: Sequence[Sequence[Mapping[str, Any]]],
+    *,
+    top_n: int = 10,
+) -> dict[str, Any]:
+    per_feature: dict[str, dict[str, Any]] = {}
+    available_folds = 0
+    for fold_idx, fold_rows in enumerate(fold_importances):
+        rows = list(fold_rows or [])
+        if not rows:
+            continue
+        available_folds += 1
+        for row in rows:
+            feature = str(row.get("feature"))
+            info = per_feature.setdefault(
+                feature,
+                {
+                    "feature": feature,
+                    "family": classify_feature_family(feature) or "unclassified",
+                    "fold_count": 0,
+                    "rank_sum": 0.0,
+                    "importance_sum": 0.0,
+                    "normalized_sum": 0.0,
+                    "best_rank": None,
+                    "folds": [],
+                },
+            )
+            rank = int(row.get("rank", 0) or 0)
+            importance = float(row.get("importance", row.get("mean_importance", 0.0)) or 0.0)
+            normalized = float(
+                row.get("importance_normalized", row.get("mean_importance_normalized", 0.0)) or 0.0
+            )
+            info["fold_count"] += 1
+            info["rank_sum"] += rank
+            info["importance_sum"] += importance
+            info["normalized_sum"] += normalized
+            info["best_rank"] = rank if info["best_rank"] is None else min(int(info["best_rank"]), rank)
+            info["folds"].append(
+                {
+                    "fold": int(fold_idx),
+                    "rank": rank,
+                    "importance": importance,
+                    "importance_normalized": normalized,
+                }
+            )
+
+    if not per_feature:
+        return {
+            "available": False,
+            "folds_with_importance": 0,
+            "top_features": [],
+        }
+
+    rows: list[dict[str, Any]] = []
+    for info in per_feature.values():
+        fold_count = max(int(info["fold_count"]), 1)
+        coverage = float(info["fold_count"] / max(available_folds, 1))
+        rows.append(
+            {
+                "feature": info["feature"],
+                "family": info["family"],
+                "fold_count": int(info["fold_count"]),
+                "fold_coverage": coverage,
+                "mean_rank": float(info["rank_sum"] / fold_count),
+                "best_rank": int(info["best_rank"]) if info["best_rank"] is not None else None,
+                "mean_importance": float(info["importance_sum"] / fold_count),
+                "mean_importance_normalized": float(info["normalized_sum"] / fold_count),
+                "folds": list(info["folds"]),
+            }
+        )
+    rows.sort(key=lambda item: (-item["fold_coverage"], item["mean_rank"], -item["mean_importance"]))
+    for rank, row in enumerate(rows, start=1):
+        row["stability_rank"] = int(rank)
+
+    return {
+        "available": True,
+        "folds_with_importance": int(available_folds),
+        "top_features": rows[:top_n],
+    }
+
+
 def summarize_prediction_alignment(
     *,
     index: pd.Index,
@@ -269,6 +360,8 @@ __all__ = [
     "aggregate_feature_importance",
     "aggregate_label_distributions",
     "extract_feature_importance",
+    "summarize_feature_family_counts",
+    "summarize_feature_importance_stability",
     "summarize_feature_availability",
     "summarize_label_distribution",
     "summarize_numeric_distribution",

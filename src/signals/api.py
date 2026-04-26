@@ -4,6 +4,7 @@ from src.signals.buy_and_hold_signal import buy_and_hold_signal
 from src.signals.conviction_sizing_signal import conviction_sizing_signal
 from src.signals.forecast_threshold_signal import forecast_threshold_signal
 from src.signals.forecast_vol_adjusted_signal import forecast_vol_adjusted_signal
+from src.signals.meta_probability_side_signal import meta_probability_side_signal
 from src.signals.momentum_strategy import momentum_strategy
 from src.signals.probability_vol_adjusted_signal import probability_vol_adjusted_signal
 from src.signals.probabilistic_signal import probabilistic_signal
@@ -27,6 +28,7 @@ __all__ = [
     "conviction_sizing_signal",
     "forecast_threshold_signal",
     "forecast_vol_adjusted_signal",
+    "meta_probability_side_signal",
     "probability_vol_adjusted_signal",
     "regime_filtered_signal",
     "vol_targeted_signal",

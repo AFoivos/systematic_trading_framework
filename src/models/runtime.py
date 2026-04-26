@@ -14,6 +14,44 @@ from src.models.lightgbm_baseline import default_feature_columns
 
 
 _FEATURE_SELECTOR_OPERATORS = {"exact", "startswith", "endswith", "contains", "regex"}
+_FEATURE_SELECTOR_ALLOWED_KEYS = {"profile", "families", "exact", "include", "exclude", "strict", "drift_filter"}
+_FEATURE_FAMILY_ORDER = (
+    "returns_lags",
+    "volatility",
+    "trend",
+    "momentum",
+    "regime",
+    "session_time",
+    "atr_adx_range",
+    "cross_asset",
+)
+_FEATURE_SELECTOR_PROFILES: dict[str, tuple[str, ...]] = {
+    "ftmo_fx_intraday_balanced_v1": (
+        "returns_lags",
+        "volatility",
+        "trend",
+        "momentum",
+        "regime",
+        "session_time",
+        "atr_adx_range",
+    ),
+    "ftmo_fx_intraday_regime_v1": (
+        "returns_lags",
+        "volatility",
+        "trend",
+        "regime",
+        "session_time",
+        "atr_adx_range",
+    ),
+    "ftmo_fx_intraday_momentum_v1": (
+        "returns_lags",
+        "volatility",
+        "trend",
+        "momentum",
+        "session_time",
+        "atr_adx_range",
+    ),
+}
 
 
 @lru_cache(maxsize=1)
@@ -241,6 +279,139 @@ def _dedupe_preserve_order(columns: Iterable[str]) -> list[str]:
     return out
 
 
+def classify_feature_family(column: str) -> str | None:
+    name = str(column)
+    if name in {
+        "close_logret",
+        "close_ret",
+    } or name.startswith(("lag_close_logret_", "lag_close_ret_")):
+        return "returns_lags"
+    if name.startswith(("vol_rolling_", "vol_ewma_")):
+        return "volatility"
+    if name.startswith(
+        (
+            "close_over_sma_",
+            "close_over_ema_",
+            "close_trend_regime_",
+            "close_trend_state_",
+        )
+    ):
+        return "trend"
+    if name.startswith(
+        (
+            "roc_",
+            "close_rsi_",
+            "close_mom_",
+            "close_logret_mom_",
+            "close_ret_mom_",
+            "close_logret_norm_mom_",
+            "close_ret_norm_mom_",
+        )
+    ):
+        return "momentum"
+    if name.startswith(
+        (
+            "regime_vol_ratio_",
+            "regime_high_vol_state_",
+            "regime_low_vol_state_",
+            "regime_trend_ratio_",
+            "regime_trend_state_",
+            "regime_absret_z_",
+        )
+    ):
+        return "regime"
+    if (
+        name in {"hour_sin_24", "hour_cos_24", "day_of_week_sin_7", "day_of_week_cos_7", "is_weekend"}
+        or name.startswith("session_")
+    ):
+        return "session_time"
+    if name.startswith(("atr_over_price_", "plus_di_", "minus_di_", "adx_", "bb_percent_b_", "bb_width_")):
+        return "atr_adx_range"
+    if name.startswith(
+        (
+            "cross_asset_",
+            "currency_exposure_",
+            "fx_base_",
+            "fx_quote_",
+            "usd_exposure_",
+            "eur_exposure_",
+            "gbp_exposure_",
+            "jpy_exposure_",
+            "aud_exposure_",
+        )
+    ):
+        return "cross_asset"
+    return None
+
+
+def _resolve_enabled_feature_families(selectors: Mapping[str, Any]) -> list[str]:
+    profile_raw = selectors.get("profile")
+    families_raw = selectors.get("families")
+
+    enabled: list[str] = []
+    if profile_raw is not None:
+        if not isinstance(profile_raw, str) or not profile_raw.strip():
+            raise TypeError("feature_selectors.profile must be a non-empty string when provided.")
+        profile = str(profile_raw).strip()
+        if profile not in _FEATURE_SELECTOR_PROFILES:
+            allowed = ", ".join(sorted(_FEATURE_SELECTOR_PROFILES))
+            raise ValueError(
+                f"Unsupported feature_selectors.profile: {profile!r}. Allowed profiles: {allowed}."
+            )
+        enabled = list(_FEATURE_SELECTOR_PROFILES[profile])
+
+    if families_raw in (None, {}):
+        return enabled
+    if not isinstance(families_raw, Mapping):
+        raise TypeError("feature_selectors.families must be a mapping when provided.")
+
+    allowed_families = set(_FEATURE_FAMILY_ORDER)
+    for family, raw_enabled in families_raw.items():
+        if family not in allowed_families:
+            allowed = ", ".join(_FEATURE_FAMILY_ORDER)
+            raise ValueError(
+                f"Unsupported feature_selectors.families key: {family!r}. Allowed families: {allowed}."
+            )
+        if not isinstance(raw_enabled, bool):
+            raise TypeError(f"feature_selectors.families[{family!r}] must be boolean.")
+        if raw_enabled and family not in enabled:
+            enabled.append(str(family))
+        if not raw_enabled and family in enabled:
+            enabled.remove(str(family))
+    return enabled
+
+
+def _match_feature_family(columns: Sequence[str], family: str) -> list[str]:
+    return [col for col in columns if classify_feature_family(col) == family]
+
+
+def describe_feature_set(
+    feature_cols: Sequence[str],
+    *,
+    feature_selectors: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    selectors = dict(feature_selectors or {})
+    enabled_families = _resolve_enabled_feature_families(selectors) if selectors else []
+    family_counts: dict[str, int] = {family: 0 for family in _FEATURE_FAMILY_ORDER}
+    family_counts["unclassified"] = 0
+    selected_by_family: dict[str, list[str]] = {family: [] for family in _FEATURE_FAMILY_ORDER}
+    selected_by_family["unclassified"] = []
+
+    for feature in feature_cols:
+        family = classify_feature_family(feature) or "unclassified"
+        family_counts[family] += 1
+        selected_by_family[family].append(str(feature))
+
+    return {
+        "profile": selectors.get("profile"),
+        "enabled_families": enabled_families,
+        "drift_filter": dict(selectors.get("drift_filter", {}) or {}),
+        "family_counts": {key: value for key, value in family_counts.items() if value > 0 or key in enabled_families},
+        "selected_by_family": {key: value for key, value in selected_by_family.items() if value},
+        "resolved_feature_count": int(len(feature_cols)),
+    }
+
+
 def resolve_feature_selectors(
     df: pd.DataFrame,
     feature_selectors: Mapping[str, Any],
@@ -254,7 +425,7 @@ def resolve_feature_selectors(
     drops.
     """
     selectors = dict(feature_selectors or {})
-    allowed_keys = {"exact", "include", "exclude", "strict"}
+    allowed_keys = _FEATURE_SELECTOR_ALLOWED_KEYS
     unknown = sorted(set(selectors) - allowed_keys)
     if unknown:
         allowed = ", ".join(sorted(allowed_keys))
@@ -262,6 +433,9 @@ def resolve_feature_selectors(
 
     columns = [str(col) for col in df.columns]
     selected: list[str] = []
+
+    for family in _resolve_enabled_feature_families(selectors):
+        selected.extend(_match_feature_family(columns, family))
 
     exact_values = selectors.get("exact")
     if exact_values is not None:
@@ -346,6 +520,8 @@ def infer_feature_columns(
 
 
 __all__ = [
+    "classify_feature_family",
+    "describe_feature_set",
     "ensure_lightgbm_runtime_available",
     "ensure_xgboost_runtime_available",
     "infer_feature_columns",

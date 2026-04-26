@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+from html import escape as html_escape
 import inspect
 import math
+import re
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import yaml
 
 from src.backtesting.engine import BacktestResult
-from src.evaluation.metrics import compute_backtest_metrics
+from src.evaluation.metrics import compute_backtest_metrics, compute_ftmo_style_metrics
 from src.experiments.schemas import EvaluationPayload, MonitoringPayload
 from src.monitoring.drift import compute_feature_drift
+from src.models.runtime import classify_feature_family
 from src.portfolio import PortfolioPerformance
 
 
@@ -47,6 +51,204 @@ def _markdown_table(headers: list[str], rows: list[list[Any]]) -> str:
     for row in rows:
         lines.append("| " + " | ".join(_format_report_value(value) for value in row) + " |")
     return "\n".join(lines) + "\n"
+
+
+_INLINE_MARKDOWN_RE = re.compile(
+    r"!\[([^\]]*)\]\(([^)]+)\)|"
+    r"\[([^\]]+)\]\(([^)]+)\)|"
+    r"`([^`]+)`|"
+    r"\*\*([^*]+)\*\*|"
+    r"_([^_]+)_"
+)
+
+
+def _render_inline_markdown(text: str) -> str:
+    out: list[str] = []
+    cursor = 0
+    for match in _INLINE_MARKDOWN_RE.finditer(text):
+        out.append(html_escape(text[cursor:match.start()]))
+        if match.group(1) is not None:
+            alt = html_escape(match.group(1))
+            src = html_escape(match.group(2), quote=True)
+            out.append(f'<img src="{src}" alt="{alt}" loading="lazy" />')
+        elif match.group(3) is not None:
+            label = _render_inline_markdown(match.group(3))
+            href = html_escape(match.group(4), quote=True)
+            out.append(f'<a href="{href}">{label}</a>')
+        elif match.group(5) is not None:
+            out.append(f"<code>{html_escape(match.group(5))}</code>")
+        elif match.group(6) is not None:
+            out.append(f"<strong>{html_escape(match.group(6))}</strong>")
+        elif match.group(7) is not None:
+            out.append(f"<em>{html_escape(match.group(7))}</em>")
+        cursor = match.end()
+    out.append(html_escape(text[cursor:]))
+    return "".join(out)
+
+
+def _is_markdown_table_separator(line: str) -> bool:
+    stripped = line.strip()
+    if not stripped.startswith("|"):
+        return False
+    cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+    return bool(cells) and all(re.fullmatch(r":?-{3,}:?", cell or "") is not None for cell in cells)
+
+
+def _split_markdown_table_row(line: str) -> list[str]:
+    return [cell.strip() for cell in line.strip().strip("|").split("|")]
+
+
+def _is_markdown_table_start(lines: list[str], index: int) -> bool:
+    if index + 1 >= len(lines):
+        return False
+    return lines[index].strip().startswith("|") and _is_markdown_table_separator(lines[index + 1])
+
+
+def _is_markdown_block_start(lines: list[str], index: int) -> bool:
+    stripped = lines[index].strip()
+    return (
+        not stripped
+        or stripped.startswith("```")
+        or bool(re.match(r"^#{1,6}\s+", stripped))
+        or stripped.startswith("- ")
+        or _is_markdown_table_start(lines, index)
+    )
+
+
+def _markdown_blocks_to_html(markdown_text: str) -> str:
+    lines = markdown_text.splitlines()
+    blocks: list[str] = []
+    index = 0
+
+    while index < len(lines):
+        raw_line = lines[index]
+        stripped = raw_line.strip()
+        if not stripped:
+            index += 1
+            continue
+
+        if stripped.startswith("```"):
+            language = stripped[3:].strip()
+            code_lines: list[str] = []
+            index += 1
+            while index < len(lines) and not lines[index].strip().startswith("```"):
+                code_lines.append(lines[index])
+                index += 1
+            if index < len(lines):
+                index += 1
+            language_attr = (
+                f' class="language-{html_escape(language, quote=True)}"' if language else ""
+            )
+            blocks.append(
+                f"<pre><code{language_attr}>{html_escape(chr(10).join(code_lines))}</code></pre>"
+            )
+            continue
+
+        heading_match = re.match(r"^(#{1,6})\s+(.*)$", stripped)
+        if heading_match:
+            level = len(heading_match.group(1))
+            blocks.append(f"<h{level}>{_render_inline_markdown(heading_match.group(2))}</h{level}>")
+            index += 1
+            continue
+
+        if _is_markdown_table_start(lines, index):
+            header = _split_markdown_table_row(lines[index])
+            row_count = len(header)
+            index += 2
+            body_rows: list[list[str]] = []
+            while index < len(lines) and lines[index].strip().startswith("|"):
+                row = _split_markdown_table_row(lines[index])
+                if len(row) < row_count:
+                    row.extend([""] * (row_count - len(row)))
+                body_rows.append(row[:row_count])
+                index += 1
+            table_lines = [
+                "<div class=\"table-wrap\">",
+                "<table>",
+                "<thead><tr>"
+                + "".join(f"<th>{_render_inline_markdown(cell)}</th>" for cell in header)
+                + "</tr></thead>",
+                "<tbody>",
+            ]
+            for row in body_rows:
+                table_lines.append(
+                    "<tr>" + "".join(f"<td>{_render_inline_markdown(cell)}</td>" for cell in row) + "</tr>"
+                )
+            table_lines.extend(["</tbody>", "</table>", "</div>"])
+            blocks.append("\n".join(table_lines))
+            continue
+
+        if stripped.startswith("- "):
+            items: list[str] = []
+            while index < len(lines) and lines[index].strip().startswith("- "):
+                item_lines = [lines[index].strip()[2:]]
+                index += 1
+                while index < len(lines):
+                    continuation = lines[index]
+                    if not continuation.strip():
+                        break
+                    if _is_markdown_block_start(lines, index):
+                        break
+                    item_lines.append(continuation.strip())
+                    index += 1
+                items.append(" ".join(part for part in item_lines if part))
+            blocks.append(
+                "<ul>\n"
+                + "\n".join(f"<li>{_render_inline_markdown(item)}</li>" for item in items)
+                + "\n</ul>"
+            )
+            continue
+
+        paragraph_lines = [stripped]
+        index += 1
+        while index < len(lines):
+            if _is_markdown_block_start(lines, index):
+                break
+            paragraph_lines.append(lines[index].strip())
+            index += 1
+        blocks.append(f"<p>{_render_inline_markdown(' '.join(paragraph_lines))}</p>")
+
+    return "\n".join(blocks)
+
+
+def render_markdown_report_html(markdown_text: str, *, title: str = "Report") -> str:
+    body = _markdown_blocks_to_html(markdown_text)
+    safe_title = html_escape(title)
+    return (
+        "<!DOCTYPE html>\n"
+        "<html lang=\"en\">\n"
+        "<head>\n"
+        "  <meta charset=\"utf-8\" />\n"
+        "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n"
+        f"  <title>{safe_title}</title>\n"
+        "  <style>\n"
+        "    :root { color-scheme: light dark; }\n"
+        "    body { margin: 0; background: #0f172a; color: #e2e8f0; font: 15px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }\n"
+        "    main { max-width: 1200px; margin: 0 auto; padding: 32px 24px 64px; }\n"
+        "    h1, h2, h3, h4, h5, h6 { color: #f8fafc; line-height: 1.25; margin: 1.5em 0 0.6em; }\n"
+        "    h1 { margin-top: 0; font-size: 2rem; }\n"
+        "    h2 { font-size: 1.4rem; padding-top: 0.4rem; border-top: 1px solid rgba(148, 163, 184, 0.2); }\n"
+        "    p, ul, pre, .table-wrap { margin: 0 0 1rem; }\n"
+        "    ul { padding-left: 1.25rem; }\n"
+        "    li + li { margin-top: 0.35rem; }\n"
+        "    code { background: rgba(148, 163, 184, 0.16); border-radius: 4px; padding: 0.1rem 0.35rem; font: 0.92em/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }\n"
+        "    pre { overflow-x: auto; background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; padding: 14px 16px; }\n"
+        "    pre code { background: transparent; padding: 0; border-radius: 0; }\n"
+        "    a { color: #93c5fd; }\n"
+        "    img { display: block; max-width: 100%; height: auto; border-radius: 8px; border: 1px solid rgba(148, 163, 184, 0.18); background: #fff; margin: 0.75rem 0 1.5rem; }\n"
+        "    table { width: 100%; border-collapse: collapse; min-width: 560px; }\n"
+        "    .table-wrap { overflow-x: auto; border: 1px solid rgba(148, 163, 184, 0.18); border-radius: 8px; }\n"
+        "    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid rgba(148, 163, 184, 0.14); vertical-align: top; }\n"
+        "    th { background: rgba(30, 41, 59, 0.9); color: #f8fafc; position: sticky; top: 0; }\n"
+        "    tr:nth-child(even) td { background: rgba(30, 41, 59, 0.35); }\n"
+        "    em { color: #cbd5e1; }\n"
+        "  </style>\n"
+        "</head>\n"
+        "<body>\n"
+        f"  <main>\n{body}\n  </main>\n"
+        "</body>\n"
+        "</html>\n"
+    )
 
 
 def _stage_tail_markdown(stage_tails: dict[str, Any]) -> list[str]:
@@ -131,6 +333,44 @@ def _extract_drifted_features(monitoring: dict[str, Any], limit: int = 8) -> lis
                 drifted.append((asset, feature, float(details.get("psi", 0.0))))
     drifted.sort(key=lambda item: abs(item[2]), reverse=True)
     return drifted[:limit]
+
+
+def _feature_family_drift_rows(monitoring: dict[str, Any]) -> list[list[Any]]:
+    bucket: dict[str, dict[str, float]] = {}
+    for _, asset_report in sorted(dict(monitoring.get("per_asset", {}) or {}).items()):
+        per_feature = dict(asset_report.get("per_feature", {}) or {})
+        for feature, details in per_feature.items():
+            family = classify_feature_family(str(feature)) or "unclassified"
+            info = bucket.setdefault(
+                family,
+                {
+                    "feature_count": 0.0,
+                    "drifted_feature_count": 0.0,
+                    "psi_sum": 0.0,
+                    "max_psi": 0.0,
+                },
+            )
+            psi = abs(float(details.get("psi", 0.0) or 0.0))
+            info["feature_count"] += 1.0
+            info["psi_sum"] += psi
+            info["max_psi"] = max(info["max_psi"], psi)
+            if bool(details.get("is_drifted", False)):
+                info["drifted_feature_count"] += 1.0
+
+    rows: list[list[Any]] = []
+    for family, info in sorted(bucket.items(), key=lambda kv: (-kv[1]["max_psi"], kv[0])):
+        feature_count = max(info["feature_count"], 1.0)
+        rows.append(
+            [
+                family,
+                int(info["feature_count"]),
+                int(info["drifted_feature_count"]),
+                float(info["drifted_feature_count"] / feature_count),
+                float(info["psi_sum"] / feature_count),
+                float(info["max_psi"]),
+            ]
+        )
+    return rows
 
 
 def _interface_ref(obj: Any) -> str:
@@ -507,6 +747,23 @@ def build_experiment_diagnostics(
             + ", ".join(feature for _, feature, _ in drifted)
             + "."
         )
+    drift_filter = dict(
+        dict(cfg.get("model", {}) or {}).get("feature_selectors", {}) or {}
+    ).get("drift_filter", {}) or {}
+    if bool(dict(drift_filter).get("enabled", False)):
+        ratio_threshold = float(dict(drift_filter).get("family_drift_ratio_threshold", 0.5) or 0.5)
+        for row in _feature_family_drift_rows(monitoring):
+            family, _, _, drift_ratio, _, _ = row
+            if float(drift_ratio) > ratio_threshold:
+                diagnostics.append(
+                    f"Feature drift filter warning: family '{family}' has drift ratio "
+                    f"{float(drift_ratio):.3f}, above threshold {ratio_threshold:.3f}."
+                )
+        if str(dict(drift_filter).get("action", "warn")) == "drop":
+            diagnostics.append(
+                "Feature drift filter action='drop' is recorded but same-run dropping is not applied, "
+                "to avoid using OOS drift information inside the evaluated fold."
+            )
 
     if not diagnostics:
         diagnostics.append("No single dominant pathology stood out from the generated artifacts.")
@@ -525,6 +782,7 @@ def build_experiment_report_markdown(
     evaluation = dict(summary_payload.get("evaluation", {}) or {})
     monitoring = dict(summary_payload.get("monitoring", {}) or {})
     model_meta = dict(run_metadata.get("model_meta", {}) or {})
+    target_meta = _safe_meta_dict(model_meta.get("target"))
     data_cfg = dict(cfg.get("data", {}) or {})
     model_cfg = dict(cfg.get("model", {}) or {})
     runtime_cfg = dict(cfg.get("runtime", {}) or {})
@@ -532,6 +790,10 @@ def build_experiment_report_markdown(
     policy_summary = dict(evaluation.get("model_oos_policy_summary", {}) or {})
     resolved_features = summary_payload.get("resolved_feature_columns", []) or []
     stage_tails = dict(summary_payload.get("stage_tails", {}) or {})
+    ftmo_metrics = _safe_meta_dict(evaluation.get("ftmo_metrics"))
+    ftmo_objective = _safe_meta_dict(evaluation.get("ftmo_objective"))
+    risk_guard_summary = _safe_meta_dict(evaluation.get("risk_guard_summary"))
+    feature_diagnostics = _safe_meta_dict(evaluation.get("feature_diagnostics"))
 
     symbols = data_cfg.get("symbols") or ([data_cfg.get("symbol")] if data_cfg.get("symbol") else [])
     run_name = str(cfg.get("logging", {}).get("run_name", cfg.get("config_path", "experiment")))
@@ -540,6 +802,9 @@ def build_experiment_report_markdown(
     if model_stages:
         ordered = " -> ".join(f"{stage.get('name')}:{stage.get('kind')}" for stage in model_stages)
         model_label = f"multi_stage ({ordered})"
+    target_cfg = dict(model_cfg.get("target", {}) or {})
+    target_kind = target_meta.get("kind", target_cfg.get("kind", "n/a"))
+    target_horizon = target_meta.get("max_holding", target_meta.get("horizon", target_cfg.get("horizon", "n/a")))
     lines: list[str] = [
         f"# Experiment Report: {run_name}",
         "",
@@ -550,7 +815,7 @@ def build_experiment_report_markdown(
         f"- Data source: `{data_cfg.get('source', 'n/a')}` at interval `{data_cfg.get('interval', 'n/a')}`",
         f"- Data window: `{data_cfg.get('start', 'n/a')}` to `{data_stats.get('end', data_cfg.get('end', 'latest'))}`",
         f"- Rows / columns: `{data_stats.get('rows', 'n/a')}` rows, `{data_stats.get('columns', 'n/a')}` columns",
-        f"- Target: `{model_cfg.get('target', {}).get('kind', 'n/a')}` horizon `{model_cfg.get('target', {}).get('horizon', 'n/a')}`",
+        f"- Target: `{target_kind}` horizon `{target_horizon}`",
         f"- Feature count: `{model_meta.get('contracts', {}).get('n_features', len(summary_payload.get('resolved_feature_columns', []) or []))}`",
         f"- Runtime seed: `{runtime_cfg.get('seed', 'n/a')}`",
         "",
@@ -569,6 +834,31 @@ def build_experiment_report_markdown(
             [
                 "## OOS Policy Summary",
                 _markdown_table(["Metric", "Value"], [[key, value] for key, value in policy_summary.items()]),
+            ]
+        )
+
+    if ftmo_metrics:
+        lines.extend(
+            [
+                "",
+                "## FTMO Metrics",
+                _markdown_table(["Metric", "Value"], _dict_metric_rows(ftmo_metrics)),
+            ]
+        )
+    if ftmo_objective:
+        lines.extend(
+            [
+                "",
+                "## FTMO Objective",
+                _markdown_table(["Metric", "Value"], _dict_metric_rows(ftmo_objective)),
+            ]
+        )
+    if risk_guard_summary:
+        lines.extend(
+            [
+                "",
+                "## Risk Guard",
+                _markdown_table(["Metric", "Value"], _dict_metric_rows(risk_guard_summary)),
             ]
         )
 
@@ -648,6 +938,47 @@ def build_experiment_report_markdown(
                 ]
             )
 
+    if target_meta:
+        target_rows: list[list[Any]] = []
+        for key in (
+            "kind",
+            "label_mode",
+            "max_holding",
+            "upper_mult",
+            "lower_mult",
+            "neutral_label",
+            "tie_break",
+            "entry_price_mode",
+            "vol_window",
+            "min_vol",
+            "labeled_rows",
+            "positive_rate",
+            "upper_barrier_count",
+            "lower_barrier_count",
+            "neutral_count",
+            "avg_hit_step",
+            "median_hit_step",
+            "meta_labeling",
+            "candidate_rows",
+            "add_r_multiple",
+            "r_col",
+            "oriented_r_col",
+        ):
+            if key in target_meta:
+                target_rows.append([key, target_meta.get(key)])
+        for section_key in ("event_r_distribution", "oriented_r_distribution"):
+            distribution = _safe_meta_dict(target_meta.get(section_key))
+            for metric, value in distribution.items():
+                target_rows.append([f"{section_key}.{metric}", value])
+        if target_rows:
+            lines.extend(
+                [
+                    "",
+                    "## Target Diagnostics",
+                    _markdown_table(["Metric", "Value"], target_rows),
+                ]
+            )
+
     target_distribution = _safe_meta_dict(model_meta.get("target_distribution"))
     if target_distribution:
         distribution_rows: list[list[Any]] = []
@@ -688,6 +1019,59 @@ def build_experiment_report_markdown(
             ]
         )
 
+    feature_diag_rows: list[list[Any]] = []
+    per_asset_feature_diag = dict(feature_diagnostics.get("per_asset", {}) or {})
+    if per_asset_feature_diag:
+        for asset, payload in sorted(per_asset_feature_diag.items()):
+            feature_diag_rows.append(
+                [
+                    asset,
+                    payload.get("resolved_feature_count"),
+                    payload.get("missing_feature_rows"),
+                    ", ".join(list(dict(payload.get("feature_selection", {}) or {}).get("enabled_families", []) or [])),
+                    _format_report_value(dict(payload.get("feature_selection", {}) or {}).get("profile")),
+                ]
+            )
+    if feature_diag_rows:
+        lines.extend(
+            [
+                "",
+                "## Feature Diagnostics",
+                _markdown_table(
+                    ["Asset", "Resolved Features", "Missing Rows", "Enabled Families", "Profile"],
+                    feature_diag_rows,
+                ),
+            ]
+        )
+
+    feature_stability_rows: list[list[Any]] = []
+    if per_asset_feature_diag:
+        for asset, payload in sorted(per_asset_feature_diag.items()):
+            stability = dict(payload.get("feature_importance_stability", {}) or {})
+            for row in list(stability.get("top_features", []) or [])[:5]:
+                feature_stability_rows.append(
+                    [
+                        asset,
+                        row.get("feature"),
+                        row.get("family"),
+                        row.get("fold_count"),
+                        row.get("fold_coverage"),
+                        row.get("mean_rank"),
+                        row.get("mean_importance_normalized"),
+                    ]
+                )
+    if feature_stability_rows:
+        lines.extend(
+            [
+                "",
+                "## Feature Importance Stability",
+                _markdown_table(
+                    ["Asset", "Feature", "Family", "Fold Count", "Fold Coverage", "Mean Rank", "Mean Importance Norm"],
+                    feature_stability_rows,
+                ),
+            ]
+        )
+
     exposure_rows = [
         ["gross_pnl", primary.get("gross_pnl")],
         ["net_pnl", primary.get("net_pnl")],
@@ -699,6 +1083,13 @@ def build_experiment_report_markdown(
         ["mean_abs_signal", policy_summary.get("mean_abs_signal")],
         ["signal_turnover", policy_summary.get("signal_turnover")],
         ["flat_rate", policy_summary.get("flat_rate")],
+        ["long_rate", policy_summary.get("long_rate")],
+        ["short_rate", policy_summary.get("short_rate")],
+        ["trade_rate", policy_summary.get("trade_rate")],
+        ["executed_trade_count", policy_summary.get("executed_trade_count")],
+        ["avg_signal_executed", policy_summary.get("avg_signal_executed")],
+        ["avg_pred_prob_executed", policy_summary.get("avg_pred_prob_executed")],
+        ["avg_realized_r_executed", policy_summary.get("avg_realized_r_executed")],
     ]
     lines.extend(
         [
@@ -831,6 +1222,19 @@ def build_experiment_report_markdown(
     else:
         lines.append("_No drifted features were flagged._")
 
+    family_drift_rows = _feature_family_drift_rows(monitoring)
+    if family_drift_rows:
+        lines.extend(
+            [
+                "",
+                "## Drift By Family",
+                _markdown_table(
+                    ["Family", "Feature Count", "Drifted Count", "Drifted Ratio", "Mean Abs PSI", "Max Abs PSI"],
+                    family_drift_rows,
+                ),
+            ]
+        )
+
     lines.extend(
         [
             "",
@@ -940,6 +1344,256 @@ def build_fold_backtest_summaries(
     return out
 
 
+def build_portfolio_fold_backtest_summaries(
+    *,
+    asset_frames: dict[str, pd.DataFrame],
+    performance: PortfolioPerformance,
+    model_meta: dict[str, Any],
+    periods_per_year: int,
+) -> list[dict[str, Any]]:
+    per_asset_meta = dict(model_meta.get("per_asset", {}) or {})
+    if not per_asset_meta:
+        return []
+
+    by_fold: dict[int, dict[str, Any]] = {}
+    for asset, meta in sorted(per_asset_meta.items()):
+        frame = asset_frames.get(asset)
+        if frame is None:
+            continue
+        for fold in list(meta.get("folds", []) or []):
+            fold_id = int(fold.get("fold", -1))
+            start = int(fold["test_start"])
+            end = int(fold["test_end"])
+            fold_index = frame.index[start:end]
+            entry = by_fold.setdefault(
+                fold_id,
+                {
+                    "fold": fold_id,
+                    "asset_indices": {},
+                    "asset_test_rows": {},
+                },
+            )
+            entry["asset_indices"][asset] = pd.Index(fold_index)
+            entry["asset_test_rows"][asset] = int(len(fold_index))
+
+    out: list[dict[str, Any]] = []
+    for fold_id in sorted(by_fold):
+        entry = by_fold[fold_id]
+        indices = list(entry["asset_indices"].values())
+        if not indices:
+            continue
+        common_index = indices[0]
+        for asset_index in indices[1:]:
+            common_index = common_index.intersection(asset_index)
+        common_index = common_index.intersection(performance.net_returns.index)
+        if len(common_index) == 0:
+            continue
+
+        mask = pd.Series(performance.net_returns.index.isin(common_index), index=performance.net_returns.index)
+        summary = compute_subset_metrics(
+            net_returns=performance.net_returns,
+            turnover=performance.turnover,
+            costs=performance.costs,
+            gross_returns=performance.gross_returns,
+            periods_per_year=periods_per_year,
+            mask=mask,
+        )
+        out.append(
+            {
+                "fold": int(fold_id),
+                "test_rows": int(len(common_index)),
+                "common_oos_rows": int(len(common_index)),
+                "asset_test_rows": dict(entry["asset_test_rows"]),
+                "metrics": summary,
+            }
+        )
+    return out
+
+
+def _portfolio_feature_diagnostics(model_meta: dict[str, Any]) -> dict[str, Any]:
+    per_asset_meta = dict(model_meta.get("per_asset", {}) or {})
+    if not per_asset_meta:
+        feature_selection = dict(model_meta.get("feature_selection", {}) or {})
+        return {
+            "profile": feature_selection.get("profile"),
+            "enabled_families": list(feature_selection.get("enabled_families", []) or []),
+            "per_asset": {},
+        }
+
+    per_asset: dict[str, Any] = {}
+    profiles = set()
+    enabled_family_sets: set[tuple[str, ...]] = set()
+    for asset, meta in sorted(per_asset_meta.items()):
+        feature_selection = dict(meta.get("feature_selection", {}) or {})
+        profile = feature_selection.get("profile")
+        if profile:
+            profiles.add(str(profile))
+        enabled_families = tuple(str(item) for item in list(feature_selection.get("enabled_families", []) or []))
+        if enabled_families:
+            enabled_family_sets.add(enabled_families)
+        per_asset[asset] = {
+            "resolved_feature_count": int(feature_selection.get("resolved_feature_count", len(meta.get("feature_cols", []) or []))),
+            "feature_family_counts": dict(meta.get("feature_family_counts", {}) or {}),
+            "missing_feature_rows": int(dict(meta.get("missing_value_diagnostics", {}) or {}).get("test_rows_missing_features", 0) or 0),
+            "feature_selection": feature_selection,
+            "feature_importance_stability": dict(meta.get("feature_importance_stability", {}) or {}),
+        }
+    return {
+        "profile": next(iter(profiles)) if len(profiles) == 1 else None,
+        "enabled_families": list(next(iter(enabled_family_sets))) if len(enabled_family_sets) == 1 else [],
+        "per_asset": per_asset,
+    }
+
+
+def _signal_execution_summary(
+    frame: pd.DataFrame,
+    *,
+    signal_col: str | None,
+    oos_mask: pd.Series | None,
+    prob_col: str | None = None,
+    realized_r_col: str | None = None,
+    execution: pd.Series | None = None,
+) -> dict[str, Any]:
+    if not signal_col or signal_col not in frame.columns:
+        return {}
+    mask = pd.Series(True, index=frame.index, dtype=bool)
+    if oos_mask is not None:
+        mask = oos_mask.reindex(frame.index, fill_value=False).astype(bool)
+    signal = frame.loc[mask, signal_col].astype(float).replace([np.inf, -np.inf], np.nan).dropna()
+    if signal.empty:
+        return {
+            "evaluation_rows": 0,
+            "signal_rows": 0,
+            "mean_abs_signal": None,
+            "signal_turnover": None,
+            "long_rate": None,
+            "short_rate": None,
+            "flat_rate": None,
+            "executed_trade_count": 0,
+            "trade_rate": None,
+            "avg_signal_executed": None,
+            "avg_pred_prob_executed": None,
+            "avg_realized_r_executed": None,
+        }
+
+    exec_signal = signal
+    if execution is not None:
+        exec_signal = execution.reindex(signal.index).astype(float).replace([np.inf, -np.inf], np.nan).fillna(0.0)
+    executed = exec_signal.abs() > 1e-12
+    out: dict[str, Any] = {
+        "evaluation_rows": int(len(signal)),
+        "signal_rows": int(len(signal)),
+        "mean_abs_signal": float(signal.abs().mean()),
+        "signal_turnover": float(signal.diff().abs().fillna(signal.abs()).mean()),
+        "long_rate": float((signal > 0.0).mean()),
+        "short_rate": float((signal < 0.0).mean()),
+        "flat_rate": float((signal == 0.0).mean()),
+        "executed_trade_count": int(executed.sum()),
+        "trade_rate": float(executed.mean()),
+        "avg_signal_executed": float(signal.loc[executed].mean()) if bool(executed.any()) else None,
+        "avg_pred_prob_executed": None,
+        "avg_realized_r_executed": None,
+    }
+    if prob_col and prob_col in frame.columns and bool(executed.any()):
+        probs = frame[prob_col].reindex(signal.index).astype(float)
+        out["avg_pred_prob_executed"] = float(probs.loc[executed].dropna().mean()) if probs.loc[executed].notna().any() else None
+    if realized_r_col and realized_r_col in frame.columns and bool(executed.any()):
+        realized_r = frame[realized_r_col].reindex(signal.index).astype(float)
+        out["avg_realized_r_executed"] = (
+            float(realized_r.loc[executed].dropna().mean()) if realized_r.loc[executed].notna().any() else None
+        )
+    return out
+
+
+def _weighted_signal_summary(summaries: list[dict[str, Any]]) -> dict[str, Any]:
+    valid = [dict(item) for item in summaries if int(dict(item).get("signal_rows", 0) or 0) > 0]
+    if not valid:
+        return {}
+    total_rows = sum(int(item.get("signal_rows", 0) or 0) for item in valid)
+    out: dict[str, Any] = {
+        "evaluation_rows": int(sum(int(item.get("evaluation_rows", 0) or 0) for item in valid)),
+        "signal_rows": int(total_rows),
+        "executed_trade_count": int(sum(int(item.get("executed_trade_count", 0) or 0) for item in valid)),
+    }
+    for key in (
+        "mean_abs_signal",
+        "signal_turnover",
+        "long_rate",
+        "short_rate",
+        "flat_rate",
+        "trade_rate",
+        "avg_signal_executed",
+        "avg_pred_prob_executed",
+        "avg_realized_r_executed",
+    ):
+        numerator = 0.0
+        denominator = 0
+        for item in valid:
+            value = item.get(key)
+            rows = int(item.get("signal_rows", 0) or 0)
+            if value is None or rows <= 0:
+                continue
+            numerator += float(value) * rows
+            denominator += rows
+        out[key] = float(numerator / denominator) if denominator > 0 else None
+    return out
+
+
+def _target_realized_r_col(target_meta: dict[str, Any]) -> str | None:
+    return (
+        str(target_meta.get("oriented_r_col"))
+        if target_meta.get("oriented_r_col") is not None
+        else (str(target_meta.get("r_col")) if target_meta.get("r_col") is not None else None)
+    )
+
+
+def _compute_ftmo_objective(
+    *,
+    primary_summary: dict[str, Any],
+    ftmo_metrics: dict[str, float],
+    weekly_return_target: float | None,
+    weekly_drawdown_limit: float | None,
+) -> dict[str, float]:
+    target_scale = abs(float(weekly_return_target)) if weekly_return_target not in (None, 0.0) else 1.0
+    drawdown_scale = abs(float(weekly_drawdown_limit)) if weekly_drawdown_limit not in (None, 0.0) else 1.0
+    mean_weekly_component = float(ftmo_metrics.get("weekly_return_mean", 0.0) / target_scale)
+    target_hit_component = float(ftmo_metrics.get("weekly_target_hit_ratio", 0.0))
+    instability_penalty = float(ftmo_metrics.get("weekly_return_std", 0.0) / target_scale)
+    weekly_drawdown_penalty = float(abs(min(ftmo_metrics.get("worst_weekly_drawdown", 0.0), 0.0)) / drawdown_scale)
+    weekly_breach_penalty = float(
+        ftmo_metrics.get("weekly_drawdown_breach_count", 0.0) / max(ftmo_metrics.get("week_count", 0.0), 1.0)
+    )
+    daily_breach_penalty = float(
+        ftmo_metrics.get("daily_loss_breach_count", 0.0) / max(ftmo_metrics.get("day_count", 0.0), 1.0)
+    )
+    max_loss_penalty = float(ftmo_metrics.get("max_total_loss_breach_count", 0.0))
+    cost_penalty = float(primary_summary.get("cost_to_gross_pnl", 0.0) or 0.0)
+    concentration_penalty = float(ftmo_metrics.get("best_day_concentration", 0.0) or 0.0)
+    ftmo_score = (
+        mean_weekly_component
+        + target_hit_component
+        - instability_penalty
+        - weekly_drawdown_penalty
+        - weekly_breach_penalty
+        - daily_breach_penalty
+        - max_loss_penalty
+        - cost_penalty
+        - concentration_penalty
+    )
+    return {
+        "score": float(ftmo_score),
+        "mean_weekly_component": mean_weekly_component,
+        "target_hit_component": target_hit_component,
+        "instability_penalty": instability_penalty,
+        "weekly_drawdown_penalty": weekly_drawdown_penalty,
+        "weekly_breach_penalty": weekly_breach_penalty,
+        "daily_breach_penalty": daily_breach_penalty,
+        "max_loss_penalty": max_loss_penalty,
+        "cost_penalty": cost_penalty,
+        "concentration_penalty": concentration_penalty,
+    }
+
+
 def build_single_asset_evaluation(
     asset: str,
     df: pd.DataFrame,
@@ -947,6 +1601,7 @@ def build_single_asset_evaluation(
     performance: BacktestResult,
     model_meta: dict[str, Any],
     periods_per_year: int,
+    backtest_cfg: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     evaluation = EvaluationPayload(
         scope="timeline",
@@ -975,6 +1630,18 @@ def build_single_asset_evaluation(
         periods_per_year=periods_per_year,
         folds=list(model_meta.get("folds", []) or []),
     )
+    target_meta = dict(model_meta.get("target", {}) or {})
+    policy_summary = dict(model_meta.get("oos_policy_summary", {}) or {})
+    policy_summary.update(
+        _signal_execution_summary(
+            df,
+            signal_col=str(dict(backtest_cfg or {}).get("signal_col", "")),
+            oos_mask=oos_mask,
+            prob_col=model_meta.get("pred_prob_col"),
+            realized_r_col=_target_realized_r_col(target_meta),
+            execution=performance.positions,
+        )
+    )
 
     return EvaluationPayload(
         scope="strict_oos_only",
@@ -988,7 +1655,7 @@ def build_single_asset_evaluation(
             "model_oos_summary": dict(model_meta.get("oos_classification_summary", {}) or {}),
             "model_oos_regression_summary": dict(model_meta.get("oos_regression_summary", {}) or {}),
             "model_oos_volatility_summary": dict(model_meta.get("oos_volatility_summary", {}) or {}),
-            "model_oos_policy_summary": dict(model_meta.get("oos_policy_summary", {}) or {}),
+            "model_oos_policy_summary": policy_summary,
             "asset": asset,
         },
     ).to_dict()
@@ -1001,6 +1668,8 @@ def build_portfolio_evaluation(
     model_meta: dict[str, Any],
     periods_per_year: int,
     alignment: str,
+    risk_cfg: dict[str, Any] | None = None,
+    backtest_cfg: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     evaluation = EvaluationPayload(
         scope="timeline",
@@ -1036,6 +1705,69 @@ def build_portfolio_evaluation(
         periods_per_year=periods_per_year,
         mask=oos_mask,
     )
+    portfolio_guard_cfg = dict(dict(risk_cfg or {}).get("portfolio_guard", {}) or {})
+    ftmo_metrics = compute_ftmo_style_metrics(
+        net_returns=performance.net_returns.loc[oos_mask],
+        weekly_return_target=portfolio_guard_cfg.get("weekly_return_target"),
+        max_daily_loss=portfolio_guard_cfg.get("max_daily_loss"),
+        weekly_drawdown_limit=portfolio_guard_cfg.get("weekly_drawdown"),
+        max_total_loss=portfolio_guard_cfg.get("max_total_loss"),
+        weekly_anchor=str(portfolio_guard_cfg.get("weekly_anchor", "W-FRI") or "W-FRI"),
+    )
+    ftmo_objective = _compute_ftmo_objective(
+        primary_summary=oos_summary or dict(performance.summary),
+        ftmo_metrics=ftmo_metrics,
+        weekly_return_target=portfolio_guard_cfg.get("weekly_return_target"),
+        weekly_drawdown_limit=portfolio_guard_cfg.get("weekly_drawdown"),
+    )
+    fold_summaries = build_portfolio_fold_backtest_summaries(
+        asset_frames=asset_frames,
+        performance=performance,
+        model_meta=model_meta,
+        periods_per_year=periods_per_year,
+    )
+    signal_col = str(dict(backtest_cfg or {}).get("signal_col", ""))
+    per_asset_policy: list[dict[str, Any]] = []
+    per_asset_policy_map: dict[str, dict[str, Any]] = {}
+    if "per_asset" in model_meta:
+        for asset, meta in sorted(dict(model_meta.get("per_asset", {}) or {}).items()):
+            frame = asset_frames.get(asset)
+            if frame is None:
+                continue
+            asset_oos = frame["pred_is_oos"].astype(bool) if "pred_is_oos" in frame.columns else None
+            weights = None
+            if performance.applied_weights is not None and asset in performance.applied_weights.columns:
+                weights = performance.applied_weights[asset]
+            target_meta = dict(meta.get("target", {}) or {})
+            summary = _signal_execution_summary(
+                frame,
+                signal_col=signal_col,
+                oos_mask=asset_oos,
+                prob_col=meta.get("pred_prob_col"),
+                realized_r_col=_target_realized_r_col(target_meta),
+                execution=weights,
+            )
+            per_asset_policy.append(summary)
+            per_asset_policy_map[asset] = summary
+    else:
+        only_asset = next(iter(sorted(asset_frames)))
+        frame = asset_frames[only_asset]
+        asset_oos = frame["pred_is_oos"].astype(bool) if "pred_is_oos" in frame.columns else None
+        weights = None
+        if performance.applied_weights is not None and only_asset in performance.applied_weights.columns:
+            weights = performance.applied_weights[only_asset]
+        summary = _signal_execution_summary(
+            frame,
+            signal_col=signal_col,
+            oos_mask=asset_oos,
+            prob_col=model_meta.get("pred_prob_col"),
+            realized_r_col=_target_realized_r_col(dict(model_meta.get("target", {}) or {})),
+            execution=weights,
+        )
+        per_asset_policy.append(summary)
+        per_asset_policy_map[only_asset] = summary
+    policy_summary = dict(model_meta.get("oos_policy_summary", {}) or {})
+    policy_summary.update(_weighted_signal_summary(per_asset_policy))
     return EvaluationPayload(
         scope="strict_oos_only",
         primary_summary=oos_summary or dict(performance.summary),
@@ -1044,10 +1776,16 @@ def build_portfolio_evaluation(
         extra={
             "oos_active_dates": int(oos_mask.sum()),
             "oos_date_coverage": float(oos_mask.mean()) if len(oos_mask) > 0 else 0.0,
+            "fold_backtest_summaries": fold_summaries,
+            "ftmo_metrics": ftmo_metrics,
+            "ftmo_objective": ftmo_objective,
+            "risk_guard_summary": dict(performance.risk_guard_summary or {}),
+            "feature_diagnostics": _portfolio_feature_diagnostics(model_meta),
             "model_oos_summary": dict(model_meta.get("oos_classification_summary", {}) or {}),
             "model_oos_regression_summary": dict(model_meta.get("oos_regression_summary", {}) or {}),
             "model_oos_volatility_summary": dict(model_meta.get("oos_volatility_summary", {}) or {}),
-            "model_oos_policy_summary": dict(model_meta.get("oos_policy_summary", {}) or {}),
+            "model_oos_policy_summary": policy_summary,
+            "signal_diagnostics_by_asset": per_asset_policy_map,
             "folds_by_asset": {
                 asset: list(meta.get("folds", []) or [])
                 for asset, meta in dict(model_meta.get("per_asset", {}) or {}).items()
@@ -1125,6 +1863,7 @@ def compute_monitoring_report(
 
 __all__ = [
     "build_fold_backtest_summaries",
+    "build_portfolio_fold_backtest_summaries",
     "build_portfolio_evaluation",
     "build_experiment_diagnostics",
     "build_experiment_report_markdown",
@@ -1132,4 +1871,5 @@ __all__ = [
     "compute_monitoring_for_asset",
     "compute_monitoring_report",
     "compute_subset_metrics",
+    "render_markdown_report_html",
 ]

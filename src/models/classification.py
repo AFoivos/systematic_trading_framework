@@ -25,11 +25,14 @@ from src.experiments.support.diagnostics import (
     aggregate_feature_importance,
     aggregate_label_distributions,
     extract_feature_importance,
+    summarize_feature_family_counts,
     summarize_feature_availability,
+    summarize_feature_importance_stability,
     summarize_label_distribution,
     summarize_prediction_alignment,
 )
 from src.models.runtime import (
+    describe_feature_set,
     ensure_lightgbm_runtime_available,
     ensure_xgboost_runtime_available,
     infer_feature_columns,
@@ -111,12 +114,14 @@ def train_forward_classifier(
             contract_df.loc[valid_mask, fwd_col] > float(target_meta["threshold"])
         ).astype("float32")
 
+    target_output_cols = set(str(col) for col in list(target_meta.get("output_cols", []) or []))
     feature_cols = infer_feature_columns(
         out,
         explicit_cols=model_cfg.get("feature_cols"),
         feature_selectors=model_cfg.get("feature_selectors"),
-        exclude={label_col, fwd_col, pred_prob_col},
+        exclude={label_col, fwd_col, pred_prob_col, *target_output_cols},
     )
+    feature_cols = [col for col in feature_cols if col not in target_output_cols]
     if not feature_cols:
         raise ValueError("No feature columns resolved for model training.")
 
@@ -387,6 +392,10 @@ def train_forward_classifier(
         "model_kind": model_kind,
         "runtime": runtime_meta,
         "feature_cols": feature_cols,
+        "feature_selection": describe_feature_set(
+            feature_cols,
+            feature_selectors=model_cfg.get("feature_selectors"),
+        ),
         "pred_prob_col": pred_prob_col,
         "label_col": label_col,
         "fwd_col": fwd_col,
@@ -402,6 +411,8 @@ def train_forward_classifier(
         "oos_regression_summary": empty_regression_metrics(),
         "oos_volatility_summary": empty_volatility_metrics(),
         "feature_importance": aggregate_feature_importance(fold_feature_importances),
+        "feature_importance_stability": summarize_feature_importance_stability(fold_feature_importances),
+        "feature_family_counts": summarize_feature_family_counts(feature_cols),
         "label_distribution": label_distribution,
         "prediction_diagnostics": prediction_diagnostics,
         "missing_value_diagnostics": {

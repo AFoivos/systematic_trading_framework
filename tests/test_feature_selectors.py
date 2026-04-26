@@ -58,3 +58,64 @@ def test_infer_feature_columns_combines_explicit_cols_and_feature_selectors_with
     )
 
     assert feature_cols == ["shock_strength", "close_rsi_14"]
+
+
+def test_resolve_feature_selectors_supports_profiles_and_family_overrides() -> None:
+    df = pd.DataFrame(
+        {
+            "hour_sin_24": [0.0],
+            "session_liquid_fx": [1.0],
+            "vol_rolling_24": [0.01],
+            "close_over_ema_24": [1.02],
+            "close_rsi_14": [55.0],
+            "lag_close_logret_1": [0.001],
+            "adx_24": [22.0],
+            "cross_asset_usd_strength": [0.3],
+        }
+    )
+
+    feature_cols = resolve_feature_selectors(
+        df,
+        {
+            "profile": "ftmo_fx_intraday_balanced_v1",
+            "families": {
+                "momentum": False,
+                "cross_asset": True,
+            },
+        },
+    )
+
+    assert "close_rsi_14" not in feature_cols
+    assert "cross_asset_usd_strength" in feature_cols
+    assert feature_cols == [
+        "lag_close_logret_1",
+        "vol_rolling_24",
+        "close_over_ema_24",
+        "hour_sin_24",
+        "session_liquid_fx",
+        "adx_24",
+        "cross_asset_usd_strength",
+    ]
+
+
+def test_feature_selector_profile_excludes_target_prediction_and_signal_columns() -> None:
+    df = pd.DataFrame(
+        {
+            "lag_close_logret_1": [0.001],
+            "vol_rolling_24": [0.01],
+            "target_fwd_24": [0.02],
+            "label": [1.0],
+            "pred_prob": [0.6],
+            "signal_prob_vol_adj": [0.1],
+            "tb_event_ret": [0.03],
+        }
+    )
+
+    feature_cols = resolve_feature_selectors(
+        df,
+        {
+            "profile": "ftmo_fx_intraday_balanced_v1",
+        },
+    )
+
+    assert feature_cols == ["lag_close_logret_1", "vol_rolling_24"]

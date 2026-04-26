@@ -155,6 +155,130 @@ def turnover_stats(turnover: pd.Series | None) -> dict[str, float]:
     }
 
 
+def _compound_returns(returns: pd.Series) -> float:
+    values = returns.dropna().astype(float)
+    if values.empty:
+        return float("nan")
+    return float((1.0 + values).prod() - 1.0)
+
+
+def _count_breach_episodes(flags: pd.Series) -> int:
+    active = flags.fillna(False).astype(bool)
+    if active.empty:
+        return 0
+    return int((active & ~active.shift(1, fill_value=False)).sum())
+
+
+def compute_ftmo_style_metrics(
+    *,
+    net_returns: pd.Series,
+    weekly_return_target: float | None = None,
+    max_daily_loss: float | None = None,
+    weekly_drawdown_limit: float | None = None,
+    max_total_loss: float | None = None,
+    weekly_anchor: str = "W-FRI",
+) -> dict[str, float]:
+    rets = net_returns.dropna().astype(float)
+    if rets.empty or not isinstance(rets.index, pd.DatetimeIndex):
+        return {
+            "week_count": 0.0,
+            "day_count": 0.0,
+            "weekly_net_return": 0.0,
+            "weekly_return_mean": 0.0,
+            "weekly_return_median": 0.0,
+            "weekly_return_min": 0.0,
+            "weekly_return_std": 0.0,
+            "weekly_target_hit_count": 0.0,
+            "weekly_target_hit_ratio": 0.0,
+            "worst_weekly_drawdown": 0.0,
+            "weekly_drawdown_breach_count": 0.0,
+            "daily_loss_breach_count": 0.0,
+            "max_total_loss_breach_count": 0.0,
+            "positive_day_count": 0.0,
+            "best_day_concentration": 0.0,
+            "positive_day_concentration": 0.0,
+        }
+
+    rets = rets.sort_index()
+    daily_groups = rets.groupby(pd.Grouper(freq="1D"))
+    weekly_groups = rets.groupby(pd.Grouper(freq=str(weekly_anchor)))
+    daily_returns = daily_groups.apply(_compound_returns).dropna()
+    weekly_returns = weekly_groups.apply(_compound_returns).dropna()
+
+    weekly_drawdowns: dict[pd.Timestamp, float] = {}
+    for ts, period_returns in weekly_groups:
+        values = period_returns.dropna().astype(float)
+        if values.empty:
+            continue
+        weekly_drawdowns[pd.Timestamp(ts)] = max_drawdown(equity_curve_from_returns(values))
+    weekly_drawdown_series = pd.Series(weekly_drawdowns, dtype=float).sort_index()
+
+    daily_intraday_loss: dict[pd.Timestamp, float] = {}
+    for ts, period_returns in daily_groups:
+        values = period_returns.dropna().astype(float)
+        if values.empty:
+            continue
+        daily_intraday_loss[pd.Timestamp(ts)] = float(equity_curve_from_returns(values).min() - 1.0)
+    daily_intraday_loss_series = pd.Series(daily_intraday_loss, dtype=float).sort_index()
+
+    positive_days = daily_returns[daily_returns > 0.0]
+    positive_day_pnl = float(positive_days.sum()) if not positive_days.empty else 0.0
+    best_day_concentration = (
+        float(positive_days.max() / positive_day_pnl)
+        if positive_day_pnl > 0.0
+        else 0.0
+    )
+    positive_day_concentration = (
+        float(((positive_days / positive_day_pnl) ** 2).sum())
+        if positive_day_pnl > 0.0
+        else 0.0
+    )
+
+    total_loss_flags = pd.Series(False, index=rets.index, dtype=bool)
+    if max_total_loss is not None:
+        total_loss_flags = equity_curve_from_returns(rets).le(1.0 - float(max_total_loss))
+
+    weekly_target = float(weekly_return_target) if weekly_return_target is not None else None
+    weekly_target_hits = (
+        int((weekly_returns >= weekly_target).sum())
+        if weekly_target is not None and not weekly_returns.empty
+        else 0
+    )
+    weekly_drawdown_breaches = (
+        int((weekly_drawdown_series <= -float(weekly_drawdown_limit)).sum())
+        if weekly_drawdown_limit is not None and not weekly_drawdown_series.empty
+        else 0
+    )
+    daily_loss_breaches = (
+        int((daily_intraday_loss_series <= -float(max_daily_loss)).sum())
+        if max_daily_loss is not None and not daily_intraday_loss_series.empty
+        else 0
+    )
+
+    return {
+        "week_count": float(len(weekly_returns)),
+        "day_count": float(len(daily_returns)),
+        "weekly_net_return": float(weekly_returns.mean()) if not weekly_returns.empty else 0.0,
+        "weekly_return_mean": float(weekly_returns.mean()) if not weekly_returns.empty else 0.0,
+        "weekly_return_median": float(weekly_returns.median()) if not weekly_returns.empty else 0.0,
+        "weekly_return_min": float(weekly_returns.min()) if not weekly_returns.empty else 0.0,
+        "weekly_return_std": float(weekly_returns.std(ddof=1)) if len(weekly_returns) >= 2 else 0.0,
+        "weekly_target_hit_count": float(weekly_target_hits),
+        "weekly_target_hit_ratio": (
+            float(weekly_target_hits / len(weekly_returns))
+            if weekly_target is not None and len(weekly_returns) > 0
+            else 0.0
+        ),
+        "worst_weekly_drawdown": float(weekly_drawdown_series.min()) if not weekly_drawdown_series.empty else 0.0,
+        "weekly_drawdown_breach_count": float(weekly_drawdown_breaches),
+        "daily_loss_breach_count": float(daily_loss_breaches),
+        "max_total_loss_breach_count": float(_count_breach_episodes(total_loss_flags)),
+        "positive_day_count": float(len(positive_days)),
+        "best_day_concentration": best_day_concentration,
+        "positive_day_concentration": positive_day_concentration,
+    }
+
+
 def cost_attribution(
     *,
     net_returns: pd.Series,
@@ -276,4 +400,5 @@ __all__ = [
     "cost_attribution",
     "compute_backtest_metrics",
     "merge_metric_overrides",
+    "compute_ftmo_style_metrics",
 ]

@@ -8,6 +8,7 @@ from datetime import datetime
 import json
 import math
 from pathlib import Path
+import re
 import tempfile
 from typing import Any, Literal, Mapping, Sequence
 from uuid import uuid4
@@ -17,6 +18,7 @@ import pandas as pd
 import yaml
 
 from src.experiments.optuna_runtime import optuna_fold_reporting_context
+from src.experiments.orchestration.reporting import render_markdown_report_html
 from src.utils.config import load_experiment_config
 from src.utils.paths import PROJECT_ROOT, enforce_safe_absolute_path
 from src.utils.run_metadata import build_artifact_manifest
@@ -338,6 +340,294 @@ def get_nested_value(payload: Any, path: str | Sequence[str | int]) -> Any:
                 raise AttributeError(f"Path token {token!r} is not available on object {type(current).__name__}.")
             current = getattr(current, token)
     return current
+
+
+def _dimension_candidate_values(dimension: SearchDimension) -> set[Any] | None:
+    if dimension.kind == "categorical":
+        try:
+            return set(dimension.choices or [])
+        except TypeError:
+            return None
+    if dimension.kind == "bool":
+        return {False, True}
+    return None
+
+
+def _search_dimensions_by_path(search_space: Sequence[SearchDimension | Mapping[str, Any]]) -> dict[tuple[str | int, ...], SearchDimension]:
+    return {normalize_config_path(dimension.path): dimension for dimension in normalize_search_space(search_space)}
+
+
+def _possible_path_values(
+    base_config: Mapping[str, Any],
+    dimensions_by_path: Mapping[tuple[str | int, ...], SearchDimension],
+    path: Sequence[str | int],
+) -> set[Any] | None:
+    tokens = tuple(path)
+    dimension = dimensions_by_path.get(tokens)
+    if dimension is not None:
+        return _dimension_candidate_values(dimension)
+    try:
+        return {get_nested_value(base_config, tokens)}
+    except TypeError:
+        return None
+
+
+def _positive_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    integer = int(numeric)
+    if numeric != float(integer) or integer <= 0:
+        return None
+    return integer
+
+
+def _single_guaranteed_positive_int(
+    base_config: Mapping[str, Any],
+    dimensions_by_path: Mapping[tuple[str | int, ...], SearchDimension],
+    path: Sequence[str | int],
+) -> int | None:
+    values = _possible_path_values(base_config, dimensions_by_path, path)
+    if values is None or len(values) != 1:
+        return None
+    return _positive_int(next(iter(values)))
+
+
+def _iter_feature_steps(base_config: Mapping[str, Any], step_name: str) -> list[tuple[int, dict[str, Any]]]:
+    out: list[tuple[int, dict[str, Any]]] = []
+    for idx, raw_step in enumerate(list(base_config.get("features", []) or [])):
+        if not isinstance(raw_step, Mapping):
+            continue
+        if str(raw_step.get("step")) != step_name:
+            continue
+        out.append((idx, dict(raw_step.get("params", {}) or {})))
+    return out
+
+
+def _guaranteed_feature_list_ints(
+    base_config: Mapping[str, Any],
+    dimensions_by_path: Mapping[tuple[str | int, ...], SearchDimension],
+    *,
+    step_name: str,
+    param_name: str,
+) -> set[int]:
+    guaranteed: set[int] = set()
+    for idx, _ in _iter_feature_steps(base_config, step_name):
+        list_path = ("features", idx, "params", param_name)
+        try:
+            values = get_nested_value(base_config, list_path)
+        except Exception:
+            continue
+        if not isinstance(values, (list, tuple)):
+            continue
+        for value_idx, _ in enumerate(values):
+            integer = _single_guaranteed_positive_int(
+                base_config,
+                dimensions_by_path,
+                (*list_path, value_idx),
+            )
+            if integer is not None:
+                guaranteed.add(integer)
+    return guaranteed
+
+
+def _guaranteed_feature_param_ints(
+    base_config: Mapping[str, Any],
+    dimensions_by_path: Mapping[tuple[str | int, ...], SearchDimension],
+    *,
+    step_name: str,
+    param_name: str,
+) -> set[int]:
+    guaranteed: set[int] = set()
+    for idx, _ in _iter_feature_steps(base_config, step_name):
+        integer = _single_guaranteed_positive_int(
+            base_config,
+            dimensions_by_path,
+            ("features", idx, "params", param_name),
+        )
+        if integer is not None:
+            guaranteed.add(integer)
+    return guaranteed
+
+
+def _guaranteed_regime_vol_ratio_pairs(
+    base_config: Mapping[str, Any],
+    dimensions_by_path: Mapping[tuple[str | int, ...], SearchDimension],
+) -> set[tuple[int, int]]:
+    guaranteed: set[tuple[int, int]] = set()
+    for idx, params in _iter_feature_steps(base_config, "regime_context"):
+        raw_pairs = params.get("vol_window_pairs")
+        if isinstance(raw_pairs, Sequence) and not isinstance(raw_pairs, (str, bytes)):
+            for pair_idx, raw_pair in enumerate(raw_pairs):
+                if not isinstance(raw_pair, Sequence) or isinstance(raw_pair, (str, bytes)) or len(raw_pair) != 2:
+                    continue
+                short = _single_guaranteed_positive_int(
+                    base_config,
+                    dimensions_by_path,
+                    ("features", idx, "params", "vol_window_pairs", pair_idx, 0),
+                )
+                long_ = _single_guaranteed_positive_int(
+                    base_config,
+                    dimensions_by_path,
+                    ("features", idx, "params", "vol_window_pairs", pair_idx, 1),
+                )
+                if short is not None and long_ is not None:
+                    guaranteed.add((short, long_))
+            continue
+        short = _single_guaranteed_positive_int(
+            base_config,
+            dimensions_by_path,
+            ("features", idx, "params", "vol_short_window"),
+        )
+        long_ = _single_guaranteed_positive_int(
+            base_config,
+            dimensions_by_path,
+            ("features", idx, "params", "vol_long_window"),
+        )
+        if short is not None and long_ is not None:
+            guaranteed.add((short, long_))
+    return guaranteed
+
+
+def _activation_filter_exact_selector_values(
+    base_config: Mapping[str, Any],
+    dimensions_by_path: Mapping[tuple[str | int, ...], SearchDimension],
+) -> list[tuple[int, set[str]]]:
+    values_by_filter: list[tuple[int, set[str]]] = []
+    signal_cfg = dict(base_config.get("signals", {}) or {})
+    params = dict(signal_cfg.get("params", {}) or {})
+    for idx, raw_filter in enumerate(list(params.get("activation_filters", []) or [])):
+        if not isinstance(raw_filter, Mapping):
+            continue
+        selector = raw_filter.get("selector")
+        if not isinstance(selector, Mapping):
+            continue
+        possible = _possible_path_values(
+            base_config,
+            dimensions_by_path,
+            ("signals", "params", "activation_filters", idx, "selector", "exact"),
+        )
+        if possible is None:
+            continue
+        exact_values = {str(value).strip() for value in possible if isinstance(value, str) and str(value).strip()}
+        if exact_values:
+            values_by_filter.append((idx, exact_values))
+    return values_by_filter
+
+
+def validate_search_space_feature_contract(
+    base_config: Mapping[str, Any],
+    search_space: Sequence[SearchDimension | Mapping[str, Any]],
+) -> None:
+    """
+    Fail fast when Optuna can sample feature windows that remove columns used by downstream steps.
+    """
+    dimensions_by_path = _search_dimensions_by_path(search_space)
+    guaranteed_sma_windows = _guaranteed_feature_list_ints(
+        base_config,
+        dimensions_by_path,
+        step_name="trend",
+        param_name="sma_windows",
+    )
+    guaranteed_vol_windows = _guaranteed_feature_list_ints(
+        base_config,
+        dimensions_by_path,
+        step_name="volatility",
+        param_name="rolling_windows",
+    )
+    guaranteed_adx_windows = _guaranteed_feature_param_ints(
+        base_config,
+        dimensions_by_path,
+        step_name="adx",
+        param_name="window",
+    ) | _guaranteed_feature_list_ints(
+        base_config,
+        dimensions_by_path,
+        step_name="adx",
+        param_name="windows",
+    )
+    guaranteed_regime_pairs = _guaranteed_regime_vol_ratio_pairs(base_config, dimensions_by_path)
+
+    errors: list[str] = []
+    for feature_idx, params in _iter_feature_steps(base_config, "trend_regime"):
+        for key in ("base_sma_for_sign", "short_sma", "long_sma"):
+            possible_values = _possible_path_values(
+                base_config,
+                dimensions_by_path,
+                ("features", feature_idx, "params", key),
+            )
+            required_values = {
+                required
+                for value in (possible_values or [])
+                if (required := _positive_int(value)) is not None
+            }
+            if possible_values is None or not required_values:
+                errors.append(
+                    f"features[{feature_idx}].trend_regime.{key} is not guaranteed by a singleton/categorical "
+                    "Optuna search_space value."
+                )
+                continue
+            missing = sorted(required_values - guaranteed_sma_windows)
+            if missing:
+                errors.append(
+                    f"features[{feature_idx}].trend_regime.{key} requires SMA windows {missing}, "
+                    "but search_space does not guarantee trend.sma_windows contains it."
+                )
+
+    for feature_idx, params in _iter_feature_steps(base_config, "vol_normalized_momentum"):
+        possible_vol_cols = _possible_path_values(
+            base_config,
+            dimensions_by_path,
+            ("features", feature_idx, "params", "vol_col"),
+        )
+        if possible_vol_cols is None or not possible_vol_cols:
+            vol_window = _positive_int(params.get("vol_window")) or 20
+            possible_vol_cols = {f"vol_rolling_{vol_window}"}
+        for vol_col in possible_vol_cols:
+            match = re.fullmatch(r"vol_rolling_(\d+)", str(vol_col))
+            if match and int(match.group(1)) not in guaranteed_vol_windows:
+                errors.append(
+                    f"features[{feature_idx}].vol_normalized_momentum.vol_col requires {vol_col}, "
+                    "but search_space does not guarantee volatility.rolling_windows contains it."
+                )
+
+    for filter_idx, exact_values in _activation_filter_exact_selector_values(base_config, dimensions_by_path):
+        for exact in sorted(exact_values):
+            if match := re.fullmatch(r"adx_(\d+)", exact):
+                required = int(match.group(1))
+                if required not in guaranteed_adx_windows:
+                    errors.append(
+                        f"signals.params.activation_filters[{filter_idx}] requires {exact}, "
+                        "but search_space does not guarantee adx windows produce it."
+                    )
+            elif match := re.fullmatch(r"regime_vol_ratio_(\d+)_(\d+)", exact):
+                required_pair = (int(match.group(1)), int(match.group(2)))
+                if required_pair not in guaranteed_regime_pairs:
+                    errors.append(
+                        f"signals.params.activation_filters[{filter_idx}] requires {exact}, "
+                        "but search_space does not guarantee regime_context vol windows produce it."
+                    )
+            elif match := re.fullmatch(r"(?:close_sma|close_over_sma)_(\d+)", exact):
+                required = int(match.group(1))
+                if required not in guaranteed_sma_windows:
+                    errors.append(
+                        f"signals.params.activation_filters[{filter_idx}] requires {exact}, "
+                        "but search_space does not guarantee trend.sma_windows contains it."
+                    )
+            elif match := re.fullmatch(r"vol_rolling_(\d+)", exact):
+                required = int(match.group(1))
+                if required not in guaranteed_vol_windows:
+                    errors.append(
+                        f"signals.params.activation_filters[{filter_idx}] requires {exact}, "
+                        "but search_space does not guarantee volatility.rolling_windows contains it."
+                    )
+
+    if errors:
+        details = "\n- ".join(errors)
+        raise ValueError(f"Optuna search_space feature contract is invalid:\n- {details}")
 
 
 _POSITION_EPS = 1.0e-12
@@ -796,6 +1086,7 @@ def build_study_objective(
     """
     base_config = load_experiment_config(config_path)
     normalized_space = normalize_search_space(search_space)
+    validate_search_space_feature_contract(base_config, normalized_space)
     objective_spec = normalize_objective_spec(objective)
     pruning_spec = normalize_pruning_spec(pruning)
     failure_score = (
@@ -871,6 +1162,14 @@ def build_study_objective(
             dict(getattr(result, "evaluation", {}).get("primary_summary", {}) or {}),
         )
         trial.set_user_attr(
+            "ftmo_metrics",
+            dict(getattr(result, "evaluation", {}).get("ftmo_metrics", {}) or {}),
+        )
+        trial.set_user_attr(
+            "ftmo_objective",
+            dict(getattr(result, "evaluation", {}).get("ftmo_objective", {}) or {}),
+        )
+        trial.set_user_attr(
             "fold_backtest_summaries",
             list(getattr(result, "evaluation", {}).get("fold_backtest_summaries", []) or []),
         )
@@ -883,6 +1182,8 @@ def build_study_objective(
             trial.set_user_attr("experiment_run_dir", result_artifacts["run_dir"])
         if result_artifacts.get("report"):
             trial.set_user_attr("experiment_report", result_artifacts["report"])
+        if result_artifacts.get("report_html"):
+            trial.set_user_attr("experiment_report_html", result_artifacts["report_html"])
         if report_state["reports"]:
             trial.set_user_attr("pruning_reports", list(report_state["reports"]))
         return score
@@ -966,6 +1267,8 @@ def _trial_duration_seconds(trial: Any) -> float | None:
 def _flat_trial_row(trial: Any) -> dict[str, Any]:
     user_attrs = dict(getattr(trial, "user_attrs", {}) or {})
     primary_summary = dict(user_attrs.get("primary_summary", {}) or {})
+    ftmo_metrics = dict(user_attrs.get("ftmo_metrics", {}) or {})
+    ftmo_objective = dict(user_attrs.get("ftmo_objective", {}) or {})
     derived_metrics = dict(user_attrs.get("derived_metrics", {}) or {})
 
     row: dict[str, Any] = {
@@ -980,7 +1283,12 @@ def _flat_trial_row(trial: Any) -> dict[str, Any]:
         "experiment_run_name": user_attrs.get("experiment_run_name"),
         "experiment_run_dir": user_attrs.get("experiment_run_dir"),
         "experiment_report": user_attrs.get("experiment_report"),
+        "experiment_report_html": user_attrs.get("experiment_report_html"),
     }
+    for key, value in sorted(ftmo_metrics.items()):
+        row[f"ftmo_{key}"] = value
+    for key, value in sorted(ftmo_objective.items()):
+        row[f"ftmo_objective_{key}"] = value
     for key, value in sorted(derived_metrics.items()):
         row[f"derived_{key}"] = value
     for key in (
@@ -1031,17 +1339,15 @@ def _resolve_optuna_report_dir(output_dir: str | Path, *, run_name: str) -> Path
 
 def _study_best_trial_payload(study: Any, *, direction: ObjectiveDirection) -> dict[str, Any]:
     trials = list(getattr(study, "trials", []) or [])
-    complete_trials = [
+    clean_complete_trials = [
         trial
         for trial in trials
         if _trial_state_name(trial) == "COMPLETE" and getattr(trial, "value", None) is not None
+        and not bool(dict(getattr(trial, "user_attrs", {}) or {}).get("trial_failed"))
     ]
-    if not complete_trials:
+    if not clean_complete_trials:
         return {}
-    try:
-        best_trial = getattr(study, "best_trial")
-    except Exception:
-        best_trial = sorted(complete_trials, key=lambda trial: _trial_sort_key(trial, direction=direction))[0]
+    best_trial = sorted(clean_complete_trials, key=lambda trial: _trial_sort_key(trial, direction=direction))[0]
     user_attrs = dict(getattr(best_trial, "user_attrs", {}) or {})
     return {
         "number": getattr(best_trial, "number", None),
@@ -1049,10 +1355,13 @@ def _study_best_trial_payload(study: Any, *, direction: ObjectiveDirection) -> d
         "state": _trial_state_name(best_trial),
         "params": dict(getattr(best_trial, "params", {}) or {}),
         "primary_summary": dict(user_attrs.get("primary_summary", {}) or {}),
+        "ftmo_metrics": dict(user_attrs.get("ftmo_metrics", {}) or {}),
+        "ftmo_objective": dict(user_attrs.get("ftmo_objective", {}) or {}),
         "derived_metrics": dict(user_attrs.get("derived_metrics", {}) or {}),
         "experiment_run_name": user_attrs.get("experiment_run_name"),
         "experiment_run_dir": user_attrs.get("experiment_run_dir"),
         "experiment_report": user_attrs.get("experiment_report"),
+        "experiment_report_html": user_attrs.get("experiment_report_html"),
         "trial_failed": user_attrs.get("trial_failed"),
         "exception": user_attrs.get("exception"),
     }
@@ -1104,10 +1413,13 @@ def build_study_report_payload(
                     "value": getattr(trial, "value", None),
                     "params": dict(getattr(trial, "params", {}) or {}),
                     "primary_summary": dict(dict(getattr(trial, "user_attrs", {}) or {}).get("primary_summary", {}) or {}),
+                    "ftmo_metrics": dict(dict(getattr(trial, "user_attrs", {}) or {}).get("ftmo_metrics", {}) or {}),
+                    "ftmo_objective": dict(dict(getattr(trial, "user_attrs", {}) or {}).get("ftmo_objective", {}) or {}),
                     "derived_metrics": dict(dict(getattr(trial, "user_attrs", {}) or {}).get("derived_metrics", {}) or {}),
                     "experiment_run_name": dict(getattr(trial, "user_attrs", {}) or {}).get("experiment_run_name"),
                     "experiment_run_dir": dict(getattr(trial, "user_attrs", {}) or {}).get("experiment_run_dir"),
                     "experiment_report": dict(getattr(trial, "user_attrs", {}) or {}).get("experiment_report"),
+                    "experiment_report_html": dict(getattr(trial, "user_attrs", {}) or {}).get("experiment_report_html"),
                 }
                 for trial in top_trials
             ],
@@ -1133,15 +1445,21 @@ def _build_study_report_markdown(payload: Mapping[str, Any]) -> str:
     ]
     if best_trial:
         summary = dict(best_trial.get("primary_summary", {}) or {})
+        ftmo_metrics = dict(best_trial.get("ftmo_metrics", {}) or {})
+        ftmo_objective = dict(best_trial.get("ftmo_objective", {}) or {})
         derived = dict(best_trial.get("derived_metrics", {}) or {})
         lines.extend(
             [
                 f"- Number: `{best_trial.get('number')}`",
                 f"- Objective value: `{best_trial.get('value')}`",
+                f"- FTMO score: `{ftmo_objective.get('score', 'n/a')}`",
                 f"- Sharpe: `{summary.get('sharpe', 'n/a')}`",
                 f"- Profit factor: `{summary.get('profit_factor', 'n/a')}`",
                 f"- Max drawdown: `{summary.get('max_drawdown', 'n/a')}`",
                 f"- Total turnover: `{summary.get('total_turnover', 'n/a')}`",
+                f"- Weekly target hit ratio: `{ftmo_metrics.get('weekly_target_hit_ratio', 'n/a')}`",
+                f"- Weekly drawdown breaches: `{ftmo_metrics.get('weekly_drawdown_breach_count', 'n/a')}`",
+                f"- Daily loss breaches: `{ftmo_metrics.get('daily_loss_breach_count', 'n/a')}`",
                 "- Turnover event count: "
                 f"`{derived.get('turnover_event_count', derived.get('trade_count', 'n/a'))}`",
                 f"- Entry count: `{derived.get('entry_count', 'n/a')}`",
@@ -1151,6 +1469,7 @@ def _build_study_report_markdown(payload: Mapping[str, Any]) -> str:
                 f"- Active week ratio: `{derived.get('active_week_ratio', 'n/a')}`",
                 f"- Experiment run name: `{best_trial.get('experiment_run_name', 'n/a')}`",
                 f"- Experiment run dir: `{best_trial.get('experiment_run_dir', 'n/a')}`",
+                f"- Experiment HTML report: `{best_trial.get('experiment_report_html', 'n/a')}`",
                 "",
                 "### Best Params",
             ]
@@ -1166,18 +1485,21 @@ def _build_study_report_markdown(payload: Mapping[str, Any]) -> str:
         lines.append("No clean complete trials were available.")
     else:
         lines.append(
-            "| trial | objective | sharpe | profit_factor | max_drawdown | "
-            "turnover_events | entries | round_trips | total_turnover |"
+            "| trial | objective | ftmo_score | sharpe | target_hit_ratio | "
+            "weekly_dd_breaches | daily_breaches | turnover_events | total_turnover |"
         )
         lines.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
         for trial in top_trials:
             summary = dict(trial.get("primary_summary", {}) or {})
+            ftmo_metrics = dict(trial.get("ftmo_metrics", {}) or {})
+            ftmo_objective = dict(trial.get("ftmo_objective", {}) or {})
             derived = dict(trial.get("derived_metrics", {}) or {})
             lines.append(
-                f"| {trial.get('number')} | {trial.get('value')} | {summary.get('sharpe', '')} | "
-                f"{summary.get('profit_factor', '')} | {summary.get('max_drawdown', '')} | "
+                f"| {trial.get('number')} | {trial.get('value')} | {ftmo_objective.get('score', '')} | "
+                f"{summary.get('sharpe', '')} | {ftmo_metrics.get('weekly_target_hit_ratio', '')} | "
+                f"{ftmo_metrics.get('weekly_drawdown_breach_count', '')} | "
+                f"{ftmo_metrics.get('daily_loss_breach_count', '')} | "
                 f"{derived.get('turnover_event_count', derived.get('trade_count', ''))} | "
-                f"{derived.get('entry_count', '')} | {derived.get('round_trip_count', '')} | "
                 f"{summary.get('total_turnover', '')} |"
             )
     lines.append("")
@@ -1222,13 +1544,20 @@ def write_study_report(
         writer.writerows(trial_rows)
 
     report_path = run_dir / "report.md"
-    report_path.write_text(_build_study_report_markdown(payload), encoding="utf-8")
+    report_html_path = run_dir / "report.html"
+    report_markdown = _build_study_report_markdown(payload)
+    report_path.write_text(report_markdown, encoding="utf-8")
+    report_html_path.write_text(
+        render_markdown_report_html(report_markdown, title=f"Optuna Study Report: {getattr(study, 'study_name', 'study')}"),
+        encoding="utf-8",
+    )
 
     artifacts = {
         "run_dir": str(run_dir),
         "study_summary": str(summary_path),
         "trials": str(trials_path),
         "report": str(report_path),
+        "report_html": str(report_html_path),
     }
     manifest = build_artifact_manifest(artifacts)
     manifest_path = run_dir / "artifact_manifest.json"
@@ -1437,6 +1766,8 @@ def _print_cli_summary(study: Any) -> None:
     report_artifacts = dict(user_attrs.get("report_artifacts", {}) or {})
     if report_artifacts.get("report"):
         print(f"Report: {report_artifacts['report']}")
+    if report_artifacts.get("report_html"):
+        print(f"HTML report: {report_artifacts['report_html']}")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -1503,6 +1834,7 @@ __all__ = [
     "sample_trial_parameters",
     "score_experiment_result",
     "set_nested_value",
+    "validate_search_space_feature_contract",
     "write_study_report",
 ]
 

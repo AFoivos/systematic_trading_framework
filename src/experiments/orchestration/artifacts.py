@@ -11,7 +11,7 @@ import yaml
 
 from src.backtesting.engine import BacktestResult
 from src.experiments.orchestration.common import data_stats_payload, redact_sensitive_values, resolved_feature_columns
-from src.experiments.orchestration.reporting import build_experiment_report_markdown
+from src.experiments.orchestration.reporting import build_experiment_report_markdown, render_markdown_report_html
 from src.portfolio import PortfolioPerformance
 from src.utils.run_metadata import build_artifact_manifest
 
@@ -565,7 +565,10 @@ def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
     chart_paths.update(model_chart_paths)
 
     report_path = run_dir / "report.md"
+    report_html_path = run_dir / "report.html"
     artifact_paths = {
+        "report_markdown": "report.md",
+        "report_html": "report.html",
         "config": "config_used.yaml",
         "summary": "summary.json",
         "run_metadata": "run_metadata.json",
@@ -596,8 +599,15 @@ def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
     )
     with report_path.open("w", encoding="utf-8") as handle:
         handle.write(report_markdown)
+    report_html_path.write_text(
+        render_markdown_report_html(report_markdown, title=f"Experiment Report: {cfg.get('logging', {}).get('run_name', run_dir.name)}"),
+        encoding="utf-8",
+    )
 
-    report_artifacts = {"report": str(report_path)}
+    report_artifacts = {
+        "report": str(report_path),
+        "report_html": str(report_html_path),
+    }
     for label, rel_path in chart_paths.items():
         report_artifacts[label] = str((run_dir / rel_path).resolve())
     for label, rel_path in model_artifact_paths.items():

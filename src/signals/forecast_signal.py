@@ -153,11 +153,14 @@ def compute_probability_vol_adjusted_signal(
     prob_center: float = 0.5,
     upper: float | None = None,
     lower: float | None = None,
-    vol_target: float = 0.001,
+    vol_target: float | None = 0.001,
     clip: float = 1.0,
     vol_floor: float = 1e-6,
     min_signal_abs: float = 0.0,
     activation_filters: list[dict[str, object]] | None = None,
+    top_quantile: float | None = None,
+    top_quantile_window: int | None = None,
+    max_trade_rate: float | None = None,
 ) -> pd.DataFrame:
     """
     Convert classifier probabilities into signed conviction and scale them by predicted
@@ -175,7 +178,7 @@ def compute_probability_vol_adjusted_signal(
         raise ValueError("clip must be > 0.")
     if vol_floor <= 0:
         raise ValueError("vol_floor must be > 0.")
-    if vol_target <= 0:
+    if vol_target is not None and vol_target <= 0:
         raise ValueError("vol_target must be > 0.")
     if not 0.0 < prob_center < 1.0:
         raise ValueError("prob_center must be in (0, 1).")
@@ -185,6 +188,14 @@ def compute_probability_vol_adjusted_signal(
         raise ValueError("lower must be in (0, 1).")
     if min_signal_abs < 0:
         raise ValueError("min_signal_abs must be >= 0.")
+    if top_quantile is None and max_trade_rate is not None:
+        top_quantile = max_trade_rate
+    if top_quantile is not None and not 0.0 < float(top_quantile) <= 1.0:
+        raise ValueError("top_quantile must be in (0, 1].")
+    if max_trade_rate is not None and not 0.0 < float(max_trade_rate) <= 1.0:
+        raise ValueError("max_trade_rate must be in (0, 1].")
+    if top_quantile_window is not None and int(top_quantile_window) <= 1:
+        raise ValueError("top_quantile_window must be > 1 when provided.")
 
     if upper is None and lower is not None:
         lower = float(lower)
@@ -206,6 +217,7 @@ def compute_probability_vol_adjusted_signal(
     if bool(valid_mask.any()):
         probs_valid = probs.loc[valid_mask].clip(lower=0.0, upper=1.0)
         vol_valid = vol.loc[valid_mask].clip(lower=float(vol_floor))
+        centered_all = (probs_valid - float(prob_center)) / max(float(prob_center), 1.0 - float(prob_center))
         active_mask = pd.Series(True, index=probs_valid.index, dtype=bool)
         if upper is not None and lower is not None:
             active_mask = (probs_valid > upper) | (probs_valid < lower)
@@ -216,11 +228,28 @@ def compute_probability_vol_adjusted_signal(
                 activation_filters=activation_filters,
             )
             active_mask &= filter_mask
+        if top_quantile is not None:
+            abs_conviction = centered_all.abs()
+            threshold_q = max(0.0, 1.0 - float(top_quantile))
+            if top_quantile_window is not None:
+                min_periods = max(2, min(int(top_quantile_window), 24))
+                threshold = (
+                    abs_conviction.rolling(int(top_quantile_window), min_periods=min_periods)
+                    .quantile(threshold_q)
+                    .shift(1)
+                )
+            else:
+                threshold = abs_conviction.expanding(min_periods=2).quantile(threshold_q).shift(1)
+            active_mask &= abs_conviction.ge(threshold.fillna(np.inf))
         if bool(active_mask.any()):
             probs_active = probs_valid.loc[active_mask]
             vol_active = vol_valid.loc[active_mask]
-            centered = (probs_active - float(prob_center)) / max(float(prob_center), 1.0 - float(prob_center))
-            scaled_active = np.tanh(centered * (float(vol_target) / vol_active)).astype(float) * float(clip)
+            centered = centered_all.loc[active_mask]
+            if vol_target is None:
+                scaled_input = centered
+            else:
+                scaled_input = centered * (float(vol_target) / vol_active)
+            scaled_active = np.tanh(scaled_input).astype(float) * float(clip)
             if min_signal_abs > 0:
                 scaled_active = np.where(np.abs(scaled_active) < float(min_signal_abs), 0.0, scaled_active)
             scaled.loc[probs_active.index] = scaled_active.astype(float)

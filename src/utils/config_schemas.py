@@ -320,6 +320,9 @@ class RiskConfig:
     target_vol: float | None
     max_leverage: float
     dd_guard: dict[str, Any] = field(default_factory=dict)
+    portfolio_guard: dict[str, Any] = field(default_factory=dict)
+    sizing: dict[str, Any] = field(default_factory=dict)
+    drawdown_sizing: dict[str, Any] = field(default_factory=dict)
     vol_col: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -331,6 +334,9 @@ class RiskConfig:
             "target_vol",
             "max_leverage",
             "dd_guard",
+            "portfolio_guard",
+            "sizing",
+            "drawdown_sizing",
             "vol_col",
         }
         target_vol = data.get("target_vol")
@@ -340,6 +346,9 @@ class RiskConfig:
             target_vol=float(target_vol) if target_vol is not None else None,
             max_leverage=float(data.get("max_leverage", 3.0)),
             dd_guard=dict(data.get("dd_guard", {}) or {}),
+            portfolio_guard=dict(data.get("portfolio_guard", {}) or {}),
+            sizing=dict(data.get("sizing", {}) or {}),
+            drawdown_sizing=dict(data.get("drawdown_sizing", {}) or {}),
             vol_col=data.get("vol_col"),
             extra=_extras(data, known),
         )
@@ -351,6 +360,9 @@ class RiskConfig:
             "target_vol": self.target_vol,
             "max_leverage": self.max_leverage,
             "dd_guard": dict(self.dd_guard),
+            "portfolio_guard": dict(self.portfolio_guard),
+            "sizing": dict(self.sizing),
+            "drawdown_sizing": dict(self.drawdown_sizing),
             "vol_col": self.vol_col,
         }
         return payload | dict(self.extra)
