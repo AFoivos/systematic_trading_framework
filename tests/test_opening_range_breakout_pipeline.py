@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
+import yaml
 
 from src.features.opening_range_breakout import add_opening_range_breakout_features
 from src.signals.meta_probability_side_signal import meta_probability_side_signal
@@ -152,6 +155,7 @@ def test_new_orb_experiment_config_validates_and_keeps_shock_config_valid() -> N
     shock_cfg = load_experiment_config("config/experiments/btcusd_1h_shock_meta_xgboost.yaml")
 
     assert cfg["features"][14]["step"] == "multi_timeframe"
+    assert cfg["features"][14]["params"]["timestamp_convention"] == "bar_start"
     assert cfg["features"][15]["step"] == "opening_range_breakout"
     assert shock_cfg["model"]["target"]["kind"] == "triple_barrier"
 
@@ -171,3 +175,17 @@ def test_dukascopy_load_paths_can_allow_missing_symbols_explicitly() -> None:
     data["storage"]["allow_missing_load_paths"] = False
     with pytest.raises(ConfigValidationError):
         validate_data_block(data)
+
+
+def test_orb_optuna_tunes_threshold_without_independent_upper_alias() -> None:
+    cfg = yaml.safe_load(
+        Path(
+            "config/optuna/optuna_ftmo_30m_xau_indices_london_newyork_opening_range_breakout_xgboost_meta_v1.yaml"
+        ).read_text()
+    )
+    search_paths = {entry["path"] for entry in cfg["search_space"]}
+    search_names = {entry["name"] for entry in cfg["search_space"]}
+
+    assert "signals.params.threshold" in search_paths
+    assert "signals.params.upper" not in search_paths
+    assert "meta_signal_upper_alias" not in search_names

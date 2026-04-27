@@ -80,16 +80,25 @@ def _resample_ohlcv(
     low_col: str,
     close_col: str,
     volume_col: str,
+    timestamp_convention: str = "bar_close",
 ) -> pd.DataFrame:
+    timestamp_convention = str(timestamp_convention).strip().lower()
+    if timestamp_convention not in {"bar_start", "bar_close"}:
+        raise ValueError("timestamp_convention must be one of: bar_start, bar_close.")
     timeframe_minutes = _timeframe_minutes(timeframe)
     if timeframe_minutes % int(base_interval_minutes) != 0:
         raise ValueError("Higher timeframes must be integer multiples of base_interval_minutes.")
     expected_rows = timeframe_minutes // int(base_interval_minutes)
 
-    # Timestamp convention: 30m rows are treated as decision-time/bar-close labels. Higher
-    # timeframe bars are labeled at their close (`label='right'`, `closed='right'`), so the
-    # later asof merge can only attach HTF features whose bar close is <= the 30m timestamp.
-    resampler = df.resample(str(timeframe), label="right", closed="right", origin="epoch")
+    # Timestamp convention:
+    # - bar_close keeps the legacy contract: each 30m row is labeled by the bar close.
+    #   HTF bars use `closed='right'`, so the 1h bar ending at 01:00 includes 00:30 and
+    #   01:00 base rows and becomes mergeable at timestamp 01:00.
+    # - bar_start is for feeds like Dukascopy where the 30m timestamp is the bar open.
+    #   HTF bars use `closed='left'`, so [00:00, 01:00) is labeled 01:00 and only rows
+    #   at or after 01:00 can receive that fully closed 1h feature.
+    closed = "left" if timestamp_convention == "bar_start" else "right"
+    resampler = df.resample(str(timeframe), label="right", closed=closed, origin="epoch")
     bars = resampler.agg(
         {
             open_col: "first",
@@ -196,6 +205,7 @@ def _add_multi_timeframe_single_asset(
     adx_window: int,
     regime_short_window: int,
     regime_long_window: int,
+    timestamp_convention: str,
 ) -> pd.DataFrame:
     _require_columns(df, [open_col, high_col, low_col, price_col, volume_col])
     prepared, has_timestamp_col, tz_naive = _prepare_single_asset_frame(
@@ -221,6 +231,7 @@ def _add_multi_timeframe_single_asset(
             low_col=low_col,
             close_col=price_col,
             volume_col=volume_col,
+            timestamp_convention=timestamp_convention,
         )
         features = _compute_higher_timeframe_features(
             bars,
@@ -265,6 +276,7 @@ def add_multi_timeframe_features(
     returns_col: str = "close_logret",
     timezone: str = "UTC",
     shift_to_last_closed: bool = True,
+    timestamp_convention: str = "bar_close",
     timestamp_col: str = "timestamp",
     asset_col: str = "asset",
     volatility_window: int = 12,
@@ -279,11 +291,15 @@ def add_multi_timeframe_features(
     Build 1h/4h features from 30m OHLCV and align them back point-in-time.
 
     `shift_to_last_closed=True` is the only supported production mode. The function labels
-    resampled HTF bars at their close and asof-merges backward, so a 10:30 UTC base row cannot
-    receive a 1h feature from a bar closing at 11:00 UTC.
+    resampled HTF bars at their close and asof-merges backward, so a base row cannot receive
+    a higher-timeframe feature whose close time is after the row timestamp. Use
+    `timestamp_convention="bar_start"` for feeds whose timestamps are bar opens.
     """
     if not shift_to_last_closed:
         raise ValueError("multi_timeframe currently supports only shift_to_last_closed=true.")
+    timestamp_convention = str(timestamp_convention).strip().lower()
+    if timestamp_convention not in {"bar_start", "bar_close"}:
+        raise ValueError("timestamp_convention must be one of: bar_start, bar_close.")
     if int(base_interval_minutes) <= 0:
         raise ValueError("base_interval_minutes must be positive.")
     for key, value in {
@@ -323,6 +339,7 @@ def add_multi_timeframe_features(
                     adx_window=int(adx_window),
                     regime_short_window=int(regime_short_window),
                     regime_long_window=int(regime_long_window),
+                    timestamp_convention=timestamp_convention,
                 )
             )
         if not frames:
@@ -351,6 +368,7 @@ def add_multi_timeframe_features(
         adx_window=int(adx_window),
         regime_short_window=int(regime_short_window),
         regime_long_window=int(regime_long_window),
+        timestamp_convention=timestamp_convention,
     )
 
 

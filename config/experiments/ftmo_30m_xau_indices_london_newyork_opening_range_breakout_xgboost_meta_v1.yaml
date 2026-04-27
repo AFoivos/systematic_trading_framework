@@ -29,11 +29,11 @@ data:
     allow_missing_load_paths: true
     # Keep only the entries that exist locally; data.symbols may remain the broader initial universe.
     load_paths:
-      XAUUSD: "data/raw/dukas_copy_bank/xauusd_30m.csv"
-      US100: "data/raw/dukas_copy_bank/us100_30m.csv"
-      US30: "data/raw/dukas_copy_bank/us30_30m.csv"
-      GER40: "data/raw/dukas_copy_bank/ger40_30m.csv"
-      SPX500: "data/raw/dukas_copy_bank/spx500_30m.csv"
+      XAUUSD: "data/raw/dukascopy_30m_clean/xauusd_30m.csv"
+      US100: "data/raw/dukascopy_30m_clean/us100_30m.csv"
+      US30: "data/raw/dukascopy_30m_clean/us30_30m.csv"
+      GER40: "data/raw/dukascopy_30m_clean/ger40_30m.csv"
+      SPX500: "data/raw/dukascopy_30m_clean/spx500_30m.csv"
     raw_dir: "data/raw"
     processed_dir: "data/processed"
 
@@ -135,6 +135,7 @@ features:
       returns_col: close_logret
       timezone: UTC
       shift_to_last_closed: true
+      timestamp_convention: bar_start
   - step: opening_range_breakout
     params:
       timestamp_col: timestamp

@@ -23,6 +23,18 @@ def _base_30m_frame(periods: int = 12, *, start: str = "2024-01-01 00:30:00") ->
     )
 
 
+def _minimal_feature_kwargs() -> dict[str, int]:
+    return {
+        "volatility_window": 2,
+        "trend_ema_span": 1,
+        "trend_sma_window": 1,
+        "atr_window": 1,
+        "adx_window": 1,
+        "regime_short_window": 1,
+        "regime_long_window": 2,
+    }
+
+
 def test_multi_timeframe_resamples_1h_ohlcv_correctly() -> None:
     df = _base_30m_frame(periods=6)
 
@@ -74,13 +86,7 @@ def test_multi_timeframe_alignment_uses_last_closed_1h_without_lookahead() -> No
     out = add_multi_timeframe_features(
         df,
         timeframes=["1h"],
-        volatility_window=2,
-        trend_ema_span=1,
-        trend_sma_window=1,
-        atr_window=1,
-        adx_window=1,
-        regime_short_window=1,
-        regime_long_window=2,
+        **_minimal_feature_kwargs(),
     )
 
     row_0130 = out.loc[pd.Timestamp("2024-01-01 01:30:00", tz="UTC")]
@@ -97,13 +103,7 @@ def test_multi_timeframe_alignment_uses_last_closed_4h_without_lookahead() -> No
     out = add_multi_timeframe_features(
         df,
         timeframes=["4h"],
-        volatility_window=2,
-        trend_ema_span=1,
-        trend_sma_window=1,
-        atr_window=1,
-        adx_window=1,
-        regime_short_window=1,
-        regime_long_window=2,
+        **_minimal_feature_kwargs(),
     )
 
     assert pd.isna(out.loc[pd.Timestamp("2024-01-01 03:30:00", tz="UTC"), "mtf_4h_close_logret"])
@@ -116,15 +116,63 @@ def test_multi_timeframe_alignment_uses_last_closed_4h_without_lookahead() -> No
     longer_out = add_multi_timeframe_features(
         longer,
         timeframes=["4h"],
-        volatility_window=2,
-        trend_ema_span=1,
-        trend_sma_window=1,
-        atr_window=1,
-        adx_window=1,
-        regime_short_window=1,
-        regime_long_window=2,
+        **_minimal_feature_kwargs(),
     )
     assert longer_out.loc[pd.Timestamp("2024-01-01 08:00:00", tz="UTC"), "mtf_4h_close_logret"] == pytest.approx(expected)
+
+
+def test_multi_timeframe_bar_start_1h_alignment_uses_closed_left_bins() -> None:
+    df = _base_30m_frame(periods=6, start="2024-01-01 00:00:00")
+
+    out = add_multi_timeframe_features(
+        df,
+        timeframes=["1h"],
+        timestamp_convention="bar_start",
+        **_minimal_feature_kwargs(),
+    )
+
+    assert pd.isna(out.loc[pd.Timestamp("2024-01-01 00:30:00", tz="UTC"), "mtf_1h_trend_score"])
+    assert out.loc[pd.Timestamp("2024-01-01 01:00:00", tz="UTC"), "mtf_1h_trend_score"] == pytest.approx(0.0)
+
+
+def test_multi_timeframe_bar_start_4h_alignment_uses_closed_left_bins() -> None:
+    df = _base_30m_frame(periods=10, start="2024-01-01 00:00:00")
+
+    out = add_multi_timeframe_features(
+        df,
+        timeframes=["4h"],
+        timestamp_convention="bar_start",
+        **_minimal_feature_kwargs(),
+    )
+
+    assert pd.isna(out.loc[pd.Timestamp("2024-01-01 03:30:00", tz="UTC"), "mtf_4h_trend_score"])
+    assert out.loc[pd.Timestamp("2024-01-01 04:00:00", tz="UTC"), "mtf_4h_trend_score"] == pytest.approx(0.0)
+
+
+def test_multi_timeframe_bar_close_preserves_legacy_closed_right_behavior() -> None:
+    df = _base_30m_frame(periods=6, start="2024-01-01 00:30:00")
+
+    out = add_multi_timeframe_features(
+        df,
+        timeframes=["1h"],
+        timestamp_convention="bar_close",
+        **_minimal_feature_kwargs(),
+    )
+
+    assert pd.isna(out.loc[pd.Timestamp("2024-01-01 00:30:00", tz="UTC"), "mtf_1h_trend_score"])
+    assert out.loc[pd.Timestamp("2024-01-01 01:00:00", tz="UTC"), "mtf_1h_trend_score"] == pytest.approx(0.0)
+
+
+def test_multi_timeframe_invalid_timestamp_convention_raises() -> None:
+    df = _base_30m_frame(periods=6)
+
+    with pytest.raises(ValueError, match="timestamp_convention"):
+        add_multi_timeframe_features(
+            df,
+            timeframes=["1h"],
+            timestamp_convention="bar_mid",
+            **_minimal_feature_kwargs(),
+        )
 
 
 def test_multi_timeframe_handles_missing_30m_rows_without_partial_htf_bar() -> None:
@@ -162,13 +210,7 @@ def test_multi_timeframe_processes_assets_independently() -> None:
     out = add_multi_timeframe_features(
         long,
         timeframes=["1h"],
-        volatility_window=2,
-        trend_ema_span=1,
-        trend_sma_window=1,
-        atr_window=1,
-        adx_window=1,
-        regime_short_window=1,
-        regime_long_window=2,
+        **_minimal_feature_kwargs(),
     )
 
     ts = pd.Timestamp("2024-01-01 02:00:00", tz="UTC")

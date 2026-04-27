@@ -577,9 +577,13 @@ def validate_features_block(features: Any) -> None:
                 "timezone",
                 "timestamp_col",
                 "asset_col",
+                "timestamp_convention",
             ):
                 if key in params and params[key] is not None and not isinstance(params[key], str):
                     raise ConfigValidationError(f"features[].params.{key} must be a string when provided.")
+            timestamp_convention = str(params.get("timestamp_convention", "bar_close")).strip().lower()
+            if timestamp_convention not in {"bar_start", "bar_close"}:
+                raise ConfigValidationError("features[].params.timestamp_convention must be one of: bar_start, bar_close.")
             if "base_interval_minutes" in params:
                 _positive_int(params["base_interval_minutes"], field="features[].params.base_interval_minutes")
             timeframes = params.get("timeframes")

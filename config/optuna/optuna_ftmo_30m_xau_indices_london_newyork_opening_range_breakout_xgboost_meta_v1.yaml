@@ -153,10 +153,6 @@ search_space:
     path: signals.params.threshold
     kind: categorical
     choices: [0.50, 0.52, 0.54, 0.56, 0.58]
-  - name: meta_signal_upper_alias
-    path: signals.params.upper
-    kind: categorical
-    choices: [0.50, 0.52, 0.54, 0.56, 0.58]
 
   - name: ftmo_risk_per_trade
     path: risk.sizing.risk_per_trade
