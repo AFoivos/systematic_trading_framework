@@ -154,6 +154,7 @@ model:
     min_child_weight: 10.0
     reg_lambda: 2.0
     reg_alpha: 0.1
+    scale_pos_weight: 1.0
     random_state: 7
     objective: binary:logistic
     eval_metric: logloss

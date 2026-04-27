@@ -784,6 +784,123 @@ def test_ftmo_panel_optuna_yaml_matches_base_config_contract() -> None:
     assert trial_cfg["logging"]["enabled"] is False
 
 
+def test_ftmo_triple_barrier_meta_optuna_yaml_matches_base_config_contract() -> None:
+    optuna_cfg_path = Path("config/optuna/optuna_ftmo_fx_intraday_panel_4pair_xgboost_triple_barrier_meta_v1.yaml")
+    payload = yaml.safe_load(optuna_cfg_path.read_text(encoding="utf-8"))
+
+    search_space = load_search_space_yaml(optuna_cfg_path)
+    objective = normalize_objective_spec(payload["objective"])
+    pruning = normalize_pruning_spec(payload["pruning"])
+    base_cfg = load_experiment_config(payload["base_config"])
+
+    trial_params = {}
+    for dimension in search_space:
+        if dimension.kind == "categorical":
+            trial_params[dimension.name] = list(dimension.choices or [])[0]
+        elif dimension.kind == "int":
+            trial_params[dimension.name] = int(dimension.low)
+        elif dimension.kind == "float":
+            trial_params[dimension.name] = float(dimension.low)
+        else:
+            trial_params[dimension.name] = False
+
+    trial_cfg = prepare_trial_config(
+        base_cfg,
+        trial_params=trial_params,
+        search_space=search_space,
+        logging_enabled=False,
+    )
+
+    validate_resolved_config(trial_cfg)
+    search_dims_by_name = {dimension.name: dimension for dimension in search_space}
+    search_paths = {dimension.path for dimension in search_space}
+    assert (
+        payload["base_config"]
+        == "config/experiments/ftmo_fx_intraday_panel_4pair_xgboost_triple_barrier_meta_v1.yaml"
+    )
+    assert payload["study"]["study_name"] == "optuna_ftmo_fx_intraday_panel_4pair_xgboost_triple_barrier_meta_v1"
+    assert payload["report"]["run_name"] == "optuna_ftmo_fx_intraday_panel_4pair_xgboost_triple_barrier_meta_v1"
+    assert objective.metric_path == "evaluation.ftmo_objective.score"
+    assert objective.failure_score == pytest.approx(-1.0e15)
+    assert objective.stability_weight == pytest.approx(0.5)
+    assert objective.stability_std_penalty == pytest.approx(1.0)
+    assert pruning.enabled is False
+    assert pruning.metric_path == "classification_metrics.roc_auc"
+    assert pruning.pruner == "none"
+
+    assert trial_cfg["data"]["end"] == "2024-10-01 00:00:00"
+    assert trial_cfg["data"]["storage"]["dataset_id"] == "ftmo_fx_intraday_panel_4pair_xgboost_triple_barrier_meta_v1"
+    assert trial_cfg["model"]["split"]["max_folds"] == 12
+    assert trial_cfg["model"]["kind"] == "xgboost_clf"
+    assert trial_cfg["model"]["feature_selectors"]["profile"] == "ftmo_fx_intraday_balanced_v1"
+    assert trial_cfg["model"]["target"]["kind"] == "triple_barrier"
+    assert trial_cfg["model"]["target"]["label_mode"] == "meta"
+    assert trial_cfg["model"]["target"]["entry_price_mode"] == "next_open"
+    assert trial_cfg["model"]["target"]["neutral_label"] == "lower"
+    assert trial_cfg["model"]["target"]["tie_break"] == "lower"
+    assert trial_cfg["model"]["target"]["side_col"] == "primary_side"
+    assert trial_cfg["model"]["target"]["candidate_col"] == "trade_candidate"
+    assert trial_cfg["model"]["target"]["max_holding"] == 12
+    assert trial_cfg["model"]["target"]["upper_mult"] == pytest.approx(1.5)
+    assert trial_cfg["model"]["target"]["lower_mult"] == pytest.approx(1.0)
+    assert trial_cfg["model"]["target"]["vol_window"] == 12
+
+    assert trial_cfg["features"][14]["step"] == "shock_context"
+    assert trial_cfg["features"][14]["params"]["ret_z_threshold"] == pytest.approx(1.0)
+    assert trial_cfg["features"][14]["params"]["atr_mult_threshold"] == pytest.approx(0.5)
+    assert trial_cfg["features"][14]["params"]["distance_from_mean_threshold"] == pytest.approx(0.3)
+    assert trial_cfg["features"][14]["params"]["post_shock_active_bars"] == 1
+    assert trial_cfg["features"][14]["params"]["short_horizon"] == 1
+    assert trial_cfg["features"][14]["params"]["medium_horizon"] == 4
+    assert trial_cfg["features"][15]["step"] == "lags"
+    assert trial_cfg["features"][15]["params"]["lags"][2] == 3
+    assert trial_cfg["features"][15]["params"]["lags"][3] == 12
+
+    assert trial_cfg["signals"]["kind"] == "meta_probability_side"
+    assert trial_cfg["signals"]["params"]["side_col"] == "primary_side"
+    assert trial_cfg["signals"]["params"]["candidate_col"] == "label_candidate"
+    assert trial_cfg["signals"]["params"]["signal_col"] == "signal_meta_side"
+    assert trial_cfg["signals"]["params"]["threshold"] == pytest.approx(0.50)
+    assert trial_cfg["signals"]["params"]["upper"] == pytest.approx(0.62)
+    assert trial_cfg["signals"]["params"]["clip"] == pytest.approx(0.5)
+    assert "signals.params.upper" not in search_paths
+    assert "signals.params.lower" not in search_paths
+    assert not any(path.startswith("signals.params.activation_filters") for path in search_paths)
+
+    assert trial_cfg["risk"]["sizing"]["kind"] == "ftmo_risk_per_trade"
+    assert trial_cfg["risk"]["sizing"]["confidence_mode"] == "meta_success"
+    assert trial_cfg["risk"]["sizing"]["risk_per_trade"] == pytest.approx(0.0025)
+    assert trial_cfg["risk"]["sizing"]["confidence_floor"] == pytest.approx(0.50)
+    assert trial_cfg["risk"]["sizing"]["confidence_power"] == pytest.approx(1.0)
+    assert trial_cfg["risk"]["sizing"]["max_leverage"] == pytest.approx(1.0)
+    assert trial_cfg["backtest"]["signal_col"] == "signal_meta_side"
+    assert trial_cfg["portfolio"]["gross_target"] == pytest.approx(1.0)
+    assert trial_cfg["portfolio"]["constraints"]["max_gross_leverage"] == pytest.approx(1.0)
+    assert trial_cfg["portfolio"]["constraints"]["max_weight"] == pytest.approx(0.40)
+    assert trial_cfg["portfolio"]["constraints"]["min_weight"] == pytest.approx(-0.40)
+
+    assert trial_cfg["model"]["params"]["n_estimators"] == 150
+    assert trial_cfg["model"]["params"]["learning_rate"] == pytest.approx(0.01)
+    assert trial_cfg["model"]["params"]["max_depth"] == 2
+    assert trial_cfg["model"]["params"]["min_child_weight"] == pytest.approx(4.0)
+    assert trial_cfg["model"]["params"]["subsample"] == pytest.approx(0.6)
+    assert trial_cfg["model"]["params"]["colsample_bytree"] == pytest.approx(0.6)
+    assert trial_cfg["model"]["params"]["reg_lambda"] == pytest.approx(0.5)
+    assert trial_cfg["model"]["params"]["reg_alpha"] == pytest.approx(0.0)
+    assert trial_cfg["model"]["params"]["scale_pos_weight"] == pytest.approx(1.0)
+    assert search_dims_by_name["vol_norm_vol_col"].choices == [
+        "vol_rolling_12",
+        "vol_rolling_24",
+        "vol_rolling_48",
+        "vol_rolling_72",
+        "vol_rolling_96",
+        "vol_rolling_120",
+        "vol_rolling_168",
+    ]
+    assert trial_cfg["logging"]["run_name"] == "ftmo_fx_intraday_panel_4pair_xgboost_triple_barrier_meta_v1"
+    assert trial_cfg["logging"]["enabled"] is False
+
+
 def test_optuna_feature_contract_rejects_unguaranteed_downstream_columns() -> None:
     base_cfg = load_experiment_config(
         "config/experiments/ftmo_fx_intraday_panel_4pair_xgboost_garch_2y_v1.yaml"
