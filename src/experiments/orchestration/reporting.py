@@ -794,6 +794,7 @@ def build_experiment_report_markdown(
     ftmo_objective = _safe_meta_dict(evaluation.get("ftmo_objective"))
     risk_guard_summary = _safe_meta_dict(evaluation.get("risk_guard_summary"))
     feature_diagnostics = _safe_meta_dict(evaluation.get("feature_diagnostics"))
+    orb_diagnostics = _safe_meta_dict(evaluation.get("orb_diagnostics"))
 
     symbols = data_cfg.get("symbols") or ([data_cfg.get("symbol")] if data_cfg.get("symbol") else [])
     run_name = str(cfg.get("logging", {}).get("run_name", cfg.get("config_path", "experiment")))
@@ -836,6 +837,45 @@ def build_experiment_report_markdown(
                 _markdown_table(["Metric", "Value"], [[key, value] for key, value in policy_summary.items()]),
             ]
         )
+
+    if orb_diagnostics:
+        scalar_keys = [
+            "orb_candidate_count",
+            "orb_candidate_rate",
+            "orb_accepted_trade_count",
+            "orb_long_candidate_count",
+            "orb_short_candidate_count",
+            "average_orb_range_width_atr",
+            "breakout_success_rate",
+        ]
+        lines.extend(
+            [
+                "",
+                "## Opening Range Breakout Diagnostics",
+                _markdown_table(
+                    ["Metric", "Value"],
+                    [[key, orb_diagnostics.get(key)] for key in scalar_keys if key in orb_diagnostics],
+                ),
+            ]
+        )
+        breakdown_rows: list[list[Any]] = []
+        for section in (
+            "candidate_count_by_asset",
+            "trade_count_by_asset",
+            "pnl_by_asset",
+            "gross_pnl_by_asset",
+            "cost_by_asset",
+            "success_rate_by_asset",
+            "candidate_count_by_session",
+            "trade_count_by_session",
+            "pnl_by_session",
+            "success_rate_by_session",
+        ):
+            values = dict(orb_diagnostics.get(section, {}) or {})
+            for key, value in sorted(values.items()):
+                breakdown_rows.append([section, key, value])
+        if breakdown_rows:
+            lines.append(_markdown_table(["Section", "Key", "Value"], breakdown_rows))
 
     if ftmo_metrics:
         lines.extend(
@@ -1547,6 +1587,200 @@ def _target_realized_r_col(target_meta: dict[str, Any]) -> str | None:
     )
 
 
+def _candidate_success_rate(frame: pd.DataFrame, *, mask: pd.Series, label_col: str | None) -> float | None:
+    if not label_col or label_col not in frame.columns:
+        return None
+    labels = pd.to_numeric(frame[label_col].reindex(frame.index), errors="coerce")
+    valid = mask.reindex(frame.index).fillna(False).astype(bool) & labels.notna()
+    if not bool(valid.any()):
+        return None
+    return float(labels.loc[valid].mean())
+
+
+def _safe_float_sum(series: pd.Series) -> float:
+    numeric = pd.to_numeric(series, errors="coerce").dropna().astype(float)
+    return float(numeric.sum()) if not numeric.empty else 0.0
+
+
+def _orb_pnl_attribution(
+    asset_frames: dict[str, pd.DataFrame],
+    *,
+    performance: PortfolioPerformance | BacktestResult,
+    returns_col: str,
+    returns_type: str,
+    alignment: str,
+) -> dict[str, dict[str, float]]:
+    if isinstance(performance, PortfolioPerformance):
+        if performance.applied_weights is None:
+            return {"pnl_by_asset": {}, "gross_pnl_by_asset": {}, "cost_by_asset": {}, "pnl_by_session": {}}
+        weights = performance.applied_weights.astype(float)
+        costs = performance.costs.reindex(weights.index).fillna(0.0).astype(float)
+    else:
+        only_asset = next(iter(sorted(asset_frames)))
+        weights = pd.DataFrame({only_asset: performance.positions.astype(float)})
+        costs = performance.costs.reindex(weights.index).fillna(0.0).astype(float)
+
+    returns_by_asset: dict[str, pd.Series] = {}
+    session_by_asset: dict[str, pd.Series] = {}
+    for asset, frame in sorted(asset_frames.items()):
+        if returns_col not in frame.columns:
+            continue
+        returns = frame[returns_col].astype(float)
+        if returns_type == "log":
+            returns = np.expm1(returns)
+        returns_by_asset[asset] = returns
+        if "orb_session_name" in frame.columns:
+            session_by_asset[asset] = frame["orb_session_name"].shift(1)
+
+    if not returns_by_asset:
+        return {"pnl_by_asset": {}, "gross_pnl_by_asset": {}, "cost_by_asset": {}, "pnl_by_session": {}}
+
+    returns_df = pd.concat(returns_by_asset, axis=1, join=alignment).sort_index()
+    if isinstance(returns_df.columns, pd.MultiIndex):
+        returns_df.columns = returns_df.columns.get_level_values(0)
+    returns_df = returns_df.reindex(index=weights.index, columns=weights.columns)
+    prev_weights = weights.shift(1).fillna(0.0)
+    gross_contrib = (prev_weights * returns_df.fillna(0.0)).astype(float)
+    turnover_by_asset = weights.diff().abs().fillna(weights.abs()).astype(float)
+    turnover_total = turnover_by_asset.sum(axis=1).replace(0.0, np.nan)
+    cost_alloc = turnover_by_asset.div(turnover_total, axis=0).mul(costs, axis=0).fillna(0.0)
+    net_contrib = gross_contrib - cost_alloc
+
+    pnl_by_asset = {str(col): _safe_float_sum(net_contrib[col]) for col in net_contrib.columns}
+    gross_pnl_by_asset = {str(col): _safe_float_sum(gross_contrib[col]) for col in gross_contrib.columns}
+    cost_by_asset = {str(col): _safe_float_sum(cost_alloc[col]) for col in cost_alloc.columns}
+
+    pnl_by_session: dict[str, float] = {}
+    for asset, sessions in session_by_asset.items():
+        if asset not in net_contrib.columns:
+            continue
+        aligned_sessions = sessions.reindex(net_contrib.index)
+        valid = aligned_sessions.notna() & prev_weights[asset].abs().gt(1e-12)
+        if not bool(valid.any()):
+            continue
+        for session_name, values in net_contrib.loc[valid, asset].groupby(aligned_sessions.loc[valid].astype(str)):
+            pnl_by_session[str(session_name)] = pnl_by_session.get(str(session_name), 0.0) + _safe_float_sum(values)
+
+    return {
+        "pnl_by_asset": pnl_by_asset,
+        "gross_pnl_by_asset": gross_pnl_by_asset,
+        "cost_by_asset": cost_by_asset,
+        "pnl_by_session": dict(sorted(pnl_by_session.items())),
+    }
+
+
+def _compute_orb_diagnostics(
+    asset_frames: dict[str, pd.DataFrame],
+    *,
+    performance: PortfolioPerformance | BacktestResult,
+    signal_col: str | None,
+    returns_col: str,
+    returns_type: str,
+    alignment: str,
+    label_col: str | None,
+) -> dict[str, Any]:
+    if not any("orb_candidate" in frame.columns for frame in asset_frames.values()):
+        return {}
+
+    candidate_count_by_asset: dict[str, int] = {}
+    trade_count_by_asset: dict[str, int] = {}
+    success_rate_by_asset: dict[str, float | None] = {}
+    candidate_count_by_session: dict[str, int] = {}
+    trade_count_by_session: dict[str, int] = {}
+    success_values_by_session: dict[str, list[float]] = {}
+    range_width_values: list[pd.Series] = []
+    total_rows = 0
+    total_candidates = 0
+    total_accepted = 0
+    long_candidates = 0
+    short_candidates = 0
+
+    for asset, frame in sorted(asset_frames.items()):
+        if "orb_candidate" not in frame.columns:
+            continue
+        oos_mask = (
+            frame["pred_is_oos"].fillna(False).astype(bool)
+            if "pred_is_oos" in frame.columns
+            else pd.Series(True, index=frame.index, dtype=bool)
+        )
+        candidate = frame["orb_candidate"].fillna(0.0).astype(float).ne(0.0) & oos_mask
+        side = frame.get("orb_side", pd.Series(0.0, index=frame.index)).astype(float)
+        if signal_col and signal_col in frame.columns:
+            accepted = candidate & frame[signal_col].fillna(0.0).astype(float).abs().gt(1e-12)
+        else:
+            accepted = pd.Series(False, index=frame.index, dtype=bool)
+
+        sessions = frame.get("orb_session_name", pd.Series(pd.NA, index=frame.index)).astype("object")
+        sessions = sessions.where(sessions.notna(), other="unknown").astype(str)
+        candidate_count = int(candidate.sum())
+        accepted_count = int(accepted.sum())
+        candidate_count_by_asset[asset] = candidate_count
+        trade_count_by_asset[asset] = accepted_count
+        success_rate_by_asset[asset] = _candidate_success_rate(frame, mask=candidate, label_col=label_col)
+        total_rows += int(oos_mask.sum())
+        total_candidates += candidate_count
+        total_accepted += accepted_count
+        long_candidates += int((candidate & side.gt(0.0)).sum())
+        short_candidates += int((candidate & side.lt(0.0)).sum())
+
+        if "orb_range_width_atr" in frame.columns and candidate_count > 0:
+            range_width_values.append(frame.loc[candidate, "orb_range_width_atr"].astype(float))
+
+        for session_name, count in candidate.groupby(sessions).sum().items():
+            if session_name == "unknown":
+                continue
+            candidate_count_by_session[session_name] = candidate_count_by_session.get(session_name, 0) + int(count)
+        for session_name, count in accepted.groupby(sessions).sum().items():
+            if session_name == "unknown":
+                continue
+            trade_count_by_session[session_name] = trade_count_by_session.get(session_name, 0) + int(count)
+        if label_col and label_col in frame.columns:
+            labels = pd.to_numeric(frame[label_col], errors="coerce")
+            valid = candidate & labels.notna()
+            for session_name, values in labels.loc[valid].groupby(sessions.loc[valid]):
+                if session_name == "unknown":
+                    continue
+                success_values_by_session.setdefault(str(session_name), []).extend(values.astype(float).tolist())
+
+    pnl_payload = _orb_pnl_attribution(
+        asset_frames,
+        performance=performance,
+        returns_col=returns_col,
+        returns_type=returns_type,
+        alignment=alignment,
+    )
+    range_values = pd.concat(range_width_values).dropna() if range_width_values else pd.Series(dtype=float)
+    success_rates = {
+        session: float(np.mean(values)) if values else None
+        for session, values in sorted(success_values_by_session.items())
+    }
+    breakout_success_values = [
+        value
+        for value in success_rate_by_asset.values()
+        if value is not None and np.isfinite(float(value))
+    ]
+    primary = {
+        "orb_candidate_count": int(total_candidates),
+        "orb_candidate_rate": float(total_candidates / max(total_rows, 1)),
+        "orb_accepted_trade_count": int(total_accepted),
+        "orb_long_candidate_count": int(long_candidates),
+        "orb_short_candidate_count": int(short_candidates),
+        "average_orb_range_width_atr": float(range_values.mean()) if not range_values.empty else None,
+        "breakout_success_rate": float(np.mean(breakout_success_values)) if breakout_success_values else None,
+    }
+    return {
+        **primary,
+        "candidate_count_by_asset": dict(sorted(candidate_count_by_asset.items())),
+        "trade_count_by_asset": dict(sorted(trade_count_by_asset.items())),
+        "candidate_count_by_session": dict(sorted(candidate_count_by_session.items())),
+        "trade_count_by_session": dict(sorted(trade_count_by_session.items())),
+        "success_rate_by_asset": dict(sorted(success_rate_by_asset.items())),
+        "success_rate_by_session": success_rates,
+        **pnl_payload,
+        "primary_summary_fields": primary,
+    }
+
+
 def _compute_ftmo_objective(
     *,
     primary_summary: dict[str, Any],
@@ -1642,10 +1876,24 @@ def build_single_asset_evaluation(
             execution=performance.positions,
         )
     )
+    orb_diagnostics = _compute_orb_diagnostics(
+        {asset: df},
+        performance=performance,
+        signal_col=str(dict(backtest_cfg or {}).get("signal_col", "")),
+        returns_col=str(dict(backtest_cfg or {}).get("returns_col", "")),
+        returns_type=str(dict(backtest_cfg or {}).get("returns_type", "simple")),
+        alignment="inner",
+        label_col=str(target_meta.get("label_col")) if target_meta.get("label_col") is not None else None,
+    )
+    primary_summary = dict(oos_summary or performance.summary)
+    primary_summary.update(dict(orb_diagnostics.get("primary_summary_fields", {}) or {}))
+    for key in ("flat_rate", "long_rate", "short_rate"):
+        if policy_summary.get(key) is not None:
+            primary_summary[key] = policy_summary[key]
 
     return EvaluationPayload(
         scope="strict_oos_only",
-        primary_summary=oos_summary or dict(performance.summary),
+        primary_summary=primary_summary,
         timeline_summary=dict(performance.summary),
         oos_only_summary=oos_summary,
         extra={
@@ -1656,6 +1904,7 @@ def build_single_asset_evaluation(
             "model_oos_regression_summary": dict(model_meta.get("oos_regression_summary", {}) or {}),
             "model_oos_volatility_summary": dict(model_meta.get("oos_volatility_summary", {}) or {}),
             "model_oos_policy_summary": policy_summary,
+            "orb_diagnostics": orb_diagnostics,
             "asset": asset,
         },
     ).to_dict()
@@ -1705,6 +1954,7 @@ def build_portfolio_evaluation(
         periods_per_year=periods_per_year,
         mask=oos_mask,
     )
+    primary_summary = dict(oos_summary or performance.summary)
     portfolio_guard_cfg = dict(dict(risk_cfg or {}).get("portfolio_guard", {}) or {})
     ftmo_metrics = compute_ftmo_style_metrics(
         net_returns=performance.net_returns.loc[oos_mask],
@@ -1715,7 +1965,7 @@ def build_portfolio_evaluation(
         weekly_anchor=str(portfolio_guard_cfg.get("weekly_anchor", "W-FRI") or "W-FRI"),
     )
     ftmo_objective = _compute_ftmo_objective(
-        primary_summary=oos_summary or dict(performance.summary),
+        primary_summary=primary_summary,
         ftmo_metrics=ftmo_metrics,
         weekly_return_target=portfolio_guard_cfg.get("weekly_return_target"),
         weekly_drawdown_limit=portfolio_guard_cfg.get("weekly_drawdown"),
@@ -1768,9 +2018,23 @@ def build_portfolio_evaluation(
         per_asset_policy_map[only_asset] = summary
     policy_summary = dict(model_meta.get("oos_policy_summary", {}) or {})
     policy_summary.update(_weighted_signal_summary(per_asset_policy))
+    target_meta = dict(model_meta.get("target", {}) or {})
+    orb_diagnostics = _compute_orb_diagnostics(
+        asset_frames,
+        performance=performance,
+        signal_col=signal_col,
+        returns_col=str(dict(backtest_cfg or {}).get("returns_col", "")),
+        returns_type=str(dict(backtest_cfg or {}).get("returns_type", "simple")),
+        alignment=alignment,
+        label_col=str(target_meta.get("label_col")) if target_meta.get("label_col") is not None else None,
+    )
+    primary_summary.update(dict(orb_diagnostics.get("primary_summary_fields", {}) or {}))
+    for key in ("flat_rate", "long_rate", "short_rate"):
+        if policy_summary.get(key) is not None:
+            primary_summary[key] = policy_summary[key]
     return EvaluationPayload(
         scope="strict_oos_only",
-        primary_summary=oos_summary or dict(performance.summary),
+        primary_summary=primary_summary,
         timeline_summary=dict(performance.summary),
         oos_only_summary=oos_summary,
         extra={
@@ -1786,6 +2050,7 @@ def build_portfolio_evaluation(
             "model_oos_volatility_summary": dict(model_meta.get("oos_volatility_summary", {}) or {}),
             "model_oos_policy_summary": policy_summary,
             "signal_diagnostics_by_asset": per_asset_policy_map,
+            "orb_diagnostics": orb_diagnostics,
             "folds_by_asset": {
                 asset: list(meta.get("folds", []) or [])
                 for asset, meta in dict(model_meta.get("per_asset", {}) or {}).items()

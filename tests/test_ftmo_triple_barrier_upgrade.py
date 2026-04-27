@@ -315,6 +315,24 @@ def test_new_ftmo_triple_barrier_configs_load_and_preserve_target_kind() -> None
     assert meta_cfg["signals"]["kind"] == "meta_probability_side"
     assert meta_cfg["backtest"]["signal_col"] == "signal_meta_side"
     assert meta_cfg["risk"]["sizing"]["confidence_mode"] == "meta_success"
+    assert meta_cfg["model"]["feature_selectors"]["exact"] == ["primary_side"]
+    assert meta_cfg["model"]["feature_selectors"]["include"] == [
+        {"exact": "shock_strength"},
+        {"exact": "shock_distance_ema"},
+        {"startswith": "shock_ret_z_"},
+        {"startswith": "shock_atr_multiple_"},
+    ]
+    assert meta_cfg["model"]["feature_selectors"]["exclude"] == [
+        {"exact": "trade_candidate"},
+        {"exact": "shock_candidate"},
+        {"exact": "shock_up_candidate"},
+        {"exact": "shock_down_candidate"},
+        {"exact": "shock_side_contrarian"},
+        {"exact": "shock_side_contrarian_active"},
+        {"startswith": "label_"},
+        {"startswith": "pred_"},
+        {"startswith": "tb_"},
+    ]
     assert conservative_cfg["model"]["target"]["kind"] == "triple_barrier"
     assert conservative_cfg["model"]["target"]["label_mode"] == "binary"
     assert meta_cfg["risk"]["sizing"]["kind"] == "ftmo_risk_per_trade"

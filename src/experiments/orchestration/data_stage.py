@@ -41,6 +41,7 @@ def load_asset_frames(
     raw_dir = storage_cfg.get("raw_dir", "data/raw")
     load_path = storage_cfg.get("load_path")
     load_paths = storage_cfg.get("load_paths")
+    allow_missing_load_paths = bool(storage_cfg.get("allow_missing_load_paths", False))
     pit_cfg = dict(data_cfg.get("pit", {}) or {})
     expected_context_obj = build_storage_context(data_cfg, symbols=symbols, pit_cfg=pit_cfg)
     expected_context = expected_context_obj.to_dict()
@@ -63,6 +64,7 @@ def load_asset_frames(
                 requested_assets=symbols,
                 start=data_cfg.get("start"),
                 end=data_cfg.get("end"),
+                allow_missing_assets=allow_missing_load_paths,
             )
             explicit_external_load = bool(snapshot_meta.get("explicit_load_path"))
             if not explicit_external_load and not snapshot_context_matches(snapshot_meta, expected_context):

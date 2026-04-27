@@ -331,6 +331,7 @@ def _load_external_csv_asset_frame_mapping(
     requested_assets: list[str] | None,
     start: str | None = None,
     end: str | None = None,
+    allow_missing_assets: bool = False,
 ) -> tuple[dict[str, pd.DataFrame], dict[str, Any]]:
     """
     Load a mapped set of per-asset external OHLCV CSV files without forcing callers to create
@@ -343,7 +344,13 @@ def _load_external_csv_asset_frame_mapping(
     assets = list(requested_assets or sorted(normalized_paths))
     missing_assets = [asset for asset in assets if asset not in normalized_paths]
     if missing_assets:
-        raise ValueError(f"load_paths is missing requested assets: {missing_assets}.")
+        if not allow_missing_assets:
+            raise ValueError(f"load_paths is missing requested assets: {missing_assets}.")
+        assets = [asset for asset in assets if asset in normalized_paths]
+        if not assets:
+            raise ValueError(
+                "load_paths contains none of the requested assets after applying allow_missing_assets=true."
+            )
 
     asset_frames: dict[str, pd.DataFrame] = {}
     metadata_by_asset: dict[str, Any] = {}
@@ -369,6 +376,8 @@ def _load_external_csv_asset_frame_mapping(
         "assets": sorted(asset_frames),
         "requested_start": start,
         "requested_end": end,
+        "allow_missing_assets": bool(allow_missing_assets),
+        "skipped_missing_assets": missing_assets,
         "per_asset": metadata_by_asset,
     }
     return asset_frames, metadata
@@ -471,6 +480,7 @@ def load_dataset_snapshot(
     requested_assets: list[str] | None = None,
     start: str | None = None,
     end: str | None = None,
+    allow_missing_assets: bool = False,
 ) -> tuple[dict[str, pd.DataFrame], dict[str, Any]]:
     """
     Load dataset snapshot for the data ingestion and storage layer and normalize it into the
@@ -486,6 +496,7 @@ def load_dataset_snapshot(
             requested_assets=requested_assets,
             start=start,
             end=end,
+            allow_missing_assets=allow_missing_assets,
         )
         metadata.setdefault("verified_fingerprint", False)
         return asset_frames, metadata

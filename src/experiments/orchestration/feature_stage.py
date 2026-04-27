@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from typing import Any
 
 import pandas as pd
@@ -39,7 +40,30 @@ def _apply_output_mapping(
     return renamed
 
 
-def apply_feature_steps(df: pd.DataFrame, steps: list[dict[str, Any]]) -> pd.DataFrame:
+def _call_feature_fn(
+    fn: Any,
+    df: pd.DataFrame,
+    params: dict[str, Any],
+    *,
+    asset: str | None,
+) -> pd.DataFrame:
+    call_params = dict(params)
+    if asset is not None and "asset" not in call_params:
+        try:
+            accepts_asset = "asset" in inspect.signature(fn).parameters
+        except (TypeError, ValueError):
+            accepts_asset = False
+        if accepts_asset:
+            call_params["asset"] = asset
+    return fn(df, **call_params)
+
+
+def apply_feature_steps(
+    df: pd.DataFrame,
+    steps: list[dict[str, Any]],
+    *,
+    asset: str | None = None,
+) -> pd.DataFrame:
     out = df
     for idx, step in enumerate(steps):
         if "step" not in step:
@@ -49,7 +73,7 @@ def apply_feature_steps(df: pd.DataFrame, steps: list[dict[str, Any]]) -> pd.Dat
         name = step["step"]
         params = step.get("params", {}) or {}
         fn = get_feature_fn(name)
-        out = fn(out, **params)
+        out = _call_feature_fn(fn, out, params, asset=asset)
         out = _apply_output_mapping(out, step.get("outputs"), owner=f"features[{idx}]")
     return out
 
@@ -76,7 +100,7 @@ def apply_steps_to_assets(
     feature_steps: list[dict[str, Any]],
 ) -> dict[str, pd.DataFrame]:
     return {
-        asset: apply_feature_steps(df, feature_steps)
+        asset: apply_feature_steps(df, feature_steps, asset=asset)
         for asset, df in sorted(asset_frames.items())
     }
 

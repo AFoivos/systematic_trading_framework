@@ -1,0 +1,193 @@
+base_config: config/experiments/ftmo_30m_xau_indices_london_newyork_opening_range_breakout_xgboost_meta_v1.yaml
+
+study:
+  study_name: optuna_ftmo_30m_xau_indices_london_newyork_opening_range_breakout_xgboost_meta_v1
+  storage: null
+  load_if_exists: false
+  sampler: tpe
+  seed: 17
+  n_trials: 64
+  timeout: null
+  n_jobs: 1
+  logging_enabled: true
+  catch_exceptions: true
+
+report:
+  enabled: true
+  output_dir: logs/experiments
+  run_name: optuna_ftmo_30m_xau_indices_london_newyork_opening_range_breakout_xgboost_meta_v1
+
+objective:
+  metric_path: evaluation.ftmo_objective.score
+  direction: maximize
+  failure_score: -1000000000000000.0
+  base_metric_weight: 1.0
+  stability_weight: 0.5
+  stability_metric_path: metrics.sharpe
+  stability_std_penalty: 1.0
+  fold_summary_path: evaluation.fold_backtest_summaries
+  constraints:
+    # Hard penalties.
+    - metric_path: evaluation.primary_summary.cumulative_return
+      op: lt
+      threshold: 0.0
+      penalty: 1000000000000.0
+      missing_penalty: 1000000000000.0
+    - metric_path: evaluation.ftmo_metrics.daily_loss_breach_count
+      op: gt
+      threshold: 0.0
+      penalty: 1000000000000.0
+      missing_penalty: 1000000000000.0
+    - metric_path: evaluation.ftmo_metrics.weekly_drawdown_breach_count
+      op: gt
+      threshold: 0.0
+      penalty: 1000000000000.0
+      missing_penalty: 1000000000000.0
+    - metric_path: evaluation.ftmo_metrics.max_total_loss_breach_count
+      op: gt
+      threshold: 0.0
+      penalty: 1000000000000.0
+      missing_penalty: 1000000000000.0
+    - metric_path: evaluation.primary_summary.max_drawdown
+      op: lt
+      threshold: -0.08
+      penalty: 1000000000000.0
+      missing_penalty: 1000000000000.0
+
+    # Strong soft penalties.
+    - metric_path: evaluation.primary_summary.cost_to_gross_pnl
+      op: gt
+      threshold: 0.25
+      penalty: 1.0
+      missing_penalty: 0.75
+    - metric_path: evaluation.primary_summary.cost_to_gross_pnl
+      op: gt
+      threshold: 0.35
+      penalty: 2.0
+      missing_penalty: 1.0
+    - metric_path: derived.entry_count
+      op: lt
+      threshold: 50.0
+      penalty: 4.0
+      missing_penalty: 4.0
+    - metric_path: derived.active_week_ratio
+      op: lt
+      threshold: 0.50
+      penalty: 3.0
+      missing_penalty: 3.0
+    - metric_path: evaluation.ftmo_metrics.weekly_target_hit_ratio
+      op: le
+      threshold: 0.0
+      penalty: 1.0
+      missing_penalty: 1.0
+    - metric_path: evaluation.ftmo_metrics.best_day_concentration
+      op: gt
+      threshold: 0.45
+      penalty: 1.25
+      missing_penalty: 0.75
+    - metric_path: evaluation.primary_summary.profit_factor
+      op: lt
+      threshold: 1.15
+      penalty: 1.5
+      missing_penalty: 1.5
+    - metric_path: evaluation.primary_summary.sharpe
+      op: lt
+      threshold: 1.0
+      penalty: 1.5
+      missing_penalty: 1.5
+
+pruning:
+  enabled: false
+  metric_path: classification_metrics.roc_auc
+  direction: maximize
+  stage_filter: [xgboost_clf]
+  pruner: none
+  n_startup_trials: 0
+  n_warmup_steps: 0
+  interval_steps: 1
+
+search_space:
+  - name: enabled_sessions
+    path: features.15.params.enabled_sessions
+    kind: categorical
+    choices:
+      - [london]
+      - [new_york_xau, new_york_cash]
+      - [london, new_york_xau, new_york_cash]
+
+  - name: opening_range_bars
+    path: features.15.params.opening_range_bars
+    kind: categorical
+    choices: [1, 2, 3]
+  - name: min_range_atr
+    path: features.15.params.min_range_atr
+    kind: categorical
+    choices: [0.3, 0.4, 0.5, 0.7]
+  - name: max_range_atr
+    path: features.15.params.max_range_atr
+    kind: categorical
+    choices: [1.5, 2.0, 2.5, 3.0]
+  - name: breakout_buffer_atr
+    path: features.15.params.breakout_buffer_atr
+    kind: categorical
+    choices: [0.05, 0.10, 0.15, 0.20]
+  - name: post_breakout_active_bars
+    path: features.15.params.post_breakout_active_bars
+    kind: categorical
+    choices: [2, 3, 4]
+
+  - name: tb_upper_mult
+    path: model.target.upper_mult
+    kind: categorical
+    choices: [1.5, 2.0, 2.5, 3.0]
+  - name: tb_max_holding
+    path: model.target.max_holding
+    kind: categorical
+    choices: [6, 8, 12]
+  - name: tb_vol_window
+    path: model.target.vol_window
+    kind: categorical
+    choices: [12, 24, 48]
+
+  - name: meta_signal_threshold
+    path: signals.params.threshold
+    kind: categorical
+    choices: [0.50, 0.52, 0.54, 0.56, 0.58]
+  - name: meta_signal_upper_alias
+    path: signals.params.upper
+    kind: categorical
+    choices: [0.50, 0.52, 0.54, 0.56, 0.58]
+
+  - name: ftmo_risk_per_trade
+    path: risk.sizing.risk_per_trade
+    kind: categorical
+    choices: [0.0025, 0.003, 0.004, 0.006]
+  - name: ftmo_confidence_floor
+    path: risk.sizing.confidence_floor
+    kind: categorical
+    choices: [0.50, 0.52, 0.54, 0.56]
+  - name: ftmo_confidence_power
+    path: risk.sizing.confidence_power
+    kind: categorical
+    choices: [1.0, 1.25]
+  - name: ftmo_sizing_max_leverage
+    path: risk.sizing.max_leverage
+    kind: categorical
+    choices: [1.0, 1.25]
+
+  - name: xgb_max_depth
+    path: model.params.max_depth
+    kind: categorical
+    choices: [2, 3]
+  - name: xgb_reg_lambda
+    path: model.params.reg_lambda
+    kind: categorical
+    choices: [5.0, 10.0, 20.0]
+  - name: xgb_n_estimators
+    path: model.params.n_estimators
+    kind: categorical
+    choices: [150, 250]
+  - name: xgb_learning_rate
+    path: model.params.learning_rate
+    kind: categorical
+    choices: [0.02, 0.03, 0.05]

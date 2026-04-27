@@ -14,6 +14,8 @@ from src.features import (
     add_macd_features,
     add_macro_context_features,
     add_mfi_features,
+    add_multi_timeframe_features,
+    add_opening_range_breakout_features,
     add_ppo_features,
     add_price_momentum_features,
     add_regime_context_features,
@@ -92,6 +94,8 @@ FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
     "support_resistance_v2": add_support_resistance_v2_features,
     "macro_context": add_macro_context_features,
     "feature_transforms": add_feature_transforms,
+    "multi_timeframe": add_multi_timeframe_features,
+    "opening_range_breakout": add_opening_range_breakout_features,
 }
 
 SIGNAL_REGISTRY: Mapping[str, SignalFn] = {

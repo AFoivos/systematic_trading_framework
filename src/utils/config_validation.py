@@ -147,6 +147,14 @@ def _validate_string_or_list(value: Any, *, field: str) -> None:
             raise ConfigValidationError(f"{field}[{idx}] must be a non-empty string.")
 
 
+def _validate_clock_string(value: Any, *, field: str) -> None:
+    if not isinstance(value, str) or not re.fullmatch(r"\d{2}:\d{2}", value.strip()):
+        raise ConfigValidationError(f"{field} must use HH:MM format.")
+    hour, minute = (int(part) for part in value.split(":"))
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        raise ConfigValidationError(f"{field} must be a valid HH:MM time.")
+
+
 def _validate_selector_mapping(value: Any, *, field: str) -> None:
     if not isinstance(value, dict):
         raise ConfigValidationError(f"{field} must be a selector mapping.")
@@ -351,6 +359,9 @@ def validate_data_block(data: dict[str, Any]) -> None:
             raise ConfigValidationError("Specify either data.storage.load_path or data.storage.load_paths, not both.")
         has_load_path = isinstance(load_path, str) and bool(load_path.strip())
         has_load_paths = isinstance(load_paths, dict) and bool(load_paths)
+        allow_missing_load_paths = storage_for_external_csv.get("allow_missing_load_paths", False)
+        if "allow_missing_load_paths" in storage_for_external_csv and not isinstance(allow_missing_load_paths, bool):
+            raise ConfigValidationError("data.storage.allow_missing_load_paths must be boolean.")
         if not has_load_path and not has_load_paths:
             raise ConfigValidationError(
                 "data.storage.load_path or data.storage.load_paths is required when data.source='dukascopy_csv'."
@@ -364,7 +375,7 @@ def validate_data_block(data: dict[str, Any]) -> None:
                 if not isinstance(path, str) or not path.strip():
                     raise ConfigValidationError("data.storage.load_paths values must be non-empty strings.")
             missing_load_paths = [symbol for symbol in requested_symbols if symbol not in load_paths]
-            if missing_load_paths:
+            if missing_load_paths and not bool(allow_missing_load_paths):
                 raise ConfigValidationError(
                     f"data.storage.load_paths is missing configured symbols: {missing_load_paths}."
                 )
@@ -459,6 +470,8 @@ def validate_data_block(data: dict[str, Any]) -> None:
         for key in ("save_raw", "save_processed"):
             if key in storage and not isinstance(storage[key], bool):
                 raise ConfigValidationError(f"data.storage.{key} must be boolean.")
+        if "allow_missing_load_paths" in storage and not isinstance(storage["allow_missing_load_paths"], bool):
+            raise ConfigValidationError("data.storage.allow_missing_load_paths must be boolean.")
 
 
 def validate_features_block(features: Any) -> None:
@@ -552,6 +565,133 @@ def validate_features_block(features: Any) -> None:
                     raise ConfigValidationError("features[].params.windows must be a non-empty list of integers.")
                 for idx, window in enumerate(windows):
                     _positive_int(window, field=f"features[].params.windows[{idx}]")
+        if step["step"] == "multi_timeframe":
+            params = step.get("params") or {}
+            for key in (
+                "price_col",
+                "high_col",
+                "low_col",
+                "open_col",
+                "volume_col",
+                "returns_col",
+                "timezone",
+                "timestamp_col",
+                "asset_col",
+            ):
+                if key in params and params[key] is not None and not isinstance(params[key], str):
+                    raise ConfigValidationError(f"features[].params.{key} must be a string when provided.")
+            if "base_interval_minutes" in params:
+                _positive_int(params["base_interval_minutes"], field="features[].params.base_interval_minutes")
+            timeframes = params.get("timeframes")
+            if timeframes is not None:
+                if not isinstance(timeframes, (list, tuple)) or not timeframes:
+                    raise ConfigValidationError("features[].params.timeframes must be a non-empty list[str].")
+                for idx, timeframe in enumerate(timeframes):
+                    if not isinstance(timeframe, str) or not timeframe.strip():
+                        raise ConfigValidationError(f"features[].params.timeframes[{idx}] must be a non-empty string.")
+            for key in (
+                "volatility_window",
+                "trend_ema_span",
+                "trend_sma_window",
+                "atr_window",
+                "adx_window",
+                "regime_short_window",
+                "regime_long_window",
+            ):
+                if key in params and params[key] is not None:
+                    _positive_int(params[key], field=f"features[].params.{key}")
+            if "shift_to_last_closed" in params and not isinstance(params["shift_to_last_closed"], bool):
+                raise ConfigValidationError("features[].params.shift_to_last_closed must be boolean.")
+        if step["step"] == "opening_range_breakout":
+            params = step.get("params") or {}
+            for key in (
+                "timestamp_col",
+                "timezone_input",
+                "price_col",
+                "open_col",
+                "high_col",
+                "low_col",
+                "close_col",
+                "atr_col",
+                "volatility_col",
+                "asset_col",
+            ):
+                if key in params and params[key] is not None and not isinstance(params[key], str):
+                    raise ConfigValidationError(f"features[].params.{key} must be a string when provided.")
+            sessions = params.get("sessions")
+            if sessions is not None:
+                if not isinstance(sessions, list) or not sessions:
+                    raise ConfigValidationError("features[].params.sessions must be a non-empty list.")
+                seen_sessions: set[str] = set()
+                for session_idx, raw_session in enumerate(sessions):
+                    field_prefix = f"features[].params.sessions[{session_idx}]"
+                    if not isinstance(raw_session, dict):
+                        raise ConfigValidationError(f"{field_prefix} must be a mapping.")
+                    name = raw_session.get("name")
+                    if not isinstance(name, str) or not name.strip():
+                        raise ConfigValidationError(f"{field_prefix}.name must be a non-empty string.")
+                    if name in seen_sessions:
+                        raise ConfigValidationError(f"Duplicate ORB session name: {name}.")
+                    seen_sessions.add(name)
+                    if not isinstance(raw_session.get("timezone"), str) or not raw_session.get("timezone", "").strip():
+                        raise ConfigValidationError(f"{field_prefix}.timezone must be a non-empty string.")
+                    _validate_clock_string(raw_session.get("session_open_time"), field=f"{field_prefix}.session_open_time")
+                    _validate_clock_string(raw_session.get("trade_until_time"), field=f"{field_prefix}.trade_until_time")
+                    if raw_session.get("extended_trade_until_time") is not None:
+                        _validate_clock_string(
+                            raw_session.get("extended_trade_until_time"),
+                            field=f"{field_prefix}.extended_trade_until_time",
+                        )
+                    if "opening_range_bars" in raw_session:
+                        _positive_int(raw_session["opening_range_bars"], field=f"{field_prefix}.opening_range_bars")
+            enabled_sessions = params.get("enabled_sessions")
+            if enabled_sessions is not None:
+                if not isinstance(enabled_sessions, (list, tuple)) or not enabled_sessions:
+                    raise ConfigValidationError("features[].params.enabled_sessions must be a non-empty list[str].")
+                for idx, session_name in enumerate(enabled_sessions):
+                    if not isinstance(session_name, str) or not session_name.strip():
+                        raise ConfigValidationError(
+                            f"features[].params.enabled_sessions[{idx}] must be a non-empty string."
+                        )
+            for mapping_key in ("asset_session_map", "asset_alias_map"):
+                mapping = params.get(mapping_key)
+                if mapping is not None:
+                    if not isinstance(mapping, dict) or not mapping:
+                        raise ConfigValidationError(f"features[].params.{mapping_key} must be a non-empty mapping.")
+                    for key, value in mapping.items():
+                        if not isinstance(key, str) or not key.strip():
+                            raise ConfigValidationError(f"features[].params.{mapping_key} keys must be non-empty strings.")
+                        if mapping_key == "asset_alias_map":
+                            if not isinstance(value, str) or not value.strip():
+                                raise ConfigValidationError(
+                                    f"features[].params.{mapping_key}.{key} must be a non-empty string."
+                                )
+                        else:
+                            if not isinstance(value, (list, tuple)) or not value:
+                                raise ConfigValidationError(
+                                    f"features[].params.{mapping_key}.{key} must be a non-empty list[str]."
+                                )
+                            for idx, session_name in enumerate(value):
+                                if not isinstance(session_name, str) or not session_name.strip():
+                                    raise ConfigValidationError(
+                                        f"features[].params.{mapping_key}.{key}[{idx}] must be a non-empty string."
+                                    )
+            for key in ("min_range_atr", "max_range_atr", "breakout_buffer_atr"):
+                if params.get(key) is not None:
+                    value = _finite_number(params[key], field=f"features[].params.{key}")
+                    if key == "max_range_atr" and value <= 0.0:
+                        raise ConfigValidationError(f"features[].params.{key} must be > 0.")
+                    if key != "max_range_atr" and value < 0.0:
+                        raise ConfigValidationError(f"features[].params.{key} must be >= 0.")
+            if params.get("min_range_atr") is not None and params.get("max_range_atr") is not None:
+                if float(params["min_range_atr"]) > float(params["max_range_atr"]):
+                    raise ConfigValidationError("features[].params.min_range_atr must be <= max_range_atr.")
+            for key in ("post_breakout_active_bars", "max_breakouts_per_session", "opening_range_bars"):
+                if key in params and params[key] is not None:
+                    _positive_int(params[key], field=f"features[].params.{key}")
+            for key in ("use_close_breakout", "allow_reversal_same_session", "use_extended_trade_until"):
+                if key in params and not isinstance(params[key], bool):
+                    raise ConfigValidationError(f"features[].params.{key} must be boolean.")
         if step["step"] in {"atr", "adx"}:
             params = step.get("params") or {}
             if "window" in params and params["window"] is not None:

@@ -841,7 +841,7 @@ def test_ftmo_triple_barrier_meta_optuna_yaml_matches_base_config_contract() -> 
     assert trial_cfg["model"]["target"]["side_col"] == "primary_side"
     assert trial_cfg["model"]["target"]["candidate_col"] == "trade_candidate"
     assert trial_cfg["model"]["target"]["max_holding"] == 12
-    assert trial_cfg["model"]["target"]["upper_mult"] == pytest.approx(1.5)
+    assert trial_cfg["model"]["target"]["upper_mult"] == pytest.approx(1.0)
     assert trial_cfg["model"]["target"]["lower_mult"] == pytest.approx(1.0)
     assert trial_cfg["model"]["target"]["vol_window"] == 12
 

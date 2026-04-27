@@ -1170,6 +1170,10 @@ def build_study_objective(
             dict(getattr(result, "evaluation", {}).get("ftmo_objective", {}) or {}),
         )
         trial.set_user_attr(
+            "orb_diagnostics",
+            dict(getattr(result, "evaluation", {}).get("orb_diagnostics", {}) or {}),
+        )
+        trial.set_user_attr(
             "fold_backtest_summaries",
             list(getattr(result, "evaluation", {}).get("fold_backtest_summaries", []) or []),
         )
@@ -1270,6 +1274,7 @@ def _flat_trial_row(trial: Any) -> dict[str, Any]:
     ftmo_metrics = dict(user_attrs.get("ftmo_metrics", {}) or {})
     ftmo_objective = dict(user_attrs.get("ftmo_objective", {}) or {})
     derived_metrics = dict(user_attrs.get("derived_metrics", {}) or {})
+    orb_diagnostics = dict(user_attrs.get("orb_diagnostics", {}) or {})
 
     row: dict[str, Any] = {
         "number": getattr(trial, "number", None),
@@ -1291,6 +1296,14 @@ def _flat_trial_row(trial: Any) -> dict[str, Any]:
         row[f"ftmo_objective_{key}"] = value
     for key, value in sorted(derived_metrics.items()):
         row[f"derived_{key}"] = value
+    for key, value in sorted(orb_diagnostics.items()):
+        if key == "primary_summary_fields":
+            continue
+        if isinstance(value, Mapping):
+            for inner_key, inner_value in sorted(dict(value).items()):
+                row[f"orb_{key}_{inner_key}"] = inner_value
+        elif not isinstance(value, list):
+            row[f"orb_{key}"] = value
     for key in (
         "sharpe",
         "sortino",
@@ -1357,6 +1370,7 @@ def _study_best_trial_payload(study: Any, *, direction: ObjectiveDirection) -> d
         "primary_summary": dict(user_attrs.get("primary_summary", {}) or {}),
         "ftmo_metrics": dict(user_attrs.get("ftmo_metrics", {}) or {}),
         "ftmo_objective": dict(user_attrs.get("ftmo_objective", {}) or {}),
+        "orb_diagnostics": dict(user_attrs.get("orb_diagnostics", {}) or {}),
         "derived_metrics": dict(user_attrs.get("derived_metrics", {}) or {}),
         "experiment_run_name": user_attrs.get("experiment_run_name"),
         "experiment_run_dir": user_attrs.get("experiment_run_dir"),
@@ -1415,6 +1429,7 @@ def build_study_report_payload(
                     "primary_summary": dict(dict(getattr(trial, "user_attrs", {}) or {}).get("primary_summary", {}) or {}),
                     "ftmo_metrics": dict(dict(getattr(trial, "user_attrs", {}) or {}).get("ftmo_metrics", {}) or {}),
                     "ftmo_objective": dict(dict(getattr(trial, "user_attrs", {}) or {}).get("ftmo_objective", {}) or {}),
+                    "orb_diagnostics": dict(dict(getattr(trial, "user_attrs", {}) or {}).get("orb_diagnostics", {}) or {}),
                     "derived_metrics": dict(dict(getattr(trial, "user_attrs", {}) or {}).get("derived_metrics", {}) or {}),
                     "experiment_run_name": dict(getattr(trial, "user_attrs", {}) or {}).get("experiment_run_name"),
                     "experiment_run_dir": dict(getattr(trial, "user_attrs", {}) or {}).get("experiment_run_dir"),
@@ -1447,16 +1462,22 @@ def _build_study_report_markdown(payload: Mapping[str, Any]) -> str:
         summary = dict(best_trial.get("primary_summary", {}) or {})
         ftmo_metrics = dict(best_trial.get("ftmo_metrics", {}) or {})
         ftmo_objective = dict(best_trial.get("ftmo_objective", {}) or {})
+        orb_diagnostics = dict(best_trial.get("orb_diagnostics", {}) or {})
         derived = dict(best_trial.get("derived_metrics", {}) or {})
         lines.extend(
             [
                 f"- Number: `{best_trial.get('number')}`",
                 f"- Objective value: `{best_trial.get('value')}`",
                 f"- FTMO score: `{ftmo_objective.get('score', 'n/a')}`",
+                f"- Cumulative return: `{summary.get('cumulative_return', 'n/a')}`",
+                f"- Annualized return: `{summary.get('annualized_return', 'n/a')}`",
                 f"- Sharpe: `{summary.get('sharpe', 'n/a')}`",
+                f"- Sortino: `{summary.get('sortino', 'n/a')}`",
                 f"- Profit factor: `{summary.get('profit_factor', 'n/a')}`",
+                f"- Hit rate: `{summary.get('hit_rate', 'n/a')}`",
                 f"- Max drawdown: `{summary.get('max_drawdown', 'n/a')}`",
                 f"- Total turnover: `{summary.get('total_turnover', 'n/a')}`",
+                f"- Cost to gross PnL: `{summary.get('cost_to_gross_pnl', 'n/a')}`",
                 f"- Weekly target hit ratio: `{ftmo_metrics.get('weekly_target_hit_ratio', 'n/a')}`",
                 f"- Weekly drawdown breaches: `{ftmo_metrics.get('weekly_drawdown_breach_count', 'n/a')}`",
                 f"- Daily loss breaches: `{ftmo_metrics.get('daily_loss_breach_count', 'n/a')}`",
@@ -1467,6 +1488,12 @@ def _build_study_report_markdown(payload: Mapping[str, Any]) -> str:
                 "- Active weeks: "
                 f"`{derived.get('active_week_count', 'n/a')}/{derived.get('total_week_count', 'n/a')}`",
                 f"- Active week ratio: `{derived.get('active_week_ratio', 'n/a')}`",
+                f"- Candidate count by asset: `{orb_diagnostics.get('candidate_count_by_asset', {})}`",
+                f"- Trade count by asset: `{orb_diagnostics.get('trade_count_by_asset', {})}`",
+                f"- PnL by asset: `{orb_diagnostics.get('pnl_by_asset', {})}`",
+                f"- Candidate count by session: `{orb_diagnostics.get('candidate_count_by_session', {})}`",
+                f"- Trade count by session: `{orb_diagnostics.get('trade_count_by_session', {})}`",
+                f"- PnL by session: `{orb_diagnostics.get('pnl_by_session', {})}`",
                 f"- Experiment run name: `{best_trial.get('experiment_run_name', 'n/a')}`",
                 f"- Experiment run dir: `{best_trial.get('experiment_run_dir', 'n/a')}`",
                 f"- Experiment HTML report: `{best_trial.get('experiment_report_html', 'n/a')}`",
