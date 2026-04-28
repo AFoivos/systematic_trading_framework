@@ -13,6 +13,7 @@ import pytest
         ("forecast_threshold_signal", "forecast_threshold_signal"),
         ("forecast_vol_adjusted_signal", "forecast_vol_adjusted_signal"),
         ("momentum_strategy", "momentum_strategy"),
+        ("orb_candidate_side_signal", "orb_candidate_side_signal"),
         ("probability_vol_adjusted_signal", "probability_vol_adjusted_signal"),
         ("probabilistic_signal", "probabilistic_signal"),
         ("regime_filtered_signal", "regime_filtered_signal"),

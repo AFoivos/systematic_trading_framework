@@ -11,6 +11,7 @@ from .forecast_signal import (
 from .momentum_signal import compute_momentum_signal
 from .momentum_strategy import momentum_strategy
 from .meta_probability_side_signal import meta_probability_side_signal
+from .orb_candidate_side_signal import orb_candidate_side_signal
 from .probability_vol_adjusted_signal import probability_vol_adjusted_signal
 from .probabilistic_signal import probabilistic_signal
 from .regime_filtered_signal import regime_filtered_signal
@@ -39,6 +40,7 @@ __all__ = [
     "forecast_vol_adjusted_signal",
     "momentum_strategy",
     "meta_probability_side_signal",
+    "orb_candidate_side_signal",
     "probability_vol_adjusted_signal",
     "probabilistic_signal",
     "regime_filtered_signal",

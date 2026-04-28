@@ -6,6 +6,7 @@ from src.signals.forecast_threshold_signal import forecast_threshold_signal
 from src.signals.forecast_vol_adjusted_signal import forecast_vol_adjusted_signal
 from src.signals.meta_probability_side_signal import meta_probability_side_signal
 from src.signals.momentum_strategy import momentum_strategy
+from src.signals.orb_candidate_side_signal import orb_candidate_side_signal
 from src.signals.probability_vol_adjusted_signal import probability_vol_adjusted_signal
 from src.signals.probabilistic_signal import probabilistic_signal
 from src.signals.regime_filtered_signal import regime_filtered_signal
@@ -29,6 +30,7 @@ __all__ = [
     "forecast_threshold_signal",
     "forecast_vol_adjusted_signal",
     "meta_probability_side_signal",
+    "orb_candidate_side_signal",
     "probability_vol_adjusted_signal",
     "regime_filtered_signal",
     "vol_targeted_signal",

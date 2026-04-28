@@ -1462,6 +1462,10 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
         clip = _finite_number(params.get("clip", 1.0), field="signals.params.clip")
         if clip <= 0:
             raise ConfigValidationError("signals.params.clip must be > 0.")
+    if signals["kind"] == "orb_candidate_side":
+        for key in ("candidate_col", "side_col", "signal_col"):
+            if key in params and params[key] is not None and not isinstance(params[key], str):
+                raise ConfigValidationError(f"signals.params.{key} must be a string or null.")
 
 
 def validate_risk_block(risk: dict[str, Any]) -> None:
