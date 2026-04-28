@@ -1,15 +1,11 @@
 #!/bin/bash
 
 # Download Dukascopy 30-minute BID and ASK OHLCV CSV files for the FTMO
-# opening range breakout universe.
-#
 # First run:
 #   chmod +x scripts/download_dukascopy_30m.sh
 #   ./scripts/download_dukascopy_30m.sh
-#
 # Test run:
 #   FROM_DATE=2024-01-01 TO_DATE=2024-02-01 ./scripts/download_dukascopy_30m.sh
-#
 # Full run:
 #   FROM_DATE=2020-01-01 TO_DATE=2026-04-28 ./scripts/download_dukascopy_30m.sh
 
@@ -60,7 +56,11 @@ while IFS='|' read -r FRAMEWORK_SYMBOL INSTRUMENT FILE_SYMBOL; do
       --date-format "YYYY-MM-DD HH:mm:ss" \
       --time-zone UTC \
       --directory "$OUT_DIR" \
-      --file-name "$OUT_FILE"
+      --file-name "$OUT_FILE" \
+      --retries 5 \
+      --retry-pause 3000 \
+      --batch-size 5 \
+      --batch-pause 1500
 
     if [ ! -s "$OUT_PATH" ]; then
       echo "ERROR: Expected output file was not created or is empty: $OUT_PATH" >&2

@@ -97,7 +97,7 @@ def _merge_bid_ask(bid: pd.DataFrame, ask: pd.DataFrame, *, asset: str, max_bad_
 
     out["spread_close"] = out["ask_close"] - out["bid_close"]
     out["spread_bps"] = out["spread_close"] / out["close"].where(out["close"] != 0.0)
-    out = out[OUTPUT_COLUMNS].sort_values("timestamp", kind="mergesort").reset_index(drop=True)
+    out = out[list(OUTPUT_COLUMNS)].sort_values("timestamp", kind="mergesort").reset_index(drop=True)
     if out[["open", "high", "low", "close"]].isna().any().any():
         raise ValueError(f"{asset}: canonical mid OHLC contains missing values after BID/ASK merge.")
     return out
