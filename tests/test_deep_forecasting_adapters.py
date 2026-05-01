@@ -345,6 +345,108 @@ print(json.dumps({
     assert int(payload["non_negative_vol_rows"]) == int(payload["aligned_rows"])
 
 
+def test_tft_forecaster_exposes_variable_selection_importance() -> None:
+    if not _torch_available_in_subprocess():
+        pytest.skip("torch is unavailable or unstable in this environment.")
+    payload = _run_python_json(
+        """
+import json
+import numpy as np
+import pandas as pd
+from src.experiments.models import train_tft_forecaster
+from src.features import add_close_returns
+from src.features.regime_context import add_regime_context_features
+from src.features.session_context import add_session_context_features
+
+rng = np.random.default_rng(41)
+periods = 260
+idx = pd.date_range("2024-01-01", periods=periods, freq="h")
+hours = idx.hour.to_numpy(dtype=float)
+returns = (
+    0.0003 * np.sin(2.0 * np.pi * hours / 24.0)
+    + 0.0002 * np.cos(2.0 * np.pi * np.arange(periods) / 72.0)
+    + rng.normal(0.0, 0.0008, size=periods)
+)
+close = 100.0 * np.exp(np.cumsum(returns))
+df = pd.DataFrame(index=idx)
+df["close"] = close
+df["open"] = df["close"].shift(1).fillna(df["close"].iloc[0] * 0.999)
+intrabar = np.abs(rng.normal(0.0008, 0.0002, size=periods))
+df["high"] = np.maximum(df["open"], df["close"]) * (1.0 + intrabar)
+df["low"] = np.minimum(df["open"], df["close"]) * (1.0 - intrabar)
+df["volume"] = 10_000.0
+df = add_close_returns(df, log=True, col_name="close_logret")
+df = add_session_context_features(df)
+df = add_regime_context_features(
+    df,
+    price_col="close",
+    returns_col="close_logret",
+    vol_short_window=12,
+    vol_long_window=48,
+    trend_fast_span=12,
+    trend_slow_span=48,
+)
+out, _, meta = train_tft_forecaster(
+    df,
+    {
+        "feature_cols": [
+            "close_logret",
+            "hour_sin_24",
+            "hour_cos_24",
+            "regime_vol_ratio_12_48",
+            "regime_trend_ratio_12_48",
+        ],
+        "target": {"kind": "forward_return", "price_col": "close", "returns_col": "close_logret", "returns_type": "log", "horizon": 1},
+        "split": {
+            "method": "walk_forward",
+            "train_size": 180,
+            "test_size": 24,
+            "step_size": 24,
+            "expanding": False,
+            "max_folds": 1,
+        },
+        "runtime": {"seed": 7, "deterministic": True, "threads": 1, "repro_mode": "strict"},
+        "params": {
+            "lookback": 16,
+            "hidden_dim": 16,
+            "num_heads": 4,
+            "num_layers": 1,
+            "dropout": 0.0,
+            "epochs": 1,
+            "batch_size": 32,
+            "learning_rate": 1e-3,
+            "weight_decay": 1e-4,
+            "quantiles": [0.1, 0.5, 0.9],
+            "scale_target": True,
+            "min_train_samples": 32,
+        },
+    },
+    returns_col="close_logret",
+)
+mask = out["pred_is_oos"] & out["pred_q10"].notna() & out["pred_q90"].notna()
+importance = dict(meta.get("feature_importance", {}) or {})
+top_features = list(importance.get("top_features", []) or [])
+print(json.dumps({
+    "model_kind": meta["model_kind"],
+    "aligned_rows": int(mask.sum()),
+    "ordered_rows": int((out.loc[mask, "pred_q10"] <= out.loc[mask, "pred_q90"]).sum()),
+    "importance_available": bool(importance.get("available")),
+    "importance_features": len(top_features),
+    "importance_source": top_features[0]["source"] if top_features else None,
+    "architecture": meta["folds"][0].get("tft_architecture"),
+}))
+"""
+    )
+
+    assert payload["model_kind"] == "tft_forecaster"
+    assert int(payload["aligned_rows"]) > 0
+    assert int(payload["ordered_rows"]) == int(payload["aligned_rows"])
+    assert payload["importance_available"] is True
+    assert int(payload["importance_features"]) > 0
+    assert payload["importance_source"] == "feature_importances_"
+    assert payload["architecture"] == "temporal_fusion_transformer"
+
+
 def test_lstm_forecaster_rejects_short_sequence_sample_with_clear_error() -> None:
     if not _torch_available_in_subprocess():
         pytest.skip("torch is unavailable or unstable in this environment.")

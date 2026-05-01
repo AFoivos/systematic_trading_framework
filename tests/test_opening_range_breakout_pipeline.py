@@ -8,6 +8,7 @@ import pytest
 import yaml
 
 from src.features.opening_range_breakout import add_opening_range_breakout_features
+from src.experiments.orchestration.backtest_stage import run_portfolio_backtest
 from src.signals.meta_probability_side_signal import meta_probability_side_signal
 from src.targets.triple_barrier import build_triple_barrier_target
 from src.utils.config import load_experiment_config
@@ -157,6 +158,9 @@ def test_new_orb_experiment_config_validates_and_keeps_shock_config_valid() -> N
     assert cfg["features"][14]["step"] == "multi_timeframe"
     assert cfg["features"][14]["params"]["timestamp_convention"] == "bar_start"
     assert cfg["features"][15]["step"] == "opening_range_breakout"
+    assert cfg["features"][15]["params"]["enabled_sessions"] == ["london", "new_york_cash"]
+    assert cfg["features"][15]["params"]["asset_session_map"]["XAUUSD"] == ["london"]
+    assert cfg["portfolio"]["constraints"]["enforce_target_net_exposure"] is False
     assert shock_cfg["model"]["target"]["kind"] == "triple_barrier"
 
 
@@ -189,3 +193,78 @@ def test_orb_optuna_tunes_threshold_without_independent_upper_alias() -> None:
     assert "signals.params.threshold" in search_paths
     assert "signals.params.upper" not in search_paths
     assert "meta_signal_upper_alias" not in search_names
+    enabled_sessions = next(entry for entry in cfg["search_space"] if entry["name"] == "enabled_sessions")
+    assert enabled_sessions["choices"] == [["london"], ["new_york_cash"], ["london", "new_york_cash"]]
+
+
+def test_orb_portfolio_keeps_inactive_assets_flat_after_ftmo_sizing() -> None:
+    idx = pd.date_range("2024-01-01 09:00:00", periods=4, freq="30min")
+
+    def _frame(signal: list[float], candidate: list[float], accepted: list[float]) -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "close_logret": [0.0, 0.001, -0.001, 0.0],
+                "signal_orb_side": signal,
+                "orb_candidate": candidate,
+                "label_candidate": accepted,
+                "pred_prob": [0.60, 0.0, 0.0, 0.0],
+                "pred_vol": [0.01, 0.01, 0.01, 0.01],
+                "pred_is_oos": True,
+            },
+            index=idx,
+        )
+
+    asset_frames = {
+        "ACTIVE": _frame([1.0, 0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]),
+        "NO_ORB": _frame([0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]),
+        "REJECTED": _frame([0.0, 0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]),
+    }
+    cfg = {
+        "data": {"alignment": "inner"},
+        "risk": {
+            "cost_per_turnover": 0.0,
+            "slippage_per_turnover": 0.0,
+            "sizing": {
+                "kind": "ftmo_risk_per_trade",
+                "vol_col": "pred_vol",
+                "risk_per_trade": 0.001,
+                "stop_mult": 1.0,
+                "max_leverage": 1.0,
+                "min_leverage": 0.0,
+                "min_abs_signal": 0.0,
+                "confidence_col": "pred_prob",
+                "confidence_mode": "meta_success",
+                "confidence_floor": 0.52,
+            },
+            "portfolio_guard": {"enabled": False},
+            "drawdown_sizing": {"enabled": False},
+        },
+        "portfolio": {
+            "enabled": True,
+            "construction": "signal_weights",
+            "constraints": {
+                "min_weight": -1.0,
+                "max_weight": 1.0,
+                "max_gross_leverage": 1.0,
+                "target_net_exposure": 0.0,
+                "enforce_target_net_exposure": False,
+            },
+            "asset_groups": {},
+        },
+        "backtest": {
+            "signal_col": "signal_orb_side",
+            "returns_col": "close_logret",
+            "returns_type": "log",
+            "subset": "test",
+            "periods_per_year": 12096,
+            "missing_return_policy": "raise_if_exposed",
+            "min_holding_bars": 0,
+        },
+    }
+
+    _, weights, _, _ = run_portfolio_backtest(asset_frames, cfg=cfg)
+
+    assert weights.loc[idx[0], "ACTIVE"] > 0.0
+    assert weights.loc[idx[0], "NO_ORB"] == pytest.approx(0.0)
+    assert weights.loc[idx[0], "REJECTED"] == pytest.approx(0.0)
+    assert weights.loc[idx[1:], ["ACTIVE", "NO_ORB", "REJECTED"]].abs().sum().sum() == pytest.approx(0.0)

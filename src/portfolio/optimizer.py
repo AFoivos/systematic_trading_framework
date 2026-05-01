@@ -99,7 +99,11 @@ def _initial_weights(
     if prev_weights is not None:
         w0 = prev_weights.reindex(assets).fillna(0.0).astype(float).to_numpy()
     else:
-        base = constraints.target_net_exposure / max(n_assets, 1)
+        base = (
+            constraints.target_net_exposure / max(n_assets, 1)
+            if constraints.enforce_target_net_exposure
+            else 0.0
+        )
         w0 = np.full(n_assets, base, dtype=float)
     w0 = np.clip(w0, constraints.min_weight, constraints.max_weight)
     gross = np.abs(w0).sum()
@@ -207,6 +211,7 @@ def optimize_mean_variance(
                 max_weight=constraints.max_weight,
                 max_gross_leverage=constraints.max_gross_leverage,
                 target_net_exposure=constraints.target_net_exposure,
+                enforce_target_net_exposure=constraints.enforce_target_net_exposure,
                 turnover_limit=max(remaining_turnover, 0.0),
                 group_max_exposure=constraints.group_max_exposure,
             )
@@ -237,16 +242,20 @@ def optimize_mean_variance(
             trade_term = 0.5 * float(trade_aversion) * float(diff @ diff)
         return alpha_term + risk_term + trade_term
 
-    cons: list[dict] = [
-        {
-            "type": "eq",
-            "fun": lambda w, t=constraints.target_net_exposure: float(np.sum(w) - t),
-        },
+    cons: list[dict] = []
+    if constraints.enforce_target_net_exposure:
+        cons.append(
+            {
+                "type": "eq",
+                "fun": lambda w, t=constraints.target_net_exposure: float(np.sum(w) - t),
+            }
+        )
+    cons.append(
         {
             "type": "ineq",
             "fun": lambda w, g=constraints.max_gross_leverage: float(g - np.abs(w).sum()),
-        },
-    ]
+        }
+    )
 
     if effective_constraints.turnover_limit is not None and prev_np is not None:
         cons.append(

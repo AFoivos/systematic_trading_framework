@@ -112,8 +112,8 @@ search_space:
     kind: categorical
     choices:
       - [london]
-      - [new_york_xau, new_york_cash]
-      - [london, new_york_xau, new_york_cash]
+      - [new_york_cash]
+      - [london, new_york_cash]
 
   - name: opening_range_bars
     path: features.15.params.opening_range_bars

@@ -1683,6 +1683,9 @@ def validate_portfolio_block(portfolio: dict[str, Any]) -> None:
         constraints_cfg.get("target_net_exposure", 0.0),
         field="portfolio.constraints.target_net_exposure",
     )
+    enforce_target_net_exposure = constraints_cfg.get("enforce_target_net_exposure", True)
+    if not isinstance(enforce_target_net_exposure, bool):
+        raise ConfigValidationError("portfolio.constraints.enforce_target_net_exposure must be boolean.")
     turnover_limit_raw = constraints_cfg.get("turnover_limit")
     turnover_limit = (
         None
@@ -1710,6 +1713,7 @@ def validate_portfolio_block(portfolio: dict[str, Any]) -> None:
             max_weight=max_weight,
             max_gross_leverage=max_gross_leverage,
             target_net_exposure=target_net_exposure,
+            enforce_target_net_exposure=enforce_target_net_exposure,
             turnover_limit=turnover_limit,
             group_max_exposure=group_caps or None,
         )

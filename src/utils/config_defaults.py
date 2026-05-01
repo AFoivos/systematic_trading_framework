@@ -249,6 +249,7 @@ def default_portfolio_block(portfolio: dict[str, Any]) -> dict[str, Any]:
     portfolio.setdefault("risk_aversion", 5.0)
     portfolio.setdefault("trade_aversion", 0.0)
     portfolio["constraints"] = dict(portfolio.get("constraints", {}) or {})
+    portfolio["constraints"].setdefault("enforce_target_net_exposure", True)
     portfolio["asset_groups"] = dict(portfolio.get("asset_groups", {}) or {})
     return portfolio
 

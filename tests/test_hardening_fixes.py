@@ -1426,6 +1426,64 @@ def test_single_asset_backtest_summary_uses_strict_oos_rows() -> None:
     assert np.isclose(result.summary["cumulative_return"], 0.0)
 
 
+def test_single_asset_backtest_preserves_ftmo_sized_oos_signal() -> None:
+    """
+    subset=test must preserve FTMO-sized OOS exposure instead of resetting to the raw frame.
+    """
+    idx = pd.date_range("2024-01-01", periods=5, freq="D")
+    df = pd.DataFrame(
+        {
+            "signal": [0.0, 0.0, 1.0, 1.0, 0.0],
+            "close_ret": [0.0, 0.0, 0.0, 0.01, 0.0],
+            "pred_is_oos": [False, False, True, True, True],
+            "pred_prob": [0.0, 0.0, 0.9, 0.9, 0.0],
+            "pred_vol": [0.1, 0.1, 0.1, 0.1, 0.1],
+        },
+        index=idx,
+    )
+    cfg = {
+        "backtest": {
+            "returns_col": "close_ret",
+            "signal_col": "signal",
+            "periods_per_year": 252,
+            "returns_type": "simple",
+            "subset": "test",
+            "min_holding_bars": 0,
+        },
+        "risk": {
+            "cost_per_turnover": 0.0,
+            "slippage_per_turnover": 0.0,
+            "target_vol": None,
+            "max_leverage": 1.0,
+            "sizing": {
+                "kind": "ftmo_risk_per_trade",
+                "vol_col": "pred_vol",
+                "risk_per_trade": 0.1,
+                "stop_mult": 1.0,
+                "max_leverage": 1.0,
+                "min_leverage": 0.0,
+                "min_abs_signal": 0.0,
+                "confidence_col": "pred_prob",
+                "confidence_mode": "meta_success",
+                "confidence_floor": 0.5,
+                "confidence_power": 1.0,
+            },
+            "dd_guard": {"enabled": False, "max_drawdown": 0.2, "cooloff_bars": 1},
+        },
+    }
+
+    result = runner_mod._run_single_asset_backtest(
+        "AAA",
+        df,
+        cfg=cfg,
+        model_meta={"split_index": 2},
+    )
+
+    assert result.positions.iloc[0] > 0.0
+    assert result.turnover.sum() > 0.0
+    assert result.summary["gross_pnl"] > 0.0
+
+
 def test_alphavantage_retry_session_is_configured() -> None:
     """
     AlphaVantage session should have retry policy for transient HTTP failures.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from src.utils.config import load_experiment_config
 from src.utils.config_validation import (
     ConfigValidationError,
     validate_backtest_block,
@@ -16,6 +17,17 @@ from src.utils.config_validation import (
     validate_resolved_config,
     validate_signals_block,
 )
+
+
+def test_dukascopy_30m_tft_feature_config_loads() -> None:
+    cfg = load_experiment_config("config/experiments/dukascopy_30m_xauusd_tft_feature_forecast_v1.yaml")
+
+    assert cfg["data"]["source"] == "dukascopy_csv"
+    assert cfg["data"]["interval"] == "30m"
+    assert cfg["model"]["kind"] == "tft_forecaster"
+    assert cfg["model"]["target"]["returns_type"] == "log"
+    assert cfg["model"]["feature_selectors"]["strict"]["min_count"] >= 32
+    assert cfg["backtest"]["periods_per_year"] == 12096
 
 
 @pytest.mark.parametrize(
@@ -136,6 +148,23 @@ def test_validate_portfolio_block_rejects_invalid_nested_constraints() -> None:
                 "constraints": {"group_max_exposure": {"fx": "bad"}},
             }
         )
+
+    with pytest.raises(ConfigValidationError, match="enforce_target_net_exposure"):
+        validate_portfolio_block(
+            {
+                "enabled": True,
+                "construction": "signal_weights",
+                "constraints": {"enforce_target_net_exposure": "false"},
+            }
+        )
+
+    validate_portfolio_block(
+        {
+            "enabled": True,
+            "construction": "signal_weights",
+            "constraints": {"target_net_exposure": 0.0, "enforce_target_net_exposure": False},
+        }
+    )
 
 
 def test_validate_execution_block_rejects_invalid_current_weight_and_price_values() -> None:

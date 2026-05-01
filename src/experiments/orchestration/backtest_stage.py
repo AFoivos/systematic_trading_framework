@@ -44,11 +44,15 @@ def validate_returns_frame(returns: pd.DataFrame, returns_type: str) -> None:
 
 def build_portfolio_constraints(portfolio_cfg: dict[str, Any]) -> PortfolioConstraints:
     constraints_cfg = dict(portfolio_cfg.get("constraints", {}) or {})
+    enforce_target_net_exposure = constraints_cfg.get("enforce_target_net_exposure", True)
+    if not isinstance(enforce_target_net_exposure, bool):
+        raise ValueError("portfolio.constraints.enforce_target_net_exposure must be boolean.")
     return PortfolioConstraints(
         min_weight=float(constraints_cfg.get("min_weight", -1.0)),
         max_weight=float(constraints_cfg.get("max_weight", 1.0)),
         max_gross_leverage=float(constraints_cfg.get("max_gross_leverage", 1.0)),
         target_net_exposure=float(constraints_cfg.get("target_net_exposure", 0.0)),
+        enforce_target_net_exposure=enforce_target_net_exposure,
         turnover_limit=(
             float(constraints_cfg["turnover_limit"])
             if constraints_cfg.get("turnover_limit") is not None
@@ -189,7 +193,10 @@ def run_single_asset_backtest(
         if bt_subset == "test" and "pred_is_oos" in df.columns:
             oos_mask = df["pred_is_oos"].fillna(False).astype(bool)
             if bool(oos_mask.any()):
-                bt_df = df.copy()
+                # Preserve any pre-backtest signal transforms such as FTMO risk-per-trade sizing.
+                # Rebuilding from the raw df here would drop bt_signal_col for OOS rows and
+                # silently flatten the single-asset backtest despite valid accepted candidates.
+                bt_df = bt_df.copy()
                 bt_df.loc[~oos_mask, bt_signal_col] = 0.0
                 first_oos_label = oos_mask[oos_mask].index[0]
                 bt_df = bt_df.loc[first_oos_label:]

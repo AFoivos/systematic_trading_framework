@@ -149,7 +149,6 @@ features:
       volatility_col: vol_rolling_24
       enabled_sessions:
         - london
-        - new_york_xau
         - new_york_cash
       sessions:
         - name: london
@@ -171,7 +170,6 @@ features:
       asset_session_map:
         XAUUSD:
           - london
-          - new_york_xau
         US100:
           - new_york_cash
         NAS100:
@@ -389,6 +387,7 @@ portfolio:
     max_weight: 0.35
     min_weight: -1.0
     target_net_exposure: 0.0
+    enforce_target_net_exposure: false
   asset_groups: {}
 
 monitoring:

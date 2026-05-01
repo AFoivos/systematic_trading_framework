@@ -10,6 +10,7 @@ from src.evaluation.metrics import compute_ftmo_style_metrics
 from src.portfolio import (
     PortfolioConstraints,
     apply_constraints,
+    build_constrained_weights_from_exposures_over_time,
     build_optimized_weights_over_time,
     build_rolling_covariance_by_date,
     build_weights_from_signals_over_time,
@@ -101,6 +102,61 @@ def test_signal_to_raw_weights_keeps_missing_assets_flat() -> None:
     assert np.isclose(weights["C"], 0.0)
     assert np.isclose(float(weights.abs().sum()), 1.0)
     assert np.isclose(float(weights.sum()), 0.0)
+
+
+def test_constrained_exposures_can_skip_net_exposure_projection_for_sparse_events() -> None:
+    """
+    Sparse event strategies must be able to keep inactive assets flat instead of creating
+    offsetting hedge weights to satisfy a target net exposure.
+    """
+    idx = pd.date_range("2024-01-01", periods=3, freq="30min")
+    exposures = pd.DataFrame(
+        {
+            "A": [0.20, -0.10, 0.0],
+            "B": [0.00, 0.00, 0.0],
+            "C": [0.00, 0.30, 0.0],
+        },
+        index=idx,
+    )
+    constraints = PortfolioConstraints(
+        min_weight=-1.0,
+        max_weight=1.0,
+        max_gross_leverage=1.0,
+        target_net_exposure=0.0,
+        enforce_target_net_exposure=False,
+    )
+
+    weights, diagnostics = build_constrained_weights_from_exposures_over_time(
+        exposures,
+        constraints=constraints,
+    )
+
+    pd.testing.assert_series_equal(weights["B"], pd.Series(0.0, index=idx, name="B"))
+    assert weights.loc[idx[0], "A"] == pytest.approx(0.20)
+    assert weights.loc[idx[0], "C"] == pytest.approx(0.0)
+    assert weights.loc[idx[1], "A"] == pytest.approx(-0.10)
+    assert weights.loc[idx[1], "C"] == pytest.approx(0.30)
+    assert weights.loc[idx[2]].abs().sum() == pytest.approx(0.0)
+    assert diagnostics.loc[idx[0], "net_exposure"] == pytest.approx(0.20)
+
+
+def test_constrained_exposures_default_still_enforces_target_net_exposure() -> None:
+    idx = pd.date_range("2024-01-01", periods=1, freq="30min")
+    exposures = pd.DataFrame({"A": [0.20], "B": [0.0], "C": [0.0]}, index=idx)
+    constraints = PortfolioConstraints(
+        min_weight=-1.0,
+        max_weight=1.0,
+        max_gross_leverage=1.0,
+        target_net_exposure=0.0,
+    )
+
+    weights, _ = build_constrained_weights_from_exposures_over_time(
+        exposures,
+        constraints=constraints,
+    )
+
+    assert abs(float(weights.iloc[0].sum())) <= 1e-10
+    assert float(weights.loc[idx[0], ["B", "C"]].abs().sum()) > 0.0
 
 
 def test_compute_portfolio_performance_respects_min_holding_bars_via_held_weights() -> None:

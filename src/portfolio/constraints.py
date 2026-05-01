@@ -19,6 +19,7 @@ class PortfolioConstraints:
     max_weight: float = 1.0
     max_gross_leverage: float = 1.0
     target_net_exposure: float = 0.0
+    enforce_target_net_exposure: bool = True
     turnover_limit: float | None = None
     group_max_exposure: Mapping[str, float] | None = None
 
@@ -31,6 +32,8 @@ class PortfolioConstraints:
             raise ValueError("min_weight must be <= max_weight.")
         if self.max_gross_leverage <= 0:
             raise ValueError("max_gross_leverage must be > 0.")
+        if not isinstance(self.enforce_target_net_exposure, bool):
+            raise ValueError("enforce_target_net_exposure must be boolean.")
         if self.turnover_limit is not None and self.turnover_limit < 0:
             raise ValueError("turnover_limit must be >= 0 when provided.")
         if self.group_max_exposure is not None:
@@ -242,9 +245,10 @@ def _constraint_violations(
     if lower_violation > tol or upper_violation > tol:
         violations["bounds"] = max(lower_violation, upper_violation)
 
-    net_error = float(abs(float(out.sum()) - constraints.target_net_exposure))
-    if net_error > tol:
-        violations["net_exposure"] = net_error
+    if constraints.enforce_target_net_exposure:
+        net_error = float(abs(float(out.sum()) - constraints.target_net_exposure))
+        if net_error > tol:
+            violations["net_exposure"] = net_error
 
     gross_excess = float(np.abs(out).sum()) - float(constraints.max_gross_leverage)
     if gross_excess > tol:
@@ -331,12 +335,13 @@ def _project_with_turnover_limit(
             asset_to_group=asset_to_group,
             group_max_exposure=constraints.group_max_exposure,
         )
-        x0 = enforce_net_exposure(
-            x0,
-            target_net_exposure=constraints.target_net_exposure,
-            min_weight=constraints.min_weight,
-            max_weight=constraints.max_weight,
-        )
+        if constraints.enforce_target_net_exposure:
+            x0 = enforce_net_exposure(
+                x0,
+                target_net_exposure=constraints.target_net_exposure,
+                min_weight=constraints.min_weight,
+                max_weight=constraints.max_weight,
+            )
         x0 = enforce_gross_leverage(
             x0,
             max_gross_leverage=constraints.max_gross_leverage,
@@ -371,22 +376,28 @@ def _project_with_turnover_limit(
         diff = w - target_np
         return 0.5 * float(diff @ diff)
 
-    cons: list[dict[str, object]] = [
-        {
-            "type": "eq",
-            "fun": lambda w, t=constraints.target_net_exposure: float(np.sum(w) - t),
-        },
-        {
-            "type": "ineq",
-            "fun": lambda w, g=constraints.max_gross_leverage: float(g - np.abs(w).sum()),
-        },
-        {
-            "type": "ineq",
-            "fun": lambda w, p=prev_np, lim=float(constraints.turnover_limit): float(
-                lim - np.abs(w - p).sum()
-            ),
-        },
-    ]
+    cons: list[dict[str, object]] = []
+    if constraints.enforce_target_net_exposure:
+        cons.append(
+            {
+                "type": "eq",
+                "fun": lambda w, t=constraints.target_net_exposure: float(np.sum(w) - t),
+            }
+        )
+    cons.extend(
+        [
+            {
+                "type": "ineq",
+                "fun": lambda w, g=constraints.max_gross_leverage: float(g - np.abs(w).sum()),
+            },
+            {
+                "type": "ineq",
+                "fun": lambda w, p=prev_np, lim=float(constraints.turnover_limit): float(
+                    lim - np.abs(w - p).sum()
+                ),
+            },
+        ]
+    )
     if constraints.group_max_exposure and asset_to_group:
         for group, cap in constraints.group_max_exposure.items():
             idx = [i for i, a in enumerate(target.index) if asset_to_group.get(str(a)) == group]
@@ -461,12 +472,13 @@ def apply_constraints(
                 asset_to_group=asset_to_group,
                 group_max_exposure=constraints.group_max_exposure,
             )
-            out = enforce_net_exposure(
-                out,
-                target_net_exposure=constraints.target_net_exposure,
-                min_weight=constraints.min_weight,
-                max_weight=constraints.max_weight,
-            )
+            if constraints.enforce_target_net_exposure:
+                out = enforce_net_exposure(
+                    out,
+                    target_net_exposure=constraints.target_net_exposure,
+                    min_weight=constraints.min_weight,
+                    max_weight=constraints.max_weight,
+                )
             out = enforce_gross_leverage(
                 out,
                 max_gross_leverage=constraints.max_gross_leverage,
