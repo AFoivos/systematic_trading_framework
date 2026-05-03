@@ -469,7 +469,16 @@ def signal_to_raw_weights(
     if long_short:
         s = s - float(s.mean())
     else:
-        s = s.clip(lower=0.0)
+        has_long = bool(s.gt(0.0).any())
+        has_short = bool(s.lt(0.0).any())
+        if has_long and has_short:
+            raise ValueError(
+                "portfolio.long_short=false requires one-sided signals only; mixed-sign signals detected."
+            )
+        if has_short:
+            s = s.clip(upper=0.0)
+        else:
+            s = s.clip(lower=0.0)
 
     denom = float(np.abs(s).sum())
     if denom <= 0:

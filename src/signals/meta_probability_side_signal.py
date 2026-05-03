@@ -5,6 +5,8 @@ import pandas as pd
 
 from src.signals._common import resolve_signal_output_name
 
+_ALLOWED_MODES = frozenset({"long_only", "short_only", "long_short"})
+
 
 def meta_probability_side_signal(
     df: pd.DataFrame,
@@ -15,6 +17,7 @@ def meta_probability_side_signal(
     threshold: float | None = None,
     upper: float | None = None,
     clip: float = 1.0,
+    mode: str = "long_short",
 ) -> pd.Series:
     """
     Convert a meta-label success probability into same-side-only execution.
@@ -31,6 +34,8 @@ def meta_probability_side_signal(
         raise KeyError(f"candidate_col '{candidate_col}' not found in DataFrame")
     if clip <= 0:
         raise ValueError("clip must be > 0.")
+    if mode not in _ALLOWED_MODES:
+        raise ValueError(f"mode must be one of {sorted(_ALLOWED_MODES)}.")
 
     activation_threshold = float(threshold if threshold is not None else (upper if upper is not None else 0.5))
     if not 0.0 < activation_threshold < 1.0:
@@ -45,6 +50,10 @@ def meta_probability_side_signal(
     candidate = side.ne(0.0)
     if candidate_col is not None:
         candidate &= df[candidate_col].astype(float).fillna(0.0).ne(0.0)
+    if mode == "long_only":
+        candidate &= side.gt(0.0)
+    elif mode == "short_only":
+        candidate &= side.lt(0.0)
     active = probs.ge(activation_threshold) & candidate & probs.notna()
 
     signal = pd.Series(0.0, index=df.index, name=output_col, dtype=float)

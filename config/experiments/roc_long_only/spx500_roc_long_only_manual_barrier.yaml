@@ -1,0 +1,218 @@
+data:
+  source: dukascopy_csv
+  interval: 30m
+  start: null
+  end: null
+  alignment: inner
+  symbol: SPX500
+  pit:
+    timestamp_alignment:
+      source_timezone: UTC
+      output_timezone: UTC
+      normalize_daily: false
+      duplicate_policy: last
+    corporate_actions:
+      policy: none
+      adj_close_col: adj_close
+    universe_snapshot:
+      inactive_policy: raise
+  storage:
+    mode: cached_only
+    dataset_id: roc_long_only_spx500_30m
+    save_raw: false
+    save_processed: true
+    load_path: data/raw/dukascopy_30m_clean/spx500_30m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed
+
+features:
+  - step: returns
+    params:
+      log: false
+      col_name: close_ret
+  - step: volatility
+    params:
+      returns_col: close_ret
+      rolling_windows: [24]
+      ewma_spans: []
+      annualization_factor: null
+  - step: roc
+    params:
+      price_col: close
+      windows: [12]
+  - step: session_context
+    params:
+      timezone: UTC
+      include_weekend_flag: true
+  - step: regime_context
+    params:
+      price_col: close
+      returns_col: close_ret
+      vol_short_window: 24
+      vol_long_window: 168
+      vol_window_pairs:
+        - [24, 168]
+      trend_fast_span: 24
+      trend_slow_span: 72
+      vol_ratio_high_threshold: 1.25
+      vol_ratio_low_threshold: 0.85
+  - step: multi_timeframe
+    params:
+      base_interval_minutes: 30
+      timeframes: [1h, 4h]
+      price_col: close
+      high_col: high
+      low_col: low
+      open_col: open
+      volume_col: volume
+      returns_col: close_ret
+      timezone: UTC
+      shift_to_last_closed: true
+      timestamp_convention: bar_start
+  - step: feature_transforms
+    params:
+      transforms:
+        - kind: rolling_zscore
+          source_col: close
+          output_col: close_z
+          window: 252
+          shift: 1
+
+model:
+  kind: none
+  target:
+    kind: r_multiple
+    candidate_col: manual_long_signal
+    candidate_out_col: r_target_candidate
+    label_col: label
+    fwd_col: r_target_event_ret
+    price_col: close
+    open_col: open
+    high_col: high
+    low_col: low
+    volatility_col: vol_rolling_24
+    entry_price_mode: next_open
+    target_r_min: 1.0
+    stop_mode: volatility_stop
+    stop_loss_return: 0.005
+    take_profit_return: 0.010
+    tie_break: conservative
+    allow_partial_horizon: false
+    diagnostic_feature_cols:
+      - roc_12
+      - regime_vol_ratio_z_24_168
+      - close_z
+      - close_open_ratio
+      - manual_conviction_score
+
+signals:
+  kind: roc_long_only_conditions
+  params:
+    signal_col: manual_vol_adjusted_signal
+    roc_window: 12
+    roc_min: 0.0015
+    vol_short_window: 24
+    vol_long_window: 168
+    vol_z_min: -1.5
+    vol_z_max: 1.75
+    close_z_col: close_z
+    close_z_min: -0.25
+    close_z_max: 2.25
+    close_open_ratio_col: close_open_ratio
+    close_open_ratio_min: 0.0002
+    mtf_1h_col: mtf_1h_trend_score
+    mtf_1h_min: -0.001
+    mtf_4h_col: mtf_4h_trend_score
+    mtf_4h_min: -0.002
+    is_weekend_col: is_weekend
+    macro_condition_col: null
+    min_score_required: 5
+    require_all_conditions: false
+    vol_adjustment_strength: 0.9
+    min_exposure: 0.10
+    max_exposure: 1.0
+
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+
+risk:
+  cost_per_turnover: 0.00015
+  slippage_per_turnover: 0.00010
+  target_vol: null
+  max_leverage: 1.0
+  sizing: {}
+  dd_guard:
+    enabled: false
+    max_drawdown: 0.08
+    rearm_drawdown: 0.04
+    cooloff_bars: 48
+  portfolio_guard: {}
+  drawdown_sizing: {}
+  vol_col: null
+
+backtest:
+  engine: manual_barrier
+  signal_col: manual_vol_adjusted_signal
+  returns_col: close_ret
+  returns_type: simple
+  subset: full
+  min_holding_bars: 0
+  periods_per_year: 12096
+  missing_return_policy: raise_if_exposed
+  vol_col: null
+  open_col: open
+  high_col: high
+  low_col: low
+  close_col: close
+  take_profit_r: 1.8
+  stop_loss_r: 1.0
+  risk_per_trade: 0.006
+  max_holding_bars: 16
+
+portfolio:
+  enabled: false
+  construction: signal_weights
+  long_short: false
+  gross_target: 1.0
+  expected_return_col: null
+  covariance_window: 240
+  covariance_rebalance_step: 48
+  risk_aversion: 8.0
+  trade_aversion: 0.0
+  constraints:
+    max_gross_leverage: 1.0
+    max_weight: 1.0
+    min_weight: 0.0
+    target_net_exposure: 0.0
+    enforce_target_net_exposure: false
+  asset_groups: {}
+
+monitoring:
+  enabled: true
+  psi_threshold: 0.15
+  n_bins: 10
+
+execution:
+  enabled: false
+  mode: paper
+  capital: 100000.0
+  price_col: close
+  min_trade_notional: 0.0
+  current_weights: {}
+  current_prices: {}
+
+logging:
+  enabled: true
+  run_name: roc_long_only_spx500_manual_barrier
+  output_dir: logs/experiments
+  stage_tails:
+    enabled: true
+    stdout: true
+    report: true
+    limit: 10
+    max_columns: 24
+    max_assets: 1

@@ -4,11 +4,6 @@ data:
   start: '2023-01-01 00:00:00'
   end: '2024-10-01 00:00:00'
   alignment: inner
-  symbols:
-  - XAUUSD
-  - US100
-  - GER40
-  - SPX500
   pit:
     timestamp_alignment:
       source_timezone: UTC
@@ -22,17 +17,13 @@ data:
       inactive_policy: raise
   storage:
     mode: cached_only
-    dataset_id: ftmo_30m_xau_indices_orb_raw_candidate_side_no_us30_minhold0_v1
+    dataset_id: london_ny_v3_us100_ny_cash_orb_breakout_raw_long_only
     save_raw: false
     save_processed: true
-    allow_missing_load_paths: true
-    load_paths:
-      XAUUSD: data/raw/dukascopy_30m_clean/xauusd_30m.csv
-      US100: data/raw/dukascopy_30m_clean/us100_30m.csv
-      GER40: data/raw/dukascopy_30m_clean/ger40_30m.csv
-      SPX500: data/raw/dukascopy_30m_clean/spx500_30m.csv
     raw_dir: data/raw
     processed_dir: data/processed
+    load_path: data/raw/dukascopy_30m_clean/us100_30m.csv
+  symbol: US100
 features:
 - step: returns
   params:
@@ -190,49 +181,38 @@ features:
     atr_col: atr_24
     volatility_col: vol_rolling_24
     enabled_sessions:
-    - london
     - new_york_cash
     sessions:
     - name: london
       timezone: Europe/London
       session_open_time: 08:00
-      opening_range_bars: 2
+      opening_range_bars: 1
       trade_until_time: '12:00'
     - name: new_york_xau
       timezone: America/New_York
       session_open_time: 08:00
-      opening_range_bars: 2
+      opening_range_bars: 1
       trade_until_time: '12:00'
     - name: new_york_cash
       timezone: America/New_York
       session_open_time: 09:30
-      opening_range_bars: 2
+      opening_range_bars: 1
       trade_until_time: '12:00'
       extended_trade_until_time: '15:30'
     asset_session_map:
-      XAUUSD:
-      - london
       US100:
       - new_york_cash
       NAS100:
       - new_york_cash
-      US30:
-      - new_york_cash
-      SPX500:
-      - new_york_cash
-      GER40:
-      - london
-      DAX:
-      - london
     asset_alias_map:
       NAS100: US100
       DAX: GER40
-    opening_range_bars: 2
-    min_range_atr: 0.4
-    max_range_atr: 2.5
-    breakout_buffer_atr: 0.1
-    post_breakout_active_bars: 3
-    max_breakouts_per_session: 1
+    opening_range_bars: 1
+    min_range_atr: 0.3
+    max_range_atr: 3.0
+    breakout_buffer_atr: 0.05
+    post_breakout_active_bars: 2
+    max_breakouts_per_session: 2
     use_close_breakout: true
     allow_reversal_same_session: false
 - step: lags
@@ -246,106 +226,14 @@ features:
     - 12
     - 24
 model:
-  kind: xgboost_clf
-  params:
-    max_depth: 2
-    n_estimators: 200
-    learning_rate: 0.03
-    reg_lambda: 10.0
-    reg_alpha: 0.1
-    subsample: 1.0
-    colsample_bytree: 0.9
-    scale_pos_weight: 1.0
-    objective: binary:logistic
-    eval_metric: logloss
-    tree_method: hist
-    random_state: 7
-  preprocessing:
-    scaler: none
-  feature_selectors:
-    profile: ftmo_fx_intraday_balanced_v1
-    families:
-      returns_lags: true
-      volatility: true
-      trend: true
-      momentum: true
-      regime: true
-      session_time: true
-      atr_adx_range: true
-      cross_asset: false
-    exact:
-    - orb_side
-    - orb_range_width
-    - orb_range_width_atr
-    - bars_since_orb_breakout
-    - orb_close_position_in_range
-    - orb_breakout_strength_atr
-    - orb_breakout_strength_range
-    - orb_pre_breakout_volatility
-    - orb_failed_breakout_recent
-    include:
-    - startswith: mtf_1h_
-    - startswith: mtf_4h_
-    exclude:
-    - exact: orb_candidate
-    - exact: orb_breakout_up
-    - exact: orb_breakout_down
-    - exact: orb_active_window
-    - startswith: label_
-    - startswith: pred_
-    - startswith: tb_
-    drift_filter:
-      enabled: true
-      max_psi: 0.5
-      action: warn
-      apply_scope: train_only_report
-      family_drift_ratio_threshold: 0.5
-    strict:
-      min_count: 24
-  target:
-    kind: triple_barrier
-    label_mode: meta
-    candidate_col: orb_candidate
-    side_col: orb_side
-    candidate_mode: all_nonzero
-    candidate_out_col: label_candidate
-    label_col: label
-    entry_price_mode: next_open
-    price_col: close
-    open_col: open
-    high_col: high
-    low_col: low
-    returns_col: close_logret
-    returns_type: log
-    upper_mult: 2.0
-    lower_mult: 1.0
-    max_holding: 8
-    vol_window: 24
-    min_vol: 0.0001
-    neutral_label: lower
-    tie_break: lower
-    add_r_multiple: true
-    r_col: tb_event_r
-    oriented_r_col: tb_oriented_r
-    event_ret_col: tb_event_ret
-  split:
-    method: walk_forward
-    train_size: 12096
-    test_size: 480
-    step_size: 480
-    expanding: true
-    max_folds: 12
-  overlay:
-    kind: garch
-    params:
-      returns_input_col: close_logret
-      mean_model: zero
+  kind: none
 signals:
   kind: orb_candidate_side
   params:
     candidate_col: orb_candidate
     side_col: orb_side
     signal_col: signal_orb_side
+    mode: long_only
 runtime:
   seed: 7
   repro_mode: strict
@@ -359,8 +247,8 @@ risk:
   max_leverage: 1.0
   sizing:
     kind: ftmo_risk_per_trade
-    vol_col: pred_vol
-    risk_per_trade: 0.003
+    vol_col: vol_rolling_24
+    risk_per_trade: 0.0025
     confidence_col: null
     confidence_mode: meta_success
     confidence_floor: null
@@ -405,15 +293,15 @@ backtest:
   signal_col: signal_orb_side
   returns_col: close_logret
   returns_type: log
-  subset: test
+  subset: full
   min_holding_bars: 0
   periods_per_year: 12096
   missing_return_policy: raise_if_exposed
   vol_col: null
 portfolio:
-  enabled: true
+  enabled: false
   construction: signal_weights
-  long_short: true
+  long_short: false
   gross_target: 1.0
   expected_return_col: null
   covariance_window: 240
@@ -423,7 +311,7 @@ portfolio:
   constraints:
     max_gross_leverage: 1.0
     max_weight: 0.35
-    min_weight: -1.0
+    min_weight: 0.0
     target_net_exposure: 0.0
     enforce_target_net_exposure: false
   asset_groups: {}
@@ -441,7 +329,7 @@ execution:
   current_prices: {}
 logging:
   enabled: true
-  run_name: ftmo_30m_xau_indices_orb_raw_candidate_side_no_us30_minhold0_v1
+  run_name: london_ny_v3_us100_ny_cash_orb_breakout_raw_long_only
   output_dir: logs/experiments
   stage_tails:
     enabled: true

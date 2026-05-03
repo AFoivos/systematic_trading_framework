@@ -1,0 +1,12 @@
+docker compose run --rm app python -m src.experiments.optuna_search config/optuna/optuna_ftmo_fx_intraday_panel_4pair_xgboost_garch_2y_v1.yaml
+
+docker compose run --rm app python -m src.experiments.runner config/experiments/ftmo_fx_intraday_panel_4pair_xgboost_triple_barrier_meta_v2_trial34_plus_bars_since_shock.yaml
+
+docker compose run --rm app python -m src.experiments.optuna_search config/optuna/optuna_ftmo_fx_intraday_panel_4pair_xgboost_triple_barrier_meta_v2_narrow_costaware.yaml
+
+docker compose exec app python -m src.experiments.runner config/experiments/ftmo_30m_xau_indices_london_newyork_opening_range_breakout_xgboost_meta_v1.yaml
+
+
+docker compose run --rm app python -m src.experiments.runner config/experiments/config_used.yaml
+
+docker compose run --rm app python -m src.experiments.optuna_search config/optuna/optuna_roc_long_only_xauusd_test.yaml

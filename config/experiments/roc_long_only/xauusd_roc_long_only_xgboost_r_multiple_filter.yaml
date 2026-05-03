@@ -1,0 +1,291 @@
+data:
+  source: dukascopy_csv
+  interval: 30m
+  start: null
+  end: null
+  alignment: inner
+  symbol: XAUUSD
+  pit:
+    timestamp_alignment:
+      source_timezone: UTC
+      output_timezone: UTC
+      normalize_daily: false
+      duplicate_policy: last
+    corporate_actions:
+      policy: none
+      adj_close_col: adj_close
+    universe_snapshot:
+      inactive_policy: raise
+  storage:
+    mode: cached_only
+    dataset_id: roc_long_only_xauusd_30m_xgboost_r_multiple
+    save_raw: false
+    save_processed: true
+    load_path: data/raw/dukascopy_30m_clean/xauusd_30m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed
+
+features:
+  - step: returns
+    params:
+      log: false
+      col_name: close_ret
+  - step: volatility
+    params:
+      returns_col: close_ret
+      rolling_windows: [24]
+      ewma_spans: []
+      annualization_factor: null
+  - step: roc
+    params:
+      price_col: close
+      windows: [12]
+  - step: session_context
+    params:
+      timezone: UTC
+      include_weekend_flag: true
+  - step: regime_context
+    params:
+      price_col: close
+      returns_col: close_ret
+      vol_short_window: 24
+      vol_long_window: 168
+      vol_window_pairs:
+        - [24, 168]
+      trend_fast_span: 24
+      trend_slow_span: 72
+      vol_ratio_high_threshold: 1.25
+      vol_ratio_low_threshold: 0.85
+  - step: multi_timeframe
+    params:
+      base_interval_minutes: 30
+      timeframes: [1h, 4h]
+      price_col: close
+      high_col: high
+      low_col: low
+      open_col: open
+      volume_col: volume
+      returns_col: close_ret
+      timezone: UTC
+      shift_to_last_closed: true
+      timestamp_convention: bar_start
+  - step: feature_transforms
+    params:
+      transforms:
+        - kind: rolling_zscore
+          source_col: close
+          output_col: close_z
+          window: 252
+          shift: 1
+  - step: roc_long_only_conditions
+    params:
+      roc_window: 12
+      roc_min: 0.0015
+      vol_short_window: 24
+      vol_long_window: 168
+      vol_z_min: -1.5
+      vol_z_max: 1.75
+      close_z_col: close_z
+      close_z_min: -0.25
+      close_z_max: 2.25
+      close_open_ratio_col: close_open_ratio
+      close_open_ratio_min: 0.0002
+      mtf_1h_col: mtf_1h_trend_score
+      mtf_1h_min: -0.001
+      mtf_4h_col: mtf_4h_trend_score
+      mtf_4h_min: -0.002
+      is_weekend_col: is_weekend
+      macro_condition_col: null
+      min_score_required: 5
+      require_all_conditions: false
+      vol_adjustment_strength: 0.9
+      min_exposure: 0.10
+      max_exposure: 1.0
+      long_signal_col: manual_long_candidate
+      vol_adjusted_col: manual_vol_adjusted_candidate
+      score_col: manual_conviction_score
+      all_conditions_col: manual_all_conditions_signal
+      short_signal_col: short_signal
+      combined_signal_col: combined_signal
+
+model:
+  kind: xgboost_clf
+  pred_prob_col: pred_prob
+  target:
+    kind: r_multiple
+    candidate_col: manual_long_candidate
+    candidate_out_col: r_target_candidate
+    label_col: label
+    fwd_col: r_target_event_ret
+    price_col: close
+    open_col: open
+    high_col: high
+    low_col: low
+    volatility_col: vol_rolling_24
+    entry_price_mode: next_open
+    target_r_min: 0.5
+    take_profit_r: 1.8
+    stop_loss_r: 1.0
+    max_holding_bars: 16
+    stop_mode: volatility_stop
+    stop_loss_return: 0.005
+    take_profit_return: 0.010
+    tie_break: conservative
+    allow_partial_horizon: false
+    diagnostic_feature_cols:
+      - roc_12
+      - regime_vol_ratio_z_24_168
+      - close_z
+      - close_open_ratio
+      - manual_conviction_score
+  split:
+    method: walk_forward
+    n_splits: 6
+    test_size: 11200
+    gap: 16
+    max_folds: 6
+  feature_selectors:
+    include:
+      - startswith: roc_
+      - startswith: regime_
+      - startswith: mtf_1h_
+      - startswith: mtf_4h_
+      - exact:
+          - close_z
+          - close_open_ratio
+          - manual_conviction_score
+          - cond_roc
+          - cond_vol_regime
+          - cond_mtf_1h_not_bearish
+          - cond_mtf_4h_not_bearish
+          - cond_close_z
+          - cond_bullish_candle
+    exclude:
+      - exact:
+          - label
+          - r_target_event_ret
+          - r_target_trade_r
+          - r_target_oriented_r
+          - r_target_candidate
+          - r_target_entry_price
+          - r_target_exit_price
+          - r_target_stop_price
+          - r_target_take_profit_price
+          - r_target_exit_reason
+          - r_target_bars_held
+          - r_target_hit_type
+          - r_target_hit_step
+          - manual_long_candidate
+          - manual_vol_adjusted_candidate
+          - manual_all_conditions_signal
+          - short_signal
+          - combined_signal
+          - model_filtered_long_signal
+          - pred_prob
+          - pred_is_oos
+  params:
+    n_estimators: 300
+    learning_rate: 0.03
+    max_depth: 3
+    min_child_weight: 8.0
+    subsample: 0.8
+    colsample_bytree: 0.8
+    reg_lambda: 2.0
+    reg_alpha: 0.1
+    scale_pos_weight: 1.0
+    random_state: 7
+    n_jobs: 1
+
+signals:
+  kind: manual_long_model_filter
+  params:
+    prob_col: pred_prob
+    candidate_col: manual_long_candidate
+    base_signal_col: manual_vol_adjusted_candidate
+    threshold: 0.40
+    signal_col: model_filtered_long_signal
+
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+
+risk:
+  cost_per_turnover: 0.00015
+  slippage_per_turnover: 0.00010
+  target_vol: null
+  max_leverage: 1.0
+  sizing: {}
+  dd_guard:
+    enabled: false
+    max_drawdown: 0.08
+    rearm_drawdown: 0.04
+    cooloff_bars: 48
+  portfolio_guard: {}
+  drawdown_sizing: {}
+  vol_col: null
+
+backtest:
+  engine: manual_barrier
+  signal_col: model_filtered_long_signal
+  returns_col: close_ret
+  returns_type: simple
+  subset: full
+  min_holding_bars: 0
+  periods_per_year: 12096
+  missing_return_policy: raise_if_exposed
+  vol_col: null
+  open_col: open
+  high_col: high
+  low_col: low
+  close_col: close
+  take_profit_r: 1.8
+  stop_loss_r: 1.0
+  risk_per_trade: 0.003
+  max_holding_bars: 16
+
+portfolio:
+  enabled: false
+  construction: signal_weights
+  long_short: false
+  gross_target: 1.0
+  expected_return_col: null
+  covariance_window: 240
+  covariance_rebalance_step: 48
+  risk_aversion: 8.0
+  trade_aversion: 0.0
+  constraints:
+    max_gross_leverage: 1.0
+    max_weight: 1.0
+    min_weight: 0.0
+    target_net_exposure: 0.0
+    enforce_target_net_exposure: false
+  asset_groups: {}
+
+monitoring:
+  enabled: true
+  psi_threshold: 0.15
+  n_bins: 10
+
+execution:
+  enabled: false
+  mode: paper
+  capital: 100000.0
+  price_col: close
+  min_trade_notional: 0.0
+  current_weights: {}
+  current_prices: {}
+
+logging:
+  enabled: true
+  run_name: xauusd_roc_long_only_xgboost_r_multiple_filter
+  output_dir: logs/experiments
+  stage_tails:
+    enabled: true
+    stdout: true
+    report: true
+    limit: 10
+    max_columns: 30
+    max_assets: 1

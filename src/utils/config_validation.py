@@ -474,6 +474,68 @@ def validate_data_block(data: dict[str, Any]) -> None:
             raise ConfigValidationError("data.storage.allow_missing_load_paths must be boolean.")
 
 
+def _validate_roc_long_only_conditions_params(params: dict[str, Any], *, field_prefix: str) -> None:
+    nullable_string_keys = {
+        "roc_col",
+        "regime_vol_ratio_z_col",
+        "macro_condition_col",
+        "signal_col",
+    }
+    string_keys = {
+        "close_z_col",
+        "close_open_ratio_col",
+        "mtf_1h_col",
+        "mtf_4h_col",
+        "is_weekend_col",
+        "long_signal_col",
+        "score_col",
+        "all_conditions_col",
+        "vol_adjusted_col",
+        "short_signal_col",
+        "combined_signal_col",
+    }
+    for key in nullable_string_keys:
+        if key in params and params[key] is not None and not isinstance(params[key], str):
+            raise ConfigValidationError(f"{field_prefix}.{key} must be a string or null.")
+    for key in string_keys:
+        if key in params and not isinstance(params[key], str):
+            raise ConfigValidationError(f"{field_prefix}.{key} must be a string.")
+    for key in ("roc_window", "vol_short_window", "vol_long_window"):
+        if key in params:
+            _positive_int(params[key], field=f"{field_prefix}.{key}")
+    if "min_score_required" in params:
+        _non_negative_int(params["min_score_required"], field=f"{field_prefix}.min_score_required")
+    for key in (
+        "roc_min",
+        "vol_z_min",
+        "vol_z_max",
+        "close_z_min",
+        "close_z_max",
+        "close_open_ratio_min",
+        "mtf_1h_min",
+        "mtf_4h_min",
+        "vol_adjustment_strength",
+        "min_exposure",
+        "max_exposure",
+    ):
+        if key in params:
+            _finite_number(params[key], field=f"{field_prefix}.{key}")
+    if float(params.get("vol_z_min", -1.5)) > float(params.get("vol_z_max", 1.75)):
+        raise ConfigValidationError(f"{field_prefix}.vol_z_min must be <= {field_prefix}.vol_z_max.")
+    if float(params.get("close_z_min", -0.25)) > float(params.get("close_z_max", 2.25)):
+        raise ConfigValidationError(f"{field_prefix}.close_z_min must be <= {field_prefix}.close_z_max.")
+    if float(params.get("vol_adjustment_strength", 0.9)) < 0.0:
+        raise ConfigValidationError(f"{field_prefix}.vol_adjustment_strength must be >= 0.")
+    if float(params.get("min_exposure", 0.10)) < 0.0:
+        raise ConfigValidationError(f"{field_prefix}.min_exposure must be >= 0.")
+    if float(params.get("max_exposure", 1.0)) <= 0.0:
+        raise ConfigValidationError(f"{field_prefix}.max_exposure must be > 0.")
+    if float(params.get("min_exposure", 0.10)) > float(params.get("max_exposure", 1.0)):
+        raise ConfigValidationError(f"{field_prefix}.min_exposure must be <= {field_prefix}.max_exposure.")
+    if "require_all_conditions" in params and not isinstance(params["require_all_conditions"], bool):
+        raise ConfigValidationError(f"{field_prefix}.require_all_conditions must be boolean.")
+
+
 def validate_features_block(features: Any) -> None:
     if not isinstance(features, list):
         raise ConfigValidationError("features must be a list of steps.")
@@ -489,6 +551,8 @@ def validate_features_block(features: Any) -> None:
         if "params" in step and step["params"] is not None and not isinstance(step["params"], dict):
             raise ConfigValidationError("features[].params must be a mapping when provided.")
         _validate_string_mapping(step.get("outputs"), field="features[].outputs")
+        if step["step"] == "roc_long_only_conditions":
+            _validate_roc_long_only_conditions_params(step.get("params") or {}, field_prefix="features[].params")
         if step["step"] == "feature_transforms":
             params = step.get("params") or {}
             transforms = params.get("transforms")
@@ -781,6 +845,71 @@ def validate_features_block(features: Any) -> None:
                         raise ConfigValidationError(f"features[].params.{key} must be >= 0.")
 
 
+def _flatten_target_cfg_for_validation(target: dict[str, Any]) -> dict[str, Any]:
+    out = dict(target or {})
+    params = out.pop("params", None)
+    if params is not None:
+        if not isinstance(params, dict):
+            raise ConfigValidationError("model.target.params must be a mapping when provided.")
+        out.update(dict(params))
+    return out
+
+
+def _validate_r_multiple_target_block(target: dict[str, Any]) -> None:
+    for key in (
+        "candidate_col",
+        "candidate_out_col",
+        "label_col",
+        "fwd_col",
+        "price_col",
+        "open_col",
+        "high_col",
+        "low_col",
+        "volatility_col",
+        "roc_col",
+        "regime_vol_ratio_z_col",
+    ):
+        if key in target and target[key] is not None and not isinstance(target[key], str):
+            raise ConfigValidationError(f"model.target.{key} must be a string or null.")
+    side = str(target.get("side", "long_only"))
+    if side != "long_only":
+        raise ConfigValidationError("model.target.side must be 'long_only'.")
+    entry_price_mode = str(target.get("entry_price_mode", "next_open"))
+    if entry_price_mode not in {"next_open", "current_close"}:
+        raise ConfigValidationError("model.target.entry_price_mode must be one of: next_open, current_close.")
+    stop_mode = str(target.get("stop_mode", "volatility_stop"))
+    if stop_mode not in {"volatility_stop", "fixed_return"}:
+        raise ConfigValidationError("model.target.stop_mode must be one of: volatility_stop, fixed_return.")
+    tie_break = str(target.get("tie_break", "conservative"))
+    if tie_break not in {"conservative", "take_profit", "stop_loss", "closest_to_open"}:
+        raise ConfigValidationError(
+            "model.target.tie_break must be one of: conservative, take_profit, stop_loss, closest_to_open."
+        )
+    for key, default in (
+        ("target_r_min", 1.0),
+        ("take_profit_r", 2.0),
+        ("stop_loss_r", 1.0),
+        ("stop_loss_return", 0.005),
+        ("take_profit_return", 0.010),
+    ):
+        value = _finite_number(target.get(key, default), field=f"model.target.{key}")
+        if key != "target_r_min" and value <= 0:
+            raise ConfigValidationError(f"model.target.{key} must be > 0.")
+    if "max_holding_bars" in target and target["max_holding_bars"] is not None:
+        _positive_int(target["max_holding_bars"], field="model.target.max_holding_bars")
+    if "max_holding" in target and target["max_holding"] is not None:
+        _positive_int(target["max_holding"], field="model.target.max_holding")
+    if "allow_partial_horizon" in target and not isinstance(target.get("allow_partial_horizon"), bool):
+        raise ConfigValidationError("model.target.allow_partial_horizon must be boolean.")
+    diagnostic_cols = target.get("diagnostic_feature_cols")
+    if diagnostic_cols is not None:
+        if (
+            not isinstance(diagnostic_cols, list)
+            or any(not isinstance(col, str) or not col.strip() for col in diagnostic_cols)
+        ):
+            raise ConfigValidationError("model.target.diagnostic_feature_cols must be a list[str].")
+
+
 def validate_model_block(model: dict[str, Any]) -> None:
     if "kind" not in model:
         raise ConfigValidationError("model.kind is required.")
@@ -803,6 +932,21 @@ def validate_model_block(model: dict[str, Any]) -> None:
         },
     )
 
+    if model["kind"] == "none":
+        target = model.get("target", {}) or {}
+        if not isinstance(target, dict):
+            raise ConfigValidationError("model.target must be a mapping when provided.")
+        if target:
+            target_for_validation = _flatten_target_cfg_for_validation(target)
+            target_kind = target_for_validation.get("kind", "forward_return")
+            if target_kind != "r_multiple":
+                raise ConfigValidationError(
+                    "model.kind='none' currently supports only model.target.kind='r_multiple' "
+                    "for target-only diagnostics."
+                )
+            _validate_r_multiple_target_block(target_for_validation)
+        return
+
     if model["kind"] != "none":
         feature_cols = model.get("feature_cols")
         if feature_cols is not None:
@@ -819,9 +963,17 @@ def validate_model_block(model: dict[str, Any]) -> None:
         target = model.get("target", {}) or {}
         if not isinstance(target, dict):
             raise ConfigValidationError("model.target must be a mapping when provided.")
+        target = _flatten_target_cfg_for_validation(target)
         target_kind = target.get("kind", "forward_return")
-        if target_kind not in {"forward_return", "triple_barrier"}:
-            raise ConfigValidationError("model.target.kind must be 'forward_return' or 'triple_barrier'.")
+        if target_kind not in {"forward_return", "triple_barrier", "r_multiple"}:
+            raise ConfigValidationError("model.target.kind must be 'forward_return', 'triple_barrier', or 'r_multiple'.")
+        if target_kind == "r_multiple":
+            if model["kind"] not in _CLASSIFIER_MODEL_KINDS:
+                raise ConfigValidationError(
+                    "model.target.kind='r_multiple' is currently supported only for classifiers "
+                    "or model.kind='none' target-only diagnostics."
+                )
+            _validate_r_multiple_target_block(target)
         if target_kind == "triple_barrier" and model["kind"] not in _CLASSIFIER_MODEL_KINDS:
             if model["kind"] not in _EMBEDDING_MODEL_KINDS and model["kind"] not in _FORECASTER_MODEL_KINDS:
                 raise ConfigValidationError(
@@ -1451,6 +1603,12 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
         for key in ("prob_col", "side_col", "candidate_col", "signal_col"):
             if key in params and params[key] is not None and not isinstance(params[key], str):
                 raise ConfigValidationError(f"signals.params.{key} must be a string or null.")
+        if "mode" in params and params.get("mode") is not None:
+            mode = str(params.get("mode"))
+            if mode not in {"long_only", "short_only", "long_short"}:
+                raise ConfigValidationError(
+                    "signals.params.mode must be one of: long_only, short_only, long_short."
+                )
         threshold = params.get("threshold", params.get("upper", 0.5))
         threshold = _finite_number(threshold, field="signals.params.threshold")
         if not 0.0 < threshold < 1.0:
@@ -1466,6 +1624,79 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
         for key in ("candidate_col", "side_col", "signal_col"):
             if key in params and params[key] is not None and not isinstance(params[key], str):
                 raise ConfigValidationError(f"signals.params.{key} must be a string or null.")
+        if "mode" in params and params.get("mode") is not None:
+            mode = str(params.get("mode"))
+            if mode not in {"long_only", "short_only", "long_short"}:
+                raise ConfigValidationError(
+                    "signals.params.mode must be one of: long_only, short_only, long_short."
+                )
+    if signals["kind"] == "manual_long_model_filter":
+        for key in ("prob_col", "candidate_col", "base_signal_col", "signal_col"):
+            if key in params and params[key] is not None and not isinstance(params[key], str):
+                raise ConfigValidationError(f"signals.params.{key} must be a string or null.")
+        threshold = _finite_number(params.get("threshold", 0.55), field="signals.params.threshold")
+        if not 0.0 < threshold < 1.0:
+            raise ConfigValidationError("signals.params.threshold must be in (0,1).")
+    if signals["kind"] == "roc_long_only_conditions":
+        nullable_string_keys = {
+            "roc_col",
+            "regime_vol_ratio_z_col",
+            "macro_condition_col",
+            "signal_col",
+        }
+        string_keys = {
+            "close_z_col",
+            "close_open_ratio_col",
+            "mtf_1h_col",
+            "mtf_4h_col",
+            "is_weekend_col",
+            "long_signal_col",
+            "score_col",
+            "all_conditions_col",
+            "vol_adjusted_col",
+            "short_signal_col",
+            "combined_signal_col",
+        }
+        for key in nullable_string_keys:
+            if key in params and params[key] is not None and not isinstance(params[key], str):
+                raise ConfigValidationError(f"signals.params.{key} must be a string or null.")
+        for key in string_keys:
+            if key in params and not isinstance(params[key], str):
+                raise ConfigValidationError(f"signals.params.{key} must be a string.")
+        for key in ("roc_window", "vol_short_window", "vol_long_window"):
+            if key in params:
+                _positive_int(params[key], field=f"signals.params.{key}")
+        if "min_score_required" in params:
+            _non_negative_int(params["min_score_required"], field="signals.params.min_score_required")
+        for key in (
+            "roc_min",
+            "vol_z_min",
+            "vol_z_max",
+            "close_z_min",
+            "close_z_max",
+            "close_open_ratio_min",
+            "mtf_1h_min",
+            "mtf_4h_min",
+            "vol_adjustment_strength",
+            "min_exposure",
+            "max_exposure",
+        ):
+            if key in params:
+                _finite_number(params[key], field=f"signals.params.{key}")
+        if float(params.get("vol_z_min", -1.5)) > float(params.get("vol_z_max", 1.75)):
+            raise ConfigValidationError("signals.params.vol_z_min must be <= signals.params.vol_z_max.")
+        if float(params.get("close_z_min", -0.25)) > float(params.get("close_z_max", 2.25)):
+            raise ConfigValidationError("signals.params.close_z_min must be <= signals.params.close_z_max.")
+        if float(params.get("vol_adjustment_strength", 0.9)) < 0.0:
+            raise ConfigValidationError("signals.params.vol_adjustment_strength must be >= 0.")
+        if float(params.get("min_exposure", 0.10)) < 0.0:
+            raise ConfigValidationError("signals.params.min_exposure must be >= 0.")
+        if float(params.get("max_exposure", 1.0)) <= 0.0:
+            raise ConfigValidationError("signals.params.max_exposure must be > 0.")
+        if float(params.get("min_exposure", 0.10)) > float(params.get("max_exposure", 1.0)):
+            raise ConfigValidationError("signals.params.min_exposure must be <= signals.params.max_exposure.")
+        if "require_all_conditions" in params and not isinstance(params["require_all_conditions"], bool):
+            raise ConfigValidationError("signals.params.require_all_conditions must be boolean.")
 
 
 def validate_risk_block(risk: dict[str, Any]) -> None:
@@ -1621,6 +1852,9 @@ def validate_backtest_block(backtest: dict[str, Any]) -> None:
     for key in ("returns_col", "signal_col"):
         if key not in backtest or not isinstance(backtest[key], str):
             raise ConfigValidationError(f"backtest.{key} (str) is required.")
+    engine = str(backtest.get("engine", "vectorized"))
+    if engine not in {"vectorized", "manual_barrier"}:
+        raise ConfigValidationError("backtest.engine must be 'vectorized' or 'manual_barrier'.")
     ppy = backtest.get("periods_per_year", 252)
     if not isinstance(ppy, int) or ppy <= 0:
         raise ConfigValidationError("backtest.periods_per_year must be a positive integer.")
@@ -1636,6 +1870,17 @@ def validate_backtest_block(backtest: dict[str, Any]) -> None:
     subset = str(backtest.get("subset", "full"))
     if subset not in {"full", "test"}:
         raise ConfigValidationError("backtest.subset must be 'full' or 'test'.")
+    if engine == "manual_barrier":
+        if subset != "full":
+            raise ConfigValidationError("backtest.engine='manual_barrier' requires backtest.subset='full'.")
+        for key in ("open_col", "high_col", "low_col", "close_col"):
+            if key in backtest and not isinstance(backtest[key], str):
+                raise ConfigValidationError(f"backtest.{key} must be a string.")
+        for key in ("take_profit_r", "stop_loss_r", "risk_per_trade"):
+            value = _finite_number(backtest.get(key), field=f"backtest.{key}")
+            if value <= 0.0:
+                raise ConfigValidationError(f"backtest.{key} must be > 0.")
+        _positive_int(backtest.get("max_holding_bars"), field="backtest.max_holding_bars")
 
 
 def validate_portfolio_block(portfolio: dict[str, Any]) -> None:
@@ -1828,6 +2073,15 @@ def validate_resolved_config(cfg: dict[str, Any]) -> dict[str, Any]:
             raise ConfigValidationError("Single-asset RL backtests currently require risk.target_vol=null.")
     if str(cfg["backtest"].get("subset", "full")) == "test" and model_kind == "none":
         raise ConfigValidationError("backtest.subset='test' requires a model that emits an OOS boundary.")
+    if str(cfg["backtest"].get("engine", "vectorized")) == "manual_barrier":
+        if bool(cfg["portfolio"].get("enabled", False)):
+            raise ConfigValidationError("backtest.engine='manual_barrier' currently supports single-asset runs only.")
+        if cfg["risk"].get("target_vol") is not None:
+            raise ConfigValidationError("backtest.engine='manual_barrier' requires risk.target_vol=null.")
+        if dict(cfg["risk"].get("sizing", {}) or {}):
+            raise ConfigValidationError("backtest.engine='manual_barrier' requires risk.sizing={}; size via signal params.")
+        if bool(dict(cfg["risk"].get("dd_guard", {}) or {}).get("enabled", True)):
+            raise ConfigValidationError("backtest.engine='manual_barrier' requires risk.dd_guard.enabled=false.")
     return cfg
 
 

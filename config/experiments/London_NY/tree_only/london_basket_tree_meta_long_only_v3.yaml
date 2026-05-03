@@ -1,0 +1,531 @@
+data:
+  source: dukascopy_csv
+  interval: 30m
+  start: '2023-01-01 00:00:00'
+  end: '2024-10-01 00:00:00'
+  alignment: inner
+  symbols:
+  - XAUUSD
+  - GER40
+  pit:
+    timestamp_alignment:
+      source_timezone: UTC
+      output_timezone: UTC
+      normalize_daily: false
+      duplicate_policy: last
+    corporate_actions:
+      policy: none
+      adj_close_col: adj_close
+    universe_snapshot:
+      inactive_policy: raise
+  storage:
+    mode: cached_only
+    dataset_id: london_ny_v3_london_basket_orb_breakout_tree_meta_long_only
+    save_raw: false
+    save_processed: true
+    allow_missing_load_paths: true
+    load_paths:
+      XAUUSD: data/raw/dukascopy_30m_clean/xauusd_30m.csv
+      GER40: data/raw/dukascopy_30m_clean/ger40_30m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed
+features:
+- step: returns
+  params:
+    log: true
+    col_name: close_logret
+- step: volatility
+  params:
+    returns_col: close_logret
+    rolling_windows:
+    - 12
+    - 24
+    - 48
+    - 96
+    - 192
+    ewma_spans:
+    - 12
+    - 24
+    - 48
+    - 96
+    annualization_factor: 12096.0
+- step: trend
+  params:
+    price_col: close
+    sma_windows:
+    - 24
+    - 48
+    - 96
+    - 192
+    ema_spans:
+    - 8
+    - 12
+    - 24
+    - 48
+    - 96
+- step: trend_regime
+  params:
+    price_col: close
+    base_sma_for_sign: 96
+    short_sma: 24
+    long_sma: 96
+- step: session_context
+  params:
+    timezone: UTC
+    sessions:
+      london_ny_liquid:
+      - 7
+      - 17
+- step: regime_context
+  params:
+    price_col: close
+    returns_col: close_logret
+    vol_short_window: 24
+    vol_long_window: 192
+    vol_window_pairs:
+    - - 12
+      - 96
+    - - 24
+      - 192
+    - - 48
+      - 384
+    trend_fast_span: 24
+    trend_slow_span: 96
+    vol_ratio_high_threshold: 1.35
+    vol_ratio_low_threshold: 0.8
+- step: bollinger
+  params:
+    price_col: close
+    window: 24
+    n_std: 2.0
+- step: roc
+  params:
+    price_col: close
+    windows:
+    - 4
+    - 12
+    - 24
+- step: atr
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    window: 24
+    windows:
+    - 14
+    - 24
+    method: wilder
+    add_over_price: true
+- step: adx
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    window: 24
+    windows:
+    - 14
+    - 24
+- step: rsi
+  params:
+    price_col: close
+    windows:
+    - 2
+    - 14
+    method: wilder
+- step: price_momentum
+  params:
+    price_col: close
+    windows:
+    - 4
+    - 12
+    - 24
+- step: return_momentum
+  params:
+    returns_col: close_logret
+    windows:
+    - 4
+    - 12
+    - 24
+- step: vol_normalized_momentum
+  params:
+    returns_col: close_logret
+    vol_col: vol_rolling_24
+    vol_window: 24
+    windows:
+    - 4
+    - 6
+    - 8
+    - 12
+    - 18
+    - 24
+    eps: 1.0e-08
+- step: multi_timeframe
+  params:
+    base_interval_minutes: 30
+    timeframes:
+    - 1h
+    - 4h
+    price_col: close
+    high_col: high
+    low_col: low
+    open_col: open
+    volume_col: volume
+    returns_col: close_logret
+    timezone: UTC
+    shift_to_last_closed: true
+    timestamp_convention: bar_start
+- step: opening_range_breakout
+  params:
+    timestamp_col: timestamp
+    timezone_input: UTC
+    price_col: close
+    open_col: open
+    high_col: high
+    low_col: low
+    close_col: close
+    atr_col: atr_24
+    volatility_col: vol_rolling_24
+    enabled_sessions:
+    - london
+    sessions:
+    - name: london
+      timezone: Europe/London
+      session_open_time: 08:00
+      opening_range_bars: 1
+      trade_until_time: '12:00'
+    - name: new_york_xau
+      timezone: America/New_York
+      session_open_time: 08:00
+      opening_range_bars: 1
+      trade_until_time: '12:00'
+    - name: new_york_cash
+      timezone: America/New_York
+      session_open_time: 09:30
+      opening_range_bars: 1
+      trade_until_time: '12:00'
+      extended_trade_until_time: '15:30'
+    asset_session_map:
+      XAUUSD:
+      - london
+      GER40:
+      - london
+      DAX:
+      - london
+    asset_alias_map:
+      NAS100: US100
+      DAX: GER40
+    opening_range_bars: 1
+    min_range_atr: 0.3
+    max_range_atr: 3.0
+    breakout_buffer_atr: 0.05
+    post_breakout_active_bars: 2
+    max_breakouts_per_session: 2
+    use_close_breakout: true
+    allow_reversal_same_session: false
+- step: lags
+  params:
+    cols:
+    - close_logret
+    lags:
+    - 1
+    - 2
+    - 4
+    - 12
+    - 24
+signals:
+  kind: meta_probability_side
+  params:
+    prob_col: pred_prob
+    candidate_col: label_candidate
+    side_col: orb_side
+    signal_col: signal_orb_side
+    mode: long_only
+    threshold: 0.54
+    upper: 0.54
+    clip: 1.0
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+risk:
+  cost_per_turnover: 2.5e-05
+  slippage_per_turnover: 1.0e-05
+  target_vol: null
+  max_leverage: 1.0
+  sizing:
+    kind: ftmo_risk_per_trade
+    vol_col: triple_barrier_vol_24
+    risk_per_trade: 0.0025
+    confidence_col: pred_prob
+    confidence_mode: meta_success
+    confidence_floor: 0.5
+    confidence_power: 1.25
+    max_leverage: 1.0
+    min_leverage: 0.0
+    min_abs_signal: 0.05
+    stop_mult: 1.0
+    target_vol: null
+  dd_guard:
+    enabled: true
+    max_drawdown: 0.08
+    rearm_drawdown: 0.04
+    cooloff_bars: 48
+  portfolio_guard:
+    enabled: true
+    weekly_return_target: 0.015
+    weekly_profit_lock: 0.015
+    after_target_mode: reduce_risk
+    after_target_risk_multiplier: 0.25
+    daily_soft_stop: 0.0075
+    daily_hard_stop: 0.015
+    max_daily_loss: 0.025
+    weekly_drawdown: 0.04
+    max_total_loss: 0.08
+    cooloff_bars: 48
+    rearm_on_new_period: true
+    weekly_anchor: W-FRI
+  drawdown_sizing:
+    enabled: true
+    levels:
+    - max_dd: 0.02
+      multiplier: 1.0
+    - max_dd: 0.04
+      multiplier: 0.5
+    - max_dd: 0.06
+      multiplier: 0.25
+    - max_dd: 0.08
+      multiplier: 0.0
+  vol_col: null
+backtest:
+  signal_col: signal_orb_side
+  returns_col: close_logret
+  returns_type: log
+  subset: test
+  min_holding_bars: 0
+  periods_per_year: 12096
+  missing_return_policy: raise_if_exposed
+  vol_col: null
+portfolio:
+  enabled: true
+  construction: signal_weights
+  long_short: false
+  gross_target: 1.0
+  expected_return_col: null
+  covariance_window: 240
+  covariance_rebalance_step: 48
+  risk_aversion: 8.0
+  trade_aversion: 0.0
+  constraints:
+    max_gross_leverage: 1.0
+    max_weight: 0.35
+    min_weight: 0.0
+    target_net_exposure: 0.0
+    enforce_target_net_exposure: false
+  asset_groups: {}
+monitoring:
+  enabled: true
+  psi_threshold: 0.15
+  n_bins: 10
+execution:
+  enabled: false
+  mode: paper
+  capital: 100000.0
+  price_col: close
+  min_trade_notional: 0.0
+  current_weights: {}
+  current_prices: {}
+logging:
+  enabled: true
+  run_name: london_ny_v3_london_basket_orb_breakout_tree_meta_long_only
+  output_dir: logs/experiments
+  stage_tails:
+    enabled: true
+    stdout: true
+    report: true
+    limit: 10
+    max_columns: 18
+    max_assets: 5
+models:
+  none:
+    enabled: false
+  xgboost_clf:
+    enabled: true
+    params:
+      max_depth: 3
+      n_estimators: 250
+      learning_rate: 0.03
+      reg_lambda: 10.0
+      reg_alpha: 0.1
+      subsample: 0.9
+      colsample_bytree: 0.9
+      min_child_weight: 5.0
+      objective: binary:logistic
+      eval_metric: logloss
+      tree_method: hist
+      random_state: 7
+    preprocessing:
+      scaler: none
+    target:
+      kind: triple_barrier
+      label_mode: meta
+      candidate_col: orb_candidate
+      side_col: orb_side
+      candidate_mode: all_nonzero
+      candidate_out_col: label_candidate
+      label_col: label
+      entry_price_mode: next_open
+      price_col: close
+      open_col: open
+      high_col: high
+      low_col: low
+      returns_col: close_logret
+      returns_type: log
+      upper_mult: 1.5
+      lower_mult: 1.0
+      max_holding: 6
+      vol_window: 24
+      min_vol: 0.0001
+      neutral_label: lower
+      tie_break: lower
+      add_r_multiple: true
+      r_col: tb_event_r
+      oriented_r_col: tb_oriented_r
+      event_ret_col: tb_event_ret
+    split:
+      method: walk_forward
+      train_size: 12096
+      test_size: 480
+      step_size: 480
+      expanding: true
+      max_folds: 12
+    pred_prob_col: pred_prob
+    overlay:
+      kind: garch
+      params:
+        returns_input_col: close_logret
+        mean_model: zero
+    feature_selectors:
+      profile: ftmo_fx_intraday_balanced_v1
+      families:
+        returns_lags: true
+        volatility: true
+        trend: true
+        momentum: true
+        regime: true
+        session_time: true
+        atr_adx_range: true
+        cross_asset: false
+      exact: &id001
+      - orb_side
+      - orb_range_width
+      - orb_range_width_atr
+      - bars_since_orb_breakout
+      - orb_close_position_in_range
+      - orb_breakout_strength_atr
+      - orb_breakout_strength_range
+      - orb_pre_breakout_volatility
+      - orb_failed_breakout_recent
+      include:
+      - startswith: mtf_1h_
+      - startswith: mtf_4h_
+      exclude:
+      - exact: orb_candidate
+      - exact: orb_breakout_up
+      - exact: orb_breakout_down
+      - exact: orb_active_window
+      - startswith: label_
+      - startswith: tb_
+      - startswith: pred_
+      drift_filter:
+        enabled: true
+        max_psi: 0.5
+        action: warn
+        apply_scope: train_only_report
+        family_drift_ratio_threshold: 0.5
+      strict:
+        min_count: 24
+  lightgbm_clf:
+    enabled: false
+    params:
+      n_estimators: 250
+      learning_rate: 0.03
+      num_leaves: 15
+      max_depth: 3
+      subsample: 0.9
+      colsample_bytree: 0.9
+      min_child_samples: 20
+      random_state: 7
+    preprocessing:
+      scaler: none
+    feature_selectors:
+      profile: ftmo_fx_intraday_balanced_v1
+      families:
+        returns_lags: true
+        volatility: true
+        trend: true
+        momentum: true
+        regime: true
+        session_time: true
+        atr_adx_range: true
+        cross_asset: false
+      exact: *id001
+      include:
+      - startswith: mtf_1h_
+      - startswith: mtf_4h_
+      exclude:
+      - exact: orb_candidate
+      - exact: orb_breakout_up
+      - exact: orb_breakout_down
+      - exact: orb_active_window
+      - startswith: label_
+      - startswith: tb_
+      - startswith: pred_
+      drift_filter:
+        enabled: true
+        max_psi: 0.5
+        action: warn
+        apply_scope: train_only_report
+        family_drift_ratio_threshold: 0.5
+      strict:
+        min_count: 24
+    target:
+      kind: triple_barrier
+      label_mode: meta
+      candidate_col: orb_candidate
+      side_col: orb_side
+      candidate_mode: all_nonzero
+      candidate_out_col: label_candidate
+      label_col: label
+      entry_price_mode: next_open
+      price_col: close
+      open_col: open
+      high_col: high
+      low_col: low
+      returns_col: close_logret
+      returns_type: log
+      upper_mult: 1.5
+      lower_mult: 1.0
+      max_holding: 6
+      vol_window: 24
+      min_vol: 0.0001
+      neutral_label: lower
+      tie_break: lower
+      add_r_multiple: true
+      r_col: tb_event_r
+      oriented_r_col: tb_oriented_r
+      event_ret_col: tb_event_ret
+    split:
+      method: walk_forward
+      train_size: 12096
+      test_size: 480
+      step_size: 480
+      expanding: true
+      max_folds: 12
+    pred_prob_col: pred_prob
+    overlay:
+      kind: garch
+      params:
+        returns_input_col: close_logret
+        mean_model: zero

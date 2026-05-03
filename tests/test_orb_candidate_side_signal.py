@@ -22,6 +22,21 @@ def test_orb_candidate_side_signal_gates_side_by_candidate() -> None:
     assert signal.tolist() == [0.0, 1.0, -1.0, 0.0, 0.5]
 
 
+def test_orb_candidate_side_signal_supports_long_only_and_short_only_modes() -> None:
+    df = pd.DataFrame(
+        {
+            "orb_candidate": [1.0, 1.0, 1.0, 1.0],
+            "orb_side": [1.0, -1.0, 0.5, -0.5],
+        }
+    )
+
+    long_only = orb_candidate_side_signal(df, mode="long_only")
+    short_only = orb_candidate_side_signal(df, mode="short_only")
+
+    assert long_only.tolist() == [1.0, 0.0, 0.5, 0.0]
+    assert short_only.tolist() == [0.0, -1.0, 0.0, -0.5]
+
+
 def test_orb_candidate_side_signal_is_registered_and_config_validates() -> None:
     assert SIGNAL_REGISTRY["orb_candidate_side"] is orb_candidate_side_signal
 
@@ -32,6 +47,7 @@ def test_orb_candidate_side_signal_is_registered_and_config_validates() -> None:
                 "candidate_col": "orb_candidate",
                 "side_col": "orb_side",
                 "signal_col": "signal_orb_side",
+                "mode": "short_only",
             },
         }
     )

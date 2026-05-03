@@ -10,8 +10,10 @@ from .price_signal_probability import plot_price_signal_probability
 from .price_with_feature_combo import plot_price_with_feature_combo
 from .price_with_features import plot_price_with_features
 from .returns_distribution import plot_returns_distribution
+from .trade_diagnostics import build_trade_event_frame, plot_trade_diagnostics
 
 __all__ = [
+    "build_trade_event_frame",
     "plot_equity_drawdown",
     "plot_feature_signal_combo",
     "plot_feature_signal_combo_suite",
@@ -22,5 +24,6 @@ __all__ = [
     "plot_price_with_feature_combo",
     "plot_price_with_features",
     "plot_returns_distribution",
+    "plot_trade_diagnostics",
     "plotly_chart_config",
 ]

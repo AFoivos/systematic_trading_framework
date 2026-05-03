@@ -88,6 +88,36 @@ def test_meta_probability_side_signal_uses_orb_side_and_never_flips() -> None:
     assert signal.tolist() == [1.0, -1.0, 0.0, 0.0]
 
 
+def test_meta_probability_side_signal_supports_long_only_and_short_only_modes() -> None:
+    df = pd.DataFrame(
+        {
+            "pred_prob": [0.90, 0.90, 0.90, 0.40],
+            "orb_side": [1.0, -1.0, 0.5, -1.0],
+            "label_candidate": [1.0, 1.0, 1.0, 1.0],
+        }
+    )
+
+    long_only = meta_probability_side_signal(
+        df,
+        prob_col="pred_prob",
+        candidate_col="label_candidate",
+        side_col="orb_side",
+        threshold=0.52,
+        mode="long_only",
+    )
+    short_only = meta_probability_side_signal(
+        df,
+        prob_col="pred_prob",
+        candidate_col="label_candidate",
+        side_col="orb_side",
+        threshold=0.52,
+        mode="short_only",
+    )
+
+    assert long_only.tolist() == [1.0, 0.0, 1.0, 0.0]
+    assert short_only.tolist() == [0.0, -1.0, 0.0, 0.0]
+
+
 def test_orb_candidate_rows_have_no_missing_model_features() -> None:
     idx = pd.DatetimeIndex(
         pd.to_datetime(

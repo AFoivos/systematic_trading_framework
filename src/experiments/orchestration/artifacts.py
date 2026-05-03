@@ -12,6 +12,11 @@ import yaml
 from src.backtesting.engine import BacktestResult
 from src.experiments.orchestration.common import data_stats_payload, redact_sensitive_values, resolved_feature_columns
 from src.experiments.orchestration.reporting import build_experiment_report_markdown, render_markdown_report_html
+from src.experiments.orchestration.trade_diagnostics import (
+    build_trade_event_frame,
+    plot_trade_diagnostics,
+    plotly_chart_config,
+)
 from src.portfolio import PortfolioPerformance
 from src.utils.run_metadata import build_artifact_manifest
 
@@ -342,13 +347,53 @@ def _write_model_diagnostic_artifacts(
         if feature_chart_path.exists():
             chart_paths["feature_importance_chart"] = str(feature_chart_path.relative_to(run_dir))
 
+    target_meta = dict(model_meta.get("target", {}) or {})
+    target_label_distribution = dict(target_meta.get("label_distribution", {}) or {})
+    if target_label_distribution:
+        target_label_path = run_dir / "target_label_distribution.csv"
+        class_counts = dict(target_label_distribution.get("class_counts", {}) or {})
+        pd.DataFrame(
+            [
+                {
+                    "label": label,
+                    "count": int(count),
+                    "positive_rate": target_label_distribution.get("positive_rate"),
+                }
+                for label, count in sorted(class_counts.items())
+            ]
+        ).to_csv(target_label_path, index=False)
+        artifact_paths["target_label_distribution"] = str(target_label_path.relative_to(run_dir))
+
+    target_exit_counts = dict(target_meta.get("exit_reason_counts", {}) or {})
+    if target_exit_counts:
+        target_exit_path = run_dir / "target_exit_reason_counts.csv"
+        pd.DataFrame(
+            [{"exit_reason": reason, "count": int(count)} for reason, count in sorted(target_exit_counts.items())]
+        ).to_csv(target_exit_path, index=False)
+        artifact_paths["target_exit_reason_counts"] = str(target_exit_path.relative_to(run_dir))
+
+    winner_loser = dict(target_meta.get("winner_loser_feature_summary", {}) or {})
+    if winner_loser:
+        winner_loser_path = run_dir / "target_winner_loser_features.csv"
+        pd.DataFrame(
+            [dict(payload or {}) | {"feature": feature} for feature, payload in sorted(winner_loser.items())]
+        ).to_csv(winner_loser_path, index=False)
+        artifact_paths["target_winner_loser_features"] = str(winner_loser_path.relative_to(run_dir))
+
     label_distribution = dict(model_meta.get("label_distribution", {}) or {})
     label_rows: list[dict[str, Any]] = []
     label_counts = dict(dict(label_distribution.get("oos_evaluation", {}) or {}).get("class_counts", {}) or {})
+    if not label_counts:
+        label_counts = dict(dict(label_distribution.get("full_target", {}) or {}).get("class_counts", {}) or {})
+    if not label_counts:
+        label_counts = dict(target_label_distribution.get("class_counts", {}) or {})
     for section, payload in sorted(label_distribution.items()):
         payload_dict = dict(payload or {})
         for label, count in dict(payload_dict.get("class_counts", {}) or {}).items():
             label_rows.append({"section": section, "label": label, "count": int(count)})
+    if not label_rows and target_label_distribution:
+        for label, count in dict(target_label_distribution.get("class_counts", {}) or {}).items():
+            label_rows.append({"section": "target", "label": label, "count": int(count)})
     if label_rows:
         label_path = run_dir / "label_distribution.csv"
         pd.DataFrame(label_rows).to_csv(label_path, index=False)
@@ -429,6 +474,319 @@ def _write_model_diagnostic_artifacts(
     return chart_paths, artifact_paths
 
 
+def _safe_asset_filename(value: str) -> str:
+    safe = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in str(value))
+    return safe.strip("_") or "asset"
+
+
+def _coerce_diagnostic_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    out = frame.copy()
+    if not isinstance(out.index, pd.DatetimeIndex):
+        for timestamp_col in ("timestamp", "datetime", "date"):
+            if timestamp_col in out.columns:
+                timestamp = pd.to_datetime(out[timestamp_col], errors="coerce")
+                if float(timestamp.notna().mean()) >= 0.8:
+                    out = out.loc[timestamp.notna()].copy()
+                    out.index = pd.DatetimeIndex(timestamp.loc[timestamp.notna()])
+                    out.index.name = timestamp_col
+                    break
+    return out.sort_index()
+
+
+def _asset_frames_for_trade_diagnostics(
+    data: pd.DataFrame | dict[str, pd.DataFrame],
+    cfg: dict[str, Any],
+) -> dict[str, pd.DataFrame]:
+    if isinstance(data, dict):
+        return {str(asset): _coerce_diagnostic_frame(frame) for asset, frame in sorted(data.items())}
+
+    data_cfg = dict(cfg.get("data", {}) or {})
+    symbols = data_cfg.get("symbols")
+    if isinstance(symbols, list) and len(symbols) == 1:
+        asset = str(symbols[0])
+    else:
+        asset = str(data_cfg.get("symbol") or "asset")
+    return {asset: _coerce_diagnostic_frame(data)}
+
+
+def _positions_for_trade_diagnostics(
+    *,
+    asset_frames: dict[str, pd.DataFrame],
+    performance: BacktestResult | PortfolioPerformance,
+    portfolio_weights: pd.DataFrame | None,
+) -> dict[str, pd.Series]:
+    if isinstance(performance, BacktestResult):
+        asset = next(iter(asset_frames), "asset")
+        return {asset: performance.positions.astype(float)}
+
+    weights = portfolio_weights
+    if weights is None and performance.applied_weights is not None:
+        weights = performance.applied_weights
+    if weights is None or weights.empty:
+        return {}
+    return {
+        str(asset): weights[str(asset)].astype(float)
+        for asset in weights.columns
+        if str(asset) in asset_frames
+    }
+
+
+def _first_existing_column(frame: pd.DataFrame, candidates: list[str | None]) -> str | None:
+    for candidate in candidates:
+        if candidate and str(candidate) in frame.columns:
+            return str(candidate)
+    return None
+
+
+def _annotate_frame_with_trade_barriers(
+    frame: pd.DataFrame,
+    trades: pd.DataFrame | None,
+    *,
+    asset: str,
+) -> pd.DataFrame:
+    if trades is None or trades.empty:
+        return frame
+    out = frame.copy()
+    asset_trades = trades
+    if "asset" in asset_trades.columns:
+        asset_trades = asset_trades.loc[asset_trades["asset"].astype(str) == str(asset)]
+    if asset_trades.empty:
+        return out
+
+    for column in (
+        "manual_target",
+        "manual_take_profit_price",
+        "manual_stop_loss_price",
+        "manual_hit_step",
+        "manual_trade_r",
+    ):
+        if column not in out.columns:
+            out[column] = np.nan
+    if "manual_exit_reason" not in out.columns:
+        out["manual_exit_reason"] = pd.Series(pd.NA, index=out.index, dtype="object")
+    else:
+        out["manual_exit_reason"] = out["manual_exit_reason"].astype("object")
+
+    for _, trade in asset_trades.iterrows():
+        entry_ts = pd.Timestamp(trade.get("entry_timestamp"))
+        if entry_ts not in out.index:
+            continue
+        exit_ts = pd.Timestamp(trade.get("exit_timestamp"))
+        if exit_ts in out.index:
+            bars_held = int(out.index.get_loc(exit_ts)) - int(out.index.get_loc(entry_ts))
+        else:
+            bars_held = pd.to_numeric(pd.Series([trade.get("bars_held")]), errors="coerce").iloc[0]
+        out.loc[entry_ts, "manual_target"] = trade.get("target_price", trade.get("take_profit_price"))
+        out.loc[entry_ts, "manual_take_profit_price"] = trade.get("take_profit_price")
+        out.loc[entry_ts, "manual_stop_loss_price"] = trade.get("stop_loss_price")
+        out.loc[entry_ts, "manual_hit_step"] = bars_held
+        out.loc[entry_ts, "manual_exit_reason"] = trade.get("exit_reason")
+        out.loc[entry_ts, "manual_trade_r"] = trade.get("trade_r")
+    return out
+
+
+def _resolve_trade_diagnostic_columns(
+    frame: pd.DataFrame,
+    cfg: dict[str, Any],
+) -> dict[str, str | None]:
+    backtest_cfg = dict(cfg.get("backtest", {}) or {})
+    target_cfg = dict(dict(cfg.get("model", {}) or {}).get("target", {}) or {})
+    label_col = _first_existing_column(
+        frame,
+        [
+            target_cfg.get("label_col"),
+            "manual_target",
+            "label",
+            "target",
+        ],
+    )
+    fwd_col = _first_existing_column(frame, [target_cfg.get("fwd_col")])
+    r_col = _first_existing_column(
+        frame,
+        [
+            "manual_trade_r",
+            target_cfg.get("oriented_r_col"),
+            target_cfg.get("r_col"),
+            f"{label_col}_oriented_r" if label_col else None,
+            "r_target_oriented_r",
+            "r_target_trade_r",
+            "tb_oriented_r",
+            "tb_event_r",
+        ],
+    )
+    return {
+        "signal_col": _first_existing_column(frame, [backtest_cfg.get("signal_col"), "manual_long_signal", "signal"]),
+        "target_col": label_col or fwd_col,
+        "upper_barrier_col": (
+            f"{label_col}_upper_barrier"
+            if label_col and f"{label_col}_upper_barrier" in frame.columns
+            else _first_existing_column(
+                frame,
+                ["manual_take_profit_price", "take_profit_price", "target_price", "r_target_take_profit_price"],
+            )
+        ),
+        "lower_barrier_col": (
+            f"{label_col}_lower_barrier"
+            if label_col and f"{label_col}_lower_barrier" in frame.columns
+            else _first_existing_column(frame, ["manual_stop_loss_price", "stop_loss_price", "r_target_stop_price"])
+        ),
+        "hit_step_col": (
+            f"{label_col}_hit_step"
+            if label_col and f"{label_col}_hit_step" in frame.columns
+            else _first_existing_column(frame, ["manual_hit_step", "r_target_hit_step"])
+        ),
+        "hit_type_col": (
+            f"{label_col}_hit_type"
+            if label_col and f"{label_col}_hit_type" in frame.columns
+            else _first_existing_column(frame, ["manual_exit_reason", "r_target_exit_reason", "r_target_hit_type"])
+        ),
+        "r_col": r_col,
+        "entry_price_col": _first_existing_column(frame, ["r_target_entry_price"]),
+        "exit_price_col": _first_existing_column(frame, ["r_target_exit_price"]),
+        "target_r_col": _first_existing_column(frame, ["r_target_trade_r", "r_target_oriented_r"]),
+        "target_entry_price_col": _first_existing_column(frame, ["r_target_entry_price"]),
+        "target_exit_price_col": _first_existing_column(frame, ["r_target_exit_price"]),
+        "target_stop_col": _first_existing_column(frame, ["r_target_stop_price"]),
+        "target_take_profit_col": _first_existing_column(frame, ["r_target_take_profit_price"]),
+        "target_exit_reason_col": _first_existing_column(frame, ["r_target_exit_reason", "r_target_hit_type"]),
+    }
+
+
+def _write_trade_diagnostic_artifacts(
+    *,
+    run_dir: Path,
+    data: pd.DataFrame | dict[str, pd.DataFrame],
+    performance: BacktestResult | PortfolioPerformance,
+    cfg: dict[str, Any],
+    portfolio_weights: pd.DataFrame | None,
+) -> tuple[dict[str, str], dict[str, str]]:
+    asset_frames = _asset_frames_for_trade_diagnostics(data, cfg)
+    positions_by_asset = _positions_for_trade_diagnostics(
+        asset_frames=asset_frames,
+        performance=performance,
+        portfolio_weights=portfolio_weights,
+    )
+    if not asset_frames or not positions_by_asset:
+        return {}, {}
+
+    report_assets_dir = run_dir / "report_assets"
+    report_assets_dir.mkdir(parents=True, exist_ok=True)
+    chart_paths: dict[str, str] = {}
+    artifact_paths: dict[str, str] = {}
+    event_frames: list[pd.DataFrame] = []
+    target_event_frames: list[pd.DataFrame] = []
+    backtest_trades = getattr(performance, "trades", None)
+    if isinstance(backtest_trades, pd.DataFrame) and not backtest_trades.empty:
+        trades_path = report_assets_dir / "trades.csv"
+        backtest_trades.to_csv(trades_path, index=False)
+        artifact_paths["trades"] = str(trades_path.relative_to(run_dir))
+
+    for asset, frame in sorted(asset_frames.items()):
+        positions = positions_by_asset.get(asset)
+        if positions is None:
+            continue
+        frame = _annotate_frame_with_trade_barriers(
+            frame,
+            backtest_trades if isinstance(backtest_trades, pd.DataFrame) else None,
+            asset=asset,
+        )
+        target_candidate_col = _first_existing_column(frame, ["r_target_candidate"])
+        if target_candidate_col is not None:
+            target_cols = [
+                col
+                for col in [
+                    target_candidate_col,
+                    "label",
+                    "r_target_event_ret",
+                    "r_target_trade_r",
+                    "r_target_oriented_r",
+                    "r_target_entry_price",
+                    "r_target_exit_price",
+                    "r_target_stop_price",
+                    "r_target_take_profit_price",
+                    "r_target_exit_reason",
+                    "r_target_bars_held",
+                    "r_target_hit_type",
+                    "r_target_hit_step",
+                    "roc_12",
+                    "regime_vol_ratio_z_24_168",
+                    "close_z",
+                    "close_open_ratio",
+                    "manual_conviction_score",
+                ]
+                if col in frame.columns
+            ]
+            target_rows = frame.loc[pd.to_numeric(frame[target_candidate_col], errors="coerce").fillna(0.0) > 0.0, target_cols]
+            if not target_rows.empty:
+                target_event_frame = target_rows.reset_index()
+                first_col = str(target_event_frame.columns[0])
+                if first_col != "timestamp":
+                    target_event_frame = target_event_frame.rename(columns={first_col: "timestamp"})
+                target_event_frame.insert(1, "asset", asset)
+                target_event_frames.append(target_event_frame)
+        columns = _resolve_trade_diagnostic_columns(frame, cfg)
+        events = build_trade_event_frame(
+            frame,
+            positions=positions,
+            asset=asset,
+            signal_col=columns["signal_col"],
+            target_col=columns["target_col"],
+            upper_barrier_col=columns["upper_barrier_col"],
+            lower_barrier_col=columns["lower_barrier_col"],
+            hit_step_col=columns["hit_step_col"],
+            hit_type_col=columns["hit_type_col"],
+            r_col=columns["r_col"],
+            entry_price_col=columns["entry_price_col"],
+            exit_price_col=columns["exit_price_col"],
+            price_col="close",
+        )
+        if not events.empty:
+            event_frames.append(events)
+
+        safe_asset = _safe_asset_filename(asset)
+        html_path = report_assets_dir / f"trade_diagnostics_{safe_asset}.html"
+        fig = plot_trade_diagnostics(
+            frame,
+            positions=positions,
+            asset=asset,
+            title=f"Trade Diagnostics: {asset}",
+            signal_col=columns["signal_col"],
+            target_col=columns["target_col"],
+            upper_barrier_col=columns["upper_barrier_col"],
+            lower_barrier_col=columns["lower_barrier_col"],
+            hit_step_col=columns["hit_step_col"],
+            hit_type_col=columns["hit_type_col"],
+            r_col=columns["r_col"],
+            entry_price_col=columns["entry_price_col"],
+            exit_price_col=columns["exit_price_col"],
+            target_r_col=columns["target_r_col"],
+            target_entry_price_col=columns["target_entry_price_col"],
+            target_exit_price_col=columns["target_exit_price_col"],
+            target_stop_col=columns["target_stop_col"],
+            target_take_profit_col=columns["target_take_profit_col"],
+            target_exit_reason_col=columns["target_exit_reason_col"],
+            price_col="close",
+        )
+        fig.write_html(
+            html_path,
+            include_plotlyjs="cdn",
+            full_html=True,
+            config=plotly_chart_config(),
+        )
+        chart_paths[f"trade_diagnostics_{safe_asset}"] = str(html_path.relative_to(run_dir))
+
+    if event_frames:
+        events_path = report_assets_dir / "trade_events.csv"
+        pd.concat(event_frames, ignore_index=True).to_csv(events_path, index=False)
+        artifact_paths["trade_events"] = str(events_path.relative_to(run_dir))
+    if target_event_frames:
+        target_events_path = report_assets_dir / "target_events.csv"
+        pd.concat(target_event_frames, ignore_index=True).to_csv(target_events_path, index=False)
+        artifact_paths["target_events"] = str(target_events_path.relative_to(run_dir))
+
+    return chart_paths, artifact_paths
+
+
 def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
     cfg = _load_yaml(run_dir / "config_used.yaml")
     summary_payload = _load_json(run_dir / "summary.json")
@@ -447,6 +805,8 @@ def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
     report_assets_dir = run_dir / "report_assets"
     report_assets_dir.mkdir(parents=True, exist_ok=True)
     chart_paths: dict[str, str] = {}
+    for trade_plot_path in sorted(report_assets_dir.glob("trade_diagnostics_*.html")):
+        chart_paths[trade_plot_path.stem] = str(trade_plot_path.relative_to(run_dir))
 
     if not equity_curve.empty:
         equity_path = report_assets_dir / "equity_curve.png"
@@ -584,6 +944,12 @@ def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
         artifact_paths["monitoring"] = "monitoring_report.json"
     if (run_dir / "portfolio_weights.csv").exists():
         artifact_paths["portfolio_weights"] = "portfolio_weights.csv"
+    if (report_assets_dir / "trade_events.csv").exists():
+        artifact_paths["trade_events"] = str((report_assets_dir / "trade_events.csv").relative_to(run_dir))
+    if (report_assets_dir / "target_events.csv").exists():
+        artifact_paths["target_events"] = str((report_assets_dir / "target_events.csv").relative_to(run_dir))
+    if (report_assets_dir / "trades.csv").exists():
+        artifact_paths["trades"] = str((report_assets_dir / "trades.csv").relative_to(run_dir))
     artifact_paths.update(model_artifact_paths)
     if (run_dir / "stage_tails.json").exists():
         artifact_paths["stage_tails"] = "stage_tails.json"
@@ -610,6 +976,12 @@ def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
     }
     for label, rel_path in chart_paths.items():
         report_artifacts[label] = str((run_dir / rel_path).resolve())
+    if "trade_events" in artifact_paths:
+        report_artifacts["trade_events"] = str((run_dir / artifact_paths["trade_events"]).resolve())
+    if "target_events" in artifact_paths:
+        report_artifacts["target_events"] = str((run_dir / artifact_paths["target_events"]).resolve())
+    if "trades" in artifact_paths:
+        report_artifacts["trades"] = str((run_dir / artifact_paths["trades"]).resolve())
     for label, rel_path in model_artifact_paths.items():
         report_artifacts[label] = str((run_dir / rel_path).resolve())
     return report_artifacts
@@ -742,6 +1114,16 @@ def save_artifacts(
         artifacts["portfolio_weights"] = str(weights_path)
     if diagnostics_path is not None:
         artifacts["portfolio_diagnostics"] = str(diagnostics_path)
+
+    trade_chart_paths, trade_artifact_paths = _write_trade_diagnostic_artifacts(
+        run_dir=run_dir,
+        data=data,
+        performance=performance,
+        cfg=cfg,
+        portfolio_weights=portfolio_weights,
+    )
+    for label, rel_path in {**trade_chart_paths, **trade_artifact_paths}.items():
+        artifacts[label] = str((run_dir / rel_path).resolve())
 
     artifacts.update(write_experiment_report_from_run_dir(run_dir))
 

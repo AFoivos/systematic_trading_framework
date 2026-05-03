@@ -27,6 +27,7 @@ class BacktestResult:
     positions: pd.Series
     turnover: pd.Series
     summary: dict
+    trades: pd.DataFrame | None = None
 
 
 def _apply_missing_return_policy(
@@ -169,4 +170,5 @@ def run_backtest(
         positions=positions,
         turnover=turnover,
         summary=summary,
+        trades=None,
     )

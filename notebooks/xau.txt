@@ -1,2 +1,9 @@
 roc
 macro
+session_context.is_weekend = 0
+regime_vol_ratio_z
+multi_time_frame
+features_transforms.close_z
+features_transforms.close_open_ratio
+probability_conviction_signal
+forecast_vol_adjusted_signal

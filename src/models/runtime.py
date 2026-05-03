@@ -491,6 +491,7 @@ def infer_feature_columns(
     Infer usable numeric feature columns when the config does not pin them explicitly.
     """
     if explicit_cols or feature_selectors:
+        exclude_set = set(exclude or [])
         explicit = list(explicit_cols or [])
         selected: list[str] = []
         missing = [c for c in explicit if c not in df.columns]
@@ -499,7 +500,7 @@ def infer_feature_columns(
         selected.extend(explicit)
         if feature_selectors:
             selected.extend(resolve_feature_selectors(df, feature_selectors))
-        return _dedupe_preserve_order(selected)
+        return [col for col in _dedupe_preserve_order(selected) if col not in exclude_set]
 
     inferred = default_feature_columns(df)
     if inferred:

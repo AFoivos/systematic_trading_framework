@@ -230,6 +230,7 @@ def default_backtest_block(
 ) -> dict[str, Any]:
     backtest = dict(backtest) if backtest else {}
     annualization_kwargs = _annualization_kwargs_for_data(data)
+    backtest.setdefault("engine", "vectorized")
     backtest.setdefault("periods_per_year", infer_periods_per_year(interval, **annualization_kwargs))
     backtest.setdefault("returns_type", "simple")
     backtest.setdefault("missing_return_policy", "raise_if_exposed")

@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from src.backtesting.engine import BacktestResult, run_backtest
+from src.backtesting.manual_barrier import run_manual_barrier_backtest
 from src.backtesting.holding import apply_min_holding_bars_to_weights
 from src.evaluation.metrics import compute_backtest_metrics
 from src.experiments.orchestration.common import align_asset_column
@@ -169,6 +170,7 @@ def run_single_asset_backtest(
     returns_col = backtest_cfg["returns_col"]
     returns_type = backtest_cfg.get("returns_type", "simple")
     validate_returns_series(df[returns_col].dropna(), returns_type)
+    backtest_engine = str(backtest_cfg.get("engine", "vectorized"))
 
     dd_cfg = risk_cfg.get("dd_guard") or {}
     dd_guard = dd_cfg.get("enabled", True)
@@ -180,6 +182,35 @@ def run_single_asset_backtest(
     bt_df = df
     bt_signal_col = signal_col
     sizing_cfg = _ftmo_sizing_config(risk_cfg)
+    if backtest_engine == "manual_barrier":
+        if bool(dd_guard):
+            raise ValueError("backtest.engine='manual_barrier' currently requires risk.dd_guard.enabled=false.")
+        if target_vol is not None:
+            raise ValueError("backtest.engine='manual_barrier' does not support risk.target_vol.")
+        if sizing_cfg:
+            raise ValueError("backtest.engine='manual_barrier' does not support risk.sizing; size via the signal.")
+        if backtest_cfg.get("subset", "full") != "full":
+            raise ValueError("backtest.engine='manual_barrier' currently supports backtest.subset='full' only.")
+        result = run_manual_barrier_backtest(
+            df,
+            signal_col=signal_col,
+            open_col=str(backtest_cfg.get("open_col", "open")),
+            high_col=str(backtest_cfg.get("high_col", "high")),
+            low_col=str(backtest_cfg.get("low_col", "low")),
+            close_col=str(backtest_cfg.get("close_col", "close")),
+            take_profit_r=float(backtest_cfg.get("take_profit_r", 1.8)),
+            stop_loss_r=float(backtest_cfg.get("stop_loss_r", 1.0)),
+            risk_per_trade=float(backtest_cfg.get("risk_per_trade", 0.006)),
+            max_holding_bars=int(backtest_cfg.get("max_holding_bars", 16)),
+            cost_per_unit_turnover=float(risk_cfg.get("cost_per_turnover", 0.0)),
+            slippage_per_unit_turnover=float(risk_cfg.get("slippage_per_turnover", 0.0)),
+            max_leverage=float(risk_cfg.get("max_leverage", 1.0)),
+            periods_per_year=int(backtest_cfg.get("periods_per_year", 252)),
+        )
+        if result.trades is not None and not result.trades.empty and "asset" not in result.trades.columns:
+            result.trades = result.trades.copy()
+            result.trades.insert(0, "asset", asset)
+        return result
     if sizing_cfg:
         bt_df, bt_signal_col = _scale_single_asset_signal_for_ftmo(
             bt_df,

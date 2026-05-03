@@ -104,6 +104,24 @@ def test_signal_to_raw_weights_keeps_missing_assets_flat() -> None:
     assert np.isclose(float(weights.sum()), 0.0)
 
 
+def test_signal_to_raw_weights_supports_short_only_when_long_short_is_false() -> None:
+    signal_t = pd.Series({"A": -1.0, "B": -0.5, "C": 0.0}, dtype=float)
+
+    weights = signal_to_raw_weights(signal_t, long_short=False, gross_target=1.0)
+
+    assert weights["A"] < 0.0
+    assert weights["B"] < 0.0
+    assert weights["C"] == pytest.approx(0.0)
+    assert np.isclose(float(weights.abs().sum()), 1.0)
+
+
+def test_signal_to_raw_weights_rejects_mixed_signals_when_long_short_is_false() -> None:
+    signal_t = pd.Series({"A": 1.0, "B": -1.0}, dtype=float)
+
+    with pytest.raises(ValueError, match="one-sided signals only"):
+        signal_to_raw_weights(signal_t, long_short=False, gross_target=1.0)
+
+
 def test_constrained_exposures_can_skip_net_exposure_projection_for_sparse_events() -> None:
     """
     Sparse event strategies must be able to keep inactive assets flat instead of creating

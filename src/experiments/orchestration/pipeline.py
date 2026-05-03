@@ -23,6 +23,7 @@ from src.experiments.orchestration.stage_trace import (
     build_stage_tail_snapshot,
     format_stage_tail_snapshot,
 )
+from src.experiments.orchestration.target_stage import apply_post_signal_target_to_assets
 from src.experiments.orchestration.types import ExperimentResult
 from src.utils.config import load_experiment_config
 from src.utils.repro import runtime_reproducibility_context
@@ -176,6 +177,23 @@ def run_experiment_pipeline(
             previous_asset_frames=model_asset_frames,
             stage_tail_cfg=stage_tail_cfg,
         )
+
+        target_asset_frames, target_only_meta = apply_post_signal_target_to_assets(
+            asset_frames,
+            model_cfg=model_cfg,
+            backtest_cfg=dict(cfg.get("backtest", {}) or {}),
+        )
+        if target_only_meta:
+            previous_asset_frames = asset_frames
+            asset_frames = target_asset_frames
+            model_meta = dict(model_meta or {}) | target_only_meta
+            _record_stage_tail(
+                traces=stage_tails,
+                stage="target_applied",
+                asset_frames=asset_frames,
+                previous_asset_frames=previous_asset_frames,
+                stage_tail_cfg=stage_tail_cfg,
+            )
 
         portfolio_enabled = bool(cfg.get("portfolio", {}).get("enabled", False))
         if len(asset_frames) > 1 and not portfolio_enabled:

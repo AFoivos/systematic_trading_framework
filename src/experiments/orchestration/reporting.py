@@ -984,6 +984,7 @@ def build_experiment_report_markdown(
             "kind",
             "label_mode",
             "max_holding",
+            "max_holding_bars",
             "upper_mult",
             "lower_mult",
             "neutral_label",
@@ -993,19 +994,39 @@ def build_experiment_report_markdown(
             "min_vol",
             "labeled_rows",
             "positive_rate",
+            "target_r_min",
+            "take_profit_r",
+            "stop_loss_r",
+            "stop_mode",
             "upper_barrier_count",
             "lower_barrier_count",
             "neutral_count",
+            "take_profit_count",
+            "stop_loss_count",
+            "max_holding_close_count",
+            "unavailable_tail_count",
+            "invalid_entry_count",
+            "avg_trade_r",
+            "median_trade_r",
+            "q25_trade_r",
+            "q75_trade_r",
+            "avg_bars_held",
+            "median_bars_held",
             "avg_hit_step",
             "median_hit_step",
             "meta_labeling",
             "candidate_rows",
+            "candidate_col",
             "add_r_multiple",
             "r_col",
             "oriented_r_col",
         ):
             if key in target_meta:
                 target_rows.append([key, target_meta.get(key)])
+        for section_key in ("label_distribution", "exit_reason_counts"):
+            distribution = _safe_meta_dict(target_meta.get(section_key))
+            for metric, value in _dict_metric_rows(distribution):
+                target_rows.append([f"{section_key}.{metric}", value])
         for section_key in ("event_r_distribution", "oriented_r_distribution"):
             distribution = _safe_meta_dict(target_meta.get(section_key))
             for metric, value in distribution.items():
@@ -1016,6 +1037,42 @@ def build_experiment_report_markdown(
                     "",
                     "## Target Diagnostics",
                     _markdown_table(["Metric", "Value"], target_rows),
+                ]
+            )
+        winner_loser_features = _safe_meta_dict(target_meta.get("winner_loser_feature_summary"))
+        if winner_loser_features:
+            rows: list[list[Any]] = []
+            for feature, payload in sorted(winner_loser_features.items()):
+                feature_payload = _safe_meta_dict(payload)
+                rows.append(
+                    [
+                        feature,
+                        feature_payload.get("winner_rows"),
+                        feature_payload.get("loser_rows"),
+                        feature_payload.get("winner_mean"),
+                        feature_payload.get("loser_mean"),
+                        feature_payload.get("mean_diff"),
+                        feature_payload.get("winner_median"),
+                        feature_payload.get("loser_median"),
+                    ]
+                )
+            lines.extend(
+                [
+                    "",
+                    "## Target Winner Vs Loser Diagnostics",
+                    _markdown_table(
+                        [
+                            "Feature",
+                            "Winner Rows",
+                            "Loser Rows",
+                            "Winner Mean",
+                            "Loser Mean",
+                            "Mean Diff",
+                            "Winner Median",
+                            "Loser Median",
+                        ],
+                        rows,
+                    ),
                 ]
             )
 
@@ -1151,7 +1208,10 @@ def build_experiment_report_markdown(
         lines.extend(["", "## Charts"])
         for label, rel_path in chart_paths.items():
             title = label.replace("_", " ").title()
-            lines.extend([f"### {title}", f"![{title}]({rel_path})", ""])
+            if str(rel_path).lower().endswith((".html", ".htm")):
+                lines.extend([f"### {title}", f"[Open interactive {title}]({rel_path})", ""])
+            else:
+                lines.extend([f"### {title}", f"![{title}]({rel_path})", ""])
 
     fold_summaries = list(evaluation.get("fold_backtest_summaries", []) or [])
     if fold_summaries:

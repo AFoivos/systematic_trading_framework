@@ -10,11 +10,13 @@ from .forecast_signal import (
 )
 from .momentum_signal import compute_momentum_signal
 from .momentum_strategy import momentum_strategy
+from .manual_long_model_filter_signal import manual_long_model_filter_signal
 from .meta_probability_side_signal import meta_probability_side_signal
 from .orb_candidate_side_signal import orb_candidate_side_signal
 from .probability_vol_adjusted_signal import probability_vol_adjusted_signal
 from .probabilistic_signal import probabilistic_signal
 from .regime_filtered_signal import regime_filtered_signal
+from .roc_long_only_conditions_signal import roc_long_only_conditions_signal
 from .rsi_strategy import rsi_strategy
 from .stochastic_signal import compute_stochastic_signal
 from .stochastic_strategy import stochastic_strategy
@@ -38,12 +40,14 @@ __all__ = [
     "compute_probability_vol_adjusted_signal",
     "forecast_threshold_signal",
     "forecast_vol_adjusted_signal",
+    "manual_long_model_filter_signal",
     "momentum_strategy",
     "meta_probability_side_signal",
     "orb_candidate_side_signal",
     "probability_vol_adjusted_signal",
     "probabilistic_signal",
     "regime_filtered_signal",
+    "roc_long_only_conditions_signal",
     "rsi_strategy",
     "stochastic_strategy",
     "trend_state_long_only_signal",

@@ -9,7 +9,10 @@ from src.features.technical.atr import add_atr_features
 from src.features.technical.trend import add_trend_features
 from src.src_data.validation import validate_ohlcv
 from src.backtesting.engine import run_backtest
+from src.backtesting.manual_barrier import run_manual_barrier_backtest
+from src.signals.roc_long_only_conditions_signal import roc_long_only_conditions_signal
 from src.signals.volatility_signal import compute_volatility_regime_signal
+from src.utils.config import load_experiment_config
 
 
 def test_compute_returns_simple_and_log() -> None:
@@ -256,6 +259,95 @@ def test_run_backtest_raises_on_missing_return_while_exposed() -> None:
             returns_col="returns",
             dd_guard=False,
         )
+
+
+def test_roc_long_only_conditions_signal_is_score_based_and_long_only() -> None:
+    idx = pd.date_range("2024-01-01", periods=3, freq="30min")
+    df = pd.DataFrame(
+        {
+            "open": [100.0, 100.0, 100.0],
+            "close": [101.0, 101.0, 101.0],
+            "is_weekend": [0.0, 1.0, 0.0],
+            "roc_12": [0.01, 0.01, -0.01],
+            "regime_vol_ratio_z_24_168": [0.5, 0.5, 0.5],
+            "mtf_1h_trend_score": [0.0, 0.0, 0.0],
+            "mtf_4h_trend_score": [0.0, 0.0, 0.0],
+            "close_z": [0.0, 0.0, 0.0],
+        },
+        index=idx,
+    )
+
+    out = roc_long_only_conditions_signal(
+        df,
+        roc_window=12,
+        vol_short_window=24,
+        vol_long_window=168,
+        min_score_required=5,
+        vol_adjustment_strength=1.0,
+    )
+
+    assert out["manual_long_signal"].tolist() == [1, 0, 1]
+    assert out["short_signal"].eq(0).all()
+    assert out["manual_vol_adjusted_signal"].iloc[0] == pytest.approx(1.0 / 1.5)
+    assert "manual_conviction_score" in out.columns
+    assert "close_open_ratio" in out.columns
+
+
+def test_manual_barrier_backtest_enters_next_open_and_records_trade_levels() -> None:
+    idx = pd.date_range("2024-01-01", periods=4, freq="30min")
+    df = pd.DataFrame(
+        {
+            "signal": [1.0, 0.0, 0.0, 0.0],
+            "open": [999.0, 100.0, 100.0, 100.0],
+            "high": [999.0, 101.5, 100.5, 100.5],
+            "low": [999.0, 99.8, 99.8, 99.8],
+            "close": [999.0, 101.0, 100.0, 100.0],
+        },
+        index=idx,
+    )
+
+    result = run_manual_barrier_backtest(
+        df,
+        signal_col="signal",
+        take_profit_r=1.0,
+        stop_loss_r=1.0,
+        risk_per_trade=0.01,
+        max_holding_bars=3,
+        cost_per_unit_turnover=0.0,
+        slippage_per_unit_turnover=0.0,
+        periods_per_year=48,
+    )
+
+    assert result.trades is not None
+    assert len(result.trades) == 1
+    trade = result.trades.iloc[0]
+    assert trade["signal_timestamp"] == idx[0]
+    assert trade["entry_timestamp"] == idx[1]
+    assert trade["exit_timestamp"] == idx[1]
+    assert trade["entry_price"] == pytest.approx(100.0)
+    assert trade["take_profit_price"] == pytest.approx(101.0)
+    assert trade["stop_loss_price"] == pytest.approx(99.0)
+    assert trade["exit_reason"] == "take_profit"
+    assert result.returns.loc[idx[1]] == pytest.approx(0.01)
+
+
+def test_roc_long_only_configs_load_as_manual_barrier_experiments() -> None:
+    config_paths = [
+        "config/experiments/roc_long_only/xauusd_roc_long_only_manual_barrier.yaml",
+        "config/experiments/roc_long_only/us100_roc_long_only_manual_barrier.yaml",
+        "config/experiments/roc_long_only/us30_roc_long_only_manual_barrier.yaml",
+        "config/experiments/roc_long_only/ger40_roc_long_only_manual_barrier.yaml",
+        "config/experiments/roc_long_only/spx500_roc_long_only_manual_barrier.yaml",
+    ]
+
+    for config_path in config_paths:
+        cfg = load_experiment_config(config_path)
+        assert cfg["model"]["kind"] == "none"
+        assert cfg["model"]["target"]["kind"] == "r_multiple"
+        assert cfg["model"]["target"]["candidate_col"] == "manual_long_signal"
+        assert cfg["signals"]["kind"] == "roc_long_only_conditions"
+        assert cfg["backtest"]["engine"] == "manual_barrier"
+        assert cfg["backtest"]["signal_col"] == "manual_vol_adjusted_signal"
 
 
 def test_run_backtest_vol_targeting_flattens_missing_vol_warmup() -> None:

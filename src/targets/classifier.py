@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from .forward_return import build_forward_return_target
+from .r_multiple import build_r_multiple_target
 from .triple_barrier import build_triple_barrier_target
 
 
@@ -19,6 +20,8 @@ def build_classifier_target(
         return build_forward_return_target(df=df, target_cfg=cfg)
     if kind == "triple_barrier":
         return build_triple_barrier_target(df=df, target_cfg=cfg)
+    if kind == "r_multiple":
+        return build_r_multiple_target(df=df, target_cfg=cfg)
     raise ValueError(f"Unsupported target.kind: {kind}")
 
 

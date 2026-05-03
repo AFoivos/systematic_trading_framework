@@ -48,6 +48,26 @@
 - `stack/london_basket_tree_tft_overlay_v3.yaml`
 - `stack/ny_cash_basket_no_us30_tree_tft_overlay_v3.yaml`
 
+## Directional variants
+
+Για κάθε runnable London_NY config υπάρχουν πλέον και δύο directional variants:
+
+- `*_long_only_v3.yaml`
+- `*_short_only_v3.yaml`
+
+Παραδείγματα:
+
+- `tree_only/xauusd_london_tree_meta_long_only_v3.yaml`
+- `tree_only/xauusd_london_tree_meta_short_only_v3.yaml`
+- `stack/london_basket_tree_tft_overlay_long_only_v3.yaml`
+- `stack/london_basket_tree_tft_overlay_short_only_v3.yaml`
+
+Implementation notes:
+
+- Στο signal layer τα `meta_probability_side` και `orb_candidate_side` δέχονται πλέον `mode: long_only | short_only | long_short`.
+- Στα basket configs το `portfolio.long_short: false` σημαίνει one-sided normalization.
+- Αν το config είναι `short_only`, το portfolio layer κρατά μόνο αρνητικά signals και δεν εισάγει synthetic longs από mean-centering.
+
 ## Current design choices
 
 - Base timeframe: `30m`
@@ -116,6 +136,8 @@
 docker compose exec app python -m src.experiments.runner experiments/London_NY/raw/xauusd_london_orb_breakout_raw_v3.yaml
 docker compose exec app python -m src.experiments.runner experiments/London_NY/tree_only/xauusd_london_tree_meta_v3.yaml
 docker compose exec app python -m src.experiments.runner experiments/London_NY/stack/london_basket_tree_tft_overlay_v3.yaml
+docker compose exec app python -m src.experiments.runner experiments/London_NY/tree_only/xauusd_london_tree_meta_long_only_v3.yaml
+docker compose exec app python -m src.experiments.runner experiments/London_NY/tree_only/xauusd_london_tree_meta_short_only_v3.yaml
 ```
 
 ## Next implementation phase
@@ -127,4 +149,3 @@ docker compose exec app python -m src.experiments.runner experiments/London_NY/s
 3. `volatility_expansion`
 4. `failed_breakout_reversal`
 5. explicit ensemble scoring report diagnostics
-

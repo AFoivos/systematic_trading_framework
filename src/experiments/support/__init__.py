@@ -21,19 +21,23 @@ from .metrics import (
     volatility_metrics,
 )
 from src.targets import (
+    R_MULTIPLE_TARGET_OUTPUT_COLS,
     assign_quantile_labels,
     build_classifier_target,
     build_forward_return_target,
+    build_r_multiple_target,
     build_triple_barrier_target,
 )
 
 __all__ = [
+    "R_MULTIPLE_TARGET_OUTPUT_COLS",
     "aggregate_feature_importance",
     "aggregate_label_distributions",
     "assign_quantile_labels",
     "binary_classification_metrics",
     "build_classifier_target",
     "build_forward_return_target",
+    "build_r_multiple_target",
     "build_triple_barrier_target",
     "empty_classification_metrics",
     "empty_regression_metrics",

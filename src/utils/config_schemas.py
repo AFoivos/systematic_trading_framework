@@ -370,6 +370,7 @@ class RiskConfig:
 
 @dataclass(frozen=True)
 class BacktestConfig:
+    engine: str
     returns_col: str
     signal_col: str
     periods_per_year: int
@@ -378,11 +379,20 @@ class BacktestConfig:
     min_holding_bars: int = 0
     subset: str | None = None
     vol_col: str | None = None
+    open_col: str = "open"
+    high_col: str = "high"
+    low_col: str = "low"
+    close_col: str = "close"
+    take_profit_r: float | None = None
+    stop_loss_r: float | None = None
+    risk_per_trade: float | None = None
+    max_holding_bars: int | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "BacktestConfig":
         known = {
+            "engine",
             "returns_col",
             "signal_col",
             "periods_per_year",
@@ -391,8 +401,18 @@ class BacktestConfig:
             "min_holding_bars",
             "subset",
             "vol_col",
+            "open_col",
+            "high_col",
+            "low_col",
+            "close_col",
+            "take_profit_r",
+            "stop_loss_r",
+            "risk_per_trade",
+            "max_holding_bars",
         }
+        max_holding_bars = data.get("max_holding_bars")
         return cls(
+            engine=str(data.get("engine", "vectorized")),
             returns_col=str(data.get("returns_col", "")),
             signal_col=str(data.get("signal_col", "")),
             periods_per_year=int(data.get("periods_per_year", 252)),
@@ -401,11 +421,26 @@ class BacktestConfig:
             min_holding_bars=int(data.get("min_holding_bars", 0)),
             subset=data.get("subset"),
             vol_col=data.get("vol_col"),
+            open_col=str(data.get("open_col", "open")),
+            high_col=str(data.get("high_col", "high")),
+            low_col=str(data.get("low_col", "low")),
+            close_col=str(data.get("close_col", "close")),
+            take_profit_r=(
+                float(data["take_profit_r"]) if data.get("take_profit_r") is not None else None
+            ),
+            stop_loss_r=(
+                float(data["stop_loss_r"]) if data.get("stop_loss_r") is not None else None
+            ),
+            risk_per_trade=(
+                float(data["risk_per_trade"]) if data.get("risk_per_trade") is not None else None
+            ),
+            max_holding_bars=int(max_holding_bars) if max_holding_bars is not None else None,
             extra=_extras(data, known),
         )
 
     def to_dict(self) -> dict[str, Any]:
         payload = {
+            "engine": self.engine,
             "returns_col": self.returns_col,
             "signal_col": self.signal_col,
             "periods_per_year": self.periods_per_year,
@@ -414,6 +449,14 @@ class BacktestConfig:
             "min_holding_bars": self.min_holding_bars,
             "subset": self.subset,
             "vol_col": self.vol_col,
+            "open_col": self.open_col,
+            "high_col": self.high_col,
+            "low_col": self.low_col,
+            "close_col": self.close_col,
+            "take_profit_r": self.take_profit_r,
+            "stop_loss_r": self.stop_loss_r,
+            "risk_per_trade": self.risk_per_trade,
+            "max_holding_bars": self.max_holding_bars,
         }
         return payload | dict(self.extra)
 

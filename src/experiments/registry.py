@@ -36,12 +36,14 @@ from src.signals import (
     conviction_sizing_signal,
     forecast_threshold_signal,
     forecast_vol_adjusted_signal,
+    manual_long_model_filter_signal,
     meta_probability_side_signal,
     momentum_strategy,
     orb_candidate_side_signal,
     probability_vol_adjusted_signal,
     probabilistic_signal,
     rsi_strategy,
+    roc_long_only_conditions_signal,
     stochastic_strategy,
     trend_state_signal,
     volatility_regime_strategy,
@@ -97,6 +99,7 @@ FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
     "feature_transforms": add_feature_transforms,
     "multi_timeframe": add_multi_timeframe_features,
     "opening_range_breakout": add_opening_range_breakout_features,
+    "roc_long_only_conditions": roc_long_only_conditions_signal,
 }
 
 SIGNAL_REGISTRY: Mapping[str, SignalFn] = {
@@ -106,6 +109,8 @@ SIGNAL_REGISTRY: Mapping[str, SignalFn] = {
     "probability_vol_adjusted": probability_vol_adjusted_signal,
     "meta_probability_side": meta_probability_side_signal,
     "orb_candidate_side": orb_candidate_side_signal,
+    "roc_long_only_conditions": roc_long_only_conditions_signal,
+    "manual_long_model_filter": manual_long_model_filter_signal,
     "forecast_threshold": forecast_threshold_signal,
     "forecast_vol_adjusted": forecast_vol_adjusted_signal,
     "rsi": rsi_strategy,

@@ -12,6 +12,7 @@ import pytest
         ("conviction_sizing_signal", "conviction_sizing_signal"),
         ("forecast_threshold_signal", "forecast_threshold_signal"),
         ("forecast_vol_adjusted_signal", "forecast_vol_adjusted_signal"),
+        ("manual_long_model_filter_signal", "manual_long_model_filter_signal"),
         ("momentum_strategy", "momentum_strategy"),
         ("orb_candidate_side_signal", "orb_candidate_side_signal"),
         ("probability_vol_adjusted_signal", "probability_vol_adjusted_signal"),

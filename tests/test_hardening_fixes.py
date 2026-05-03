@@ -1320,6 +1320,8 @@ def test_save_artifacts_writes_experiment_report(tmp_path) -> None:
     assert report_html_path.exists()
     assert artifacts["equity_curve"].endswith("equity_curve.csv")
     assert artifacts["equity_curve_chart"].endswith("report_assets/equity_curve.png")
+    assert artifacts["trade_diagnostics_TEST"].endswith("report_assets/trade_diagnostics_TEST.html")
+    assert artifacts["trade_events"].endswith("report_assets/trade_events.csv")
     assert artifacts["feature_importance"].endswith("feature_importance.csv")
     assert artifacts["label_distribution"].endswith("label_distribution.csv")
     assert artifacts["prediction_diagnostics"].endswith("prediction_diagnostics.json")
@@ -1331,6 +1333,8 @@ def test_save_artifacts_writes_experiment_report(tmp_path) -> None:
     assert (run_dir / "report_assets" / "rolling_pnl.png").exists()
     assert (run_dir / "report_assets" / "cumulative_cost_drag.png").exists()
     assert (run_dir / "report_assets" / "positions_turnover.png").exists()
+    assert (run_dir / "report_assets" / "trade_diagnostics_TEST.html").exists()
+    assert (run_dir / "report_assets" / "trade_events.csv").exists()
     assert (run_dir / "report_assets" / "rolling_behavior.png").exists()
     assert (run_dir / "report_assets" / "signal_distribution.png").exists()
     assert (run_dir / "report_assets" / "feature_importance.png").exists()
@@ -1355,10 +1359,64 @@ def test_save_artifacts_writes_experiment_report(tmp_path) -> None:
     assert "## Model Fold Diagnostics" in report_text
     assert "## Cost / Exposure / Turnover" in report_text
     assert "## Diagnostics" in report_text
+    assert "Open interactive Trade Diagnostics Test" in report_text
+    trade_events = pd.read_csv(run_dir / "report_assets" / "trade_events.csv")
+    assert {"event_type", "side", "position_before", "position_after", "signal", "target"}.issubset(
+        trade_events.columns
+    )
     report_html_text = report_html_path.read_text(encoding="utf-8")
     assert "<!DOCTYPE html>" in report_html_text
     assert "<h1>Experiment Report: demo_report</h1>" in report_html_text
     assert "report_assets/equity_curve.png" in report_html_text
+    assert "report_assets/trade_diagnostics_TEST.html" in report_html_text
+
+
+def test_trade_event_frame_includes_signal_target_and_barriers() -> None:
+    """
+    Trade diagnostics should carry the fields needed to inspect bad entries/exits.
+    """
+    from src.experiments.orchestration.trade_diagnostics import build_trade_event_frame
+
+    idx = pd.date_range("2024-01-01", periods=4, freq="h", name="datetime")
+    frame = pd.DataFrame(
+        {
+            "open": [1.0, 1.05, 1.10, 1.08],
+            "high": [1.02, 1.12, 1.14, 1.09],
+            "low": [0.99, 1.03, 1.06, 1.02],
+            "close": [1.01, 1.10, 1.08, 1.03],
+            "signal_long": [0.0, 0.8, 0.8, 0.0],
+            "label": [np.nan, 1.0, 0.0, np.nan],
+            "label_upper_barrier": [np.nan, 1.18, 1.16, np.nan],
+            "label_lower_barrier": [np.nan, 1.02, 1.00, np.nan],
+            "label_hit_step": [np.nan, 1.0, 1.0, np.nan],
+            "label_hit_type": [None, "profit", "stop", None],
+            "tb_oriented_r": [np.nan, 1.5, -1.0, np.nan],
+        },
+        index=idx,
+    )
+    positions = pd.Series([0.0, 0.5, 0.5, 0.0], index=idx)
+
+    events = build_trade_event_frame(
+        frame,
+        positions=positions,
+        asset="TEST",
+        signal_col="signal_long",
+        target_col="label",
+        upper_barrier_col="label_upper_barrier",
+        lower_barrier_col="label_lower_barrier",
+        hit_step_col="label_hit_step",
+        hit_type_col="label_hit_type",
+        r_col="tb_oriented_r",
+    )
+
+    entry = events.loc[events["event_type"] == "entry"].iloc[0]
+    assert entry["signal"] == pytest.approx(0.8)
+    assert entry["target"] == pytest.approx(1.0)
+    assert entry["take_profit"] == pytest.approx(1.18)
+    assert entry["stop_loss"] == pytest.approx(1.02)
+    assert entry["target_exit_timestamp"] == idx[2]
+    assert entry["trade_r"] == pytest.approx(1.5)
+    assert set(events["event_type"]) == {"entry", "exit"}
 
 
 def test_run_backtest_caps_positions_at_max_leverage() -> None:
