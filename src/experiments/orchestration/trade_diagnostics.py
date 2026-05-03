@@ -8,6 +8,9 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 
+DEFAULT_MAX_PLOT_POINTS = 12_000
+
+
 def _as_aligned_series(
     values: pd.Series | None,
     index: pd.Index,
@@ -38,6 +41,37 @@ def _optional_value(frame: pd.DataFrame, timestamp: Any, column: str | None) -> 
     if column and column in frame.columns and timestamp in frame.index:
         return frame.loc[timestamp, column]
     return np.nan
+
+
+def _numeric_series(frame: pd.DataFrame, column: str) -> pd.Series:
+    return pd.to_numeric(frame[column], errors="coerce").astype(float)
+
+
+def _resolve_feature_panel_columns(
+    frame: pd.DataFrame,
+    feature_panel_cols: list[str] | None,
+) -> list[str]:
+    ordered: list[str] = []
+    for column in list(feature_panel_cols or []):
+        if not isinstance(column, str) or not column.strip():
+            continue
+        if column in ordered or column not in frame.columns:
+            continue
+        if _numeric_series(frame, column).notna().sum() <= 0:
+            continue
+        ordered.append(column)
+    return ordered
+
+
+def _feature_panel_hovertemplate() -> str:
+    return "timestamp=%{x}<br>feature=%{meta}<br>value=%{y:.6f}<extra></extra>"
+
+
+def _sample_frame_for_plot(frame: pd.DataFrame, max_plot_points: int | None) -> pd.DataFrame:
+    if max_plot_points is None or max_plot_points <= 0 or len(frame) <= max_plot_points:
+        return frame
+    sampled_positions = np.unique(np.linspace(0, len(frame) - 1, num=int(max_plot_points), dtype=int))
+    return frame.iloc[sampled_positions].copy()
 
 
 def _lookup_timestamp_for_event(
@@ -248,13 +282,16 @@ def plot_trade_diagnostics(
     target_stop_col: str | None = None,
     target_take_profit_col: str | None = None,
     target_exit_reason_col: str | None = None,
+    feature_panel_cols: list[str] | None = None,
     price_col: str = "close",
     open_col: str = "open",
     high_col: str = "high",
     low_col: str = "low",
+    max_plot_points: int | None = DEFAULT_MAX_PLOT_POINTS,
 ) -> go.Figure:
     frame = frame.copy().sort_index()
     positions_aligned = _as_aligned_series(positions, frame.index, name="position")
+    resolved_feature_panels = _resolve_feature_panel_columns(frame, feature_panel_cols)
     events = build_trade_event_frame(
         frame,
         positions=positions_aligned,
@@ -270,35 +307,52 @@ def plot_trade_diagnostics(
         exit_price_col=exit_price_col,
         price_col=price_col,
     )
+    plot_frame = _sample_frame_for_plot(frame, max_plot_points)
+    plot_positions = positions_aligned.reindex(plot_frame.index).fillna(0.0).rename("position")
+
+    feature_panel_count = len(resolved_feature_panels)
+    row_count = 2 + feature_panel_count
+    if feature_panel_count <= 0:
+        row_heights = [0.68, 0.32]
+    else:
+        price_height = 0.48
+        signal_height = 0.16
+        feature_height = max((1.0 - price_height - signal_height) / float(feature_panel_count), 0.06)
+        row_heights = [price_height, signal_height, *([feature_height] * feature_panel_count)]
+    subplot_titles = [
+        "Price / Trade Events / Barriers",
+        "Signal / Position / Target",
+        *[f"Feature Panel {idx + 1}" for idx in range(feature_panel_count)],
+    ]
 
     fig = make_subplots(
-        rows=2,
+        rows=row_count,
         cols=1,
         shared_xaxes=True,
-        vertical_spacing=0.08,
-        row_heights=[0.68, 0.32],
-        subplot_titles=("Price / Trade Events / Barriers", "Signal / Position / Target"),
+        vertical_spacing=0.03 if feature_panel_count <= 2 else 0.02,
+        row_heights=row_heights,
+        subplot_titles=tuple(subplot_titles),
     )
 
-    has_ohlc = all(col in frame.columns for col in (open_col, high_col, low_col, price_col))
+    has_ohlc = all(col in plot_frame.columns for col in (open_col, high_col, low_col, price_col))
     if has_ohlc:
         fig.add_trace(
             go.Candlestick(
-                x=frame.index,
-                open=frame[open_col],
-                high=frame[high_col],
-                low=frame[low_col],
-                close=frame[price_col],
+                x=plot_frame.index,
+                open=plot_frame[open_col],
+                high=plot_frame[high_col],
+                low=plot_frame[low_col],
+                close=plot_frame[price_col],
                 name="OHLC",
             ),
             row=1,
             col=1,
         )
-    elif price_col in frame.columns:
+    elif price_col in plot_frame.columns:
         fig.add_trace(
             go.Scatter(
-                x=frame.index,
-                y=frame[price_col],
+                x=plot_frame.index,
+                y=plot_frame[price_col],
                 name=price_col,
                 mode="lines",
                 line={"color": "#111827", "width": 1.6},
@@ -381,11 +435,11 @@ def plot_trade_diagnostics(
             col=1,
         )
 
-    if signal_col and signal_col in frame.columns:
+    if signal_col and signal_col in plot_frame.columns:
         fig.add_trace(
             go.Scatter(
-                x=frame.index,
-                y=frame[signal_col],
+                x=plot_frame.index,
+                y=plot_frame[signal_col],
                 name=signal_col,
                 mode="lines",
                 line={"color": "#059669", "width": 1.2},
@@ -395,8 +449,8 @@ def plot_trade_diagnostics(
         )
     fig.add_trace(
         go.Scatter(
-            x=positions_aligned.index,
-            y=positions_aligned,
+            x=plot_positions.index,
+            y=plot_positions,
             name="executed_position",
             mode="lines",
             line={"color": "#1d4ed8", "width": 1.2, "dash": "dot"},
@@ -404,71 +458,71 @@ def plot_trade_diagnostics(
         row=2,
         col=1,
     )
-    if target_col and target_col in frame.columns:
+    if target_col and target_col in plot_frame.columns:
         hit_type = (
-            frame[hit_type_col].astype(str).to_numpy()
-            if hit_type_col and hit_type_col in frame.columns
-            else np.full(len(frame), "")
+            plot_frame[hit_type_col].astype(str).to_numpy()
+            if hit_type_col and hit_type_col in plot_frame.columns
+            else np.full(len(plot_frame), "")
         )
         target_customdata = np.column_stack(
             [
                 hit_type,
                 (
-                    frame[target_r_col].astype(str).to_numpy()
-                    if target_r_col and target_r_col in frame.columns
+                    plot_frame[target_r_col].astype(str).to_numpy()
+                    if target_r_col and target_r_col in plot_frame.columns
                     else (
-                        frame[r_col].astype(str).to_numpy()
-                        if r_col and r_col in frame.columns
-                        else np.full(len(frame), "")
+                        plot_frame[r_col].astype(str).to_numpy()
+                        if r_col and r_col in plot_frame.columns
+                        else np.full(len(plot_frame), "")
                     )
                 ),
                 (
-                    frame[target_entry_price_col].astype(str).to_numpy()
-                    if target_entry_price_col and target_entry_price_col in frame.columns
+                    plot_frame[target_entry_price_col].astype(str).to_numpy()
+                    if target_entry_price_col and target_entry_price_col in plot_frame.columns
                     else (
-                        frame[entry_price_col].astype(str).to_numpy()
-                        if entry_price_col and entry_price_col in frame.columns
-                        else np.full(len(frame), "")
+                        plot_frame[entry_price_col].astype(str).to_numpy()
+                        if entry_price_col and entry_price_col in plot_frame.columns
+                        else np.full(len(plot_frame), "")
                     )
                 ),
                 (
-                    frame[target_exit_price_col].astype(str).to_numpy()
-                    if target_exit_price_col and target_exit_price_col in frame.columns
+                    plot_frame[target_exit_price_col].astype(str).to_numpy()
+                    if target_exit_price_col and target_exit_price_col in plot_frame.columns
                     else (
-                        frame[exit_price_col].astype(str).to_numpy()
-                        if exit_price_col and exit_price_col in frame.columns
-                        else np.full(len(frame), "")
+                        plot_frame[exit_price_col].astype(str).to_numpy()
+                        if exit_price_col and exit_price_col in plot_frame.columns
+                        else np.full(len(plot_frame), "")
                     )
                 ),
                 (
-                    frame[target_stop_col].astype(str).to_numpy()
-                    if target_stop_col and target_stop_col in frame.columns
+                    plot_frame[target_stop_col].astype(str).to_numpy()
+                    if target_stop_col and target_stop_col in plot_frame.columns
                     else (
-                        frame[lower_barrier_col].astype(str).to_numpy()
-                        if lower_barrier_col and lower_barrier_col in frame.columns
-                        else np.full(len(frame), "")
+                        plot_frame[lower_barrier_col].astype(str).to_numpy()
+                        if lower_barrier_col and lower_barrier_col in plot_frame.columns
+                        else np.full(len(plot_frame), "")
                     )
                 ),
                 (
-                    frame[target_take_profit_col].astype(str).to_numpy()
-                    if target_take_profit_col and target_take_profit_col in frame.columns
+                    plot_frame[target_take_profit_col].astype(str).to_numpy()
+                    if target_take_profit_col and target_take_profit_col in plot_frame.columns
                     else (
-                        frame[upper_barrier_col].astype(str).to_numpy()
-                        if upper_barrier_col and upper_barrier_col in frame.columns
-                        else np.full(len(frame), "")
+                        plot_frame[upper_barrier_col].astype(str).to_numpy()
+                        if upper_barrier_col and upper_barrier_col in plot_frame.columns
+                        else np.full(len(plot_frame), "")
                     )
                 ),
                 (
-                    frame[target_exit_reason_col].astype(str).to_numpy()
-                    if target_exit_reason_col and target_exit_reason_col in frame.columns
-                    else np.full(len(frame), "")
+                    plot_frame[target_exit_reason_col].astype(str).to_numpy()
+                    if target_exit_reason_col and target_exit_reason_col in plot_frame.columns
+                    else np.full(len(plot_frame), "")
                 ),
             ]
         )
         fig.add_trace(
             go.Scatter(
-                x=frame.index,
-                y=frame[target_col],
+                x=plot_frame.index,
+                y=plot_frame[target_col],
                 name=target_col,
                 mode="markers",
                 marker={"symbol": "circle", "size": 5, "color": "#7c3aed", "opacity": 0.65},
@@ -484,17 +538,90 @@ def plot_trade_diagnostics(
             col=1,
         )
 
+    feature_trace_indices: list[int] = []
+    feature_colors = ["#7c3aed", "#0891b2", "#ea580c", "#65a30d", "#dc2626", "#2563eb", "#0f766e"]
+    for idx, column in enumerate(resolved_feature_panels):
+        row = 3 + idx
+        fig.add_trace(
+            go.Scatter(
+                x=plot_frame.index,
+                y=_numeric_series(plot_frame, column),
+                name=f"feature_panel_{idx + 1}: {column}",
+                mode="lines",
+                line={"color": feature_colors[idx % len(feature_colors)], "width": 1.1},
+                meta=column,
+                hovertemplate=_feature_panel_hovertemplate(),
+            ),
+            row=row,
+            col=1,
+        )
+        feature_trace_indices.append(len(fig.data) - 1)
+
+    display_title = title
+    if len(plot_frame) < len(frame):
+        display_title = f"{title} (displaying {len(plot_frame):,}/{len(frame):,} bars)"
+
     fig.update_layout(
-        title=title,
+        title=display_title,
         template="plotly_white",
         dragmode="zoom",
         hovermode="x unified",
         legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "x": 0.0},
-        margin={"l": 40, "r": 20, "t": 70, "b": 40},
+        margin={
+            "l": 40,
+            "r": 20,
+            "t": 70 + max(0, ((feature_panel_count + 1) // 2) * 42),
+            "b": 40,
+        },
     )
     fig.update_xaxes(showgrid=True, rangeslider={"visible": False})
     fig.update_yaxes(showgrid=True, row=1, col=1, title_text="Price")
     fig.update_yaxes(showgrid=True, row=2, col=1, title_text="Signal / Target")
+    for idx, _column in enumerate(resolved_feature_panels):
+        fig.update_yaxes(showgrid=True, row=3 + idx, col=1, title_text=f"Feature {idx + 1}")
+
+    if resolved_feature_panels:
+        updatemenus: list[dict[str, Any]] = []
+        menus_per_row = 2
+        menu_x_positions = [0.0, 0.52]
+        menu_y_start = 1.18
+        menu_y_step = 0.07
+        for idx, trace_index in enumerate(feature_trace_indices):
+            buttons: list[dict[str, Any]] = []
+            for option_col in resolved_feature_panels:
+                buttons.append(
+                    {
+                        "label": option_col,
+                        "method": "restyle",
+                        "args": [
+                            {
+                                "y": [_numeric_series(plot_frame, option_col).to_numpy()],
+                                "meta": [option_col],
+                                "name": [f"feature_panel_{idx + 1}: {option_col}"],
+                                "hovertemplate": [_feature_panel_hovertemplate()],
+                            },
+                            [trace_index],
+                        ],
+                    }
+                )
+            menu_row = idx // menus_per_row
+            menu_col = idx % menus_per_row
+            active_idx = idx if idx < len(resolved_feature_panels) else 0
+            updatemenus.append(
+                {
+                    "type": "dropdown",
+                    "direction": "down",
+                    "showactive": True,
+                    "x": menu_x_positions[menu_col],
+                    "xanchor": "left",
+                    "y": menu_y_start - menu_row * menu_y_step,
+                    "yanchor": "top",
+                    "buttons": buttons,
+                    "active": active_idx,
+                    "pad": {"r": 8, "t": 4, "b": 4},
+                }
+            )
+        fig.update_layout(updatemenus=updatemenus)
     return fig
 
 

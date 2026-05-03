@@ -8,6 +8,7 @@ import pytest
 import yaml
 
 from src.experiments.optuna_search import load_search_space_yaml, validate_search_space_feature_contract
+from src.experiments.orchestration.artifacts import _resolve_trade_diagnostic_feature_panels
 from src.experiments.orchestration.feature_stage import apply_feature_steps
 from src.experiments.registry import FEATURE_REGISTRY, SIGNAL_REGISTRY
 from src.signals.manual_long_model_filter_signal import manual_long_model_filter_signal
@@ -138,12 +139,15 @@ def test_xauusd_xgboost_r_multiple_filter_config_contracts() -> None:
     assert cfg["model"]["kind"] == "xgboost_clf"
     assert cfg["model"]["target"]["kind"] == "r_multiple"
     assert cfg["model"]["target"]["candidate_col"] == "manual_long_candidate"
-    assert cfg["model"]["target"]["target_r_min"] == pytest.approx(0.5)
+    assert cfg["model"]["target"]["target_r_min"] == pytest.approx(0.8)
     assert cfg["signals"]["kind"] == "manual_long_model_filter"
     assert cfg["signals"]["params"]["candidate_col"] == "manual_long_candidate"
-    assert cfg["signals"]["params"]["threshold"] == pytest.approx(0.40)
+    assert cfg["signals"]["params"]["threshold"] == pytest.approx(0.42)
     assert cfg["backtest"]["signal_col"] == "model_filtered_long_signal"
-    assert cfg["backtest"]["risk_per_trade"] == pytest.approx(0.003)
+    assert cfg["backtest"]["risk_per_trade"] == pytest.approx(0.004)
+    assert cfg["backtest"]["dynamic_exits"]["enabled"] is False
+    assert cfg["backtest"]["dynamic_exits"]["signal_off_exit"]["exit_price"] == "next_open"
+    assert cfg["backtest"]["dynamic_exits"]["profit_lock"]["lock_r"] == pytest.approx(0.3)
 
     excluded = set(cfg["model"]["feature_selectors"]["exclude"][0]["exact"])
     assert {
@@ -195,3 +199,70 @@ def test_xauusd_xgboost_filter_optuna_yaml_matches_base_config_contract() -> Non
     assert constraint_index[("evaluation.primary_summary.flat_rate", 0.985)]["penalty"] == pytest.approx(1.0)
     assert constraint_index[("derived.entry_count", 100.0)]["penalty"] == pytest.approx(5.0)
     assert constraint_index[("evaluation.primary_summary.cumulative_return", 0.05)]["penalty"] == pytest.approx(2.0)
+
+
+def test_xauusd_dynamic_exit_optuna_yaml_only_tunes_exit_params() -> None:
+    optuna_path = Path(
+        "config/optuna/roc_long_only/optuna_xauusd_roc_long_only_xgboost_r_multiple_filter_dynamic_exits.yaml"
+    )
+    payload = yaml.safe_load(optuna_path.read_text(encoding="utf-8"))
+    base_cfg = load_experiment_config(payload["base_config"])
+    search_space = load_search_space_yaml(optuna_path)
+
+    validate_search_space_feature_contract(base_cfg, search_space)
+    paths = {dimension.path for dimension in search_space}
+    assert paths == {
+        "backtest.dynamic_exits.signal_off_exit.min_bars_held",
+        "backtest.dynamic_exits.breakeven.trigger_r",
+        "backtest.dynamic_exits.profit_lock.trigger_r",
+        "backtest.dynamic_exits.profit_lock.lock_r",
+        "backtest.dynamic_exits.no_progress.bars",
+        "backtest.dynamic_exits.no_progress.min_favorable_r",
+    }
+
+
+def test_trade_diagnostics_feature_panels_follow_trial_specific_column_names() -> None:
+    frame = pd.DataFrame(
+        {
+            "roc_8": [0.001, 0.002],
+            "regime_vol_ratio_z_12_96": [0.1, 0.2],
+            "close_z": [0.0, 0.3],
+            "close_open_ratio": [0.0001, 0.0002],
+            "manual_conviction_score": [4, 6],
+        }
+    )
+    cfg = {
+        "features": [
+            {"step": "returns", "params": {}},
+            {
+                "step": "roc_long_only_conditions",
+                "params": {
+                    "roc_window": 8,
+                    "vol_short_window": 12,
+                    "vol_long_window": 96,
+                    "score_col": "manual_conviction_score",
+                },
+            },
+        ],
+        "model": {
+            "target": {
+                "diagnostic_feature_cols": [
+                    "roc_12",
+                    "regime_vol_ratio_z_24_168",
+                    "close_z",
+                    "close_open_ratio",
+                    "manual_conviction_score",
+                ]
+            }
+        },
+    }
+
+    resolved = _resolve_trade_diagnostic_feature_panels(frame, cfg)
+
+    assert resolved == [
+        "roc_8",
+        "regime_vol_ratio_z_12_96",
+        "close_z",
+        "close_open_ratio",
+        "manual_conviction_score",
+    ]

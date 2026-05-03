@@ -1881,6 +1881,50 @@ def validate_backtest_block(backtest: dict[str, Any]) -> None:
             if value <= 0.0:
                 raise ConfigValidationError(f"backtest.{key} must be > 0.")
         _positive_int(backtest.get("max_holding_bars"), field="backtest.max_holding_bars")
+        _validate_dynamic_exits_block(backtest.get("dynamic_exits", {}) or {})
+
+
+def _validate_dynamic_exits_block(dynamic_exits: Any) -> None:
+    if dynamic_exits in ({}, None):
+        return
+    if not isinstance(dynamic_exits, dict):
+        raise ConfigValidationError("backtest.dynamic_exits must be a mapping when provided.")
+    if "enabled" in dynamic_exits and not isinstance(dynamic_exits.get("enabled"), bool):
+        raise ConfigValidationError("backtest.dynamic_exits.enabled must be boolean.")
+    enabled = bool(dynamic_exits.get("enabled", False))
+    section_specs = {
+        "signal_off_exit": {"enabled": bool, "min_bars_held": int, "exit_price": str},
+        "breakeven": {"enabled": bool, "trigger_r": float, "lock_r": float},
+        "profit_lock": {"enabled": bool, "trigger_r": float, "lock_r": float},
+        "no_progress": {"enabled": bool, "bars": int, "min_favorable_r": float, "exit_price": str},
+    }
+    for section_name, spec in section_specs.items():
+        raw_section = dynamic_exits.get(section_name, {}) or {}
+        if not isinstance(raw_section, dict):
+            raise ConfigValidationError(f"backtest.dynamic_exits.{section_name} must be a mapping.")
+        if "enabled" in raw_section and not isinstance(raw_section.get("enabled"), bool):
+            raise ConfigValidationError(f"backtest.dynamic_exits.{section_name}.enabled must be boolean.")
+        if not enabled:
+            continue
+        for key, expected in spec.items():
+            if key not in raw_section:
+                continue
+            field = f"backtest.dynamic_exits.{section_name}.{key}"
+            value = raw_section.get(key)
+            if expected is int:
+                if key == "min_bars_held":
+                    _non_negative_int(value, field=field)
+                else:
+                    _positive_int(value, field=field)
+            elif expected is float:
+                numeric = _finite_number(value, field=field)
+                if key == "trigger_r" and numeric <= 0.0:
+                    raise ConfigValidationError(f"{field} must be > 0.")
+                if key in {"lock_r", "min_favorable_r"} and numeric < 0.0:
+                    raise ConfigValidationError(f"{field} must be >= 0.")
+            elif expected is str:
+                if value not in {"close", "next_open"}:
+                    raise ConfigValidationError(f"{field} must be 'close' or 'next_open'.")
 
 
 def validate_portfolio_block(portfolio: dict[str, Any]) -> None:

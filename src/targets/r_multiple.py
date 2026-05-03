@@ -5,6 +5,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from src.backtesting.trade_path import simulate_long_trade_path
+
 
 R_MULTIPLE_TARGET_OUTPUT_COLS = [
     "label",
@@ -51,28 +53,6 @@ def _finite_number(value: Any, *, field: str) -> float:
     if not np.isfinite(out):
         raise ValueError(f"r_multiple target {field} must be a finite number.")
     return out
-
-
-def _resolve_double_touch(
-    *,
-    tie_break: str,
-    bar_open: float,
-    stop_price: float,
-    take_profit_price: float,
-) -> str:
-    if tie_break in {"conservative", "stop_loss"}:
-        return "stop_loss"
-    if tie_break == "take_profit":
-        return "take_profit"
-    if tie_break == "closest_to_open":
-        stop_distance = abs(float(bar_open) - float(stop_price))
-        target_distance = abs(float(bar_open) - float(take_profit_price))
-        if target_distance < stop_distance:
-            return "take_profit"
-        return "stop_loss"
-    raise ValueError(
-        "r_multiple target tie_break must be one of: conservative, take_profit, stop_loss, closest_to_open."
-    )
 
 
 def _numeric_quantile(values: pd.Series, q: float) -> float | None:
@@ -281,52 +261,37 @@ def build_r_multiple_target(
         stop_prices[start_idx] = stop_price
         take_profit_prices[start_idx] = take_profit_price
 
-        exit_idx: int | None = None
-        exit_price = np.nan
-        exit_reason = "max_holding_close"
-        for step_idx in range(entry_idx, max_exit_idx + 1):
-            bar_low = float(lows[step_idx])
-            bar_high = float(highs[step_idx])
-            if not np.isfinite(bar_low) or not np.isfinite(bar_high):
-                continue
-
-            stop_hit = bar_low <= stop_price
-            take_profit_hit = bar_high >= take_profit_price
-            if stop_hit and take_profit_hit:
-                exit_reason = _resolve_double_touch(
-                    tie_break=tie_break,
-                    bar_open=float(opens[step_idx]),
-                    stop_price=stop_price,
-                    take_profit_price=take_profit_price,
-                )
-                exit_idx = step_idx
-                exit_price = stop_price if exit_reason == "stop_loss" else take_profit_price
-                break
-            if stop_hit:
-                exit_idx = step_idx
-                exit_price = stop_price
-                exit_reason = "stop_loss"
-                break
-            if take_profit_hit:
-                exit_idx = step_idx
-                exit_price = take_profit_price
-                exit_reason = "take_profit"
-                break
-
-        if exit_idx is None:
-            exit_idx = max_exit_idx
-            exit_price = float(prices[exit_idx])
-            exit_reason = "max_holding_close"
-            if not np.isfinite(exit_price) or exit_price <= 0.0:
-                exit_reasons[start_idx] = "invalid_entry"
-                continue
+        try:
+            path = simulate_long_trade_path(
+                opens=opens,
+                highs=highs,
+                lows=lows,
+                closes=prices,
+                signals=None,
+                entry_idx=entry_idx,
+                max_exit_idx=max_exit_idx,
+                entry_price=entry_price,
+                initial_stop_price=stop_price,
+                take_profit_price=take_profit_price,
+                dynamic_exits=None,
+                tie_break=tie_break,
+            )
+        except ValueError:
+            exit_reasons[start_idx] = "invalid_entry"
+            continue
+        exit_idx = int(path["exit_idx"])
+        exit_price = float(path["raw_exit_price"])
+        exit_reason = str(path["exit_reason"])
+        if not np.isfinite(exit_price) or exit_price <= 0.0:
+            exit_reasons[start_idx] = "invalid_entry"
+            continue
 
         trade_ret = exit_price / entry_price - 1.0
         trade_r = trade_ret / risk_distance_return
         event_rets[start_idx] = trade_ret
         trade_rs[start_idx] = trade_r
         exit_prices[start_idx] = exit_price
-        bars_held_values[start_idx] = float(exit_idx - entry_idx + 1)
+        bars_held_values[start_idx] = float(path["bars_held"])
         hit_steps[start_idx] = float(exit_idx - entry_idx)
         exit_reasons[start_idx] = exit_reason
         labels[start_idx] = 1.0 if trade_r >= target_r_min else 0.0

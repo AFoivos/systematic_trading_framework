@@ -795,6 +795,7 @@ def build_experiment_report_markdown(
     risk_guard_summary = _safe_meta_dict(evaluation.get("risk_guard_summary"))
     feature_diagnostics = _safe_meta_dict(evaluation.get("feature_diagnostics"))
     orb_diagnostics = _safe_meta_dict(evaluation.get("orb_diagnostics"))
+    trade_diagnostics = _safe_meta_dict(evaluation.get("trade_diagnostics"))
 
     symbols = data_cfg.get("symbols") or ([data_cfg.get("symbol")] if data_cfg.get("symbol") else [])
     run_name = str(cfg.get("logging", {}).get("run_name", cfg.get("config_path", "experiment")))
@@ -837,6 +838,16 @@ def build_experiment_report_markdown(
                 _markdown_table(["Metric", "Value"], [[key, value] for key, value in policy_summary.items()]),
             ]
         )
+
+    warnings = list(model_meta.get("warnings", []) or [])
+    if bool(dict(cfg.get("backtest", {}) or {}).get("dynamic_exits", {}).get("enabled", False)):
+        warnings.append(
+            "Backtest dynamic exits are enabled. The current pre-model r_multiple target still labels "
+            "manual candidates with barrier semantics and does not use final model_filtered_long_signal "
+            "for signal-off exits."
+        )
+    if warnings:
+        lines.extend(["", "## Warnings", *[f"- {warning}" for warning in warnings]])
 
     if orb_diagnostics:
         scalar_keys = [
@@ -975,6 +986,17 @@ def build_experiment_report_markdown(
                     "",
                     "## Label Distribution",
                     _markdown_table(["Metric", "Value"], label_rows),
+                ]
+            )
+
+    if trade_diagnostics:
+        trade_rows = _dict_metric_rows(trade_diagnostics)
+        if trade_rows:
+            lines.extend(
+                [
+                    "",
+                    "## Trade Diagnostics",
+                    _markdown_table(["Metric", "Value"], trade_rows),
                 ]
             )
 
@@ -1605,6 +1627,32 @@ def _signal_execution_summary(
     return out
 
 
+def _trade_diagnostics_from_trades(trades: pd.DataFrame | None) -> dict[str, Any]:
+    if trades is None or trades.empty:
+        return {
+            "trade_count": 0,
+            "average_r": None,
+            "median_r": None,
+        }
+    out: dict[str, Any] = {"trade_count": int(len(trades))}
+    if "trade_r" in trades.columns:
+        trade_r = pd.to_numeric(trades["trade_r"], errors="coerce").dropna().astype(float)
+        out["average_r"] = float(trade_r.mean()) if not trade_r.empty else None
+        out["median_r"] = float(trade_r.median()) if not trade_r.empty else None
+    if "exit_reason" in trades.columns:
+        for reason, count in trades["exit_reason"].astype(str).value_counts().sort_index().items():
+            out[f"exit_reason_counts.{reason}"] = int(count)
+    for col in ("max_favorable_r", "max_adverse_r"):
+        if col in trades.columns:
+            values = pd.to_numeric(trades[col], errors="coerce").dropna().astype(float)
+            out[f"avg_{col}"] = float(values.mean()) if not values.empty else None
+            out[f"median_{col}"] = float(values.median()) if not values.empty else None
+    for col in ("breakeven_activated", "profit_lock_activated"):
+        if col in trades.columns:
+            out[f"{col}_count"] = int(pd.Series(trades[col]).fillna(False).astype(bool).sum())
+    return out
+
+
 def _weighted_signal_summary(summaries: list[dict[str, Any]]) -> dict[str, Any]:
     valid = [dict(item) for item in summaries if int(dict(item).get("signal_rows", 0) or 0) > 0]
     if not valid:
@@ -1897,10 +1945,16 @@ def build_single_asset_evaluation(
     periods_per_year: int,
     backtest_cfg: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    trade_diagnostics = _trade_diagnostics_from_trades(performance.trades)
+    primary_summary = dict(performance.summary)
+    for key in ("trade_count", "average_r", "median_r"):
+        if key in trade_diagnostics:
+            primary_summary[key] = trade_diagnostics[key]
     evaluation = EvaluationPayload(
         scope="timeline",
-        primary_summary=dict(performance.summary),
+        primary_summary=primary_summary,
         timeline_summary=dict(performance.summary),
+        extra={"trade_diagnostics": trade_diagnostics} if trade_diagnostics else {},
     ).to_dict()
 
     if "pred_is_oos" not in df.columns:
@@ -1947,6 +2001,9 @@ def build_single_asset_evaluation(
     )
     primary_summary = dict(oos_summary or performance.summary)
     primary_summary.update(dict(orb_diagnostics.get("primary_summary_fields", {}) or {}))
+    for key in ("trade_count", "average_r", "median_r"):
+        if key in trade_diagnostics:
+            primary_summary[key] = trade_diagnostics[key]
     for key in ("flat_rate", "long_rate", "short_rate"):
         if policy_summary.get(key) is not None:
             primary_summary[key] = policy_summary[key]
@@ -1965,6 +2022,7 @@ def build_single_asset_evaluation(
             "model_oos_volatility_summary": dict(model_meta.get("oos_volatility_summary", {}) or {}),
             "model_oos_policy_summary": policy_summary,
             "orb_diagnostics": orb_diagnostics,
+            "trade_diagnostics": trade_diagnostics,
             "asset": asset,
         },
     ).to_dict()

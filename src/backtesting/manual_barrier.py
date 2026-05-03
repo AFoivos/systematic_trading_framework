@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from src.backtesting.engine import BacktestResult
+from src.backtesting.trade_path import normalize_dynamic_exit_config, simulate_long_trade_path
 from src.evaluation.metrics import compute_backtest_metrics
 
 
@@ -38,6 +39,7 @@ def run_manual_barrier_backtest(
     slippage_per_unit_turnover: float = 0.0,
     max_leverage: float = 1.0,
     periods_per_year: int = 252,
+    dynamic_exits: dict[str, Any] | None = None,
 ) -> BacktestResult:
     """
     Event-based long-only backtest for manual rule signals.
@@ -46,8 +48,8 @@ def run_manual_barrier_backtest(
     evaluated from the entry bar onward using stop loss, take profit, or max holding. No
     pyramiding, averaging down, martingale sizing, or risk escalation is applied.
 
-    TODO: add optional, explicitly-configured exit policies without changing the default engine
-    contract: signal-off exits, break-even stop, profit-lock stop, and no-progress exits.
+    Dynamic exits are opt-in. With `dynamic_exits.enabled=false` or no dynamic exit config, the
+    engine keeps the legacy stop/take-profit/max-holding behavior.
     """
     _require_columns(df, [signal_col, open_col, high_col, low_col, close_col])
     if int(max_holding_bars) <= 0:
@@ -60,11 +62,17 @@ def run_manual_barrier_backtest(
         raise ValueError("max_leverage must be positive.")
     if float(cost_per_unit_turnover) < 0.0 or float(slippage_per_unit_turnover) < 0.0:
         raise ValueError("cost_per_unit_turnover and slippage_per_unit_turnover must be >= 0.")
+    dynamic_cfg = normalize_dynamic_exit_config(dynamic_exits)
 
     frame = df.copy()
     signal = pd.to_numeric(frame[signal_col], errors="coerce").fillna(0.0).astype(float)
     signal = signal.clip(lower=0.0, upper=float(max_leverage))
     index = frame.index
+    opens = pd.to_numeric(frame[open_col], errors="coerce").to_numpy(dtype=float)
+    highs = pd.to_numeric(frame[high_col], errors="coerce").to_numpy(dtype=float)
+    lows = pd.to_numeric(frame[low_col], errors="coerce").to_numpy(dtype=float)
+    closes = pd.to_numeric(frame[close_col], errors="coerce").to_numpy(dtype=float)
+    signals = signal.to_numpy(dtype=float)
 
     net_returns = pd.Series(0.0, index=index, name="returns", dtype=float)
     gross_returns = pd.Series(0.0, index=index, name="gross_returns", dtype=float)
@@ -88,39 +96,27 @@ def run_manual_barrier_backtest(
         stop_price = entry_open * (1.0 - stop_distance_pct)
         take_profit_price = entry_open * (1.0 + target_distance_pct)
 
-        exit_idx: int | None = None
-        raw_exit_price = np.nan
-        exit_reason = "max_holding_close"
-        bars_held = 0
         max_exit_idx = min(n - 1, entry_idx + int(max_holding_bars) - 1)
+        path = simulate_long_trade_path(
+            opens=opens,
+            highs=highs,
+            lows=lows,
+            closes=closes,
+            signals=signals,
+            entry_idx=entry_idx,
+            max_exit_idx=max_exit_idx,
+            entry_price=entry_open,
+            initial_stop_price=stop_price,
+            take_profit_price=take_profit_price,
+            dynamic_exits=dynamic_cfg,
+            tie_break="conservative",
+            legacy_same_bar_stop_reason=not bool(dynamic_cfg.get("enabled", False)),
+        )
 
-        for j in range(entry_idx, max_exit_idx + 1):
-            bar = frame.iloc[j]
-            bar_low = _finite_price(bar[low_col], field=f"{low_col}[{j}]")
-            bar_high = _finite_price(bar[high_col], field=f"{high_col}[{j}]")
-            bars_held += 1
-            stop_hit = bar_low <= stop_price
-            target_hit = bar_high >= take_profit_price
-            if stop_hit and target_hit:
-                exit_idx = j
-                raw_exit_price = stop_price
-                exit_reason = "stop_and_target_same_bar_stop_first"
-                break
-            if stop_hit:
-                exit_idx = j
-                raw_exit_price = stop_price
-                exit_reason = "stop_loss"
-                break
-            if target_hit:
-                exit_idx = j
-                raw_exit_price = take_profit_price
-                exit_reason = "take_profit"
-                break
-
-        if exit_idx is None:
-            exit_idx = max_exit_idx
-            raw_exit_price = _finite_price(frame.iloc[exit_idx][close_col], field=f"{close_col}[exit]")
-            exit_reason = "max_holding_close"
+        exit_idx = int(path["exit_idx"])
+        raw_exit_price = _finite_price(path["raw_exit_price"], field=f"{close_col}[exit]")
+        exit_reason = str(path["exit_reason"])
+        bars_held = int(path["bars_held"])
 
         slip = float(slippage_per_unit_turnover)
         entry_price = entry_open * (1.0 + slip)
@@ -161,6 +157,11 @@ def run_manual_barrier_backtest(
                 "trade_r": trade_r,
                 "bars_held": int(bars_held),
                 "exit_reason": exit_reason,
+                "max_favorable_r": float(path["max_favorable_r"]),
+                "max_adverse_r": float(path["max_adverse_r"]),
+                "breakeven_activated": bool(path["breakeven_activated"]),
+                "profit_lock_activated": bool(path["profit_lock_activated"]),
+                "effective_stop_price": float(path["effective_stop_price"]),
             }
         )
         i = exit_idx + 1

@@ -387,6 +387,7 @@ class BacktestConfig:
     stop_loss_r: float | None = None
     risk_per_trade: float | None = None
     max_holding_bars: int | None = None
+    dynamic_exits: dict[str, Any] = field(default_factory=dict)
     extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -409,6 +410,7 @@ class BacktestConfig:
             "stop_loss_r",
             "risk_per_trade",
             "max_holding_bars",
+            "dynamic_exits",
         }
         max_holding_bars = data.get("max_holding_bars")
         return cls(
@@ -435,6 +437,7 @@ class BacktestConfig:
                 float(data["risk_per_trade"]) if data.get("risk_per_trade") is not None else None
             ),
             max_holding_bars=int(max_holding_bars) if max_holding_bars is not None else None,
+            dynamic_exits=dict(data.get("dynamic_exits", {}) or {}),
             extra=_extras(data, known),
         )
 
@@ -457,6 +460,7 @@ class BacktestConfig:
             "stop_loss_r": self.stop_loss_r,
             "risk_per_trade": self.risk_per_trade,
             "max_holding_bars": self.max_holding_bars,
+            "dynamic_exits": dict(self.dynamic_exits),
         }
         return payload | dict(self.extra)
 

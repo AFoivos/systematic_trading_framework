@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import re
 from typing import Any
 
 import numpy as np
@@ -652,6 +653,92 @@ def _resolve_trade_diagnostic_columns(
     }
 
 
+def _resolve_trade_diagnostic_feature_panels(
+    frame: pd.DataFrame,
+    cfg: dict[str, Any],
+) -> list[str]:
+    def _roc_long_only_params(config: dict[str, Any]) -> dict[str, Any]:
+        for step in list(config.get("features", []) or []):
+            if not isinstance(step, dict):
+                continue
+            if str(step.get("step", "")).strip() == "roc_long_only_conditions":
+                return dict(step.get("params", {}) or {})
+        signals_cfg = dict(config.get("signals", {}) or {})
+        if str(signals_cfg.get("kind", "")).strip() == "roc_long_only_conditions":
+            return dict(signals_cfg.get("params", {}) or {})
+        return {}
+
+    def _resolve_requested_column(
+        requested: str,
+        *,
+        params: dict[str, Any],
+    ) -> str | None:
+        token = str(requested).strip()
+        if not token:
+            return None
+
+        if token in frame.columns:
+            return token
+
+        roc_window = int(params.get("roc_window", 12) or 12)
+        vol_short_window = int(params.get("vol_short_window", 24) or 24)
+        vol_long_window = int(params.get("vol_long_window", 168) or 168)
+        dynamic_map = {
+            "roc_dynamic": str(params.get("roc_col") or f"roc_{roc_window}"),
+            "regime_vol_ratio_z_dynamic": str(
+                params.get("regime_vol_ratio_z_col") or f"regime_vol_ratio_z_{vol_short_window}_{vol_long_window}"
+            ),
+            "close_z_dynamic": str(params.get("close_z_col") or "close_z"),
+            "close_open_ratio_dynamic": str(params.get("close_open_ratio_col") or "close_open_ratio"),
+            "mtf_1h_dynamic": str(params.get("mtf_1h_col") or "mtf_1h_trend_score"),
+            "mtf_4h_dynamic": str(params.get("mtf_4h_col") or "mtf_4h_trend_score"),
+            "score_dynamic": str(params.get("score_col") or "manual_conviction_score"),
+            "long_signal_dynamic": str(params.get("long_signal_col") or "manual_long_signal"),
+            "vol_adjusted_dynamic": str(params.get("vol_adjusted_col") or "manual_vol_adjusted_signal"),
+        }
+        if token in dynamic_map and dynamic_map[token] in frame.columns:
+            return dynamic_map[token]
+
+        if re.fullmatch(r"roc_\d+", token):
+            dynamic_col = dynamic_map["roc_dynamic"]
+            if dynamic_col in frame.columns:
+                return dynamic_col
+        if re.fullmatch(r"regime_vol_ratio_z_\d+_\d+", token):
+            dynamic_col = dynamic_map["regime_vol_ratio_z_dynamic"]
+            if dynamic_col in frame.columns:
+                return dynamic_col
+
+        named_aliases = {
+            "close_z": dynamic_map["close_z_dynamic"],
+            "close_open_ratio": dynamic_map["close_open_ratio_dynamic"],
+            "mtf_1h_trend_score": dynamic_map["mtf_1h_dynamic"],
+            "mtf_4h_trend_score": dynamic_map["mtf_4h_dynamic"],
+            "manual_conviction_score": dynamic_map["score_dynamic"],
+            "manual_long_signal": dynamic_map["long_signal_dynamic"],
+            "manual_long_candidate": dynamic_map["long_signal_dynamic"],
+            "manual_vol_adjusted_signal": dynamic_map["vol_adjusted_dynamic"],
+            "manual_vol_adjusted_candidate": dynamic_map["vol_adjusted_dynamic"],
+        }
+        alias_col = named_aliases.get(token)
+        if alias_col in frame.columns:
+            return alias_col
+        return token if token in frame.columns else None
+
+    model_cfg = dict(cfg.get("model", {}) or {})
+    target_cfg = dict(model_cfg.get("target", {}) or {})
+    requested = list(target_cfg.get("diagnostic_feature_cols", []) or [])
+    signal_params = _roc_long_only_params(cfg)
+    ordered: list[str] = []
+    for column in requested:
+        if not isinstance(column, str) or not column.strip():
+            continue
+        resolved = _resolve_requested_column(column, params=signal_params)
+        if resolved is None or resolved in ordered:
+            continue
+        ordered.append(resolved)
+    return ordered
+
+
 def _write_trade_diagnostic_artifacts(
     *,
     run_dir: Path,
@@ -690,6 +777,7 @@ def _write_trade_diagnostic_artifacts(
             backtest_trades if isinstance(backtest_trades, pd.DataFrame) else None,
             asset=asset,
         )
+        feature_panel_cols = _resolve_trade_diagnostic_feature_panels(frame, cfg)
         target_candidate_col = _first_existing_column(frame, ["r_target_candidate"])
         if target_candidate_col is not None:
             target_cols = [
@@ -708,11 +796,7 @@ def _write_trade_diagnostic_artifacts(
                     "r_target_bars_held",
                     "r_target_hit_type",
                     "r_target_hit_step",
-                    "roc_12",
-                    "regime_vol_ratio_z_24_168",
-                    "close_z",
-                    "close_open_ratio",
-                    "manual_conviction_score",
+                    *feature_panel_cols,
                 ]
                 if col in frame.columns
             ]
@@ -765,11 +849,12 @@ def _write_trade_diagnostic_artifacts(
             target_stop_col=columns["target_stop_col"],
             target_take_profit_col=columns["target_take_profit_col"],
             target_exit_reason_col=columns["target_exit_reason_col"],
+            feature_panel_cols=feature_panel_cols,
             price_col="close",
         )
         fig.write_html(
             html_path,
-            include_plotlyjs="cdn",
+            include_plotlyjs="directory",
             full_html=True,
             config=plotly_chart_config(),
         )

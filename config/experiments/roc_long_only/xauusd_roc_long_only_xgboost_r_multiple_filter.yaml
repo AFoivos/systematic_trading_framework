@@ -80,25 +80,25 @@ features:
   - step: roc_long_only_conditions
     params:
       roc_window: 12
-      roc_min: 0.0015
+      roc_min: 0.0035
       vol_short_window: 24
       vol_long_window: 168
-      vol_z_min: -1.5
-      vol_z_max: 1.75
+      vol_z_min: -1.6
+      vol_z_max: 1.1
       close_z_col: close_z
-      close_z_min: -0.25
-      close_z_max: 2.25
+      close_z_min: 0.6000000000000002
+      close_z_max: 1.0
       close_open_ratio_col: close_open_ratio
-      close_open_ratio_min: 0.0002
+      close_open_ratio_min: 0.00125
       mtf_1h_col: mtf_1h_trend_score
-      mtf_1h_min: -0.001
+      mtf_1h_min: 0.003
       mtf_4h_col: mtf_4h_trend_score
-      mtf_4h_min: -0.002
+      mtf_4h_min: -0.004
       is_weekend_col: is_weekend
       macro_condition_col: null
-      min_score_required: 5
+      min_score_required: 7
       require_all_conditions: false
-      vol_adjustment_strength: 0.9
+      vol_adjustment_strength: 0.30000000000000004
       min_exposure: 0.10
       max_exposure: 1.0
       long_signal_col: manual_long_candidate
@@ -123,10 +123,10 @@ model:
     low_col: low
     volatility_col: vol_rolling_24
     entry_price_mode: next_open
-    target_r_min: 0.5
+    target_r_min: 0.8
     take_profit_r: 1.8
     stop_loss_r: 1.0
-    max_holding_bars: 16
+    max_holding_bars: 18
     stop_mode: volatility_stop
     stop_loss_return: 0.005
     take_profit_return: 0.010
@@ -184,15 +184,15 @@ model:
           - pred_prob
           - pred_is_oos
   params:
-    n_estimators: 300
-    learning_rate: 0.03
-    max_depth: 3
-    min_child_weight: 8.0
-    subsample: 0.8
-    colsample_bytree: 0.8
-    reg_lambda: 2.0
-    reg_alpha: 0.1
-    scale_pos_weight: 1.0
+    n_estimators: 150
+    learning_rate: 0.036335821823178384
+    max_depth: 4
+    min_child_weight: 6.0
+    subsample: 0.7
+    colsample_bytree: 0.7
+    reg_lambda: 5.0
+    reg_alpha: 0.05
+    scale_pos_weight: 3.0
     random_state: 7
     n_jobs: 1
 
@@ -202,7 +202,7 @@ signals:
     prob_col: pred_prob
     candidate_col: manual_long_candidate
     base_signal_col: manual_vol_adjusted_candidate
-    threshold: 0.40
+    threshold: 0.42
     signal_col: model_filtered_long_signal
 
 runtime:
@@ -243,8 +243,27 @@ backtest:
   close_col: close
   take_profit_r: 1.8
   stop_loss_r: 1.0
-  risk_per_trade: 0.003
-  max_holding_bars: 16
+  risk_per_trade: 0.004
+  max_holding_bars: 18
+  dynamic_exits:
+    enabled: false
+    signal_off_exit:
+      enabled: false
+      min_bars_held: 1
+      exit_price: next_open
+    breakeven:
+      enabled: false
+      trigger_r: 1.2
+      lock_r: 0.0
+    profit_lock:
+      enabled: false
+      trigger_r: 1.8
+      lock_r: 0.3
+    no_progress:
+      enabled: false
+      bars: 10
+      min_favorable_r: 0.0
+      exit_price: close
 
 portfolio:
   enabled: false

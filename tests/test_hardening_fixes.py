@@ -1364,6 +1364,10 @@ def test_save_artifacts_writes_experiment_report(tmp_path) -> None:
     assert {"event_type", "side", "position_before", "position_after", "signal", "target"}.issubset(
         trade_events.columns
     )
+    trade_diagnostics_html_text = (run_dir / "report_assets" / "trade_diagnostics_TEST.html").read_text(encoding="utf-8")
+    assert 'src="https://cdn.plot.ly/' not in trade_diagnostics_html_text
+    assert 'src="plotly.min.js"' in trade_diagnostics_html_text
+    assert (run_dir / "report_assets" / "plotly.min.js").exists()
     report_html_text = report_html_path.read_text(encoding="utf-8")
     assert "<!DOCTYPE html>" in report_html_text
     assert "<h1>Experiment Report: demo_report</h1>" in report_html_text

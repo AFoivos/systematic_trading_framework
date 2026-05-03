@@ -206,6 +206,7 @@ def run_single_asset_backtest(
             slippage_per_unit_turnover=float(risk_cfg.get("slippage_per_turnover", 0.0)),
             max_leverage=float(risk_cfg.get("max_leverage", 1.0)),
             periods_per_year=int(backtest_cfg.get("periods_per_year", 252)),
+            dynamic_exits=dict(backtest_cfg.get("dynamic_exits", {}) or {}),
         )
         if result.trades is not None and not result.trades.empty and "asset" not in result.trades.columns:
             result.trades = result.trades.copy()
