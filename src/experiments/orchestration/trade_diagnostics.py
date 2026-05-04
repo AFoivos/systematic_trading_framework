@@ -67,6 +67,16 @@ def _feature_panel_hovertemplate() -> str:
     return "timestamp=%{x}<br>feature=%{meta}<br>value=%{y:.6f}<extra></extra>"
 
 
+def _exit_reason_filter_options(values: np.ndarray) -> list[str]:
+    skipped = {"", "nan", "none", "<na>"}
+    options = {
+        str(value).strip()
+        for value in values
+        if str(value).strip().lower() not in skipped
+    }
+    return sorted(options)
+
+
 def _sample_frame_for_plot(frame: pd.DataFrame, max_plot_points: int | None) -> pd.DataFrame:
     if max_plot_points is None or max_plot_points <= 0 or len(frame) <= max_plot_points:
         return frame
@@ -309,6 +319,11 @@ def plot_trade_diagnostics(
     )
     plot_frame = _sample_frame_for_plot(frame, max_plot_points)
     plot_positions = positions_aligned.reindex(plot_frame.index).fillna(0.0).rename("position")
+    target_trace_index: int | None = None
+    target_filter_x: np.ndarray | None = None
+    target_filter_y: np.ndarray | None = None
+    target_filter_customdata: np.ndarray | None = None
+    target_exit_reason_values: np.ndarray | None = None
 
     feature_panel_count = len(resolved_feature_panels)
     row_count = 2 + feature_panel_count
@@ -537,6 +552,16 @@ def plot_trade_diagnostics(
             row=2,
             col=1,
         )
+        target_trace_index = len(fig.data) - 1
+        target_filter_x = plot_frame.index.to_numpy()
+        target_filter_y = pd.to_numeric(plot_frame[target_col], errors="coerce").to_numpy()
+        target_filter_customdata = target_customdata
+        if target_exit_reason_col and target_exit_reason_col in plot_frame.columns:
+            exit_reason_series = plot_frame[target_exit_reason_col].where(
+                plot_frame[target_exit_reason_col].notna(),
+                "",
+            )
+            target_exit_reason_values = exit_reason_series.astype(str).to_numpy()
 
     feature_trace_indices: list[int] = []
     feature_colors = ["#7c3aed", "#0891b2", "#ea580c", "#65a30d", "#dc2626", "#2563eb", "#0f766e"]
@@ -560,6 +585,13 @@ def plot_trade_diagnostics(
     display_title = title
     if len(plot_frame) < len(frame):
         display_title = f"{title} (displaying {len(plot_frame):,}/{len(frame):,} bars)"
+    exit_reason_options = (
+        _exit_reason_filter_options(target_exit_reason_values)
+        if target_exit_reason_values is not None
+        else []
+    )
+    feature_menu_rows = (feature_panel_count + 1) // 2 if resolved_feature_panels else 0
+    control_rows = feature_menu_rows + (1 if exit_reason_options else 0)
 
     fig.update_layout(
         title=display_title,
@@ -570,7 +602,7 @@ def plot_trade_diagnostics(
         margin={
             "l": 40,
             "r": 20,
-            "t": 70 + max(0, ((feature_panel_count + 1) // 2) * 42),
+            "t": 70 + max(0, control_rows * 42),
             "b": 40,
         },
     )
@@ -580,11 +612,54 @@ def plot_trade_diagnostics(
     for idx, _column in enumerate(resolved_feature_panels):
         fig.update_yaxes(showgrid=True, row=3 + idx, col=1, title_text=f"Feature {idx + 1}")
 
+    updatemenus: list[dict[str, Any]] = []
+    if (
+        exit_reason_options
+        and target_trace_index is not None
+        and target_filter_x is not None
+        and target_filter_y is not None
+        and target_filter_customdata is not None
+        and target_exit_reason_values is not None
+    ):
+        buttons: list[dict[str, Any]] = []
+        all_mask = np.ones(len(target_filter_y), dtype=bool)
+        for label, mask in [
+            ("all exit_reason", all_mask),
+            *[(reason, target_exit_reason_values == reason) for reason in exit_reason_options],
+        ]:
+            buttons.append(
+                {
+                    "label": label,
+                    "method": "restyle",
+                    "args": [
+                        {
+                            "x": [target_filter_x[mask]],
+                            "y": [target_filter_y[mask]],
+                            "customdata": [target_filter_customdata[mask]],
+                        },
+                        [target_trace_index],
+                    ],
+                }
+            )
+        updatemenus.append(
+            {
+                "type": "dropdown",
+                "direction": "down",
+                "showactive": True,
+                "x": 0.0,
+                "xanchor": "left",
+                "y": 1.26,
+                "yanchor": "top",
+                "buttons": buttons,
+                "active": 0,
+                "pad": {"r": 8, "t": 4, "b": 4},
+            }
+        )
+
     if resolved_feature_panels:
-        updatemenus: list[dict[str, Any]] = []
         menus_per_row = 2
         menu_x_positions = [0.0, 0.52]
-        menu_y_start = 1.18
+        menu_y_start = 1.15 if exit_reason_options else 1.18
         menu_y_step = 0.07
         for idx, trace_index in enumerate(feature_trace_indices):
             buttons: list[dict[str, Any]] = []
@@ -621,6 +696,7 @@ def plot_trade_diagnostics(
                     "pad": {"r": 8, "t": 4, "b": 4},
                 }
             )
+    if updatemenus:
         fig.update_layout(updatemenus=updatemenus)
     return fig
 

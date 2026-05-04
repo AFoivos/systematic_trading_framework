@@ -4,6 +4,7 @@ from .shock_context import add_shock_context_features
 from .session_context import add_session_context_features
 from .macro import add_macro_context_features
 from .multi_timeframe import add_multi_timeframe_features
+from .extrema_context import swing_extrema_context
 from .opening_range_breakout import add_opening_range_breakout_features
 from .support_resistance import add_support_resistance_features
 from .support_resistance_v2 import add_support_resistance_v2_features
@@ -46,6 +47,7 @@ __all__ = [
     "add_session_context_features",
     "add_macro_context_features",
     "add_multi_timeframe_features",
+    "swing_extrema_context",
     "add_opening_range_breakout_features",
     "add_support_resistance_features",
     "add_support_resistance_v2_features",

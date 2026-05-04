@@ -7,6 +7,6 @@ docker compose run --rm app python -m src.experiments.optuna_search config/optun
 docker compose exec app python -m src.experiments.runner config/experiments/ftmo_30m_xau_indices_london_newyork_opening_range_breakout_xgboost_meta_v1.yaml
 
 
-docker compose run --rm app python -m src.experiments.runner config/experiments/roc_long_only/xauusd_roc_long_only_xgboost_r_multiple_filter.yaml
+docker compose run --rm app python -m src.experiments.runner config/experiments/roc_long_only/xauusd_roc_long_only_xgboost_r_multiple_filter_dynamic_stop.yaml
 
-docker compose run --rm app python -m src.experiments.optuna_search config/optuna/roc_long_only/optuna_xauusd_roc_long_only_xgboost_r_multiple_filter_dynamic_exits.yaml
+docker compose run --rm app python -m src.experiments.optuna_search config/optuna/roc_long_only/optuna_xauusd_roc_long_only_xgboost_r_multiple_filter.yaml

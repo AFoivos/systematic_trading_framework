@@ -1,12 +1,12 @@
 base_config: config/experiments/roc_long_only/xauusd_roc_long_only_xgboost_r_multiple_filter.yaml
 
 study:
-  study_name: optuna_xauusd_roc_long_only_xgboost_r_multiple_filter_dynamic_exits
+  study_name: optuna_xauusd_roc_long_only_static_best_dynamic_exits_broad
   storage: null
   load_if_exists: false
   sampler: tpe
   seed: 7
-  n_trials: 1
+  n_trials: 150
   timeout: null
   n_jobs: 1
   logging_enabled: true
@@ -15,106 +15,197 @@ study:
 report:
   enabled: true
   output_dir: logs/experiments
-  run_name: optuna_xauusd_roc_long_only_xgboost_r_multiple_filter_dynamic_exits
+  run_name: optuna_xauusd_roc_long_only_static_best_dynamic_exits_broad
 
 objective:
-  metric_path: evaluation.primary_summary.sharpe
+  # Εδώ κυνηγάμε profit/edge, όχι απλά Sharpe.
+  # Το static best baseline είναι:
+  # cumulative_return ~ 0.111
+  # max_drawdown ~ -0.035
+  # profit_factor ~ 1.33
+  # cost_to_gross_pnl ~ 0.44
+  metric_path: evaluation.primary_summary.cumulative_return
   direction: maximize
   failure_score: -1000000000000.0
   base_metric_weight: 1.0
+
+  # Stability guard ώστε να μη βρει ένα lucky high-return trial.
   stability_weight: 0.25
   stability_metric_path: metrics.sharpe
   stability_std_penalty: 1.0
   fold_summary_path: evaluation.fold_backtest_summaries
+
   constraints:
+    # Πρέπει να είναι θετικό.
     - metric_path: evaluation.primary_summary.cumulative_return
       op: le
       threshold: 0.0
       penalty: 1000000000000.0
       missing_penalty: 1000000000000.0
+
+    # Δεν θέλουμε να χαλάσει πολύ το DD.
+    # Static baseline max DD περίπου -3.52%.
+    # Δίνουμε χώρο μέχρι -5%.
+    - metric_path: evaluation.primary_summary.max_drawdown
+      op: lt
+      threshold: -0.05
+      penalty: 1000000000000.0
+      missing_penalty: 1000000000000.0
+
+    # Απόλυτο risk cutoff.
     - metric_path: evaluation.primary_summary.max_drawdown
       op: lt
       threshold: -0.08
       penalty: 1000000000000.0
       missing_penalty: 1000000000000.0
+
+    # FTMO-style hard guards.
     - metric_path: evaluation.ftmo_metrics.daily_loss_breach_count
       op: gt
       threshold: 0.0
       penalty: 1000000000000.0
       missing_penalty: 0.0
+
     - metric_path: evaluation.ftmo_metrics.weekly_drawdown_breach_count
       op: gt
       threshold: 0.0
       penalty: 1000000000000.0
       missing_penalty: 0.0
+
     - metric_path: evaluation.ftmo_metrics.max_total_loss_breach_count
       op: gt
       threshold: 0.0
       penalty: 1000000000000.0
       missing_penalty: 0.0
-    - metric_path: evaluation.primary_summary.flat_rate
-      op: gt
-      threshold: 0.990
-      penalty: 3.0
-      missing_penalty: 0.5
-    - metric_path: evaluation.primary_summary.flat_rate
-      op: gt
-      threshold: 0.985
-      penalty: 1.0
-      missing_penalty: 0.25
-    - metric_path: derived.entry_count
-      op: lt
-      threshold: 100.0
-      penalty: 5.0
-      missing_penalty: 5.0
-    - metric_path: evaluation.primary_summary.cost_to_gross_pnl
-      op: gt
-      threshold: 0.45
-      penalty: 1.0
-      missing_penalty: 0.25
+
+    # Θέλουμε πραγματικό edge, όχι απλά random high return.
     - metric_path: evaluation.primary_summary.profit_factor
       op: lt
-      threshold: 1.15
-      penalty: 1.0
+      threshold: 1.20
+      penalty: 2.0
+      missing_penalty: 0.5
+
+    # Static baseline PF ~1.33. Soft pressure να μείνει κοντά.
+    - metric_path: evaluation.primary_summary.profit_factor
+      op: lt
+      threshold: 1.30
+      penalty: 0.75
       missing_penalty: 0.25
+
+    # Static baseline cost_to_gross_pnl ~0.44.
+    # Αν πάει πολύ πάνω, τα exits τρώνε το edge.
+    - metric_path: evaluation.primary_summary.cost_to_gross_pnl
+      op: gt
+      threshold: 0.50
+      penalty: 1.5
+      missing_penalty: 0.25
+
+    # Absolute cost drag cutoff.
+    - metric_path: evaluation.primary_summary.cost_to_gross_pnl
+      op: gt
+      threshold: 0.70
+      penalty: 3.0
+      missing_penalty: 0.5
+
+    # Να μη γίνει υπερβολικά flat.
+    - metric_path: evaluation.primary_summary.flat_rate
+      op: gt
+      threshold: 0.992
+      penalty: 2.0
+      missing_penalty: 0.25
+
+    # Static baseline trade_count ~182.
+    # Αν πέσει πολύ κάτω, δεν έχουμε αρκετή δραστηριότητα.
+    - metric_path: derived.entry_count
+      op: lt
+      threshold: 120.0
+      penalty: 2.0
+      missing_penalty: 1.0
+
+    # Αν αυξηθούν υπερβολικά τα trades, συνήθως ανεβαίνει turnover/cost.
+    - metric_path: derived.entry_count
+      op: gt
+      threshold: 260.0
+      penalty: 1.0
+      missing_penalty: 0.5
 
 pruning:
   enabled: false
-  metric_path: classification_metrics.roc_auc
+  metric_path: metrics.sharpe
   direction: maximize
-  stage_filter: [xgboost_clf]
+  stage_filter: []
   pruner: none
   n_startup_trials: 5
   n_warmup_steps: 1
   interval_steps: 1
 
 search_space:
-  - name: signal_off_min_bars
-    path: backtest.dynamic_exits.signal_off_exit.min_bars_held
+  # ==================================================
+  # IMPORTANT:
+  # signal_off_exit ΔΕΝ το κάνουμε tune.
+  # Πρέπει να είναι σταθερά OFF στο base YAML.
+  # Το model_filtered_long_signal είναι entry signal,
+  # όχι hold/exit signal.
+  # ==================================================
+
+  # Breakeven on/off.
+  # Το boolean αναγκαστικά είναι categorical.
+  - name: breakeven_enabled
+    path: backtest.dynamic_exits.breakeven.enabled
     kind: categorical
-    choices: [1, 2, 3]
+    choices: [false, true]
 
   - name: breakeven_trigger_r
     path: backtest.dynamic_exits.breakeven.trigger_r
+    kind: float
+    low: 0.6
+    high: 2.5
+    step: 0.1
+
+  - name: breakeven_lock_r
+    path: backtest.dynamic_exits.breakeven.lock_r
+    kind: float
+    low: 0.0
+    high: 0.5
+    step: 0.05
+
+  # Profit lock on/off.
+  - name: profit_lock_enabled
+    path: backtest.dynamic_exits.profit_lock.enabled
     kind: categorical
-    choices: [0.6, 0.8, 1.0]
+    choices: [false, true]
 
   - name: profit_lock_trigger_r
     path: backtest.dynamic_exits.profit_lock.trigger_r
-    kind: categorical
-    choices: [1.0, 1.2, 1.5]
+    kind: float
+    low: 0.9
+    high: 3.5
+    step: 0.1
 
   - name: profit_lock_r
     path: backtest.dynamic_exits.profit_lock.lock_r
+    kind: float
+    low: 0.1
+    high: 1.5
+    step: 0.05
+
+  # No-progress on/off.
+  # Μεγάλο εύρος, αλλά όχι signal-off.
+  - name: no_progress_enabled
+    path: backtest.dynamic_exits.no_progress.enabled
     kind: categorical
-    choices: [0.2, 0.3, 0.5]
+    choices: [false, true]
 
   - name: no_progress_bars
     path: backtest.dynamic_exits.no_progress.bars
-    kind: categorical
-    choices: [4, 5, 6, 8]
+    kind: int
+    low: 4
+    high: 24
+    step: 1
 
   - name: no_progress_min_favorable_r
     path: backtest.dynamic_exits.no_progress.min_favorable_r
-    kind: categorical
-    choices: [0.1, 0.2, 0.3]
+    kind: float
+    low: -0.3
+    high: 0.8
+    step: 0.05

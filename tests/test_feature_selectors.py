@@ -119,3 +119,24 @@ def test_feature_selector_profile_excludes_target_prediction_and_signal_columns(
     )
 
     assert feature_cols == ["lag_close_logret_1", "vol_rolling_24"]
+
+
+def test_infer_feature_columns_excludes_future_looking_extrema_research_and_raw_columns() -> None:
+    df = pd.DataFrame(
+        {
+            "open": [1.0],
+            "high": [1.1],
+            "low": [0.9],
+            "close": [1.0],
+            "volume": [10.0],
+            "swing_last_high": [1.2],
+            "swing_structure_score": [1.0],
+            "swing_raw_local_high": [1.0],
+            "swing_raw_local_high_price": [1.2],
+            "pre_local_high_3": [0.0],
+        }
+    )
+
+    feature_cols = infer_feature_columns(df)
+
+    assert feature_cols == ["swing_last_high", "swing_structure_score"]

@@ -52,6 +52,7 @@ def test_registry_contains_phase12_extensions() -> None:
     assert "shock_context" in FEATURE_REGISTRY
     assert "support_resistance" in FEATURE_REGISTRY
     assert "support_resistance_v2" in FEATURE_REGISTRY
+    assert "swing_extrema_context" in FEATURE_REGISTRY
     assert "feature_transforms" in FEATURE_REGISTRY
     assert "bollinger" in FEATURE_REGISTRY
     assert "macd" in FEATURE_REGISTRY

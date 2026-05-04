@@ -1,4 +1,4 @@
-base_config: config/experiments/roc_long_only/xauusd_roc_long_only_xgboost_r_multiple_filter.yaml
+base_config: config/experiments/roc_long_only/xauusd_roc_long_only_xgboost_r_multiple_filter_dynamic_stop.yaml
 
 study:
   study_name: optuna_xauusd_roc_long_only_xgboost_r_multiple_filter
@@ -6,7 +6,7 @@ study:
   load_if_exists: false
   sampler: tpe
   seed: 7
-  n_trials: 1
+  n_trials: 80
   timeout: null
   n_jobs: 1
   logging_enabled: true
@@ -98,126 +98,182 @@ pruning:
   n_warmup_steps: 1
   interval_steps: 1
 
+# search_space:
+#   - name: signal_roc_min
+#     path: features.7.params.roc_min
+#     kind: float
+#     low: 0.0005
+#     high: 0.0045
+#     step: 0.0005
+#   - name: signal_vol_z_min
+#     path: features.7.params.vol_z_min
+#     kind: float
+#     low: -2.5
+#     high: -0.1
+#     step: 0.1
+#   - name: signal_vol_z_max
+#     path: features.7.params.vol_z_max
+#     kind: float
+#     low: 0.8
+#     high: 2.6
+#     step: 0.1
+#   - name: signal_close_z_min
+#     path: features.7.params.close_z_min
+#     kind: float
+#     low: -0.6
+#     high: 0.8
+#     step: 0.1
+#   - name: signal_close_z_max
+#     path: features.7.params.close_z_max
+#     kind: float
+#     low: 1.0
+#     high: 2.8
+#     step: 0.1
+#   - name: signal_close_open_ratio_min
+#     path: features.7.params.close_open_ratio_min
+#     kind: float
+#     low: 0.0
+#     high: 0.003
+#     step: 0.00025
+#   - name: signal_mtf_1h_min
+#     path: features.7.params.mtf_1h_min
+#     kind: float
+#     low: -0.003
+#     high: 0.004
+#     step: 0.0005
+#   - name: signal_mtf_4h_min
+#     path: features.7.params.mtf_4h_min
+#     kind: float
+#     low: -0.006
+#     high: 0.005
+#     step: 0.0005
+#   - name: signal_min_score_required
+#     path: features.7.params.min_score_required
+#     kind: int
+#     low: 4
+#     high: 7
+#   - name: signal_vol_adjustment_strength
+#     path: features.7.params.vol_adjustment_strength
+#     kind: float
+#     low: 0.0
+#     high: 2.0
+#     step: 0.1
+#   - name: target_r_min
+#     path: model.target.target_r_min
+#     kind: float
+#     low: 0.3
+#     high: 0.8
+#     step: 0.1
+#   - name: model_probability_threshold
+#     path: signals.params.threshold
+#     kind: float
+#     low: 0.35
+#     high: 0.52
+#     step: 0.01
+#   - name: xgb_n_estimators
+#     path: model.params.n_estimators
+#     kind: int
+#     low: 150
+#     high: 500
+#     step: 50
+#   - name: xgb_learning_rate
+#     path: model.params.learning_rate
+#     kind: float
+#     low: 0.01
+#     high: 0.06
+#     log: true
+#   - name: xgb_max_depth
+#     path: model.params.max_depth
+#     kind: int
+#     low: 2
+#     high: 4
+#   - name: xgb_min_child_weight
+#     path: model.params.min_child_weight
+#     kind: float
+#     low: 2.0
+#     high: 12.0
+#     step: 2.0
+#   - name: xgb_subsample
+#     path: model.params.subsample
+#     kind: float
+#     low: 0.6
+#     high: 1.0
+#     step: 0.1
+#   - name: xgb_colsample_bytree
+#     path: model.params.colsample_bytree
+#     kind: float
+#     low: 0.6
+#     high: 1.0
+#     step: 0.1
+#   - name: xgb_reg_lambda
+#     path: model.params.reg_lambda
+#     kind: categorical
+#     choices: [1.0, 2.0, 5.0, 10.0]
+#   - name: xgb_reg_alpha
+#     path: model.params.reg_alpha
+#     kind: categorical
+#     choices: [0.0, 0.05, 0.1, 0.5]
+#   - name: xgb_scale_pos_weight
+#     path: model.params.scale_pos_weight
+#     kind: categorical
+#     choices: [1.0, 1.5, 2.0, 3.0]
+#   - name: backtest_risk_per_trade
+#     path: backtest.risk_per_trade
+#     kind: categorical
+#     choices: [0.0025, 0.003, 0.0035, 0.004]
+
 search_space:
   - name: signal_roc_min
     path: features.7.params.roc_min
     kind: float
-    low: 0.0005
-    high: 0.0045
+    low: 0.0010
+    high: 0.0030
     step: 0.0005
-  - name: signal_vol_z_min
-    path: features.7.params.vol_z_min
-    kind: float
-    low: -2.5
-    high: -0.1
-    step: 0.1
-  - name: signal_vol_z_max
-    path: features.7.params.vol_z_max
-    kind: float
-    low: 0.8
-    high: 2.6
-    step: 0.1
+
   - name: signal_close_z_min
     path: features.7.params.close_z_min
     kind: float
-    low: -0.6
-    high: 0.8
+    low: 0.0
+    high: 0.6
     step: 0.1
+
   - name: signal_close_z_max
     path: features.7.params.close_z_max
     kind: float
-    low: 1.0
-    high: 2.8
+    low: 0.9
+    high: 1.8
     step: 0.1
-  - name: signal_close_open_ratio_min
-    path: features.7.params.close_open_ratio_min
-    kind: float
-    low: 0.0
-    high: 0.003
-    step: 0.00025
+
   - name: signal_mtf_1h_min
     path: features.7.params.mtf_1h_min
     kind: float
-    low: -0.003
-    high: 0.004
+    low: 0.0000
+    high: 0.0035
     step: 0.0005
+
   - name: signal_mtf_4h_min
     path: features.7.params.mtf_4h_min
     kind: float
-    low: -0.006
-    high: 0.005
+    low: -0.0030
+    high: 0.0020
     step: 0.0005
+
   - name: signal_min_score_required
     path: features.7.params.min_score_required
     kind: int
-    low: 4
-    high: 7
-  - name: signal_vol_adjustment_strength
-    path: features.7.params.vol_adjustment_strength
-    kind: float
-    low: 0.0
-    high: 2.0
-    step: 0.1
-  - name: target_r_min
-    path: model.target.target_r_min
-    kind: float
-    low: 0.3
-    high: 0.8
-    step: 0.1
+    low: 6
+    high: 8
+
   - name: model_probability_threshold
     path: signals.params.threshold
     kind: float
-    low: 0.35
-    high: 0.52
+    low: 0.44
+    high: 0.56
     step: 0.01
-  - name: xgb_n_estimators
-    path: model.params.n_estimators
-    kind: int
-    low: 150
-    high: 500
-    step: 50
-  - name: xgb_learning_rate
-    path: model.params.learning_rate
+
+  - name: signal_vol_adjustment_strength
+    path: features.7.params.vol_adjustment_strength
     kind: float
-    low: 0.01
-    high: 0.06
-    log: true
-  - name: xgb_max_depth
-    path: model.params.max_depth
-    kind: int
-    low: 2
-    high: 4
-  - name: xgb_min_child_weight
-    path: model.params.min_child_weight
-    kind: float
-    low: 2.0
-    high: 12.0
-    step: 2.0
-  - name: xgb_subsample
-    path: model.params.subsample
-    kind: float
-    low: 0.6
-    high: 1.0
+    low: 0.3
+    high: 1.2
     step: 0.1
-  - name: xgb_colsample_bytree
-    path: model.params.colsample_bytree
-    kind: float
-    low: 0.6
-    high: 1.0
-    step: 0.1
-  - name: xgb_reg_lambda
-    path: model.params.reg_lambda
-    kind: categorical
-    choices: [1.0, 2.0, 5.0, 10.0]
-  - name: xgb_reg_alpha
-    path: model.params.reg_alpha
-    kind: categorical
-    choices: [0.0, 0.05, 0.1, 0.5]
-  - name: xgb_scale_pos_weight
-    path: model.params.scale_pos_weight
-    kind: categorical
-    choices: [1.0, 1.5, 2.0, 3.0]
-  - name: backtest_risk_per_trade
-    path: backtest.risk_per_trade
-    kind: categorical
-    choices: [0.0025, 0.003, 0.0035, 0.004]

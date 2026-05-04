@@ -20,6 +20,7 @@ from src.features import (
     add_price_momentum_features,
     add_regime_context_features,
     add_return_momentum_features,
+    swing_extrema_context,
     add_shock_context_features,
     add_support_resistance_features,
     add_support_resistance_v2_features,
@@ -99,6 +100,7 @@ FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
     "feature_transforms": add_feature_transforms,
     "multi_timeframe": add_multi_timeframe_features,
     "opening_range_breakout": add_opening_range_breakout_features,
+    "swing_extrema_context": swing_extrema_context,
     "roc_long_only_conditions": roc_long_only_conditions_signal,
 }
 

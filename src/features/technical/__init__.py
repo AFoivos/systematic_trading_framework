@@ -5,6 +5,12 @@ from .atr import add_atr_features
 from .bollinger import add_bollinger_bands
 from .bollinger import add_bollinger_features
 from .ema import compute_ema
+from .extrema import (
+    build_last_confirmed_extrema_context,
+    confirm_extrema_without_lookahead,
+    detect_local_extrema,
+    make_pre_extrema_research_label,
+)
 from .indicators import add_indicator_features
 from .macd import compute_macd
 from .macd import add_macd_features
@@ -36,6 +42,10 @@ from .volume_features import add_volume_features
 __all__ = [
     "compute_sma",
     "compute_ema",
+    "detect_local_extrema",
+    "confirm_extrema_without_lookahead",
+    "build_last_confirmed_extrema_context",
+    "make_pre_extrema_research_label",
     "add_trend_features",
     "add_trend_regime_features",
     "compute_price_momentum",

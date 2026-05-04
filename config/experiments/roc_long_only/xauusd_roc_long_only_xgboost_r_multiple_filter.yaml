@@ -134,10 +134,7 @@ model:
     allow_partial_horizon: false
     diagnostic_feature_cols:
       - roc_12
-      - regime_vol_ratio_z_24_168
       - close_z
-      - close_open_ratio
-      - manual_conviction_score
   split:
     method: walk_forward
     n_splits: 6
@@ -246,17 +243,17 @@ backtest:
   risk_per_trade: 0.004
   max_holding_bars: 18
   dynamic_exits:
-    enabled: false
+    enabled: true
     signal_off_exit:
       enabled: false
       min_bars_held: 1
       exit_price: next_open
     breakeven:
-      enabled: false
+      enabled: true
       trigger_r: 1.2
       lock_r: 0.0
     profit_lock:
-      enabled: false
+      enabled: true
       trigger_r: 1.8
       lock_r: 0.3
     no_progress:

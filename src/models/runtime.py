@@ -516,6 +516,10 @@ def infer_feature_columns(
             continue
         if col.startswith(("signal_", "pred_", "target_")):
             continue
+        if col.startswith("pre_local_"):
+            continue
+        if "raw_local_" in str(col):
+            continue
         features.append(col)
     return features
 

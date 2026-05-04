@@ -119,3 +119,36 @@ def test_plot_trade_diagnostics_downsamples_large_timeseries_payload() -> None:
     assert len(feature_trace.x) == 10
     assert entry_trace.x[0] == idx[55]
     assert "displaying 10/101 bars" in str(fig.layout.title.text)
+
+
+def test_plot_trade_diagnostics_adds_exit_reason_filter() -> None:
+    idx = pd.date_range("2024-01-01", periods=4, freq="h")
+    frame = pd.DataFrame(
+        {
+            "open": [1.0, 1.02, 1.03, 1.01],
+            "high": [1.01, 1.05, 1.06, 1.04],
+            "low": [0.99, 1.00, 1.01, 0.98],
+            "close": [1.00, 1.04, 1.02, 1.00],
+            "signal_long": [0.0, 0.7, 0.7, 0.0],
+            "label": [np.nan, 1.0, 0.0, 1.0],
+            "r_target_exit_reason": [None, "take_profit", "stop_loss", "take_profit"],
+        },
+        index=idx,
+    )
+    positions = pd.Series([0.0, 0.7, 0.7, 0.0], index=idx)
+
+    fig = plot_trade_diagnostics(
+        frame,
+        positions=positions,
+        asset="TEST",
+        title="Trade Diagnostics: TEST",
+        signal_col="signal_long",
+        target_col="label",
+        target_exit_reason_col="r_target_exit_reason",
+    )
+
+    assert len(fig.layout.updatemenus) == 1
+    labels = [button.label for button in fig.layout.updatemenus[0].buttons]
+    assert labels == ["all exit_reason", "stop_loss", "take_profit"]
+    take_profit_button = fig.layout.updatemenus[0].buttons[2]
+    assert len(take_profit_button.args[0]["y"][0]) == 2
