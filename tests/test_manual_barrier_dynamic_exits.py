@@ -12,6 +12,7 @@ def _run(
     dynamic_exits: dict | None = None,
     take_profit_r: float = 3.0,
     max_holding_bars: int = 12,
+    allow_short: bool = False,
 ):
     return run_manual_barrier_backtest(
         df,
@@ -24,6 +25,7 @@ def _run(
         slippage_per_unit_turnover=0.0,
         periods_per_year=48,
         dynamic_exits=dynamic_exits,
+        allow_short=allow_short,
     )
 
 
@@ -165,3 +167,46 @@ def test_manual_barrier_dynamic_exits_never_create_short_or_flip() -> None:
 
     assert bool(result.positions.ge(0.0).all())
     assert set(result.trades["side"]) == {"long"}
+
+
+def test_manual_barrier_short_signal_off_exit_works_when_enabled() -> None:
+    df = _frame(5, signal=[-1.0, -1.0, 0.0, 0.0, 0.0])
+    df.loc[df.index[1], ["open", "high", "low", "close"]] = [100.0, 100.2, 99.4, 99.8]
+    df.loc[df.index[2], "open"] = 99.6
+
+    result = _run(
+        df,
+        dynamic_exits={
+            "enabled": True,
+            "signal_off_exit": {"enabled": True, "min_bars_held": 1, "exit_price": "next_open"},
+        },
+        allow_short=True,
+    )
+
+    trade = result.trades.iloc[0]
+    assert trade["side"] == "short"
+    assert trade["entry_timestamp"] == df.index[1]
+    assert trade["exit_timestamp"] == df.index[3]
+    assert trade["raw_exit_price"] == pytest.approx(100.0)
+    assert trade["exit_reason"] == "signal_off_exit"
+    assert result.positions.loc[df.index[1]] == pytest.approx(-1.0)
+
+
+def test_manual_barrier_short_take_profit_records_positive_return() -> None:
+    df = _frame(4, signal=[-1.0, 0.0, 0.0, 0.0])
+    df.loc[df.index[1], ["open", "high", "low", "close"]] = [100.0, 100.2, 98.8, 99.1]
+
+    result = _run(
+        df,
+        take_profit_r=1.0,
+        max_holding_bars=3,
+        allow_short=True,
+    )
+
+    trade = result.trades.iloc[0]
+    assert trade["side"] == "short"
+    assert trade["take_profit_price"] == pytest.approx(99.0)
+    assert trade["stop_loss_price"] == pytest.approx(101.0)
+    assert trade["exit_reason"] == "take_profit"
+    assert trade["trade_r"] == pytest.approx(1.0)
+    assert result.returns.loc[df.index[1]] == pytest.approx(0.01)

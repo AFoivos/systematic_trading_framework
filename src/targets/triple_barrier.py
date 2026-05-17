@@ -5,6 +5,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from src.targets.output_aliases import apply_target_output_aliases
+
 
 def _parse_r_clip(value: Any) -> tuple[float, float] | None:
     if value is None:
@@ -63,7 +65,7 @@ def build_triple_barrier_target(
     - 0.0 when the lower barrier is touched first
     - NaN (default) when neither barrier is touched before the vertical barrier
     """
-    cfg = dict(target_cfg or {})
+    cfg = apply_target_output_aliases(target_cfg)
     price_col = str(cfg.get("price_col", "close"))
     open_col = str(cfg.get("open_col", "open"))
     high_col = str(cfg.get("high_col", "high"))
@@ -90,6 +92,12 @@ def build_triple_barrier_target(
     r_col = str(cfg.get("r_col", "tb_event_r"))
     oriented_r_col = str(cfg.get("oriented_r_col", "tb_oriented_r"))
     r_clip = _parse_r_clip(cfg.get("r_clip"))
+    hit_step_col = str(cfg.get("hit_step_col", f"{label_col}_hit_step"))
+    hit_type_col = str(cfg.get("hit_type_col", f"{label_col}_hit_type"))
+    upper_barrier_col = str(cfg.get("upper_barrier_col", f"{label_col}_upper_barrier"))
+    lower_barrier_col = str(cfg.get("lower_barrier_col", f"{label_col}_lower_barrier"))
+    meta_side_col = str(cfg.get("meta_side_col", f"{label_col}_meta_side"))
+    oriented_ret_col = str(cfg.get("oriented_ret_col", f"{label_col}_oriented_ret"))
 
     if max_holding <= 0:
         raise ValueError("triple_barrier max_holding must be a positive integer.")
@@ -140,7 +148,7 @@ def build_triple_barrier_target(
         else:
             returns = out[price_col].astype(float).pct_change()
         vol = returns.rolling(vol_window, min_periods=vol_window).std()
-        vol_source_col = f"triple_barrier_vol_{vol_window}"
+        vol_source_col = str(cfg.get("vol_source_col", f"triple_barrier_vol_{vol_window}"))
         out[vol_source_col] = vol.astype("float32")
 
     prices = out[price_col].astype(float).to_numpy(dtype=float)
@@ -323,16 +331,16 @@ def build_triple_barrier_target(
 
         candidate_out_col = str(cfg.get("candidate_out_col", f"{label_col}_candidate"))
         out[candidate_out_col] = candidate_mask.astype("float32")
-        out[f"{label_col}_meta_side"] = side_sign.astype("float32")
-        out[f"{label_col}_oriented_ret"] = oriented_rets.astype("float32")
+        out[meta_side_col] = side_sign.astype("float32")
+        out[oriented_ret_col] = oriented_rets.astype("float32")
     elif side_col is not None:
         side_series = out[str(side_col)].astype(float).fillna(0.0).clip(lower=-1.0, upper=1.0)
         side_sign = np.sign(side_series.to_numpy(dtype=float))
         oriented_r = event_r * side_sign
         if r_clip is not None:
             oriented_r = np.clip(oriented_r, r_clip[0], r_clip[1])
-        out[f"{label_col}_meta_side"] = side_sign.astype("float32")
-        out[f"{label_col}_oriented_ret"] = (event_rets * side_sign).astype("float32")
+        out[meta_side_col] = side_sign.astype("float32")
+        out[oriented_ret_col] = (event_rets * side_sign).astype("float32")
     else:
         oriented_r = event_r.copy()
 
@@ -343,10 +351,10 @@ def build_triple_barrier_target(
         out[r_col] = event_r.astype("float32")
         out[oriented_r_col] = oriented_r.astype("float32")
     out[label_col] = labels.astype("float32")
-    out[f"{label_col}_hit_step"] = hit_steps.astype("float32")
-    out[f"{label_col}_hit_type"] = pd.Series(hit_types, index=out.index, dtype="object")
-    out[f"{label_col}_upper_barrier"] = upper_levels.astype("float32")
-    out[f"{label_col}_lower_barrier"] = lower_levels.astype("float32")
+    out[hit_step_col] = hit_steps.astype("float32")
+    out[hit_type_col] = pd.Series(hit_types, index=out.index, dtype="object")
+    out[upper_barrier_col] = upper_levels.astype("float32")
+    out[lower_barrier_col] = lower_levels.astype("float32")
 
     label_series = pd.Series(labels, index=out.index)
     valid = label_series.notna()
@@ -360,18 +368,19 @@ def build_triple_barrier_target(
         label_col,
         event_ret_col,
         fwd_col,
-        f"{label_col}_hit_step",
-        f"{label_col}_hit_type",
-        f"{label_col}_upper_barrier",
-        f"{label_col}_lower_barrier",
+        hit_step_col,
+        hit_type_col,
+        upper_barrier_col,
+        lower_barrier_col,
+        vol_source_col,
     ]
     if add_r_multiple:
         output_cols.extend([r_col, oriented_r_col])
     if candidate_out_col is not None:
         output_cols.append(candidate_out_col)
-        output_cols.extend([f"{label_col}_meta_side", f"{label_col}_oriented_ret"])
+        output_cols.extend([meta_side_col, oriented_ret_col])
     elif side_col is not None:
-        output_cols.extend([f"{label_col}_meta_side", f"{label_col}_oriented_ret"])
+        output_cols.extend([meta_side_col, oriented_ret_col])
     output_cols = sorted(set(output_cols))
     meta = {
         "kind": "triple_barrier",
@@ -416,6 +425,12 @@ def build_triple_barrier_target(
         "add_r_multiple": bool(add_r_multiple),
         "r_col": r_col if add_r_multiple else None,
         "oriented_r_col": oriented_r_col if add_r_multiple else None,
+        "hit_step_col": hit_step_col,
+        "hit_type_col": hit_type_col,
+        "upper_barrier_col": upper_barrier_col,
+        "lower_barrier_col": lower_barrier_col,
+        "meta_side_col": meta_side_col if side_col is not None else None,
+        "oriented_ret_col": oriented_ret_col if side_col is not None else None,
         "r_clip": list(r_clip) if r_clip is not None else None,
     }
     if add_r_multiple:

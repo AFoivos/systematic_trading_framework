@@ -1,0 +1,333 @@
+data:
+  source: dukascopy_csv
+  interval: 30m
+  start: null
+  end: null
+  alignment: inner
+  symbol: SPX500
+  pit:
+    timestamp_alignment:
+      source_timezone: UTC
+      output_timezone: UTC
+      normalize_daily: false
+      duplicate_policy: last
+    corporate_actions:
+      policy: none
+      adj_close_col: adj_close
+    universe_snapshot:
+      inactive_policy: raise
+  storage:
+    mode: cached_only
+    dataset_id: stochrsi_cross_ma_raw_manual_barrier_spx500_30m
+    save_raw: false
+    save_processed: true
+    load_path: data/raw/dukascopy_30m_clean/spx500_30m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed
+
+features:
+  - step: returns
+    outputs:
+      close_ret: close_ret
+    params:
+      log: false
+      col_name: close_ret
+  - step: volatility
+    outputs:
+      vol_rolling_24: vol_rolling_24
+      vol_rolling_48: vol_rolling_48
+    params:
+      returns_col: close_ret
+      rolling_windows: [24, 48]
+      ewma_spans: []
+      annualization_factor: null
+  - step: trend
+    params:
+      price_col: close
+      sma_windows: []
+      ema_spans: [50, 150]
+    outputs:
+      close_ema_50: ema_50
+      close_ema_150: ema_150
+  - step: stochastic_rsi
+    outputs:
+      stoch_rsi_k: stoch_rsi_k
+      stoch_rsi_d: stoch_rsi_d
+      stoch_rsi_k_minus_d: stoch_rsi_k_minus_d
+      stoch_rsi_cross_up: stoch_rsi_cross_up
+      stoch_rsi_cross_down: stoch_rsi_cross_down
+      stoch_rsi_oversold: stoch_rsi_oversold
+      stoch_rsi_overbought: stoch_rsi_overbought
+      stoch_rsi_slope: stoch_rsi_slope
+      stoch_rsi_recover_from_oversold: stoch_rsi_recover_from_oversold
+      stoch_rsi_fall_from_overbought: stoch_rsi_fall_from_overbought
+    params:
+      price_col: close
+      rsi_period: 14
+      stoch_period: 14
+      k_period: 3
+      d_period: 3
+      oversold: 0.20
+      overbought: 0.80
+      prefix: stoch_rsi
+  - step: atr
+    outputs:
+      atr_24: atr_24
+      atr_over_price_24: atr_over_price_24
+    params:
+      high_col: high
+      low_col: low
+      close_col: close
+      window: 24
+      windows: [24]
+      method: wilder
+      add_over_price: true
+  - step: session_context
+    outputs:
+      hour_sin_24: hour_sin_24
+      hour_cos_24: hour_cos_24
+      day_of_week_sin_7: day_of_week_sin_7
+      day_of_week_cos_7: day_of_week_cos_7
+      session_asia: session_asia
+      session_europe: session_europe
+      session_us: session_us
+      session_europe_us_overlap: session_europe_us_overlap
+      is_weekend: is_weekend
+    params:
+      timezone: UTC
+      include_weekend_flag: true
+  - step: swing_extrema_context
+    outputs:
+      swing_raw_local_high: swing_raw_local_high
+      swing_raw_local_low: swing_raw_local_low
+      swing_raw_local_high_price: swing_raw_local_high_price
+      swing_raw_local_low_price: swing_raw_local_low_price
+      swing_confirmed_local_high: swing_confirmed_local_high
+      swing_confirmed_local_low: swing_confirmed_local_low
+      swing_confirmed_local_high_price: swing_confirmed_local_high_price
+      swing_confirmed_local_low_price: swing_confirmed_local_low_price
+      swing_last_high: swing_last_high
+      swing_last_low: swing_last_low
+      swing_last_high_age: swing_last_high_age
+      swing_last_low_age: swing_last_low_age
+      swing_dist_to_last_high_atr: swing_dist_to_last_high_atr
+      swing_dist_from_last_low_atr: swing_dist_from_last_low_atr
+      swing_range_atr: swing_range_atr
+      swing_position_in_range: swing_position_in_range
+      swing_higher_high: swing_higher_high
+      swing_higher_low: swing_higher_low
+      swing_lower_high: swing_lower_high
+      swing_lower_low: swing_lower_low
+      swing_structure_score: swing_structure_score
+      swing_bars_since_high_breakout: swing_bars_since_high_breakout
+      swing_bars_since_low_breakdown: swing_bars_since_low_breakdown
+      swing_near_last_high: swing_near_last_high
+      swing_near_last_low: swing_near_last_low
+      swing_overextended_long: swing_overextended_long
+    params:
+      high_col: high
+      low_col: low
+      close_col: close
+      normalizer_col: atr_24
+      normalizer_mode: price
+      left_bars: 3
+      right_bars: 3
+      include_research_labels: false
+      prefix: swing
+  - step: ema_stoch_rsi_pullback
+    outputs:
+      ema_stoch_ema_fast_above_slow: ema_stoch_ema_fast_above_slow
+      ema_stoch_ema_fast_below_slow: ema_stoch_ema_fast_below_slow
+      ema_stoch_bull_cross: ema_stoch_bull_cross
+      ema_stoch_bear_cross: ema_stoch_bear_cross
+      ema_stoch_bars_since_bull_cross: ema_stoch_bars_since_bull_cross
+      ema_stoch_bars_since_bear_cross: ema_stoch_bars_since_bear_cross
+      ema_stoch_ema_fast_slope: ema_stoch_ema_fast_slope
+      ema_stoch_ema_slow_slope: ema_stoch_ema_slow_slope
+      ema_stoch_ema_distance: ema_stoch_ema_distance
+      ema_stoch_ema_distance_pct: ema_stoch_ema_distance_pct
+      ema_stoch_oversold_after_bull_cross: ema_stoch_oversold_after_bull_cross
+      ema_stoch_overbought_after_bear_cross: ema_stoch_overbought_after_bear_cross
+      ema_stoch_first_oversold_after_bull_cross: ema_stoch_first_oversold_after_bull_cross
+      ema_stoch_first_overbought_after_bear_cross: ema_stoch_first_overbought_after_bear_cross
+      ema_stoch_long_entry: ema_stoch_long_entry
+      ema_stoch_short_entry: ema_stoch_short_entry
+      signal_side: signal_side
+      signal_candidate: signal_candidate
+    params:
+      price_col: close
+      ema_fast_col: ema_50
+      ema_slow_col: ema_150
+      stoch_k_col: stoch_rsi_k
+      stoch_d_col: stoch_rsi_d
+      stoch_recover_col: stoch_rsi_recover_from_oversold
+      stoch_fall_col: stoch_rsi_fall_from_overbought
+      oversold: 0.20
+      overbought: 0.80
+      max_bars_after_cross: 999999
+      require_k_d_confirmation: false
+      require_price_above_slow_ema_for_long: false
+      require_price_below_slow_ema_for_short: false
+      use_first_pullback_only: false
+      prefix: ema_stoch
+      side_col: signal_side
+      candidate_col: signal_candidate
+  - step: lags
+    outputs:
+      lag_close_ret_1: lag_close_ret_1
+      lag_close_ret_2: lag_close_ret_2
+      lag_close_ret_4: lag_close_ret_4
+      lag_close_ret_8: lag_close_ret_8
+      lag_close_ret_12: lag_close_ret_12
+    params:
+      cols: [close_ret]
+      lags: [1, 2, 4, 8, 12]
+
+model:
+  kind: none
+
+signals:
+  kind: none
+
+target:
+  kind: triple_barrier
+  outputs:
+    label_col: label
+    event_ret_col: tb_event_ret
+    fwd_col: tb_event_ret
+    candidate_out_col: label_candidate
+    r_col: tb_event_r
+    oriented_r_col: tb_oriented_r
+  price_col: close
+  open_col: open
+  high_col: high
+  low_col: low
+  label_mode: meta
+  side_col: signal_side
+  candidate_col: signal_candidate
+  candidate_mode: all_nonzero
+  entry_price_mode: next_open
+  max_holding: 12
+  upper_mult: 1.5
+  lower_mult: 1.0
+  vol_window: 24
+  min_vol: 0.0001
+  neutral_label: lower
+  tie_break: closest_to_open
+  add_r_multiple: true
+  r_clip: [-3, 3]
+  diagnostic_feature_cols:
+    - ema_50
+    - ema_150
+    - ema_stoch_ema_distance_pct
+    - ema_stoch_bars_since_bull_cross
+    - ema_stoch_bars_since_bear_cross
+    - stoch_rsi_k
+    - stoch_rsi_d
+    - stoch_rsi_k_minus_d
+    - stoch_rsi_recover_from_oversold
+    - stoch_rsi_fall_from_overbought
+    - ema_stoch_oversold_after_bull_cross
+    - ema_stoch_overbought_after_bear_cross
+    - ema_stoch_first_oversold_after_bull_cross
+    - ema_stoch_first_overbought_after_bear_cross
+    - ema_stoch_long_entry
+    - ema_stoch_short_entry
+    - signal_side
+    - signal_candidate
+
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+
+risk:
+  cost_per_turnover: 0.00015
+  slippage_per_turnover: 0.00010
+  target_vol: null
+  max_leverage: 1.0
+  sizing: {}
+  dd_guard:
+    enabled: false
+    max_drawdown: 0.08
+    rearm_drawdown: 0.04
+    cooloff_bars: 48
+  portfolio_guard: {}
+  drawdown_sizing: {}
+  vol_col: null
+
+backtest:
+  engine: manual_barrier
+  signal_col: signal_side
+  returns_col: close_ret
+  returns_type: simple
+  subset: full
+  periods_per_year: 12096
+  missing_return_policy: raise_if_exposed
+  allow_short: true
+  open_col: open
+  high_col: high
+  low_col: low
+  close_col: close
+  take_profit_r: 1.8
+  stop_loss_r: 1.0
+  risk_per_trade: 0.006
+  max_holding_bars: 16
+  dynamic_exits: {}
+  vol_col: null
+
+portfolio:
+  enabled: false
+  construction: signal_weights
+  long_short: true
+  gross_target: 1.0
+  expected_return_col: null
+  covariance_window: 240
+  covariance_rebalance_step: 48
+  risk_aversion: 8.0
+  trade_aversion: 0.0
+  constraints:
+    max_gross_leverage: 1.0
+    max_weight: 1.0
+    min_weight: -1.0
+    target_net_exposure: 0.0
+    enforce_target_net_exposure: false
+  asset_groups: {}
+
+evaluation:
+  probability_thresholds: []
+  primary_metric: sharpe
+  secondary_metrics:
+    - win_rate
+    - profit_factor
+    - max_drawdown
+    - sharpe
+    - trade_count
+
+monitoring:
+  enabled: true
+  psi_threshold: 0.15
+  n_bins: 10
+
+execution:
+  enabled: false
+  mode: paper
+  capital: 100000.0
+  price_col: close
+  min_trade_notional: 0.0
+  current_weights: {}
+  current_prices: {}
+
+logging:
+  enabled: true
+  run_name: stochrsi_cross_ma_raw_manual_barrier
+  output_dir: logs/experiments
+  stage_tails:
+    enabled: true
+    stdout: true
+    report: true
+    limit: 10
+    max_columns: 30
+    max_assets: 1

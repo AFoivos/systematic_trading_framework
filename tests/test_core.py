@@ -10,8 +10,13 @@ from src.features.technical.trend import add_trend_features
 from src.src_data.validation import validate_ohlcv
 from src.backtesting.engine import run_backtest
 from src.backtesting.manual_barrier import run_manual_barrier_backtest
+from src.experiments.orchestration.feature_stage import apply_signal_step
+from src.models.classification import train_logistic_regression_classifier
 from src.signals.roc_long_only_conditions_signal import roc_long_only_conditions_signal
 from src.signals.volatility_signal import compute_volatility_regime_signal
+from src.targets.forward_return import build_forward_return_target
+from src.targets.r_multiple import build_r_multiple_target
+from src.targets.triple_barrier import build_triple_barrier_target
 from src.utils.config import load_experiment_config
 
 
@@ -43,6 +48,210 @@ def test_add_trend_features_columns() -> None:
     assert "close_ema_2" in out.columns
     assert "close_over_sma_2" in out.columns
     assert "close_over_ema_2" in out.columns
+
+
+def _output_alias_price_frame() -> pd.DataFrame:
+    idx = pd.date_range("2024-01-01", periods=6, freq="30min")
+    return pd.DataFrame(
+        {
+            "open": [100.0, 100.0, 101.0, 102.0, 101.0, 100.0],
+            "high": [100.5, 102.0, 102.5, 102.5, 101.5, 100.5],
+            "low": [99.5, 99.5, 100.5, 100.5, 99.0, 99.0],
+            "close": [100.0, 101.0, 102.0, 101.0, 100.0, 99.0],
+            "ret": [0.0, 0.01, 0.0099, -0.0098, -0.0099, -0.01],
+            "candidate": [1.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+            "side": [1.0, 0.0, -1.0, 0.0, 0.0, 0.0],
+            "vol": [0.01] * 6,
+        },
+        index=idx,
+    )
+
+
+def test_forward_return_target_outputs_aliases_columns() -> None:
+    out, label_col, fwd_col, meta = build_forward_return_target(
+        _output_alias_price_frame(),
+        {
+            "price_col": "close",
+            "horizon": 1,
+            "outputs": {
+                "label_col": "my_label",
+                "fwd_col": "my_forward_return",
+            },
+        },
+    )
+
+    assert label_col == "my_label"
+    assert fwd_col == "my_forward_return"
+    assert {"my_label", "my_forward_return"}.issubset(out.columns)
+    assert meta["output_cols"] == ["my_forward_return", "my_label"]
+
+
+def test_triple_barrier_target_outputs_aliases_all_diagnostic_columns() -> None:
+    out, label_col, fwd_col, meta = build_triple_barrier_target(
+        _output_alias_price_frame(),
+        {
+            "price_col": "close",
+            "open_col": "open",
+            "high_col": "high",
+            "low_col": "low",
+            "returns_col": "ret",
+            "side_col": "side",
+            "candidate_col": "candidate",
+            "label_mode": "meta",
+            "entry_price_mode": "next_open",
+            "max_holding": 2,
+            "upper_mult": 1.0,
+            "lower_mult": 1.0,
+            "vol_window": 2,
+            "min_vol": 0.0001,
+            "add_r_multiple": True,
+            "outputs": {
+                "label_col": "tb_label_custom",
+                "event_ret_col": "tb_ret_custom",
+                "fwd_col": "tb_fwd_custom",
+                "candidate_out_col": "tb_candidate_custom",
+                "r_col": "tb_r_custom",
+                "oriented_r_col": "tb_oriented_r_custom",
+                "hit_step_col": "tb_hit_step_custom",
+                "hit_type_col": "tb_hit_type_custom",
+                "upper_barrier_col": "tb_upper_custom",
+                "lower_barrier_col": "tb_lower_custom",
+                "meta_side_col": "tb_side_custom",
+                "oriented_ret_col": "tb_oriented_ret_custom",
+                "vol_source_col": "tb_vol_custom",
+            },
+        },
+    )
+
+    expected = {
+        "tb_label_custom",
+        "tb_ret_custom",
+        "tb_fwd_custom",
+        "tb_candidate_custom",
+        "tb_r_custom",
+        "tb_oriented_r_custom",
+        "tb_hit_step_custom",
+        "tb_hit_type_custom",
+        "tb_upper_custom",
+        "tb_lower_custom",
+        "tb_side_custom",
+        "tb_oriented_ret_custom",
+        "tb_vol_custom",
+    }
+    assert label_col == "tb_label_custom"
+    assert fwd_col == "tb_fwd_custom"
+    assert expected.issubset(out.columns)
+    assert expected.issubset(set(meta["output_cols"]))
+    assert meta["hit_step_col"] == "tb_hit_step_custom"
+    assert meta["upper_barrier_col"] == "tb_upper_custom"
+
+
+def test_r_multiple_target_outputs_aliases_execution_columns() -> None:
+    out, label_col, fwd_col, meta = build_r_multiple_target(
+        _output_alias_price_frame(),
+        {
+            "candidate_col": "candidate",
+            "price_col": "close",
+            "open_col": "open",
+            "high_col": "high",
+            "low_col": "low",
+            "volatility_col": "vol",
+            "max_holding_bars": 2,
+            "allow_partial_horizon": True,
+            "outputs": {
+                "label_col": "r_label_custom",
+                "fwd_col": "r_ret_custom",
+                "candidate_out_col": "r_candidate_custom",
+                "trade_r_col": "r_trade_custom",
+                "oriented_r_col": "r_oriented_custom",
+                "entry_price_col": "r_entry_custom",
+                "exit_price_col": "r_exit_custom",
+                "stop_price_col": "r_stop_custom",
+                "take_profit_price_col": "r_take_custom",
+                "exit_reason_col": "r_reason_custom",
+                "bars_held_col": "r_bars_custom",
+                "hit_type_col": "r_hit_type_custom",
+                "hit_step_col": "r_hit_step_custom",
+            },
+        },
+    )
+
+    expected = {
+        "r_label_custom",
+        "r_ret_custom",
+        "r_candidate_custom",
+        "r_trade_custom",
+        "r_oriented_custom",
+        "r_entry_custom",
+        "r_exit_custom",
+        "r_stop_custom",
+        "r_take_custom",
+        "r_reason_custom",
+        "r_bars_custom",
+        "r_hit_type_custom",
+        "r_hit_step_custom",
+    }
+    assert label_col == "r_label_custom"
+    assert fwd_col == "r_ret_custom"
+    assert expected.issubset(out.columns)
+    assert expected.issubset(set(meta["output_cols"]))
+    assert meta["trade_r_col"] == "r_trade_custom"
+    assert meta["exit_reason_col"] == "r_reason_custom"
+
+
+def test_signal_outputs_aliases_rename_emitted_signal_columns() -> None:
+    frame = pd.DataFrame({"pred_prob": [0.40, 0.60, 0.50]})
+
+    out = apply_signal_step(
+        frame,
+        {
+            "kind": "probability_threshold",
+            "params": {
+                "prob_col": "pred_prob",
+                "signal_col": "raw_signal",
+                "upper": 0.55,
+                "lower": 0.45,
+                "mode": "long_short",
+            },
+            "outputs": {"raw_signal": "custom_signal"},
+        },
+    )
+
+    assert "custom_signal" in out.columns
+    assert "raw_signal" not in out.columns
+    assert out["custom_signal"].tolist() == [-1.0, 1.0, 0.0]
+
+
+def test_model_outputs_aliases_custom_probability_and_oos_columns() -> None:
+    n = 80
+    idx = pd.date_range("2024-01-01", periods=n, freq="30min")
+    close = 100.0 + np.cumsum([((value % 6) - 3) * 0.1 for value in range(n)])
+    frame = pd.DataFrame(
+        {
+            "close": close,
+            "feat": [float(idx % 5) for idx in range(n)],
+        },
+        index=idx,
+    )
+
+    out, _, meta = train_logistic_regression_classifier(
+        frame,
+        {
+            "kind": "logistic_regression_clf",
+            "pred_prob_col": "custom_prob",
+            "pred_is_oos_col": "custom_oos",
+            "feature_cols": ["feat"],
+            "target": {"kind": "forward_return", "price_col": "close", "horizon": 1},
+            "split": {"method": "walk_forward", "train_size": 40, "test_size": 20, "max_folds": 1},
+        },
+    )
+
+    assert "custom_prob" in out.columns
+    assert "custom_oos" in out.columns
+    assert "pred_is_oos" not in out.columns
+    assert int(out["custom_oos"].sum()) == 20
+    assert meta["pred_prob_col"] == "custom_prob"
+    assert meta["pred_is_oos_col"] == "custom_oos"
 
 
 def test_range_features_support_superset_windows() -> None:
@@ -293,6 +502,34 @@ def test_roc_long_only_conditions_signal_is_score_based_and_long_only() -> None:
     assert "close_open_ratio" in out.columns
 
 
+def test_roc_long_only_conditions_can_require_bullish_candle() -> None:
+    idx = pd.date_range("2024-01-01", periods=2, freq="30min")
+    df = pd.DataFrame(
+        {
+            "open": [100.0, 100.0],
+            "close": [99.9, 101.0],
+            "is_weekend": [0.0, 0.0],
+            "roc_12": [0.01, 0.01],
+            "regime_vol_ratio_z_24_168": [0.5, 0.5],
+            "mtf_1h_trend_score": [0.0, 0.0],
+            "mtf_4h_trend_score": [0.0, 0.0],
+            "close_z": [0.0, 0.0],
+        },
+        index=idx,
+    )
+
+    out = roc_long_only_conditions_signal(
+        df,
+        min_score_required=5,
+        close_open_ratio_min=0.0,
+        require_bullish_candle=True,
+        vol_adjustment_strength=0.0,
+    )
+
+    assert out["cond_bullish_candle"].tolist() == [0, 1]
+    assert out["manual_long_signal"].tolist() == [0, 1]
+
+
 def test_manual_barrier_backtest_enters_next_open_and_records_trade_levels() -> None:
     idx = pd.date_range("2024-01-01", periods=4, freq="30min")
     df = pd.DataFrame(
@@ -331,6 +568,70 @@ def test_manual_barrier_backtest_enters_next_open_and_records_trade_levels() -> 
     assert result.returns.loc[idx[1]] == pytest.approx(0.01)
 
 
+def test_manual_barrier_backtest_supports_short_when_enabled() -> None:
+    idx = pd.date_range("2024-01-01", periods=4, freq="30min")
+    df = pd.DataFrame(
+        {
+            "signal": [-1.0, 0.0, 0.0, 0.0],
+            "open": [999.0, 100.0, 100.0, 100.0],
+            "high": [999.0, 100.2, 100.2, 100.2],
+            "low": [999.0, 98.8, 99.5, 99.5],
+            "close": [999.0, 99.2, 100.0, 100.0],
+        },
+        index=idx,
+    )
+
+    result = run_manual_barrier_backtest(
+        df,
+        signal_col="signal",
+        take_profit_r=1.0,
+        stop_loss_r=1.0,
+        risk_per_trade=0.01,
+        max_holding_bars=3,
+        cost_per_unit_turnover=0.0,
+        slippage_per_unit_turnover=0.0,
+        periods_per_year=48,
+        allow_short=True,
+    )
+
+    trade = result.trades.iloc[0]
+    assert trade["side"] == "short"
+    assert trade["entry_timestamp"] == idx[1]
+    assert trade["exit_timestamp"] == idx[1]
+    assert trade["take_profit_price"] == pytest.approx(99.0)
+    assert trade["stop_loss_price"] == pytest.approx(101.0)
+    assert trade["exit_reason"] == "take_profit"
+    assert result.returns.loc[idx[1]] == pytest.approx(0.01)
+
+
+def test_manual_barrier_short_configs_default_to_long_only_behavior() -> None:
+    idx = pd.date_range("2024-01-01", periods=4, freq="30min")
+    df = pd.DataFrame(
+        {
+            "signal": [-1.0, 0.0, 0.0, 0.0],
+            "open": [999.0, 100.0, 100.0, 100.0],
+            "high": [999.0, 100.2, 98.8, 100.2],
+            "low": [999.0, 98.8, 98.8, 99.8],
+            "close": [999.0, 99.0, 99.5, 100.0],
+        },
+        index=idx,
+    )
+
+    result = run_manual_barrier_backtest(
+        df,
+        signal_col="signal",
+        take_profit_r=1.0,
+        stop_loss_r=1.0,
+        risk_per_trade=0.01,
+        max_holding_bars=3,
+        cost_per_unit_turnover=0.0,
+        slippage_per_unit_turnover=0.0,
+        periods_per_year=48,
+    )
+
+    assert result.trades.empty
+
+
 def test_roc_long_only_configs_load_as_manual_barrier_experiments() -> None:
     config_paths = [
         "config/experiments/roc_long_only/xauusd_roc_long_only_manual_barrier.yaml",
@@ -348,6 +649,18 @@ def test_roc_long_only_configs_load_as_manual_barrier_experiments() -> None:
         assert cfg["signals"]["kind"] == "roc_long_only_conditions"
         assert cfg["backtest"]["engine"] == "manual_barrier"
         assert cfg["backtest"]["signal_col"] == "manual_vol_adjusted_signal"
+
+
+def test_stochrsi_cross_ma_manual_barrier_config_loads_short_execution() -> None:
+    cfg = load_experiment_config(
+        "config/experiments/stochrsi_cross_ma/stochrsi_cross_ma_raw_manual_barrier.yaml"
+    )
+
+    assert cfg["model"]["kind"] == "none"
+    assert cfg["signals"]["kind"] == "none"
+    assert cfg["backtest"]["engine"] == "manual_barrier"
+    assert cfg["backtest"]["signal_col"] == "signal_side"
+    assert cfg["backtest"]["allow_short"] is True
 
 
 def test_run_backtest_vol_targeting_flattens_missing_vol_warmup() -> None:

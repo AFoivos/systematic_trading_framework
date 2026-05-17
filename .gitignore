@@ -132,6 +132,8 @@ logs/
 processed/
 /pdfs/
 AGENTS.md
-docs/
+docs/*
+!docs/trading_dashboard_assumptions.md
 notebooks/
 tests/
+data/

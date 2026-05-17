@@ -7,8 +7,11 @@ import pytest
 from src.evaluation.metrics import annualized_return, compute_backtest_metrics
 from src.experiments.contracts import TargetContract, validate_feature_target_contract
 from src.experiments.models import train_logistic_regression_classifier
+from src.experiments.orchestration.feature_stage import apply_feature_steps
 from src.features.technical.indicators import compute_mfi
 from src.features.technical.oscillators import compute_rsi
+from src.features.technical.stochastic_rsi import add_stochastic_rsi_features
+from src.models.runtime import classify_feature_family
 from src.src_data.pit import (
     align_ohlcv_timestamps,
     apply_corporate_actions_policy,
@@ -17,6 +20,7 @@ from src.src_data.pit import (
     load_universe_snapshot,
 )
 from src.utils.config import ConfigError, ResolvedExperimentConfig, load_experiment_config, load_experiment_config_typed
+from src.utils.config_validation import validate_features_block
 
 
 def _synthetic_frame(n: int = 240) -> pd.DataFrame:
@@ -34,6 +38,19 @@ def _synthetic_frame(n: int = 240) -> pd.DataFrame:
     df["feat_1"] = pd.Series(base, index=idx).shift(1)
     df["feat_2"] = pd.Series(base, index=idx).rolling(10, min_periods=2).std()
     return df
+
+
+def _synthetic_ohlcv_for_stochastic_rsi(n: int = 80) -> pd.DataFrame:
+    idx = pd.date_range("2024-01-01", periods=n, freq="h")
+    steps = 0.002 * np.sin(np.arange(n) / 2.0) + 0.0003 * np.cos(np.arange(n) / 5.0)
+    close = 100.0 * np.exp(np.cumsum(steps))
+    frame = pd.DataFrame(index=idx)
+    frame["close"] = close
+    frame["open"] = frame["close"].shift(1).fillna(frame["close"].iloc[0])
+    frame["high"] = np.maximum(frame["open"], frame["close"]) * 1.001
+    frame["low"] = np.minimum(frame["open"], frame["close"]) * 0.999
+    frame["volume"] = 1000.0
+    return frame[["open", "high", "low", "close", "volume"]]
 
 
 def test_forward_horizon_guard_trims_train_rows_in_time_split() -> None:
@@ -140,6 +157,112 @@ def test_rsi_saturates_to_100_in_monotonic_uptrend() -> None:
     rsi = compute_rsi(prices, window=3)
 
     assert np.isclose(float(rsi.iloc[-1]), 100.0)
+
+
+def test_stochastic_rsi_features_emit_expected_columns_and_values() -> None:
+    df = _synthetic_ohlcv_for_stochastic_rsi()
+
+    out = add_stochastic_rsi_features(
+        df,
+        price_col="close",
+        rsi_period=5,
+        stoch_period=6,
+        k_period=2,
+        d_period=3,
+        oversold=0.2,
+        overbought=0.8,
+    )
+
+    expected = [
+        "stoch_rsi_k",
+        "stoch_rsi_d",
+        "stoch_rsi_k_minus_d",
+        "stoch_rsi_cross_up",
+        "stoch_rsi_cross_down",
+        "stoch_rsi_oversold",
+        "stoch_rsi_overbought",
+        "stoch_rsi_slope",
+        "stoch_rsi_recover_from_oversold",
+    ]
+    assert out.columns[-len(expected) :].tolist() == expected
+    assert out["stoch_rsi_k"].dropna().between(0.0, 1.0).all()
+    assert out["stoch_rsi_d"].dropna().between(0.0, 1.0).all()
+
+    for column in [
+        "stoch_rsi_cross_up",
+        "stoch_rsi_cross_down",
+        "stoch_rsi_oversold",
+        "stoch_rsi_overbought",
+        "stoch_rsi_recover_from_oversold",
+    ]:
+        assert set(out[column].dropna().unique()).issubset({0, 1})
+
+    pd.testing.assert_series_equal(
+        out["stoch_rsi_k_minus_d"],
+        out["stoch_rsi_k"] - out["stoch_rsi_d"],
+        check_names=False,
+    )
+    pd.testing.assert_series_equal(
+        out["stoch_rsi_slope"],
+        out["stoch_rsi_k"] - out["stoch_rsi_k"].shift(1),
+        check_names=False,
+    )
+
+
+def test_stochastic_rsi_features_are_point_in_time_safe() -> None:
+    df = _synthetic_ohlcv_for_stochastic_rsi()
+    future = df.tail(3).copy()
+    future.index = pd.date_range(df.index[-1], periods=4, freq="h")[1:]
+    future["close"] = [500.0, 250.0, 750.0]
+
+    params = {
+        "price_col": "close",
+        "rsi_period": 5,
+        "stoch_period": 6,
+        "k_period": 2,
+        "d_period": 2,
+    }
+    base = add_stochastic_rsi_features(df, **params)
+    extended = add_stochastic_rsi_features(pd.concat([df, future]), **params)
+    cols = [column for column in base.columns if column.startswith("stoch_rsi_")]
+
+    pd.testing.assert_frame_equal(base[cols], extended.loc[df.index, cols])
+
+
+def test_stochastic_rsi_feature_step_is_yaml_driven_and_flat_price_safe() -> None:
+    step = {
+        "step": "stochastic_rsi",
+        "params": {
+            "price_col": "close",
+            "rsi_period": 5,
+            "stoch_period": 6,
+            "k_period": 2,
+            "d_period": 2,
+            "oversold": 0.2,
+            "overbought": 0.8,
+            "prefix": "stoch_rsi",
+        },
+    }
+    validate_features_block([step])
+
+    out = apply_feature_steps(_synthetic_ohlcv_for_stochastic_rsi(), [step])
+    assert "stoch_rsi_k" in out.columns
+    assert classify_feature_family("stoch_rsi_k") == "momentum"
+
+    flat = pd.DataFrame(
+        {
+            "open": [100.0] * 20,
+            "high": [100.0] * 20,
+            "low": [100.0] * 20,
+            "close": [100.0] * 20,
+            "volume": [1000.0] * 20,
+        },
+        index=pd.date_range("2024-01-01", periods=20, freq="h"),
+    )
+    flat_out = apply_feature_steps(flat, [step])
+    assert flat_out["stoch_rsi_k"].isna().all()
+    assert flat_out["stoch_rsi_d"].isna().all()
+    assert flat_out["stoch_rsi_cross_up"].eq(0).all()
 
 
 def test_mfi_saturates_to_100_when_negative_flow_is_zero() -> None:

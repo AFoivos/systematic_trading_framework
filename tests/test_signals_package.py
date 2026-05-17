@@ -10,6 +10,7 @@ import pytest
     [
         ("buy_and_hold_signal", "buy_and_hold_signal"),
         ("conviction_sizing_signal", "conviction_sizing_signal"),
+        ("ema_stoch_rsi_pullback_signal", "ema_stoch_rsi_pullback_signal"),
         ("forecast_threshold_signal", "forecast_threshold_signal"),
         ("forecast_vol_adjusted_signal", "forecast_vol_adjusted_signal"),
         ("manual_long_model_filter_signal", "manual_long_model_filter_signal"),

@@ -4,14 +4,14 @@ import math
 import re
 from typing import Any
 
-from src.experiments.registry import (
-    FEATURE_REGISTRY,
-    MODEL_REGISTRY,
+from src.intraday import validate_intraday_normalization_policy
+from src.utils.config_kinds import (
+    FEATURE_KINDS,
+    MODEL_KINDS,
     PORTFOLIO_MODEL_KINDS,
     RL_MODEL_KINDS,
-    SIGNAL_REGISTRY,
+    SIGNAL_KINDS,
 )
-from src.intraday import validate_intraday_normalization_policy
 from src.utils.repro import RuntimeConfigError, validate_runtime_config
 
 _RL_SINGLE_ASSET_DQN_KINDS = {"dqn_agent"}
@@ -58,6 +58,36 @@ _FEATURE_SELECTOR_PROFILES = {
     "ftmo_fx_intraday_balanced_v1",
     "ftmo_fx_intraday_regime_v1",
     "ftmo_fx_intraday_momentum_v1",
+}
+_TARGET_OUTPUT_KEYS = {
+    "label_col",
+    "fwd_col",
+    "event_ret_col",
+    "candidate_out_col",
+    "r_col",
+    "oriented_r_col",
+    "trade_r_col",
+    "entry_price_col",
+    "exit_price_col",
+    "stop_price_col",
+    "take_profit_price_col",
+    "exit_reason_col",
+    "bars_held_col",
+    "hit_step_col",
+    "hit_type_col",
+    "upper_barrier_col",
+    "lower_barrier_col",
+    "meta_side_col",
+    "oriented_ret_col",
+    "vol_source_col",
+}
+_MODEL_OUTPUT_KEYS = {
+    "pred_prob_col",
+    "pred_ret_col",
+    "pred_is_oos_col",
+    "returns_input_col",
+    "signal_col",
+    "action_col",
 }
 
 
@@ -546,7 +576,7 @@ def validate_features_block(features: Any) -> None:
             raise ConfigValidationError("features[].step must be a string.")
         if "enabled" in step and not isinstance(step["enabled"], bool):
             raise ConfigValidationError("features[].enabled must be boolean when provided.")
-        if step["step"] not in FEATURE_REGISTRY:
+        if step["step"] not in FEATURE_KINDS:
             raise ConfigValidationError(f"Unknown feature step: {step['step']}")
         if "params" in step and step["params"] is not None and not isinstance(step["params"], dict):
             raise ConfigValidationError("features[].params must be a mapping when provided.")
@@ -856,11 +886,28 @@ def _flatten_target_cfg_for_validation(target: dict[str, Any]) -> dict[str, Any]
 
 
 def _validate_r_multiple_target_block(target: dict[str, Any]) -> None:
+    _validate_string_mapping(
+        target.get("outputs"),
+        field="model.target.outputs",
+        allowed_keys=_TARGET_OUTPUT_KEYS,
+    )
     for key in (
         "candidate_col",
         "candidate_out_col",
         "label_col",
         "fwd_col",
+        "event_ret_col",
+        "r_col",
+        "oriented_r_col",
+        "trade_r_col",
+        "entry_price_col",
+        "exit_price_col",
+        "stop_price_col",
+        "take_profit_price_col",
+        "exit_reason_col",
+        "bars_held_col",
+        "hit_step_col",
+        "hit_type_col",
         "price_col",
         "open_col",
         "high_col",
@@ -915,22 +962,16 @@ def validate_model_block(model: dict[str, Any]) -> None:
         raise ConfigValidationError("model.kind is required.")
     if not isinstance(model["kind"], str):
         raise ConfigValidationError("model.kind must be a string.")
-    if model["kind"] != "none" and model["kind"] not in MODEL_REGISTRY:
+    if model["kind"] != "none" and model["kind"] not in MODEL_KINDS:
         raise ConfigValidationError(f"Unknown model kind: {model['kind']}")
     _validate_string_mapping(
         model.get("outputs"),
         field="model.outputs",
-        allowed_keys={
-            "pred_prob_col",
-            "pred_ret_col",
-            "returns_input_col",
-            "signal_col",
-            "action_col",
-            "label_col",
-            "fwd_col",
-            "candidate_out_col",
-        },
+        allowed_keys=_MODEL_OUTPUT_KEYS | _TARGET_OUTPUT_KEYS,
     )
+    for key in _MODEL_OUTPUT_KEYS:
+        if key in model and model[key] is not None and not isinstance(model[key], str):
+            raise ConfigValidationError(f"model.{key} must be a string when provided.")
 
     if model["kind"] == "none":
         target = model.get("target", {}) or {}
@@ -938,6 +979,11 @@ def validate_model_block(model: dict[str, Any]) -> None:
             raise ConfigValidationError("model.target must be a mapping when provided.")
         if target:
             target_for_validation = _flatten_target_cfg_for_validation(target)
+            _validate_string_mapping(
+                target_for_validation.get("outputs"),
+                field="model.target.outputs",
+                allowed_keys=_TARGET_OUTPUT_KEYS,
+            )
             target_kind = target_for_validation.get("kind", "forward_return")
             if target_kind != "r_multiple":
                 raise ConfigValidationError(
@@ -964,6 +1010,11 @@ def validate_model_block(model: dict[str, Any]) -> None:
         if not isinstance(target, dict):
             raise ConfigValidationError("model.target must be a mapping when provided.")
         target = _flatten_target_cfg_for_validation(target)
+        _validate_string_mapping(
+            target.get("outputs"),
+            field="model.target.outputs",
+            allowed_keys=_TARGET_OUTPUT_KEYS,
+        )
         target_kind = target.get("kind", "forward_return")
         if target_kind not in {"forward_return", "triple_barrier", "r_multiple"}:
             raise ConfigValidationError("model.target.kind must be 'forward_return', 'triple_barrier', or 'r_multiple'.")
@@ -1025,6 +1076,13 @@ def validate_model_block(model: dict[str, Any]) -> None:
                 "fwd_col",
                 "r_col",
                 "oriented_r_col",
+                "hit_step_col",
+                "hit_type_col",
+                "upper_barrier_col",
+                "lower_barrier_col",
+                "meta_side_col",
+                "oriented_ret_col",
+                "vol_source_col",
                 "target_col",
                 "regression_target_col",
             ):
@@ -1390,28 +1448,66 @@ def validate_model_block(model: dict[str, Any]) -> None:
         _non_negative_int(split.get("embargo_bars", 0), field="model.split.embargo_bars")
 
 
+def validate_standalone_target_block(target: Any) -> None:
+    if target in (None, {}):
+        return
+    if not isinstance(target, dict):
+        raise ConfigValidationError("target must be a mapping when provided.")
+    target_cfg = _flatten_target_cfg_for_validation(target)
+    _validate_string_mapping(
+        target_cfg.get("outputs"),
+        field="target.outputs",
+        allowed_keys=_TARGET_OUTPUT_KEYS,
+    )
+    target_kind = target_cfg.get("kind", "forward_return")
+    if target_kind not in {"forward_return", "triple_barrier", "r_multiple"}:
+        raise ConfigValidationError("target.kind must be 'forward_return', 'triple_barrier', or 'r_multiple'.")
+    validate_model_block(
+        {
+            "kind": "xgboost_clf",
+            "feature_cols": ["__standalone_target_validation__"],
+            "target": target_cfg,
+        }
+    )
+
+
 def _model_emitted_columns(model: dict[str, Any]) -> dict[str, str]:
     kind = str(model.get("kind", "none"))
+    pred_is_oos_col = str(model.get("pred_is_oos_col") or "pred_is_oos")
+    explicit_oos = model.get("pred_is_oos_col") is not None
     if kind in _CLASSIFIER_MODEL_KINDS:
-        return {"pred_prob_col": str(model.get("pred_prob_col") or "pred_prob")}
+        emitted = {
+            "pred_prob_col": str(model.get("pred_prob_col") or "pred_prob"),
+        }
+        if explicit_oos:
+            emitted["pred_is_oos_col"] = pred_is_oos_col
+        return emitted
     if kind in _EMBEDDING_MODEL_KINDS:
         emitted = {
             f"embedding_col_{idx}": col
             for idx, col in enumerate(_resolve_event_embedding_columns(model))
         }
+        if explicit_oos:
+            emitted["pred_is_oos_col"] = pred_is_oos_col
         if model.get("pred_prob_col") is not None:
             emitted["pred_prob_col"] = str(model.get("pred_prob_col"))
         return emitted
     if kind in _FORECASTER_MODEL_KINDS:
-        return {
+        emitted = {
             "pred_ret_col": str(model.get("pred_ret_col") or "pred_ret"),
             "pred_prob_col": str(model.get("pred_prob_col") or "pred_prob"),
         }
+        if explicit_oos:
+            emitted["pred_is_oos_col"] = pred_is_oos_col
+        return emitted
     if kind in RL_MODEL_KINDS:
-        return {
+        emitted = {
             "signal_col": str(model.get("signal_col") or "signal_rl"),
             "action_col": str(model.get("action_col") or "action_rl"),
         }
+        if explicit_oos:
+            emitted["pred_is_oos_col"] = pred_is_oos_col
+        return emitted
     return {}
 
 
@@ -1479,7 +1575,7 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
         raise ConfigValidationError("signals.kind is required.")
     if not isinstance(signals["kind"], str):
         raise ConfigValidationError("signals.kind must be a string.")
-    if signals["kind"] != "none" and signals["kind"] not in SIGNAL_REGISTRY:
+    if signals["kind"] != "none" and signals["kind"] not in SIGNAL_KINDS:
         raise ConfigValidationError(f"Unknown signals kind: {signals['kind']}")
     params = signals.get("params", {}) or {}
     if not isinstance(params, dict):
@@ -1487,7 +1583,6 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
     _validate_string_mapping(
         signals.get("outputs"),
         field="signals.outputs",
-        allowed_keys={"signal_col"},
     )
     if "signal_name" in params:
         raise ConfigValidationError("signals.params.signal_name is no longer supported; use signals.params.signal_col.")
@@ -1873,6 +1968,8 @@ def validate_backtest_block(backtest: dict[str, Any]) -> None:
     if engine == "manual_barrier":
         if subset != "full":
             raise ConfigValidationError("backtest.engine='manual_barrier' requires backtest.subset='full'.")
+        if "allow_short" in backtest and not isinstance(backtest.get("allow_short"), bool):
+            raise ConfigValidationError("backtest.allow_short must be boolean.")
         for key in ("open_col", "high_col", "low_col", "close_col"):
             if key in backtest and not isinstance(backtest[key], str):
                 raise ConfigValidationError(f"backtest.{key} must be a string.")
@@ -2085,6 +2182,12 @@ def validate_resolved_config(cfg: dict[str, Any]) -> dict[str, Any]:
     validate_features_block(cfg["features"])
     validate_model_stages_block(cfg.get("model_stages"))
     validate_model_block(cfg["model"])
+    if cfg.get("target") not in (None, {}):
+        if str(cfg["model"].get("kind", "none")) != "none":
+            raise ConfigValidationError("Top-level target diagnostics require model.kind='none'.")
+        if cfg["model"].get("target") not in (None, {}):
+            raise ConfigValidationError("Specify either top-level target or model.target, not both.")
+        validate_standalone_target_block(cfg["target"])
     validate_signals_block(cfg["signals"])
     validate_risk_block(cfg["risk"])
     validate_backtest_block(cfg["backtest"])
@@ -2138,6 +2241,7 @@ __all__ = [
     "validate_features_block",
     "validate_model_block",
     "validate_model_stages_block",
+    "validate_standalone_target_block",
     "validate_monitoring_block",
     "validate_portfolio_block",
     "validate_resolved_config",

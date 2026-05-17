@@ -248,4 +248,148 @@ def simulate_long_trade_path(
     }
 
 
-__all__ = ["normalize_dynamic_exit_config", "simulate_long_trade_path"]
+def simulate_short_trade_path(
+    *,
+    opens: np.ndarray,
+    highs: np.ndarray,
+    lows: np.ndarray,
+    closes: np.ndarray,
+    signals: np.ndarray | None,
+    entry_idx: int,
+    max_exit_idx: int,
+    entry_price: float,
+    initial_stop_price: float,
+    take_profit_price: float,
+    dynamic_exits: Mapping[str, Any] | None = None,
+    tie_break: str = "conservative",
+    legacy_same_bar_stop_reason: bool = False,
+) -> dict[str, Any]:
+    """
+    Simulate one short trade path from entry bar through the maximum holding bar.
+    """
+    if entry_idx < 0 or max_exit_idx < entry_idx:
+        raise ValueError("entry_idx/max_exit_idx define an empty trade path.")
+    if max_exit_idx >= len(opens):
+        raise ValueError("max_exit_idx is outside the supplied price arrays.")
+
+    entry = float(entry_price)
+    stop = float(initial_stop_price)
+    take_profit = float(take_profit_price)
+    risk_distance = stop - entry
+    if not np.isfinite(entry) or entry <= 0.0:
+        raise ValueError("entry_price must be a finite positive price.")
+    if not np.isfinite(risk_distance) or risk_distance <= 0.0:
+        raise ValueError("initial_stop_price must be above entry_price for a short trade.")
+    if not np.isfinite(take_profit) or take_profit >= entry:
+        raise ValueError("take_profit_price must be below entry_price for a short trade.")
+
+    dynamic_cfg = normalize_dynamic_exit_config(dynamic_exits)
+    effective_stop_price = stop
+    stop_reason = "stop_loss"
+    breakeven_activated = False
+    profit_lock_activated = False
+    max_favorable_r = 0.0
+    max_adverse_r = 0.0
+    bars_held = 0
+    exit_idx: int | None = None
+    raw_exit_price = np.nan
+    exit_reason = "max_holding_close"
+
+    for idx in range(entry_idx, max_exit_idx + 1):
+        bar_open = float(opens[idx])
+        bar_high = float(highs[idx])
+        bar_low = float(lows[idx])
+        bar_close = float(closes[idx])
+        if not all(np.isfinite(value) for value in (bar_open, bar_high, bar_low, bar_close)):
+            continue
+
+        bars_held += 1
+        max_favorable_r = max(max_favorable_r, float((entry - bar_low) / risk_distance))
+        max_adverse_r = min(max_adverse_r, float((entry - bar_high) / risk_distance))
+
+        if dynamic_cfg["breakeven"]["enabled"] and max_favorable_r >= dynamic_cfg["breakeven"]["trigger_r"]:
+            breakeven_activated = True
+            candidate_stop = entry - dynamic_cfg["breakeven"]["lock_r"] * risk_distance
+            if candidate_stop < effective_stop_price:
+                effective_stop_price = float(candidate_stop)
+                stop_reason = "breakeven_stop"
+
+        if dynamic_cfg["profit_lock"]["enabled"] and max_favorable_r >= dynamic_cfg["profit_lock"]["trigger_r"]:
+            profit_lock_activated = True
+            candidate_stop = entry - dynamic_cfg["profit_lock"]["lock_r"] * risk_distance
+            if candidate_stop <= effective_stop_price:
+                effective_stop_price = float(candidate_stop)
+                stop_reason = "profit_lock_stop"
+
+        stop_hit = bar_high >= effective_stop_price
+        take_profit_hit = bar_low <= take_profit
+        if stop_hit and take_profit_hit:
+            exit_idx = idx
+            raw_exit_price, exit_reason = _double_touch_exit(
+                tie_break=tie_break,
+                bar_open=bar_open,
+                effective_stop_price=effective_stop_price,
+                take_profit_price=take_profit,
+                stop_reason=stop_reason,
+            )
+            if legacy_same_bar_stop_reason and exit_reason == "stop_loss":
+                exit_reason = "stop_and_target_same_bar_stop_first"
+            break
+        if stop_hit:
+            exit_idx = idx
+            raw_exit_price = effective_stop_price
+            exit_reason = stop_reason
+            break
+        if take_profit_hit:
+            exit_idx = idx
+            raw_exit_price = take_profit
+            exit_reason = "take_profit"
+            break
+
+        signal_off = dynamic_cfg["signal_off_exit"]
+        if signal_off["enabled"] and bars_held >= signal_off["min_bars_held"] and signals is not None:
+            current_signal = float(signals[idx]) if idx < len(signals) and np.isfinite(float(signals[idx])) else 0.0
+            if current_signal >= 0.0:
+                exit_idx, raw_exit_price = _exit_on_price_mode(
+                    mode=signal_off["exit_price"],
+                    current_idx=idx,
+                    opens=opens,
+                    closes=closes,
+                )
+                exit_reason = "signal_off_exit"
+                break
+
+        no_progress = dynamic_cfg["no_progress"]
+        if (
+            no_progress["enabled"]
+            and bars_held >= no_progress["bars"]
+            and max_favorable_r < no_progress["min_favorable_r"]
+        ):
+            exit_idx, raw_exit_price = _exit_on_price_mode(
+                mode=no_progress["exit_price"],
+                current_idx=idx,
+                opens=opens,
+                closes=closes,
+            )
+            exit_reason = "no_progress_exit"
+            break
+
+    if exit_idx is None:
+        exit_idx = int(max_exit_idx)
+        raw_exit_price = float(closes[exit_idx])
+        exit_reason = "max_holding_close"
+
+    return {
+        "exit_idx": int(exit_idx),
+        "raw_exit_price": float(raw_exit_price),
+        "exit_reason": str(exit_reason),
+        "bars_held": int(bars_held),
+        "max_favorable_r": float(max_favorable_r),
+        "max_adverse_r": float(max_adverse_r),
+        "breakeven_activated": bool(breakeven_activated),
+        "profit_lock_activated": bool(profit_lock_activated),
+        "effective_stop_price": float(effective_stop_price),
+    }
+
+
+__all__ = ["normalize_dynamic_exit_config", "simulate_long_trade_path", "simulate_short_trade_path"]

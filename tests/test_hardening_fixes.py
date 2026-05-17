@@ -314,18 +314,26 @@ models:
       eval_metric: logloss
       tree_method: hist
     feature_cols: [close_logret]
-    target:
-      kind: triple_barrier
-      price_col: close
-      open_col: open
-      high_col: high
-      low_col: low
-      returns_col: close_logret
-      max_holding: 12
-      upper_mult: 1.5
-      lower_mult: 1.5
-      vol_window: 24
-      neutral_label: drop
+    targets_catalog:
+      forward_return:
+        enabled: false
+        price_col: close
+        returns_col: close_logret
+        returns_type: log
+        horizon: 12
+        threshold: 0.0
+      triple_barrier:
+        enabled: true
+        price_col: close
+        open_col: open
+        high_col: high
+        low_col: low
+        returns_col: close_logret
+        max_holding: 12
+        upper_mult: 1.5
+        lower_mult: 1.5
+        vol_window: 24
+        neutral_label: drop
     split:
       method: walk_forward
       train_size: 100
@@ -404,8 +412,264 @@ logging:
     cfg = load_experiment_config(config_path)
 
     assert cfg["model"]["kind"] == "xgboost_clf"
+    assert cfg["model"]["target"]["kind"] == "triple_barrier"
     assert cfg["signals"]["kind"] == "probability_threshold"
     assert "models" not in cfg
+    assert "targets_catalog" not in cfg["model"]
+    assert "signals_catalog" not in cfg
+
+
+def test_load_experiment_config_resolves_top_level_target_catalog_for_eda(tmp_path: Path) -> None:
+    config_path = tmp_path / "target_catalog.yaml"
+    config_path.write_text(
+        """
+data:
+  source: dukascopy_csv
+  interval: 30m
+  start: null
+  end: null
+  alignment: inner
+  symbol: XAUUSD
+  pit:
+    timestamp_alignment:
+      source_timezone: UTC
+      output_timezone: UTC
+      normalize_daily: false
+      duplicate_policy: last
+    corporate_actions:
+      policy: none
+      adj_close_col: adj_close
+    universe_snapshot:
+      inactive_policy: raise
+  storage:
+    mode: cached_only
+    dataset_id: target_catalog_test
+    save_raw: false
+    save_processed: false
+    load_path: data/raw/dukascopy_30m_clean/xauusd_30m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed
+features:
+  - step: returns
+    params:
+      log: false
+      col_name: close_ret
+targets_catalog:
+  forward_return:
+    enabled: false
+    price_col: close
+    returns_col: close_ret
+    returns_type: simple
+    horizon: 12
+    fwd_col: target_fwd_12
+    label_col: label
+  r_multiple:
+    enabled: true
+    candidate_col: manual_long_candidate
+    candidate_out_col: r_target_candidate
+    label_col: label
+    fwd_col: r_target_event_ret
+    price_col: close
+    open_col: open
+    high_col: high
+    low_col: low
+    volatility_col: vol_rolling_24
+    entry_price_mode: next_open
+    target_r_min: 0.8
+    take_profit_r: 1.8
+    stop_loss_r: 1.0
+    max_holding_bars: 18
+signals_catalog:
+  none:
+    enabled: true
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+risk:
+  cost_per_turnover: 0.0
+  slippage_per_turnover: 0.0
+  target_vol: null
+  max_leverage: 1.0
+  sizing: {}
+  dd_guard:
+    enabled: false
+    max_drawdown: 0.12
+    cooloff_bars: 48
+backtest:
+  engine: vectorized
+  returns_col: close_ret
+  signal_col: manual_long_candidate
+  periods_per_year: 12096
+  returns_type: simple
+  missing_return_policy: raise_if_exposed
+  min_holding_bars: 0
+  subset: full
+portfolio:
+  enabled: false
+  construction: signal_weights
+  gross_target: 1.0
+  long_short: false
+  expected_return_col: null
+  covariance_window: 60
+  covariance_rebalance_step: 1
+  risk_aversion: 5.0
+  trade_aversion: 0.0
+  constraints: {}
+  asset_groups: {}
+monitoring:
+  enabled: false
+  psi_threshold: 0.15
+  n_bins: 10
+execution:
+  enabled: false
+  mode: paper
+  capital: 100000.0
+  price_col: close
+  min_trade_notional: 0.0
+  current_weights: {}
+  current_prices: {}
+logging:
+  enabled: true
+  run_name: target_catalog_test
+  output_dir: logs/experiments/lab
+""",
+        encoding="utf-8",
+    )
+
+    cfg = load_experiment_config(config_path)
+
+    assert cfg["model"]["kind"] == "none"
+    assert cfg["target"]["kind"] == "r_multiple"
+    assert cfg["model"]["target"] == {}
+    assert "targets_catalog" not in cfg
+
+
+def test_load_experiment_config_allows_no_enabled_top_level_target_catalog(tmp_path: Path) -> None:
+    config_path = tmp_path / "feature_only_catalog.yaml"
+    config_path.write_text(
+        """
+data:
+  source: dukascopy_csv
+  interval: 30m
+  start: null
+  end: null
+  alignment: inner
+  symbol: XAUUSD
+  pit:
+    timestamp_alignment:
+      source_timezone: UTC
+      output_timezone: UTC
+      normalize_daily: false
+      duplicate_policy: last
+    corporate_actions:
+      policy: none
+      adj_close_col: adj_close
+    universe_snapshot:
+      inactive_policy: raise
+  storage:
+    mode: cached_only
+    dataset_id: feature_only_catalog_test
+    save_raw: false
+    save_processed: false
+    load_path: data/raw/dukascopy_30m_clean/xauusd_30m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed
+features:
+  - step: returns
+    params:
+      log: false
+      col_name: close_ret
+targets_catalog:
+  forward_return:
+    enabled: false
+    price_col: close
+    returns_col: close_ret
+    returns_type: simple
+    horizon: 12
+    fwd_col: target_fwd_12
+    label_col: label
+  r_multiple:
+    enabled: false
+    candidate_col: manual_long_candidate
+    label_col: label
+signals_catalog:
+  none:
+    enabled: false
+    params:
+      signal_col: eda_flat_signal
+  momentum:
+    enabled: false
+    params:
+      momentum_col: close_ret
+      signal_col: signal_momentum
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+risk:
+  cost_per_turnover: 0.0
+  slippage_per_turnover: 0.0
+  target_vol: null
+  max_leverage: 1.0
+  sizing: {}
+  dd_guard:
+    enabled: false
+    max_drawdown: 0.12
+    cooloff_bars: 48
+backtest:
+  engine: vectorized
+  returns_col: close_ret
+  signal_col: eda_flat_signal
+  periods_per_year: 12096
+  returns_type: simple
+  missing_return_policy: raise_if_exposed
+  min_holding_bars: 0
+  subset: full
+portfolio:
+  enabled: false
+  construction: signal_weights
+  gross_target: 1.0
+  long_short: false
+  expected_return_col: null
+  covariance_window: 60
+  covariance_rebalance_step: 1
+  risk_aversion: 5.0
+  trade_aversion: 0.0
+  constraints: {}
+  asset_groups: {}
+monitoring:
+  enabled: false
+  psi_threshold: 0.15
+  n_bins: 10
+execution:
+  enabled: false
+  mode: paper
+  capital: 100000.0
+  price_col: close
+  min_trade_notional: 0.0
+  current_weights: {}
+  current_prices: {}
+logging:
+  enabled: true
+  run_name: feature_only_catalog_test
+  output_dir: logs/experiments/lab
+""",
+        encoding="utf-8",
+    )
+
+    cfg = load_experiment_config(config_path)
+
+    assert cfg["model"]["kind"] == "none"
+    assert cfg["signals"]["kind"] == "none"
+    assert cfg["signals"]["params"]["signal_col"] == "eda_flat_signal"
+    assert cfg["backtest"]["signal_col"] == "eda_flat_signal"
+    assert "target" not in cfg
+    assert "targets_catalog" not in cfg
     assert "signals_catalog" not in cfg
 
 
@@ -450,6 +714,7 @@ model:
   kind: logistic_regression_clf
   outputs:
     pred_prob_col: stage2_prob
+    pred_is_oos_col: stage2_oos
     label_col: trend_label
     fwd_col: trend_fwd_4h
     candidate_out_col: meta_candidate
@@ -504,6 +769,7 @@ logging:
 
     assert cfg["model"]["outputs"]["pred_prob_col"] == "stage2_prob"
     assert cfg["model"]["pred_prob_col"] == "stage2_prob"
+    assert cfg["model"]["pred_is_oos_col"] == "stage2_oos"
     assert cfg["model"]["target"]["label_col"] == "trend_label"
     assert cfg["model"]["target"]["fwd_col"] == "trend_fwd_4h"
     assert cfg["model"]["target"]["candidate_out_col"] == "meta_candidate"

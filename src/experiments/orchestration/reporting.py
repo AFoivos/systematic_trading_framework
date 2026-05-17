@@ -14,8 +14,9 @@ from src.backtesting.engine import BacktestResult
 from src.evaluation.metrics import compute_backtest_metrics, compute_ftmo_style_metrics
 from src.experiments.schemas import EvaluationPayload, MonitoringPayload
 from src.monitoring.drift import compute_feature_drift
-from src.models.runtime import classify_feature_family
+from src.models.common.runtime import classify_feature_family
 from src.portfolio import PortfolioPerformance
+from src.utils.html_reports import render_dashboard_html_document
 
 
 def _yaml_block(value: Any) -> str:
@@ -213,41 +214,12 @@ def _markdown_blocks_to_html(markdown_text: str) -> str:
 
 def render_markdown_report_html(markdown_text: str, *, title: str = "Report") -> str:
     body = _markdown_blocks_to_html(markdown_text)
-    safe_title = html_escape(title)
-    return (
-        "<!DOCTYPE html>\n"
-        "<html lang=\"en\">\n"
-        "<head>\n"
-        "  <meta charset=\"utf-8\" />\n"
-        "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n"
-        f"  <title>{safe_title}</title>\n"
-        "  <style>\n"
-        "    :root { color-scheme: light dark; }\n"
-        "    body { margin: 0; background: #0f172a; color: #e2e8f0; font: 15px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }\n"
-        "    main { max-width: 1200px; margin: 0 auto; padding: 32px 24px 64px; }\n"
-        "    h1, h2, h3, h4, h5, h6 { color: #f8fafc; line-height: 1.25; margin: 1.5em 0 0.6em; }\n"
-        "    h1 { margin-top: 0; font-size: 2rem; }\n"
-        "    h2 { font-size: 1.4rem; padding-top: 0.4rem; border-top: 1px solid rgba(148, 163, 184, 0.2); }\n"
-        "    p, ul, pre, .table-wrap { margin: 0 0 1rem; }\n"
-        "    ul { padding-left: 1.25rem; }\n"
-        "    li + li { margin-top: 0.35rem; }\n"
-        "    code { background: rgba(148, 163, 184, 0.16); border-radius: 4px; padding: 0.1rem 0.35rem; font: 0.92em/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }\n"
-        "    pre { overflow-x: auto; background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; padding: 14px 16px; }\n"
-        "    pre code { background: transparent; padding: 0; border-radius: 0; }\n"
-        "    a { color: #93c5fd; }\n"
-        "    img { display: block; max-width: 100%; height: auto; border-radius: 8px; border: 1px solid rgba(148, 163, 184, 0.18); background: #fff; margin: 0.75rem 0 1.5rem; }\n"
-        "    table { width: 100%; border-collapse: collapse; min-width: 560px; }\n"
-        "    .table-wrap { overflow-x: auto; border: 1px solid rgba(148, 163, 184, 0.18); border-radius: 8px; }\n"
-        "    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid rgba(148, 163, 184, 0.14); vertical-align: top; }\n"
-        "    th { background: rgba(30, 41, 59, 0.9); color: #f8fafc; position: sticky; top: 0; }\n"
-        "    tr:nth-child(even) td { background: rgba(30, 41, 59, 0.35); }\n"
-        "    em { color: #cbd5e1; }\n"
-        "  </style>\n"
-        "</head>\n"
-        "<body>\n"
-        f"  <main>\n{body}\n  </main>\n"
-        "</body>\n"
-        "</html>\n"
+    return render_dashboard_html_document(
+        title=title,
+        subtitle="Local experiment report",
+        body_html=body,
+        content_class="content-surface report-content",
+        status_items=["Experiment artifact", "Static report"],
     )
 
 
@@ -428,7 +400,7 @@ def _build_pipeline_trace_markdown(
 ) -> str:
     from src.backtesting.engine import BacktestResult, run_backtest
     from src.experiments.contracts import validate_data_contract
-    from src.models.runtime import resolve_runtime_for_model
+    from src.models.common.runtime import resolve_runtime_for_model
     from src.experiments.orchestration.artifacts import save_artifacts, write_experiment_report_from_run_dir
     from src.experiments.orchestration.backtest_stage import run_portfolio_backtest, run_single_asset_backtest
     from src.experiments.orchestration.data_stage import load_asset_frames, save_processed_snapshot_if_enabled
@@ -1786,6 +1758,7 @@ def _compute_orb_diagnostics(
     returns_type: str,
     alignment: str,
     label_col: str | None,
+    pred_is_oos_col: str = "pred_is_oos",
 ) -> dict[str, Any]:
     if not any("orb_candidate" in frame.columns for frame in asset_frames.values()):
         return {}
@@ -1807,8 +1780,8 @@ def _compute_orb_diagnostics(
         if "orb_candidate" not in frame.columns:
             continue
         oos_mask = (
-            frame["pred_is_oos"].fillna(False).astype(bool)
-            if "pred_is_oos" in frame.columns
+            frame[pred_is_oos_col].fillna(False).astype(bool)
+            if pred_is_oos_col in frame.columns
             else pd.Series(True, index=frame.index, dtype=bool)
         )
         candidate = frame["orb_candidate"].fillna(0.0).astype(float).ne(0.0) & oos_mask
@@ -1957,10 +1930,11 @@ def build_single_asset_evaluation(
         extra={"trade_diagnostics": trade_diagnostics} if trade_diagnostics else {},
     ).to_dict()
 
-    if "pred_is_oos" not in df.columns:
+    pred_is_oos_col = str(model_meta.get("pred_is_oos_col") or "pred_is_oos")
+    if pred_is_oos_col not in df.columns:
         return evaluation
 
-    oos_mask = df["pred_is_oos"].reindex(performance.returns.index).fillna(False).astype(bool)
+    oos_mask = df[pred_is_oos_col].reindex(performance.returns.index).fillna(False).astype(bool)
     oos_summary = compute_subset_metrics(
         net_returns=performance.returns,
         turnover=performance.turnover,
@@ -1998,6 +1972,7 @@ def build_single_asset_evaluation(
         returns_type=str(dict(backtest_cfg or {}).get("returns_type", "simple")),
         alignment="inner",
         label_col=str(target_meta.get("label_col")) if target_meta.get("label_col") is not None else None,
+        pred_is_oos_col=pred_is_oos_col,
     )
     primary_summary = dict(oos_summary or performance.summary)
     primary_summary.update(dict(orb_diagnostics.get("primary_summary_fields", {}) or {}))
@@ -2047,15 +2022,17 @@ def build_portfolio_evaluation(
     if not model_meta:
         return evaluation
 
+    pred_is_oos_col = str(model_meta.get("pred_is_oos_col") or "pred_is_oos")
     oos_by_asset: dict[str, pd.Series] = {}
     if "per_asset" in model_meta:
-        for asset in sorted(model_meta["per_asset"]):
+        for asset, asset_meta in sorted(dict(model_meta.get("per_asset", {}) or {}).items()):
+            asset_pred_is_oos_col = str(dict(asset_meta or {}).get("pred_is_oos_col") or pred_is_oos_col)
             frame = asset_frames.get(asset)
-            if frame is not None and "pred_is_oos" in frame.columns:
-                oos_by_asset[asset] = frame["pred_is_oos"].astype(float)
-    elif "pred_is_oos" in next(iter(asset_frames.values())).columns:
+            if frame is not None and asset_pred_is_oos_col in frame.columns:
+                oos_by_asset[asset] = frame[asset_pred_is_oos_col].astype(float)
+    elif pred_is_oos_col in next(iter(asset_frames.values())).columns:
         only_asset = next(iter(sorted(asset_frames)))
-        oos_by_asset[only_asset] = asset_frames[only_asset]["pred_is_oos"].astype(float)
+        oos_by_asset[only_asset] = asset_frames[only_asset][pred_is_oos_col].astype(float)
 
     if not oos_by_asset:
         return evaluation
@@ -2102,7 +2079,8 @@ def build_portfolio_evaluation(
             frame = asset_frames.get(asset)
             if frame is None:
                 continue
-            asset_oos = frame["pred_is_oos"].astype(bool) if "pred_is_oos" in frame.columns else None
+            asset_pred_is_oos_col = str(dict(meta or {}).get("pred_is_oos_col") or pred_is_oos_col)
+            asset_oos = frame[asset_pred_is_oos_col].astype(bool) if asset_pred_is_oos_col in frame.columns else None
             weights = None
             if performance.applied_weights is not None and asset in performance.applied_weights.columns:
                 weights = performance.applied_weights[asset]
@@ -2120,7 +2098,7 @@ def build_portfolio_evaluation(
     else:
         only_asset = next(iter(sorted(asset_frames)))
         frame = asset_frames[only_asset]
-        asset_oos = frame["pred_is_oos"].astype(bool) if "pred_is_oos" in frame.columns else None
+        asset_oos = frame[pred_is_oos_col].astype(bool) if pred_is_oos_col in frame.columns else None
         weights = None
         if performance.applied_weights is not None and only_asset in performance.applied_weights.columns:
             weights = performance.applied_weights[only_asset]
@@ -2145,6 +2123,7 @@ def build_portfolio_evaluation(
         returns_type=str(dict(backtest_cfg or {}).get("returns_type", "simple")),
         alignment=alignment,
         label_col=str(target_meta.get("label_col")) if target_meta.get("label_col") is not None else None,
+        pred_is_oos_col=pred_is_oos_col,
     )
     primary_summary.update(dict(orb_diagnostics.get("primary_summary_fields", {}) or {}))
     for key in ("flat_rate", "long_rate", "short_rate"):
@@ -2184,10 +2163,11 @@ def compute_monitoring_for_asset(
     monitoring_cfg: dict[str, Any],
 ) -> dict[str, Any] | None:
     feature_cols = list(meta.get("feature_cols", []) or [])
-    if not feature_cols or "pred_is_oos" not in df.columns:
+    pred_is_oos_col = str(meta.get("pred_is_oos_col") or "pred_is_oos")
+    if not feature_cols or pred_is_oos_col not in df.columns:
         return None
 
-    oos_mask = df["pred_is_oos"].astype(bool)
+    oos_mask = df[pred_is_oos_col].astype(bool)
     ref = df.loc[~oos_mask, feature_cols]
     cur = df.loc[oos_mask, feature_cols]
     if ref.empty or cur.empty:

@@ -28,6 +28,7 @@ from src.features import (
     add_rsi_features,
     add_session_context_features,
     add_stochastic_features,
+    add_stochastic_rsi_features,
     add_vol_normalized_momentum_features,
     add_volatility_features,
     add_volume_features,
@@ -35,6 +36,7 @@ from src.features import (
 from src.features.technical.trend import add_trend_features, add_trend_regime_features
 from src.signals import (
     conviction_sizing_signal,
+    ema_stoch_rsi_pullback_signal,
     forecast_threshold_signal,
     forecast_vol_adjusted_signal,
     manual_long_model_filter_signal,
@@ -64,6 +66,8 @@ from src.experiments.models import (
     train_tft_forecaster,
     train_xgboost_classifier,
 )
+from src.utils.config_kinds import PORTFOLIO_MODEL_KINDS as CONFIG_PORTFOLIO_MODEL_KINDS
+from src.utils.config_kinds import RL_MODEL_KINDS as CONFIG_RL_MODEL_KINDS
 
 FeatureFn = Callable[..., pd.DataFrame]
 SignalFn = Callable[..., Union[pd.DataFrame, pd.Series]]
@@ -88,6 +92,7 @@ FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
     "mfi": add_mfi_features,
     "rsi": add_rsi_features,
     "stochastic": add_stochastic_features,
+    "stochastic_rsi": add_stochastic_rsi_features,
     "price_momentum": add_price_momentum_features,
     "return_momentum": add_return_momentum_features,
     "vol_normalized_momentum": add_vol_normalized_momentum_features,
@@ -102,6 +107,7 @@ FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
     "opening_range_breakout": add_opening_range_breakout_features,
     "swing_extrema_context": swing_extrema_context,
     "roc_long_only_conditions": roc_long_only_conditions_signal,
+    "ema_stoch_rsi_pullback": ema_stoch_rsi_pullback_signal,
 }
 
 SIGNAL_REGISTRY: Mapping[str, SignalFn] = {
@@ -112,6 +118,7 @@ SIGNAL_REGISTRY: Mapping[str, SignalFn] = {
     "meta_probability_side": meta_probability_side_signal,
     "orb_candidate_side": orb_candidate_side_signal,
     "roc_long_only_conditions": roc_long_only_conditions_signal,
+    "ema_stoch_rsi_pullback": ema_stoch_rsi_pullback_signal,
     "manual_long_model_filter": manual_long_model_filter_signal,
     "forecast_threshold": forecast_threshold_signal,
     "forecast_vol_adjusted": forecast_vol_adjusted_signal,
@@ -145,15 +152,8 @@ MODEL_REGISTRY: Mapping[str, ModelFn] = {
     **PORTFOLIO_MODEL_REGISTRY,
 }
 
-RL_MODEL_KINDS = frozenset(
-    {
-        "ppo_agent",
-        "dqn_agent",
-        "ppo_portfolio_agent",
-        "dqn_portfolio_agent",
-    }
-)
-PORTFOLIO_MODEL_KINDS = frozenset(PORTFOLIO_MODEL_REGISTRY)
+RL_MODEL_KINDS = CONFIG_RL_MODEL_KINDS
+PORTFOLIO_MODEL_KINDS = CONFIG_PORTFOLIO_MODEL_KINDS
 
 
 def get_feature_fn(name: str) -> FeatureFn:

@@ -1,0 +1,231 @@
+base_config: config/experiments/roc_long_only/spx500_roc_long_only_xgboost_r_multiple_filter_dynamic_stop.yaml
+
+study:
+  study_name: optuna_spx500_roc_long_only_static_best_dynamic_exits_broad
+  storage: null
+  load_if_exists: false
+  sampler: tpe
+  seed: 7
+  n_trials: 100
+  timeout: null
+  n_jobs: 1
+  logging_enabled: true
+  catch_exceptions: true
+
+report:
+  enabled: true
+  output_dir: logs/experiments
+  run_name: optuna_spx500_roc_long_only_static_best_dynamic_exits_broad
+
+objective:
+  metric_path: evaluation.primary_summary.cumulative_return
+  direction: maximize
+  failure_score: -1000000000000.0
+  base_metric_weight: 1.0
+
+  stability_weight: 0.25
+  stability_metric_path: metrics.sharpe
+  stability_std_penalty: 1.0
+  fold_summary_path: evaluation.fold_backtest_summaries
+
+  constraints:
+    - metric_path: evaluation.primary_summary.cumulative_return
+      op: le
+      threshold: 0.0
+      penalty: 1000000000000.0
+      missing_penalty: 1000000000000.0
+
+    - metric_path: evaluation.primary_summary.max_drawdown
+      op: lt
+      threshold: -0.05
+      penalty: 1000000000000.0
+      missing_penalty: 1000000000000.0
+
+    - metric_path: evaluation.primary_summary.max_drawdown
+      op: lt
+      threshold: -0.08
+      penalty: 1000000000000.0
+      missing_penalty: 1000000000000.0
+
+    - metric_path: evaluation.ftmo_metrics.daily_loss_breach_count
+      op: gt
+      threshold: 0.0
+      penalty: 1000000000000.0
+      missing_penalty: 0.0
+
+    - metric_path: evaluation.ftmo_metrics.weekly_drawdown_breach_count
+      op: gt
+      threshold: 0.0
+      penalty: 1000000000000.0
+      missing_penalty: 0.0
+
+    - metric_path: evaluation.ftmo_metrics.max_total_loss_breach_count
+      op: gt
+      threshold: 0.0
+      penalty: 1000000000000.0
+      missing_penalty: 0.0
+
+    - metric_path: evaluation.primary_summary.profit_factor
+      op: lt
+      threshold: 1.20
+      penalty: 2.0
+      missing_penalty: 0.5
+
+    - metric_path: evaluation.primary_summary.profit_factor
+      op: lt
+      threshold: 1.30
+      penalty: 0.75
+      missing_penalty: 0.25
+
+    - metric_path: evaluation.primary_summary.cost_to_gross_pnl
+      op: gt
+      threshold: 0.50
+      penalty: 1.5
+      missing_penalty: 0.25
+
+    - metric_path: evaluation.primary_summary.cost_to_gross_pnl
+      op: gt
+      threshold: 0.70
+      penalty: 3.0
+      missing_penalty: 0.5
+
+    - metric_path: evaluation.primary_summary.flat_rate
+      op: gt
+      threshold: 0.992
+      penalty: 2.0
+      missing_penalty: 0.25
+
+    - metric_path: derived.entry_count
+      op: lt
+      threshold: 120.0
+      penalty: 2.0
+      missing_penalty: 1.0
+
+    - metric_path: derived.entry_count
+      op: gt
+      threshold: 260.0
+      penalty: 1.0
+      missing_penalty: 0.5
+
+pruning:
+  enabled: false
+  metric_path: metrics.sharpe
+  direction: maximize
+  stage_filter: []
+  pruner: none
+  n_startup_trials: 5
+  n_warmup_steps: 1
+  interval_steps: 1
+
+search_space:
+  - name: breakeven_enabled
+    path: backtest.dynamic_exits.breakeven.enabled
+    kind: categorical
+    choices: [false, true]
+
+  - name: breakeven_trigger_r
+    path: backtest.dynamic_exits.breakeven.trigger_r
+    kind: float
+    low: 0.6
+    high: 2.5
+    step: 0.1
+
+  - name: breakeven_lock_r
+    path: backtest.dynamic_exits.breakeven.lock_r
+    kind: float
+    low: 0.0
+    high: 0.5
+    step: 0.05
+
+  - name: profit_lock_enabled
+    path: backtest.dynamic_exits.profit_lock.enabled
+    kind: categorical
+    choices: [false, true]
+
+  - name: profit_lock_trigger_r
+    path: backtest.dynamic_exits.profit_lock.trigger_r
+    kind: float
+    low: 0.9
+    high: 3.5
+    step: 0.1
+
+  - name: profit_lock_r
+    path: backtest.dynamic_exits.profit_lock.lock_r
+    kind: float
+    low: 0.1
+    high: 1.5
+    step: 0.05
+
+  - name: no_progress_enabled
+    path: backtest.dynamic_exits.no_progress.enabled
+    kind: categorical
+    choices: [false, true]
+
+  - name: no_progress_bars
+    path: backtest.dynamic_exits.no_progress.bars
+    kind: int
+    low: 4
+    high: 24
+    step: 1
+
+  - name: no_progress_min_favorable_r
+    path: backtest.dynamic_exits.no_progress.min_favorable_r
+    kind: float
+    low: -0.3
+    high: 0.8
+    step: 0.05
+
+  - name: signal_roc_min
+    path: features.7.params.roc_min
+    kind: float
+    low: 0.0010
+    high: 0.0030
+    step: 0.0005
+
+  - name: signal_close_z_min
+    path: features.7.params.close_z_min
+    kind: float
+    low: 0.0
+    high: 0.6
+    step: 0.1
+
+  - name: signal_close_z_max
+    path: features.7.params.close_z_max
+    kind: float
+    low: 0.9
+    high: 1.8
+    step: 0.1
+
+  - name: signal_mtf_1h_min
+    path: features.7.params.mtf_1h_min
+    kind: float
+    low: 0.0000
+    high: 0.0035
+    step: 0.0005
+
+  - name: signal_mtf_4h_min
+    path: features.7.params.mtf_4h_min
+    kind: float
+    low: -0.0030
+    high: 0.0020
+    step: 0.0005
+
+  - name: signal_min_score_required
+    path: features.7.params.min_score_required
+    kind: int
+    low: 6
+    high: 8
+
+  - name: model_probability_threshold
+    path: signals.params.threshold
+    kind: float
+    low: 0.44
+    high: 0.56
+    step: 0.01
+
+  - name: signal_vol_adjustment_strength
+    path: features.7.params.vol_adjustment_strength
+    kind: float
+    low: 0.3
+    high: 1.2
+    step: 0.1

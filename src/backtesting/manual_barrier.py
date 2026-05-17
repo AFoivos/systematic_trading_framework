@@ -6,7 +6,11 @@ import numpy as np
 import pandas as pd
 
 from src.backtesting.engine import BacktestResult
-from src.backtesting.trade_path import normalize_dynamic_exit_config, simulate_long_trade_path
+from src.backtesting.trade_path import (
+    normalize_dynamic_exit_config,
+    simulate_long_trade_path,
+    simulate_short_trade_path,
+)
 from src.evaluation.metrics import compute_backtest_metrics
 
 
@@ -40,9 +44,10 @@ def run_manual_barrier_backtest(
     max_leverage: float = 1.0,
     periods_per_year: int = 252,
     dynamic_exits: dict[str, Any] | None = None,
+    allow_short: bool = False,
 ) -> BacktestResult:
     """
-    Event-based long-only backtest for manual rule signals.
+    Event-based backtest for manual rule signals.
 
     Signal is read at bar close `t`; entry is executed at the next bar open `t+1`. Exits are
     evaluated from the entry bar onward using stop loss, take profit, or max holding. No
@@ -66,7 +71,10 @@ def run_manual_barrier_backtest(
 
     frame = df.copy()
     signal = pd.to_numeric(frame[signal_col], errors="coerce").fillna(0.0).astype(float)
-    signal = signal.clip(lower=0.0, upper=float(max_leverage))
+    if allow_short:
+        signal = signal.clip(lower=-float(max_leverage), upper=float(max_leverage))
+    else:
+        signal = signal.clip(lower=0.0, upper=float(max_leverage))
     index = frame.index
     opens = pd.to_numeric(frame[open_col], errors="coerce").to_numpy(dtype=float)
     highs = pd.to_numeric(frame[high_col], errors="coerce").to_numpy(dtype=float)
@@ -84,34 +92,56 @@ def run_manual_barrier_backtest(
     n = len(frame)
     while i < n - 1:
         raw_signal = float(signal.iloc[i])
-        if raw_signal <= 0.0:
+        if raw_signal == 0.0:
+            i += 1
+            continue
+        if raw_signal < 0.0 and not allow_short:
             i += 1
             continue
 
         entry_idx = i + 1
         entry_open = _finite_price(frame.iloc[entry_idx][open_col], field=f"{open_col}[entry]")
-        size = min(raw_signal, float(max_leverage))
+        size = min(abs(raw_signal), float(max_leverage))
         stop_distance_pct = max(float(risk_per_trade) * float(stop_loss_r), 1e-8)
         target_distance_pct = max(float(risk_per_trade) * float(take_profit_r), 1e-8)
-        stop_price = entry_open * (1.0 - stop_distance_pct)
-        take_profit_price = entry_open * (1.0 + target_distance_pct)
-
         max_exit_idx = min(n - 1, entry_idx + int(max_holding_bars) - 1)
-        path = simulate_long_trade_path(
-            opens=opens,
-            highs=highs,
-            lows=lows,
-            closes=closes,
-            signals=signals,
-            entry_idx=entry_idx,
-            max_exit_idx=max_exit_idx,
-            entry_price=entry_open,
-            initial_stop_price=stop_price,
-            take_profit_price=take_profit_price,
-            dynamic_exits=dynamic_cfg,
-            tie_break="conservative",
-            legacy_same_bar_stop_reason=not bool(dynamic_cfg.get("enabled", False)),
-        )
+        is_short = raw_signal < 0.0
+        if is_short:
+            stop_price = entry_open * (1.0 + stop_distance_pct)
+            take_profit_price = entry_open * (1.0 - target_distance_pct)
+            path = simulate_short_trade_path(
+                opens=opens,
+                highs=highs,
+                lows=lows,
+                closes=closes,
+                signals=signals,
+                entry_idx=entry_idx,
+                max_exit_idx=max_exit_idx,
+                entry_price=entry_open,
+                initial_stop_price=stop_price,
+                take_profit_price=take_profit_price,
+                dynamic_exits=dynamic_cfg,
+                tie_break="conservative",
+                legacy_same_bar_stop_reason=not bool(dynamic_cfg.get("enabled", False)),
+            )
+        else:
+            stop_price = entry_open * (1.0 - stop_distance_pct)
+            take_profit_price = entry_open * (1.0 + target_distance_pct)
+            path = simulate_long_trade_path(
+                opens=opens,
+                highs=highs,
+                lows=lows,
+                closes=closes,
+                signals=signals,
+                entry_idx=entry_idx,
+                max_exit_idx=max_exit_idx,
+                entry_price=entry_open,
+                initial_stop_price=stop_price,
+                take_profit_price=take_profit_price,
+                dynamic_exits=dynamic_cfg,
+                tie_break="conservative",
+                legacy_same_bar_stop_reason=not bool(dynamic_cfg.get("enabled", False)),
+            )
 
         exit_idx = int(path["exit_idx"])
         raw_exit_price = _finite_price(path["raw_exit_price"], field=f"{close_col}[exit]")
@@ -119,10 +149,16 @@ def run_manual_barrier_backtest(
         bars_held = int(path["bars_held"])
 
         slip = float(slippage_per_unit_turnover)
-        entry_price = entry_open * (1.0 + slip)
-        exit_price = raw_exit_price * (1.0 - slip)
-        gross_before_cost = size * (raw_exit_price / entry_open - 1.0)
-        gross_after_slippage = size * (exit_price / entry_price - 1.0)
+        if is_short:
+            entry_price = entry_open * (1.0 - slip)
+            exit_price = raw_exit_price * (1.0 + slip)
+            gross_before_cost = size * (1.0 - raw_exit_price / entry_open)
+            gross_after_slippage = size * (1.0 - exit_price / entry_price)
+        else:
+            entry_price = entry_open * (1.0 + slip)
+            exit_price = raw_exit_price * (1.0 - slip)
+            gross_before_cost = size * (raw_exit_price / entry_open - 1.0)
+            gross_after_slippage = size * (exit_price / entry_price - 1.0)
         slippage_drag = max(gross_before_cost - gross_after_slippage, 0.0)
         fixed_cost = size * 2.0 * float(cost_per_unit_turnover)
         total_cost = fixed_cost + slippage_drag
@@ -134,14 +170,14 @@ def run_manual_barrier_backtest(
         costs.iloc[exit_idx] += total_cost
         net_returns.iloc[exit_idx] += net_return
         if exit_idx > entry_idx:
-            positions.iloc[entry_idx:exit_idx] = size
+            positions.iloc[entry_idx:exit_idx] = -size if is_short else size
 
         trades.append(
             {
                 "signal_timestamp": index[i],
                 "entry_timestamp": index[entry_idx],
                 "exit_timestamp": index[exit_idx],
-                "side": "long",
+                "side": "short" if is_short else "long",
                 "signal": raw_signal,
                 "entry_price": entry_price,
                 "exit_price": exit_price,

@@ -49,6 +49,7 @@ def _resolve_enabled_catalog_entry(
     *,
     catalog_key: str,
     output_key: str,
+    require_enabled: bool = True,
 ) -> dict[str, Any]:
     catalog = cfg.get(catalog_key)
     if catalog is None:
@@ -76,6 +77,10 @@ def _resolve_enabled_catalog_entry(
         if enabled:
             enabled_items.append((kind, entry))
 
+    if not enabled_items and not require_enabled:
+        out = dict(cfg)
+        out.pop(catalog_key, None)
+        return out
     if len(enabled_items) != 1:
         raise ConfigPathError(
             f"'{catalog_key}' must have exactly one entry with enabled=true; found {len(enabled_items)}."
@@ -91,7 +96,85 @@ def _resolve_enabled_catalog_entry(
     return out
 
 
-def _normalize_named_outputs(outputs: Any, *, owner: str, allowed: set[str]) -> dict[str, str]:
+def _resolve_model_target_catalog(model: Any, *, owner: str) -> dict[str, Any]:
+    if model in (None, {}):
+        return {} if model in ({}, None) else dict(model)
+    if not isinstance(model, dict):
+        raise ConfigPathError(f"'{owner}' must be a mapping.")
+
+    out = dict(model)
+    catalog = out.get("targets_catalog")
+    if catalog is None:
+        return out
+    if out.get("target") not in (None, {}):
+        raise ConfigPathError(
+            f"Config must specify either '{owner}.target' or '{owner}.targets_catalog', not both."
+        )
+    if not isinstance(catalog, dict) or not catalog:
+        raise ConfigPathError(f"'{owner}.targets_catalog' must be a non-empty mapping.")
+
+    enabled_items: list[tuple[str, dict[str, Any]]] = []
+    for kind, raw_entry in catalog.items():
+        if not isinstance(kind, str) or not kind:
+            raise ConfigPathError(f"Keys under '{owner}.targets_catalog' must be non-empty strings.")
+        if raw_entry is None:
+            entry: dict[str, Any] = {}
+        elif not isinstance(raw_entry, dict):
+            raise ConfigPathError(f"'{owner}.targets_catalog.{kind}' must be a mapping.")
+        else:
+            entry = dict(raw_entry)
+        enabled = entry.get("enabled", False)
+        if not isinstance(enabled, bool):
+            raise ConfigPathError(f"'{owner}.targets_catalog.{kind}.enabled' must be boolean.")
+        if enabled:
+            enabled_items.append((kind, entry))
+
+    if len(enabled_items) != 1:
+        raise ConfigPathError(
+            f"'{owner}.targets_catalog' must have exactly one entry with enabled=true; "
+            f"found {len(enabled_items)}."
+        )
+
+    selected_kind, selected_entry = enabled_items[0]
+    selected_entry.pop("enabled", None)
+    out.pop("targets_catalog", None)
+    out["target"] = {"kind": selected_kind} | selected_entry
+    return out
+
+
+_TARGET_OUTPUT_KEYS = {
+    "label_col",
+    "fwd_col",
+    "event_ret_col",
+    "candidate_out_col",
+    "r_col",
+    "oriented_r_col",
+    "trade_r_col",
+    "entry_price_col",
+    "exit_price_col",
+    "stop_price_col",
+    "take_profit_price_col",
+    "exit_reason_col",
+    "bars_held_col",
+    "hit_step_col",
+    "hit_type_col",
+    "upper_barrier_col",
+    "lower_barrier_col",
+    "meta_side_col",
+    "oriented_ret_col",
+    "vol_source_col",
+}
+_MODEL_OUTPUT_KEYS = {
+    "pred_prob_col",
+    "pred_ret_col",
+    "pred_is_oos_col",
+    "returns_input_col",
+    "signal_col",
+    "action_col",
+}
+
+
+def _normalize_outputs_mapping(outputs: Any, *, owner: str) -> dict[str, str]:
     if outputs in (None, {}):
         return {}
     if not isinstance(outputs, dict):
@@ -100,13 +183,32 @@ def _normalize_named_outputs(outputs: Any, *, owner: str, allowed: set[str]) -> 
     for key, value in outputs.items():
         if not isinstance(key, str) or not key.strip():
             raise ConfigPathError(f"'{owner}.outputs' keys must be non-empty strings.")
-        if key not in allowed:
-            allowed_display = ", ".join(sorted(allowed))
-            raise ConfigPathError(f"'{owner}.outputs.{key}' is not supported. Allowed keys: {allowed_display}.")
         if not isinstance(value, str) or not value.strip():
             raise ConfigPathError(f"'{owner}.outputs.{key}' must be a non-empty string.")
         normalized[key] = value
     return normalized
+
+
+def _normalize_named_outputs(outputs: Any, *, owner: str, allowed: set[str]) -> dict[str, str]:
+    normalized = _normalize_outputs_mapping(outputs, owner=owner)
+    for key in normalized:
+        if key not in allowed:
+            allowed_display = ", ".join(sorted(allowed))
+            raise ConfigPathError(f"'{owner}.outputs.{key}' is not supported. Allowed keys: {allowed_display}.")
+    return normalized
+
+
+def _apply_target_outputs_aliases(target: Any, *, owner: str) -> dict[str, Any]:
+    if target in (None, {}):
+        return {} if target in ({}, None) else dict(target)
+    if not isinstance(target, dict):
+        raise ConfigPathError(f"'{owner}' must be a mapping.")
+    out = dict(target)
+    outputs = _normalize_named_outputs(out.get("outputs"), owner=owner, allowed=_TARGET_OUTPUT_KEYS)
+    for field, column in outputs.items():
+        if out.get(field) in (None, ""):
+            out[field] = column
+    return out
 
 
 def _apply_model_outputs_aliases(model: Any, *, owner: str) -> dict[str, Any]:
@@ -119,22 +221,13 @@ def _apply_model_outputs_aliases(model: Any, *, owner: str) -> dict[str, Any]:
     outputs = _normalize_named_outputs(
         out.get("outputs"),
         owner=owner,
-        allowed={
-            "pred_prob_col",
-            "pred_ret_col",
-            "returns_input_col",
-            "signal_col",
-            "action_col",
-            "label_col",
-            "fwd_col",
-            "candidate_out_col",
-        },
+        allowed=_MODEL_OUTPUT_KEYS | _TARGET_OUTPUT_KEYS,
     )
-    target = dict(out.get("target", {}) or {})
-    for field in ("pred_prob_col", "pred_ret_col", "returns_input_col", "signal_col", "action_col"):
+    target = _apply_target_outputs_aliases(out.get("target", {}) or {}, owner=f"{owner}.target")
+    for field in _MODEL_OUTPUT_KEYS:
         if field in outputs and out.get(field) in (None, ""):
             out[field] = outputs[field]
-    for field in ("label_col", "fwd_col", "candidate_out_col"):
+    for field in _TARGET_OUTPUT_KEYS:
         if field in outputs and target.get(field) in (None, ""):
             target[field] = outputs[field]
     if target:
@@ -148,12 +241,30 @@ def _apply_signals_outputs_aliases(signals: Any) -> dict[str, Any]:
     if not isinstance(signals, dict):
         raise ConfigPathError("'signals' must be a mapping.")
     out = dict(signals)
-    outputs = _normalize_named_outputs(out.get("outputs"), owner="signals", allowed={"signal_col"})
+    outputs = _normalize_outputs_mapping(out.get("outputs"), owner="signals")
     if outputs:
         params = dict(out.get("params", {}) or {})
-        if params.get("signal_col") in (None, ""):
+        if "signal_col" in outputs and params.get("signal_col") in (None, ""):
             params["signal_col"] = outputs["signal_col"]
         out["params"] = params
+    return out
+
+
+def _model_kind_for_empty_signal_catalog(cfg: dict[str, Any]) -> str:
+    model = cfg.get("model")
+    if isinstance(model, dict):
+        return str(model.get("kind", "none"))
+    return "none"
+
+
+def _inject_flat_signal_for_empty_signals_catalog(cfg: dict[str, Any]) -> dict[str, Any]:
+    out = dict(cfg)
+    backtest = dict(out.get("backtest", {}) or {})
+    raw_signal_col = backtest.get("signal_col")
+    signal_col = raw_signal_col if isinstance(raw_signal_col, str) and raw_signal_col.strip() else "eda_flat_signal"
+    backtest["signal_col"] = signal_col
+    out["backtest"] = backtest
+    out["signals"] = {"kind": "none", "params": {"signal_col": signal_col}}
     return out
 
 
@@ -174,17 +285,48 @@ def load_resolved_config(path: Path) -> dict[str, Any]:
         raise ConfigPathError(
             "Config must specify either 'model'/'models' or 'model_stages', not both."
         )
+    had_signals_catalog = cfg.get("signals_catalog") is not None
+    cfg = _resolve_enabled_catalog_entry(
+        cfg,
+        catalog_key="targets_catalog",
+        output_key="target",
+        require_enabled=False,
+    )
     cfg = _resolve_enabled_catalog_entry(cfg, catalog_key="models", output_key="model")
-    cfg = _resolve_enabled_catalog_entry(cfg, catalog_key="signals_catalog", output_key="signals")
+    cfg = _resolve_enabled_catalog_entry(
+        cfg,
+        catalog_key="signals_catalog",
+        output_key="signals",
+        require_enabled=False,
+    )
+    if cfg.get("target") not in (None, {}) and cfg.get("model") not in (None, {}):
+        model = cfg.get("model")
+        if not isinstance(model, dict):
+            raise ConfigPathError("'model' must be a mapping.")
+        if model.get("target") not in (None, {}) or model.get("targets_catalog") not in (None, {}):
+            raise ConfigPathError(
+                "Config must specify either top-level 'target'/'targets_catalog' or "
+                "'model.target'/'model.targets_catalog', not both."
+            )
     if cfg.get("model") not in (None, {}):
+        cfg["model"] = _resolve_model_target_catalog(cfg["model"], owner="model")
         cfg["model"] = _apply_model_outputs_aliases(cfg["model"], owner="model")
+    if cfg.get("target") not in (None, {}):
+        cfg["target"] = _apply_target_outputs_aliases(cfg["target"], owner="target")
     if cfg.get("model_stages") not in (None, []):
         if not isinstance(cfg["model_stages"], list):
             raise ConfigPathError("'model_stages' must be a list when provided.")
         cfg["model_stages"] = [
-            _apply_model_outputs_aliases(stage, owner=f"model_stages[{idx}]")
+            _apply_model_outputs_aliases(
+                _resolve_model_target_catalog(stage, owner=f"model_stages[{idx}]"),
+                owner=f"model_stages[{idx}]",
+            )
             for idx, stage in enumerate(cfg["model_stages"])
         ]
+    if had_signals_catalog and cfg.get("signals") in (None, {}):
+        model_stages_enabled = cfg.get("model_stages") not in (None, [])
+        if not model_stages_enabled and _model_kind_for_empty_signal_catalog(cfg) == "none":
+            cfg = _inject_flat_signal_for_empty_signals_catalog(cfg)
     if cfg.get("signals") not in (None, {}):
         cfg["signals"] = _apply_signals_outputs_aliases(cfg["signals"])
     cfg["config_path"] = str(path)

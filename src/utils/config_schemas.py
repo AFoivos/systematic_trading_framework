@@ -113,6 +113,7 @@ class ModelConfig:
     use_features: bool = True
     pred_prob_col: str | None = None
     pred_ret_col: str | None = None
+    pred_is_oos_col: str | None = None
     returns_input_col: str | None = None
     signal_col: str | None = None
     action_col: str | None = None
@@ -134,6 +135,7 @@ class ModelConfig:
             "use_features",
             "pred_prob_col",
             "pred_ret_col",
+            "pred_is_oos_col",
             "returns_input_col",
             "signal_col",
             "action_col",
@@ -158,6 +160,7 @@ class ModelConfig:
             use_features=bool(data.get("use_features", True)),
             pred_prob_col=data.get("pred_prob_col"),
             pred_ret_col=data.get("pred_ret_col"),
+            pred_is_oos_col=data.get("pred_is_oos_col"),
             returns_input_col=data.get("returns_input_col"),
             signal_col=data.get("signal_col"),
             action_col=data.get("action_col"),
@@ -178,6 +181,7 @@ class ModelConfig:
             "use_features": self.use_features,
             "pred_prob_col": self.pred_prob_col,
             "pred_ret_col": self.pred_ret_col,
+            "pred_is_oos_col": self.pred_is_oos_col,
             "returns_input_col": self.returns_input_col,
             "signal_col": self.signal_col,
             "action_col": self.action_col,
@@ -205,6 +209,7 @@ class ModelStageConfig:
     use_features: bool = True
     pred_prob_col: str | None = None
     pred_ret_col: str | None = None
+    pred_is_oos_col: str | None = None
     returns_input_col: str | None = None
     signal_col: str | None = None
     action_col: str | None = None
@@ -229,6 +234,7 @@ class ModelStageConfig:
             "use_features",
             "pred_prob_col",
             "pred_ret_col",
+            "pred_is_oos_col",
             "returns_input_col",
             "signal_col",
             "action_col",
@@ -256,6 +262,7 @@ class ModelStageConfig:
             use_features=bool(data.get("use_features", True)),
             pred_prob_col=data.get("pred_prob_col"),
             pred_ret_col=data.get("pred_ret_col"),
+            pred_is_oos_col=data.get("pred_is_oos_col"),
             returns_input_col=data.get("returns_input_col"),
             signal_col=data.get("signal_col"),
             action_col=data.get("action_col"),
@@ -279,6 +286,7 @@ class ModelStageConfig:
             "use_features": self.use_features,
             "pred_prob_col": self.pred_prob_col,
             "pred_ret_col": self.pred_ret_col,
+            "pred_is_oos_col": self.pred_is_oos_col,
             "returns_input_col": self.returns_input_col,
             "signal_col": self.signal_col,
             "action_col": self.action_col,
@@ -388,6 +396,7 @@ class BacktestConfig:
     risk_per_trade: float | None = None
     max_holding_bars: int | None = None
     dynamic_exits: dict[str, Any] = field(default_factory=dict)
+    allow_short: bool = False
     extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -411,6 +420,7 @@ class BacktestConfig:
             "risk_per_trade",
             "max_holding_bars",
             "dynamic_exits",
+            "allow_short",
         }
         max_holding_bars = data.get("max_holding_bars")
         return cls(
@@ -438,6 +448,7 @@ class BacktestConfig:
             ),
             max_holding_bars=int(max_holding_bars) if max_holding_bars is not None else None,
             dynamic_exits=dict(data.get("dynamic_exits", {}) or {}),
+            allow_short=bool(data.get("allow_short", False)),
             extra=_extras(data, known),
         )
 
@@ -461,6 +472,7 @@ class BacktestConfig:
             "risk_per_trade": self.risk_per_trade,
             "max_holding_bars": self.max_holding_bars,
             "dynamic_exits": dict(self.dynamic_exits),
+            "allow_short": self.allow_short,
         }
         return payload | dict(self.extra)
 
@@ -649,6 +661,7 @@ class ResolvedExperimentConfig:
     monitoring: MonitoringConfig
     execution: ExecutionConfig
     logging: LoggingConfig
+    target: dict[str, Any] = field(default_factory=dict)
     extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -667,6 +680,7 @@ class ResolvedExperimentConfig:
             "monitoring",
             "execution",
             "logging",
+            "target",
         }
         return cls(
             config_path=str(data["config_path"]),
@@ -685,6 +699,7 @@ class ResolvedExperimentConfig:
             monitoring=MonitoringConfig.from_dict(dict(data.get("monitoring", {}) or {})),
             execution=ExecutionConfig.from_dict(dict(data.get("execution", {}) or {})),
             logging=LoggingConfig.from_dict(dict(data.get("logging", {}) or {})),
+            target=dict(data.get("target", {}) or {}),
             extra=_extras(data, known),
         )
 
@@ -703,6 +718,8 @@ class ResolvedExperimentConfig:
             "execution": self.execution.to_dict(),
             "logging": self.logging.to_dict(),
         }
+        if self.target:
+            payload["target"] = dict(self.target)
         if self.model_stages:
             payload["model_stages"] = [stage.to_dict() for stage in self.model_stages]
         return payload | dict(self.extra)

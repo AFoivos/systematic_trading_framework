@@ -13,6 +13,7 @@ import src.experiments.runner as runner_mod
 import src.src_data.storage as storage_mod
 from src.execution.paper import build_rebalance_orders
 from src.experiments.models import train_logistic_regression_classifier
+from src.experiments.orchestration.data_stage import save_processed_snapshot_if_enabled
 from src.portfolio.construction import PortfolioPerformance
 from src.src_data.storage import load_dataset_snapshot, load_ohlcv_csv, save_dataset_snapshot
 
@@ -242,6 +243,61 @@ def test_dataset_snapshot_rejects_path_traversal_in_dataset_id(tmp_path) -> None
             root_dir=tmp_path,
             context={},
         )
+
+
+def test_processed_snapshot_appends_optuna_trial_token_to_dataset_id(tmp_path) -> None:
+    asset_frames = {"AAA": _synthetic_ohlcv(periods=12, seed=1)}
+
+    snapshot = save_processed_snapshot_if_enabled(
+        asset_frames,
+        data_cfg={
+            "symbol": "AAA",
+            "source": "yahoo",
+            "interval": "1d",
+            "storage": {
+                "save_processed": True,
+                "dataset_id": "demo_dataset",
+                "processed_dir": str(tmp_path / "processed"),
+            },
+        },
+        config_hash_sha256="abc12345deadbeef",
+        feature_steps=[{"step": "returns", "params": {"log": False}}],
+        logging_cfg={"run_name": "unit_strategy_trial_0032"},
+    )
+
+    assert snapshot is not None
+    assert snapshot["dataset_id"] == "demo_dataset_abc12345_trial_0032"
+    metadata = json.loads(Path(snapshot["metadata_path"]).read_text(encoding="utf-8"))
+    assert metadata["dataset_id"] == "demo_dataset_abc12345_trial_0032"
+    assert metadata["context"]["trial_token"] == "trial_0032"
+    assert metadata["context"]["run_name"] == "unit_strategy_trial_0032"
+
+
+def test_processed_snapshot_keeps_legacy_dataset_id_without_trial_token(tmp_path) -> None:
+    asset_frames = {"AAA": _synthetic_ohlcv(periods=12, seed=1)}
+
+    snapshot = save_processed_snapshot_if_enabled(
+        asset_frames,
+        data_cfg={
+            "symbol": "AAA",
+            "source": "yahoo",
+            "interval": "1d",
+            "storage": {
+                "save_processed": True,
+                "dataset_id": "demo_dataset",
+                "processed_dir": str(tmp_path / "processed"),
+            },
+        },
+        config_hash_sha256="abc12345deadbeef",
+        feature_steps=[],
+        logging_cfg={"run_name": "unit_strategy"},
+    )
+
+    assert snapshot is not None
+    assert snapshot["dataset_id"] == "demo_dataset_abc12345"
+    metadata = json.loads(Path(snapshot["metadata_path"]).read_text(encoding="utf-8"))
+    assert metadata["context"]["trial_token"] is None
+    assert metadata["context"]["run_name"] == "unit_strategy"
 
 
 def test_load_asset_frames_rejects_cached_snapshot_with_mismatched_pit_context(tmp_path) -> None:

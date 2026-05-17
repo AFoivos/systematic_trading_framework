@@ -13,6 +13,7 @@ def _apply_output_mapping(
     outputs: dict[str, Any] | None,
     *,
     owner: str,
+    ignore_missing_keys: set[str] | None = None,
 ) -> pd.DataFrame:
     if not outputs:
         return df
@@ -20,12 +21,15 @@ def _apply_output_mapping(
         raise TypeError(f"{owner}.outputs must be a mapping when provided.")
 
     rename_map: dict[str, str] = {}
+    ignored = set(ignore_missing_keys or set())
     for source_col, target_col in outputs.items():
         if not isinstance(source_col, str) or not source_col.strip():
             raise ValueError(f"{owner}.outputs keys must be non-empty strings.")
         if not isinstance(target_col, str) or not target_col.strip():
             raise ValueError(f"{owner}.outputs values must be non-empty strings.")
         if source_col not in df.columns:
+            if source_col in ignored:
+                continue
             raise KeyError(
                 f"{owner}.outputs refers to source column '{source_col}' which was not emitted by the step."
             )
@@ -81,16 +85,37 @@ def apply_feature_steps(
 def apply_signal_step(df: pd.DataFrame, signals_cfg: dict[str, Any]) -> pd.DataFrame:
     kind = signals_cfg.get("kind", "none")
     if kind == "none":
+        params = signals_cfg.get("params", {}) or {}
+        signal_col = params.get("signal_col")
+        if signal_col not in (None, ""):
+            frame = df.copy()
+            frame[str(signal_col)] = 0.0
+            return _apply_output_mapping(
+                frame,
+                signals_cfg.get("outputs"),
+                owner="signals",
+                ignore_missing_keys={"signal_col"},
+            )
         return df
     params = signals_cfg.get("params", {}) or {}
     fn = get_signal_fn(kind)
     out = fn(df, **params)
     if isinstance(out, pd.DataFrame):
-        return _apply_output_mapping(out, signals_cfg.get("outputs"), owner="signals")
+        return _apply_output_mapping(
+            out,
+            signals_cfg.get("outputs"),
+            owner="signals",
+            ignore_missing_keys={"signal_col"},
+        )
     if isinstance(out, pd.Series):
         frame = df.copy()
         frame[out.name] = out
-        return _apply_output_mapping(frame, signals_cfg.get("outputs"), owner="signals")
+        return _apply_output_mapping(
+            frame,
+            signals_cfg.get("outputs"),
+            owner="signals",
+            ignore_missing_keys={"signal_col"},
+        )
     raise TypeError(f"Signal function for kind='{kind}' returned unsupported type: {type(out)}")
 
 

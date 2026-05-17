@@ -16,6 +16,7 @@ from src.utils.config_validation import (
     validate_risk_block,
     validate_resolved_config,
     validate_signals_block,
+    validate_standalone_target_block,
 )
 
 
@@ -102,7 +103,7 @@ def test_validate_features_block_accepts_support_resistance_v2() -> None:
     )
 
 
-def test_validate_model_and_signals_outputs_reject_unknown_keys() -> None:
+def test_validate_model_outputs_reject_unknown_keys_and_signals_allow_column_mapping() -> None:
     with pytest.raises(ConfigValidationError, match="model.outputs.bad_key"):
         validate_model_block(
             {
@@ -113,12 +114,21 @@ def test_validate_model_and_signals_outputs_reject_unknown_keys() -> None:
             }
         )
 
-    with pytest.raises(ConfigValidationError, match="signals.outputs.bad_key"):
-        validate_signals_block(
+    validate_signals_block(
+        {
+            "kind": "probability_threshold",
+            "outputs": {"probability_threshold_signal": "signal_custom"},
+            "params": {"prob_col": "pred_prob", "upper": 0.55, "lower": 0.45},
+        }
+    )
+
+    with pytest.raises(ConfigValidationError, match="target.outputs.bad_key"):
+        validate_standalone_target_block(
             {
-                "kind": "probability_threshold",
-                "outputs": {"bad_key": "signal_custom"},
-                "params": {"prob_col": "pred_prob", "upper": 0.55, "lower": 0.45},
+                "kind": "forward_return",
+                "price_col": "close",
+                "horizon": 1,
+                "outputs": {"bad_key": "custom_label"},
             }
         )
 

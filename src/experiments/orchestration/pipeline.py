@@ -130,6 +130,7 @@ def run_experiment_pipeline(
             data_cfg=data_cfg,
             config_hash_sha256=config_hash_sha256,
             feature_steps=list(cfg.get("features", []) or []),
+            logging_cfg=dict(cfg.get("logging", {}) or {}),
         )
         if processed_snapshot is not None:
             storage_meta["saved_processed_snapshot"] = processed_snapshot
@@ -178,9 +179,18 @@ def run_experiment_pipeline(
             stage_tail_cfg=stage_tail_cfg,
         )
 
+        target_cfg = dict(cfg.get("target", {}) or {})
+        target_model_cfg = dict(model_cfg)
+        if target_cfg:
+            if str(target_model_cfg.get("kind", "none")) != "none":
+                raise ValueError("Top-level target diagnostics require model.kind='none'.")
+            if target_model_cfg.get("target") not in (None, {}):
+                raise ValueError("Specify either top-level target or model.target, not both.")
+            target_model_cfg["target"] = target_cfg
+
         target_asset_frames, target_only_meta = apply_post_signal_target_to_assets(
             asset_frames,
-            model_cfg=model_cfg,
+            model_cfg=target_model_cfg,
             backtest_cfg=dict(cfg.get("backtest", {}) or {}),
         )
         if target_only_meta:

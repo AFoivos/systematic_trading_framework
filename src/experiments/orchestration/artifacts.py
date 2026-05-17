@@ -13,12 +13,12 @@ import yaml
 from src.backtesting.engine import BacktestResult
 from src.experiments.orchestration.common import data_stats_payload, redact_sensitive_values, resolved_feature_columns
 from src.experiments.orchestration.reporting import build_experiment_report_markdown, render_markdown_report_html
-from src.experiments.orchestration.trade_diagnostics import (
+from src.plots.trade_diagnostics import (
     build_trade_event_frame,
     plot_trade_diagnostics,
-    plotly_chart_config,
 )
 from src.portfolio import PortfolioPerformance
+from src.utils.html_reports import plotly_chart_config, write_plotly_dashboard_html
 from src.utils.run_metadata import build_artifact_manifest
 
 
@@ -532,6 +532,259 @@ def _positions_for_trade_diagnostics(
     }
 
 
+_LAB_RAW_MARKET_COLUMNS = {
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "bid_open",
+    "bid_high",
+    "bid_low",
+    "bid_close",
+    "ask_open",
+    "ask_high",
+    "ask_low",
+    "ask_close",
+    "spread_close",
+    "spread_bps",
+}
+_LAB_EXCLUDED_COLUMNS = {
+    "timestamp",
+    "datetime",
+    "date",
+    "asset",
+    "label",
+    "target",
+    "position",
+    "positions",
+    "entry",
+    "exit",
+    "eda_flat_signal",
+    "manual_long_signal",
+    "manual_long_candidate",
+    "manual_vol_adjusted_signal",
+    "manual_vol_adjusted_candidate",
+    "manual_all_conditions_signal",
+    "short_signal",
+    "combined_signal",
+    "strategy_equity",
+    "strategy_net_returns",
+    "strategy_gross_returns",
+    "strategy_costs",
+    "strategy_positions",
+    "strategy_turnover",
+    "strategy_drawdown",
+    "oos_mask",
+    "pred_is_oos",
+}
+_LAB_EXCLUDED_PREFIXES = (
+    "signal_",
+    "pred_",
+    "stage",
+    "target_",
+    "r_target_",
+    "tb_",
+    "strategy_",
+    "shock_side_",
+)
+_SIGNAL_PARAM_COLUMN_KEYS = {
+    "signal_col",
+    "long_signal_col",
+    "short_signal_col",
+    "combined_signal_col",
+    "vol_adjusted_col",
+    "all_conditions_col",
+}
+_LAB_PRICE_OVERLAY_EXACT_COLUMNS = {
+    "pivot_high_confirmed",
+    "pivot_low_confirmed",
+    "sr_v2_resistance_level",
+    "sr_v2_support_level",
+    "orb_range_high",
+    "orb_range_low",
+    "orb_range_mid",
+    "orb_breakout_price",
+}
+
+
+def _enabled_catalog_item_exists(cfg: dict[str, Any], key: str) -> bool:
+    catalog = cfg.get(key)
+    if not isinstance(catalog, dict):
+        return False
+    return any(isinstance(payload, dict) and bool(payload.get("enabled", False)) for payload in catalog.values())
+
+
+def _is_lab_eda_config(cfg: dict[str, Any]) -> bool:
+    logging_cfg = dict(cfg.get("logging", {}) or {})
+    model_kind = str(dict(cfg.get("model", {}) or {}).get("kind", "none")).strip().lower()
+    path_tokens = " ".join(
+        [
+            str(cfg.get("config_path", "")),
+            str(logging_cfg.get("output_dir", "")),
+            str(logging_cfg.get("run_name", "")),
+        ]
+    ).lower()
+    return model_kind == "none" or "lab" in path_tokens
+
+
+def _has_enabled_target_config(cfg: dict[str, Any]) -> bool:
+    if _enabled_catalog_item_exists(cfg, "targets_catalog"):
+        return True
+    for target_cfg in (
+        cfg.get("target"),
+        dict(dict(cfg.get("model", {}) or {}).get("target", {}) or {}),
+    ):
+        if not isinstance(target_cfg, dict):
+            continue
+        kind = str(target_cfg.get("kind", "")).strip().lower()
+        if kind and kind != "none":
+            return True
+    return False
+
+
+def _has_enabled_signal_config(cfg: dict[str, Any]) -> bool:
+    if _enabled_catalog_item_exists(cfg, "signals_catalog"):
+        return True
+    signals_cfg = dict(cfg.get("signals", {}) or {})
+    kind = str(signals_cfg.get("kind", "none")).strip().lower()
+    return bool(kind and kind != "none")
+
+
+def _configured_lab_signal_columns(cfg: dict[str, Any]) -> set[str]:
+    columns: set[str] = set()
+    backtest_cfg = dict(cfg.get("backtest", {}) or {})
+    if backtest_cfg.get("signal_col"):
+        columns.add(str(backtest_cfg["signal_col"]))
+
+    sections: list[dict[str, Any]] = []
+    signals_cfg = dict(cfg.get("signals", {}) or {})
+    sections.append(dict(signals_cfg.get("params", {}) or {}))
+    signals_catalog = cfg.get("signals_catalog")
+    if isinstance(signals_catalog, dict):
+        for payload in signals_catalog.values():
+            if isinstance(payload, dict):
+                sections.append(dict(payload.get("params", {}) or {}))
+
+    for params in sections:
+        for key in _SIGNAL_PARAM_COLUMN_KEYS:
+            value = params.get(key)
+            if isinstance(value, str) and value:
+                columns.add(value)
+    return columns
+
+
+def _is_lab_feature_column(column: str, frame: pd.DataFrame, *, excluded_signal_cols: set[str]) -> bool:
+    if column in _LAB_RAW_MARKET_COLUMNS or column in _LAB_EXCLUDED_COLUMNS or column in excluded_signal_cols:
+        return False
+    if column.startswith(_LAB_EXCLUDED_PREFIXES):
+        return False
+    if column not in frame.columns or not pd.api.types.is_numeric_dtype(frame[column]):
+        return False
+    series = pd.to_numeric(frame[column], errors="coerce").replace([np.inf, -np.inf], np.nan)
+    return bool(series.notna().any())
+
+
+def _resolve_lab_feature_columns(frame: pd.DataFrame, cfg: dict[str, Any]) -> list[str]:
+    excluded_signal_cols = _configured_lab_signal_columns(cfg)
+    model_features = [
+        str(column)
+        for column in list(dict(cfg.get("model", {}) or {}).get("feature_cols", []) or [])
+        if _is_lab_feature_column(str(column), frame, excluded_signal_cols=excluded_signal_cols)
+    ]
+    candidates = [
+        str(column)
+        for column in frame.columns
+        if _is_lab_feature_column(str(column), frame, excluded_signal_cols=excluded_signal_cols)
+    ]
+    ordered: list[str] = []
+    for column in [*model_features, *candidates]:
+        if column not in ordered:
+            ordered.append(column)
+    return ordered
+
+
+def _is_lab_price_overlay_column(column: str) -> bool:
+    token = str(column)
+    if token in _LAB_PRICE_OVERLAY_EXACT_COLUMNS:
+        return True
+    if re.fullmatch(r".+_(?:sma|ema)_\d+", token):
+        return True
+    if re.fullmatch(r"bb_(?:ma|upper|lower)_\d+(?:_[0-9.]+)?", token):
+        return True
+    if re.fullmatch(r"(?:support|resistance)_\d+", token):
+        return True
+    return bool(token.endswith("_price") and not token.startswith(("r_target_", "target_")))
+
+
+def _split_lab_feature_columns(feature_cols: list[str]) -> tuple[list[str], list[str]]:
+    price_overlay_cols: list[str] = []
+    scaled_feature_cols: list[str] = []
+    for column in feature_cols:
+        if _is_lab_price_overlay_column(column):
+            price_overlay_cols.append(column)
+        else:
+            scaled_feature_cols.append(column)
+    return price_overlay_cols, scaled_feature_cols
+
+
+def _write_lab_feature_diagnostic_artifacts(
+    *,
+    run_dir: Path,
+    data: pd.DataFrame | dict[str, pd.DataFrame],
+    cfg: dict[str, Any],
+) -> dict[str, str]:
+    if not _is_lab_eda_config(cfg):
+        return {}
+
+    asset_frames = _asset_frames_for_trade_diagnostics(data, cfg)
+    if not asset_frames:
+        return {}
+
+    report_assets_dir = run_dir / "report_assets"
+    report_assets_dir.mkdir(parents=True, exist_ok=True)
+    chart_paths: dict[str, str] = {}
+    from src.plots.price_with_features import plot_price_with_features
+
+    for asset, frame in sorted(asset_frames.items()):
+        feature_cols = _resolve_lab_feature_columns(frame, cfg)
+        if not feature_cols:
+            continue
+        price_overlay_cols, scaled_feature_cols = _split_lab_feature_columns(feature_cols)
+        safe_asset = _safe_asset_filename(asset)
+        html_path = report_assets_dir / f"lab_feature_diagnostics_{safe_asset}.html"
+        fig = plot_price_with_features(
+            frame,
+            title=(
+                f"Lab Feature Diagnostics: {asset} "
+                f"({len(price_overlay_cols)} price overlays, {len(scaled_feature_cols)} scaled features)"
+            ),
+            feature_cols=scaled_feature_cols,
+            price_overlay_cols=price_overlay_cols,
+            normalize=True,
+            price_col="close",
+            max_plot_points=5_000,
+            height=720,
+            initial_features_visible=False,
+        )
+        write_plotly_dashboard_html(
+            fig,
+            html_path,
+            include_plotlyjs="directory",
+            config=plotly_chart_config(),
+            title=f"Lab Feature Diagnostics: {asset}",
+            subtitle="Local experiment graph artifact",
+        )
+        chart_paths[f"lab_feature_diagnostics_{safe_asset}"] = str(html_path.relative_to(run_dir))
+    return chart_paths
+
+
+def _should_write_trade_diagnostic_artifacts(cfg: dict[str, Any]) -> bool:
+    if _is_lab_eda_config(cfg) and not _has_enabled_signal_config(cfg) and not _has_enabled_target_config(cfg):
+        return False
+    return True
+
+
 def _first_existing_column(frame: pd.DataFrame, candidates: list[str | None]) -> str | None:
     for candidate in candidates:
         if candidate and str(candidate) in frame.columns:
@@ -591,7 +844,10 @@ def _resolve_trade_diagnostic_columns(
     cfg: dict[str, Any],
 ) -> dict[str, str | None]:
     backtest_cfg = dict(cfg.get("backtest", {}) or {})
-    target_cfg = dict(dict(cfg.get("model", {}) or {}).get("target", {}) or {})
+    target_cfg = dict(
+        cfg.get("target")
+        or dict(dict(cfg.get("model", {}) or {}).get("target", {}) or {})
+    )
     label_col = _first_existing_column(
         frame,
         [
@@ -619,37 +875,66 @@ def _resolve_trade_diagnostic_columns(
         "signal_col": _first_existing_column(frame, [backtest_cfg.get("signal_col"), "manual_long_signal", "signal"]),
         "target_col": label_col or fwd_col,
         "upper_barrier_col": (
-            f"{label_col}_upper_barrier"
+            str(target_cfg.get("upper_barrier_col"))
+            if target_cfg.get("upper_barrier_col") in frame.columns
+            else f"{label_col}_upper_barrier"
             if label_col and f"{label_col}_upper_barrier" in frame.columns
             else _first_existing_column(
                 frame,
-                ["manual_take_profit_price", "take_profit_price", "target_price", "r_target_take_profit_price"],
+                [
+                    "manual_take_profit_price",
+                    "take_profit_price",
+                    "target_price",
+                    target_cfg.get("take_profit_price_col"),
+                    "r_target_take_profit_price",
+                ],
             )
         ),
         "lower_barrier_col": (
-            f"{label_col}_lower_barrier"
+            str(target_cfg.get("lower_barrier_col"))
+            if target_cfg.get("lower_barrier_col") in frame.columns
+            else f"{label_col}_lower_barrier"
             if label_col and f"{label_col}_lower_barrier" in frame.columns
-            else _first_existing_column(frame, ["manual_stop_loss_price", "stop_loss_price", "r_target_stop_price"])
+            else _first_existing_column(
+                frame,
+                ["manual_stop_loss_price", "stop_loss_price", target_cfg.get("stop_price_col"), "r_target_stop_price"],
+            )
         ),
         "hit_step_col": (
-            f"{label_col}_hit_step"
+            str(target_cfg.get("hit_step_col"))
+            if target_cfg.get("hit_step_col") in frame.columns
+            else f"{label_col}_hit_step"
             if label_col and f"{label_col}_hit_step" in frame.columns
             else _first_existing_column(frame, ["manual_hit_step", "r_target_hit_step"])
         ),
         "hit_type_col": (
-            f"{label_col}_hit_type"
+            str(target_cfg.get("hit_type_col"))
+            if target_cfg.get("hit_type_col") in frame.columns
+            else f"{label_col}_hit_type"
             if label_col and f"{label_col}_hit_type" in frame.columns
-            else _first_existing_column(frame, ["manual_exit_reason", "r_target_exit_reason", "r_target_hit_type"])
+            else _first_existing_column(
+                frame,
+                ["manual_exit_reason", target_cfg.get("exit_reason_col"), "r_target_exit_reason", "r_target_hit_type"],
+            )
         ),
         "r_col": r_col,
-        "entry_price_col": _first_existing_column(frame, ["r_target_entry_price"]),
-        "exit_price_col": _first_existing_column(frame, ["r_target_exit_price"]),
-        "target_r_col": _first_existing_column(frame, ["r_target_trade_r", "r_target_oriented_r"]),
-        "target_entry_price_col": _first_existing_column(frame, ["r_target_entry_price"]),
-        "target_exit_price_col": _first_existing_column(frame, ["r_target_exit_price"]),
-        "target_stop_col": _first_existing_column(frame, ["r_target_stop_price"]),
-        "target_take_profit_col": _first_existing_column(frame, ["r_target_take_profit_price"]),
-        "target_exit_reason_col": _first_existing_column(frame, ["r_target_exit_reason", "r_target_hit_type"]),
+        "entry_price_col": _first_existing_column(frame, [target_cfg.get("entry_price_col"), "r_target_entry_price"]),
+        "exit_price_col": _first_existing_column(frame, [target_cfg.get("exit_price_col"), "r_target_exit_price"]),
+        "target_r_col": _first_existing_column(
+            frame,
+            [target_cfg.get("trade_r_col"), target_cfg.get("oriented_r_col"), "r_target_trade_r", "r_target_oriented_r"],
+        ),
+        "target_entry_price_col": _first_existing_column(frame, [target_cfg.get("entry_price_col"), "r_target_entry_price"]),
+        "target_exit_price_col": _first_existing_column(frame, [target_cfg.get("exit_price_col"), "r_target_exit_price"]),
+        "target_stop_col": _first_existing_column(frame, [target_cfg.get("stop_price_col"), "r_target_stop_price"]),
+        "target_take_profit_col": _first_existing_column(
+            frame,
+            [target_cfg.get("take_profit_price_col"), "r_target_take_profit_price"],
+        ),
+        "target_exit_reason_col": _first_existing_column(
+            frame,
+            [target_cfg.get("exit_reason_col"), target_cfg.get("hit_type_col"), "r_target_exit_reason", "r_target_hit_type"],
+        ),
     }
 
 
@@ -725,7 +1010,7 @@ def _resolve_trade_diagnostic_feature_panels(
         return token if token in frame.columns else None
 
     model_cfg = dict(cfg.get("model", {}) or {})
-    target_cfg = dict(model_cfg.get("target", {}) or {})
+    target_cfg = dict(cfg.get("target") or model_cfg.get("target", {}) or {})
     requested = list(target_cfg.get("diagnostic_feature_cols", []) or [])
     signal_params = _roc_long_only_params(cfg)
     ordered: list[str] = []
@@ -852,11 +1137,13 @@ def _write_trade_diagnostic_artifacts(
             feature_panel_cols=feature_panel_cols,
             price_col="close",
         )
-        fig.write_html(
+        write_plotly_dashboard_html(
+            fig,
             html_path,
             include_plotlyjs="directory",
-            full_html=True,
             config=plotly_chart_config(),
+            title=f"Trade Diagnostics: {asset}",
+            subtitle="Local experiment graph artifact",
         )
         chart_paths[f"trade_diagnostics_{safe_asset}"] = str(html_path.relative_to(run_dir))
 
@@ -890,6 +1177,8 @@ def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
     report_assets_dir = run_dir / "report_assets"
     report_assets_dir.mkdir(parents=True, exist_ok=True)
     chart_paths: dict[str, str] = {}
+    for lab_plot_path in sorted(report_assets_dir.glob("lab_feature_diagnostics_*.html")):
+        chart_paths[lab_plot_path.stem] = str(lab_plot_path.relative_to(run_dir))
     for trade_plot_path in sorted(report_assets_dir.glob("trade_diagnostics_*.html")):
         chart_paths[trade_plot_path.stem] = str(trade_plot_path.relative_to(run_dir))
 
@@ -1200,13 +1489,24 @@ def save_artifacts(
     if diagnostics_path is not None:
         artifacts["portfolio_diagnostics"] = str(diagnostics_path)
 
-    trade_chart_paths, trade_artifact_paths = _write_trade_diagnostic_artifacts(
+    lab_chart_paths = _write_lab_feature_diagnostic_artifacts(
         run_dir=run_dir,
         data=data,
-        performance=performance,
         cfg=cfg,
-        portfolio_weights=portfolio_weights,
     )
+    for label, rel_path in lab_chart_paths.items():
+        artifacts[label] = str((run_dir / rel_path).resolve())
+
+    trade_chart_paths: dict[str, str] = {}
+    trade_artifact_paths: dict[str, str] = {}
+    if _should_write_trade_diagnostic_artifacts(cfg):
+        trade_chart_paths, trade_artifact_paths = _write_trade_diagnostic_artifacts(
+            run_dir=run_dir,
+            data=data,
+            performance=performance,
+            cfg=cfg,
+            portfolio_weights=portfolio_weights,
+        )
     for label, rel_path in {**trade_chart_paths, **trade_artifact_paths}.items():
         artifacts[label] = str((run_dir / rel_path).resolve())
 

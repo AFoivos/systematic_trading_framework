@@ -5,6 +5,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from src.targets.output_aliases import apply_target_output_aliases
+
 
 def build_forward_return_target(
     df: pd.DataFrame,
@@ -13,7 +15,7 @@ def build_forward_return_target(
     """
     Build the canonical forward-return target and optional binary label columns.
     """
-    cfg = dict(target_cfg or {})
+    cfg = apply_target_output_aliases(target_cfg)
     price_col = cfg.get("price_col", "close")
     returns_col = cfg.get("returns_col")
     returns_type = str(cfg.get("returns_type", "simple"))
@@ -77,6 +79,7 @@ def build_forward_return_target(
         "quantiles": quantiles,
         "labeled_rows": int(valid_mask.sum()),
         "positive_rate": float((out.loc[valid_mask, label_col] == 1.0).mean()) if not quantiles and bool(valid_mask.any()) else None,
+        "output_cols": sorted({str(label_col), str(fwd_col)}),
     }
     return out, label_col, fwd_col, meta
 

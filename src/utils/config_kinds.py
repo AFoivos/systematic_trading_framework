@@ -1,0 +1,101 @@
+from __future__ import annotations
+
+FEATURE_KINDS = frozenset(
+    {
+        "adx",
+        "atr",
+        "bollinger",
+        "ema_stoch_rsi_pullback",
+        "feature_transforms",
+        "lags",
+        "macd",
+        "macro_context",
+        "mfi",
+        "multi_timeframe",
+        "opening_range_breakout",
+        "ppo",
+        "price_momentum",
+        "regime_context",
+        "return_momentum",
+        "returns",
+        "roc",
+        "roc_long_only_conditions",
+        "rsi",
+        "session_context",
+        "shock_context",
+        "stochastic",
+        "stochastic_rsi",
+        "support_resistance",
+        "support_resistance_v2",
+        "swing_extrema_context",
+        "trend",
+        "trend_regime",
+        "vol_normalized_momentum",
+        "volatility",
+        "volume_features",
+    }
+)
+
+SIGNAL_KINDS = frozenset(
+    {
+        "ema_stoch_rsi_pullback",
+        "forecast_threshold",
+        "forecast_vol_adjusted",
+        "manual_long_model_filter",
+        "meta_probability_side",
+        "momentum",
+        "orb_candidate_side",
+        "probability_conviction",
+        "probability_threshold",
+        "probability_vol_adjusted",
+        "regime_filtered",
+        "roc_long_only_conditions",
+        "rsi",
+        "stochastic",
+        "trend_state",
+        "volatility_regime",
+    }
+)
+
+SINGLE_ASSET_MODEL_KINDS = frozenset(
+    {
+        "dqn_agent",
+        "event_transformer_encoder",
+        "garch_forecaster",
+        "lightgbm_clf",
+        "logistic_regression_clf",
+        "lstm_forecaster",
+        "patchtst_forecaster",
+        "ppo_agent",
+        "sarimax_forecaster",
+        "tft_forecaster",
+        "xgboost_clf",
+    }
+)
+
+PORTFOLIO_MODEL_KINDS = frozenset(
+    {
+        "dqn_portfolio_agent",
+        "ppo_portfolio_agent",
+    }
+)
+
+MODEL_KINDS = frozenset({*SINGLE_ASSET_MODEL_KINDS, *PORTFOLIO_MODEL_KINDS})
+
+RL_MODEL_KINDS = frozenset(
+    {
+        "dqn_agent",
+        "dqn_portfolio_agent",
+        "ppo_agent",
+        "ppo_portfolio_agent",
+    }
+)
+
+__all__ = [
+    "FEATURE_KINDS",
+    "MODEL_KINDS",
+    "PORTFOLIO_MODEL_KINDS",
+    "RL_MODEL_KINDS",
+    "SIGNAL_KINDS",
+    "SINGLE_ASSET_MODEL_KINDS",
+]

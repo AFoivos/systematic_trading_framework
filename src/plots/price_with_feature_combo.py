@@ -6,7 +6,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from src.experiments.support.notebook_lab import build_feature_combo_frame
+from src.plots.feature_combo_data import build_feature_combo_frame
 
 
 def plot_price_with_feature_combo(

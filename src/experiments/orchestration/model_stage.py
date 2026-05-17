@@ -235,6 +235,7 @@ def aggregate_model_meta(per_asset_meta: dict[str, dict[str, Any]]) -> dict[str,
             "alignment_ok": bool(non_oos_prediction_rows == 0),
         },
         "missing_value_diagnostics": missing_value_diagnostics,
+        "pred_is_oos_col": first.get("pred_is_oos_col", "pred_is_oos"),
     }
 
 
@@ -282,6 +283,7 @@ def _stage_record(
         "embedding_cols": list(stage_meta.get("embedding_cols", []) or []),
         "pred_prob_col": stage_meta.get("pred_prob_col"),
         "pred_ret_col": stage_meta.get("pred_ret_col"),
+        "pred_is_oos_col": stage_meta.get("pred_is_oos_col"),
         "signal_col": stage_meta.get("signal_col"),
         "action_col": stage_meta.get("action_col"),
         "oos_classification_summary": dict(stage_meta.get("oos_classification_summary", {}) or {}),

@@ -64,6 +64,7 @@ def test_registry_contains_phase12_extensions() -> None:
     assert "mfi" in FEATURE_REGISTRY
     assert "rsi" in FEATURE_REGISTRY
     assert "stochastic" in FEATURE_REGISTRY
+    assert "stochastic_rsi" in FEATURE_REGISTRY
     assert "price_momentum" in FEATURE_REGISTRY
     assert "return_momentum" in FEATURE_REGISTRY
     assert "vol_normalized_momentum" in FEATURE_REGISTRY
@@ -168,6 +169,20 @@ def test_apply_signal_step_supports_signal_col_config() -> None:
 
     assert legacy["signal_prob_size"].tolist() == [0.8, 0.0, -0.8]
     assert canonical["signal_forecast_custom"].tolist() == [1.0, 0.0, -1.0]
+
+
+def test_apply_signal_step_none_can_emit_explicit_flat_signal() -> None:
+    idx = pd.date_range("2024-01-01", periods=3, freq="h")
+    df = pd.DataFrame({"close": [100.0, 101.0, 102.0]}, index=idx)
+
+    out = apply_signal_step(
+        df,
+        {"kind": "none", "params": {"signal_col": "eda_flat_signal"}},
+    )
+    noop = apply_signal_step(df, {"kind": "none"})
+
+    assert out["eda_flat_signal"].tolist() == [0.0, 0.0, 0.0]
+    assert "eda_flat_signal" not in noop.columns
 
 
 def test_probability_threshold_hysteresis_gates_base_signal() -> None:

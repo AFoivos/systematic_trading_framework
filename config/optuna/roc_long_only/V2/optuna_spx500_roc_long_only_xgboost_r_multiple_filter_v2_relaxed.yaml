@@ -1,0 +1,243 @@
+base_config: config/experiments/roc_long_only/V2/spx500_roc_long_only_xgboost_r_multiple_filter_v2_relaxed.yaml
+
+study:
+  study_name: optuna_spx500_roc_long_only_xgboost_r_multiple_filter_v2_relaxed
+  storage: null
+  load_if_exists: false
+  sampler: tpe
+  seed: 7
+  n_trials: 160
+  timeout: null
+  n_jobs: 1
+  logging_enabled: true
+  catch_exceptions: true
+
+report:
+  enabled: true
+  output_dir: logs/experiments
+  run_name: optuna_spx500_roc_long_only_xgboost_r_multiple_filter_v2_relaxed
+
+objective:
+  metric_path: evaluation.primary_summary.sharpe
+  direction: maximize
+  failure_score: -1000000000000.0
+  base_metric_weight: 1.0
+  stability_weight: 0.25
+  stability_metric_path: metrics.sharpe
+  stability_std_penalty: 1.0
+  fold_summary_path: evaluation.fold_backtest_summaries
+  constraints:
+    - metric_path: evaluation.primary_summary.cumulative_return
+      op: le
+      threshold: 0.0
+      penalty: 1000000000000.0
+      missing_penalty: 1000000000000.0
+
+    - metric_path: evaluation.primary_summary.cumulative_return
+      op: lt
+      threshold: 0.04
+      penalty: 2.0
+      missing_penalty: 1.0
+
+    - metric_path: evaluation.primary_summary.max_drawdown
+      op: lt
+      threshold: -0.05
+      penalty: 1000000000000.0
+      missing_penalty: 1000000000000.0
+
+    - metric_path: evaluation.primary_summary.max_drawdown
+      op: lt
+      threshold: -0.08
+      penalty: 1000000000000.0
+      missing_penalty: 1000000000000.0
+
+    - metric_path: evaluation.ftmo_metrics.daily_loss_breach_count
+      op: gt
+      threshold: 0.0
+      penalty: 1000000000000.0
+      missing_penalty: 0.0
+
+    - metric_path: evaluation.ftmo_metrics.weekly_drawdown_breach_count
+      op: gt
+      threshold: 0.0
+      penalty: 1000000000000.0
+      missing_penalty: 0.0
+
+    - metric_path: evaluation.ftmo_metrics.max_total_loss_breach_count
+      op: gt
+      threshold: 0.0
+      penalty: 1000000000000.0
+      missing_penalty: 0.0
+
+    - metric_path: evaluation.primary_summary.profit_factor
+      op: lt
+      threshold: 1.20
+      penalty: 2.0
+      missing_penalty: 0.5
+
+    - metric_path: evaluation.primary_summary.cost_to_gross_pnl
+      op: gt
+      threshold: 0.45
+      penalty: 1.5
+      missing_penalty: 0.25
+
+    - metric_path: evaluation.primary_summary.cost_to_gross_pnl
+      op: gt
+      threshold: 0.60
+      penalty: 4.0
+      missing_penalty: 0.5
+
+    - metric_path: evaluation.primary_summary.flat_rate
+      op: gt
+      threshold: 0.985
+      penalty: 2.0
+      missing_penalty: 0.25
+
+    - metric_path: derived.entry_count
+      op: lt
+      threshold: 80.0
+      penalty: 4.0
+      missing_penalty: 2.0
+
+    - metric_path: derived.entry_count
+      op: gt
+      threshold: 280.0
+      penalty: 1.5
+      missing_penalty: 0.5
+
+pruning:
+  enabled: true
+  metric_path: classification_metrics.roc_auc
+  direction: maximize
+  stage_filter: [xgboost_clf]
+  pruner: median
+  n_startup_trials: 20
+  n_warmup_steps: 2
+  interval_steps: 1
+
+search_space:
+  - name: signal_roc_min
+    path: features.8.params.roc_min
+    kind: float
+    low: 0.0015
+    high: 0.0045
+    step: 0.0005
+
+  - name: signal_vol_z_min
+    path: features.8.params.vol_z_min
+    kind: float
+    low: -1.8
+    high: -0.2
+    step: 0.1
+
+  - name: signal_vol_z_max
+    path: features.8.params.vol_z_max
+    kind: float
+    low: 1.0
+    high: 2.4
+    step: 0.1
+
+  - name: signal_close_z_min
+    path: features.8.params.close_z_min
+    kind: float
+    low: -0.4
+    high: 0.6
+    step: 0.1
+
+  - name: signal_close_z_max
+    path: features.8.params.close_z_max
+    kind: float
+    low: 0.9
+    high: 2.0
+    step: 0.1
+
+  - name: signal_close_open_ratio_min
+    path: features.8.params.close_open_ratio_min
+    kind: float
+    low: 0.0
+    high: 0.0012
+    step: 0.0002
+
+  - name: signal_mtf_1h_min
+    path: features.8.params.mtf_1h_min
+    kind: float
+    low: -0.0020
+    high: 0.0030
+    step: 0.0005
+
+  - name: signal_mtf_4h_min
+    path: features.8.params.mtf_4h_min
+    kind: float
+    low: -0.0005
+    high: 0.0030
+    step: 0.0005
+
+  - name: signal_min_score_required
+    path: features.8.params.min_score_required
+    kind: categorical
+    choices: [6, 7, 8]
+
+  - name: signal_require_bullish_candle
+    path: features.8.params.require_bullish_candle
+    kind: bool
+
+  - name: signal_vol_adjustment_strength
+    path: features.8.params.vol_adjustment_strength
+    kind: float
+    low: 0.5
+    high: 2.0
+    step: 0.1
+
+  - name: swing_near_high_threshold_atr
+    path: features.6.params.near_high_threshold_atr
+    kind: categorical
+    choices: [0.15, 0.25, 0.35, 0.50]
+
+  - name: swing_near_low_threshold_atr
+    path: features.6.params.near_low_threshold_atr
+    kind: categorical
+    choices: [0.15, 0.25, 0.35, 0.50]
+
+  - name: swing_overextended_long_threshold_atr
+    path: features.6.params.overextended_long_threshold_atr
+    kind: categorical
+    choices: [1.5, 2.0, 2.5, 3.0]
+
+  - name: target_r_min
+    path: model.target.target_r_min
+    kind: float
+    low: 0.6
+    high: 1.2
+    step: 0.1
+
+  - name: model_probability_threshold
+    path: signals.params.threshold
+    kind: float
+    low: 0.41
+    high: 0.46
+    step: 0.01
+
+  - name: breakeven_trigger_r
+    path: backtest.dynamic_exits.breakeven.trigger_r
+    kind: categorical
+    choices: [0.9, 1.0]
+
+  - name: breakeven_lock_r
+    path: backtest.dynamic_exits.breakeven.lock_r
+    kind: categorical
+    choices: [0.0, 0.1]
+
+  - name: profit_lock_trigger_r
+    path: backtest.dynamic_exits.profit_lock.trigger_r
+    kind: categorical
+    choices: [1.2, 1.3]
+
+  - name: profit_lock_r
+    path: backtest.dynamic_exits.profit_lock.lock_r
+    kind: categorical
+    choices: [0.3, 0.4]
+
+  - name: backtest_risk_per_trade
+    path: backtest.risk_per_trade
+    kind: categorical
+    choices: [0.002, 0.0025, 0.003]

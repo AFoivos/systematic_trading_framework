@@ -36,7 +36,7 @@ def should_apply_post_signal_target(model_cfg: dict[str, Any]) -> bool:
     if str(model_cfg.get("kind", "none")) != "none":
         return False
     target_cfg = _flatten_target_cfg(dict(model_cfg.get("target", {}) or {}))
-    return str(target_cfg.get("kind", "")) == "r_multiple"
+    return str(target_cfg.get("kind", "")) in {"forward_return", "triple_barrier", "r_multiple"}
 
 
 def _weighted_rate(items: list[dict[str, Any]], *, value_key: str, weight_key: str) -> float | None:

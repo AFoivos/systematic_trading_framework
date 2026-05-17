@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from src.backtesting.trade_path import simulate_long_trade_path
+from src.targets.output_aliases import apply_target_output_aliases
 
 
 R_MULTIPLE_TARGET_OUTPUT_COLS = [
@@ -152,11 +153,21 @@ def build_r_multiple_target(
     Candidate rows are labeled at the signal bar. With `entry_price_mode='next_open'`, the entry
     price is the next bar open and the forward path is used only for target construction.
     """
-    cfg = _flatten_cfg(target_cfg)
+    cfg = apply_target_output_aliases(_flatten_cfg(target_cfg))
     candidate_col = str(cfg.get("candidate_col", "manual_long_signal"))
     label_col = str(cfg.get("label_col", "label"))
     fwd_col = str(cfg.get("fwd_col", "r_target_event_ret"))
     candidate_out_col = str(cfg.get("candidate_out_col", "r_target_candidate"))
+    trade_r_col = str(cfg.get("trade_r_col", cfg.get("r_col", "r_target_trade_r")))
+    oriented_r_col = str(cfg.get("oriented_r_col", "r_target_oriented_r"))
+    entry_price_col = str(cfg.get("entry_price_col", "r_target_entry_price"))
+    exit_price_col = str(cfg.get("exit_price_col", "r_target_exit_price"))
+    stop_price_col = str(cfg.get("stop_price_col", "r_target_stop_price"))
+    take_profit_price_col = str(cfg.get("take_profit_price_col", "r_target_take_profit_price"))
+    exit_reason_col = str(cfg.get("exit_reason_col", "r_target_exit_reason"))
+    bars_held_col = str(cfg.get("bars_held_col", "r_target_bars_held"))
+    hit_type_col = str(cfg.get("hit_type_col", "r_target_hit_type"))
+    hit_step_col = str(cfg.get("hit_step_col", "r_target_hit_step"))
     price_col = str(cfg.get("price_col", "close"))
     open_col = str(cfg.get("open_col", "open"))
     high_col = str(cfg.get("high_col", "high"))
@@ -298,16 +309,16 @@ def build_r_multiple_target(
 
     out[candidate_out_col] = candidates.astype("float32")
     out[fwd_col] = event_rets.astype("float32")
-    out["r_target_trade_r"] = trade_rs.astype("float32")
-    out["r_target_oriented_r"] = trade_rs.astype("float32")
-    out["r_target_entry_price"] = entry_prices.astype("float64")
-    out["r_target_exit_price"] = exit_prices.astype("float64")
-    out["r_target_stop_price"] = stop_prices.astype("float64")
-    out["r_target_take_profit_price"] = take_profit_prices.astype("float64")
-    out["r_target_exit_reason"] = pd.Series(exit_reasons, index=out.index, dtype="object")
-    out["r_target_bars_held"] = bars_held_values.astype("float32")
-    out["r_target_hit_type"] = pd.Series(exit_reasons, index=out.index, dtype="object")
-    out["r_target_hit_step"] = hit_steps.astype("float32")
+    out[trade_r_col] = trade_rs.astype("float32")
+    out[oriented_r_col] = trade_rs.astype("float32")
+    out[entry_price_col] = entry_prices.astype("float64")
+    out[exit_price_col] = exit_prices.astype("float64")
+    out[stop_price_col] = stop_prices.astype("float64")
+    out[take_profit_price_col] = take_profit_prices.astype("float64")
+    out[exit_reason_col] = pd.Series(exit_reasons, index=out.index, dtype="object")
+    out[bars_held_col] = bars_held_values.astype("float32")
+    out[hit_type_col] = pd.Series(exit_reasons, index=out.index, dtype="object")
+    out[hit_step_col] = hit_steps.astype("float32")
     out[label_col] = labels.astype("float32")
 
     label_series = pd.Series(labels, index=out.index)
@@ -322,17 +333,17 @@ def build_r_multiple_target(
     output_cols = [
         label_col,
         fwd_col,
-        "r_target_trade_r",
-        "r_target_oriented_r",
+        trade_r_col,
+        oriented_r_col,
         candidate_out_col,
-        "r_target_entry_price",
-        "r_target_exit_price",
-        "r_target_stop_price",
-        "r_target_take_profit_price",
-        "r_target_exit_reason",
-        "r_target_bars_held",
-        "r_target_hit_type",
-        "r_target_hit_step",
+        entry_price_col,
+        exit_price_col,
+        stop_price_col,
+        take_profit_price_col,
+        exit_reason_col,
+        bars_held_col,
+        hit_type_col,
+        hit_step_col,
     ]
     diagnostic_cols = _diagnostic_feature_columns(out, cfg)
     winner_loser_summary = _winner_loser_feature_summary(
@@ -384,10 +395,17 @@ def build_r_multiple_target(
         "exit_reason_counts": {str(key): int(value) for key, value in exit_counts.items()},
         "winner_loser_feature_summary": winner_loser_summary,
         "output_cols": sorted(set(output_cols)),
-        "oriented_r_col": "r_target_oriented_r",
-        "r_col": "r_target_trade_r",
-        "hit_type_col": "r_target_hit_type",
-        "hit_step_col": "r_target_hit_step",
+        "oriented_r_col": oriented_r_col,
+        "r_col": trade_r_col,
+        "trade_r_col": trade_r_col,
+        "entry_price_col": entry_price_col,
+        "exit_price_col": exit_price_col,
+        "stop_price_col": stop_price_col,
+        "take_profit_price_col": take_profit_price_col,
+        "exit_reason_col": exit_reason_col,
+        "bars_held_col": bars_held_col,
+        "hit_type_col": hit_type_col,
+        "hit_step_col": hit_step_col,
     }
     return out, label_col, fwd_col, meta
 

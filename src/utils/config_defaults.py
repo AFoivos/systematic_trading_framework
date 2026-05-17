@@ -235,6 +235,7 @@ def default_backtest_block(
     backtest.setdefault("returns_type", "simple")
     backtest.setdefault("missing_return_policy", "raise_if_exposed")
     backtest.setdefault("min_holding_bars", 0)
+    backtest.setdefault("allow_short", False)
     return backtest
 
 

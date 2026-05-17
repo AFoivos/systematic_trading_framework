@@ -640,11 +640,19 @@ def _strict_oos_mask(result: Any, index: Any) -> Any:
         return None
 
     data = getattr(result, "data", None)
+    model_meta = getattr(result, "model_meta", {}) or {}
+    pred_is_oos_col = str(
+        model_meta.get("pred_is_oos_col")
+        if isinstance(model_meta, Mapping)
+        else "pred_is_oos"
+    )
+    if not pred_is_oos_col:
+        pred_is_oos_col = "pred_is_oos"
     if isinstance(data, Mapping):
         masks = [
-            frame["pred_is_oos"].astype(bool)
+            frame[pred_is_oos_col].astype(bool)
             for frame in data.values()
-            if hasattr(frame, "columns") and "pred_is_oos" in frame.columns
+            if hasattr(frame, "columns") and pred_is_oos_col in frame.columns
         ]
         if masks:
             return (
@@ -654,8 +662,8 @@ def _strict_oos_mask(result: Any, index: Any) -> Any:
                 .astype(bool)
                 .all(axis=1)
             )
-    elif hasattr(data, "columns") and "pred_is_oos" in data.columns:
-        return data["pred_is_oos"].reindex(index).fillna(False).astype(bool)
+    elif hasattr(data, "columns") and pred_is_oos_col in data.columns:
+        return data[pred_is_oos_col].reindex(index).fillna(False).astype(bool)
     return None
 
 

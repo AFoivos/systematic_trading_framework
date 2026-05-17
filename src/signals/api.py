@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from src.signals.buy_and_hold_signal import buy_and_hold_signal
 from src.signals.conviction_sizing_signal import conviction_sizing_signal
+from src.signals.ema_stoch_rsi_pullback_signal import ema_stoch_rsi_pullback_signal
 from src.signals.forecast_threshold_signal import forecast_threshold_signal
 from src.signals.forecast_vol_adjusted_signal import forecast_vol_adjusted_signal
 from src.signals.meta_probability_side_signal import meta_probability_side_signal
@@ -21,6 +22,7 @@ from src.signals.volatility_regime_strategy import volatility_regime_strategy
 
 __all__ = [
     "buy_and_hold_signal",
+    "ema_stoch_rsi_pullback_signal",
     "trend_state_long_only_signal",
     "trend_state_signal",
     "rsi_strategy",

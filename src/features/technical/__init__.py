@@ -29,6 +29,8 @@ from .roc import add_roc_features
 from .rsi import compute_rsi
 from .rsi import add_rsi_features
 from .sma import compute_sma
+from .stochastic_rsi import compute_stochastic_rsi
+from .stochastic_rsi import add_stochastic_rsi_features
 from .stochastic import compute_stoch_d, compute_stoch_k
 from .stochastic import add_stochastic_features
 from .trend import add_trend_features
@@ -60,6 +62,8 @@ __all__ = [
     "compute_stoch_k",
     "compute_stoch_d",
     "add_stochastic_features",
+    "compute_stochastic_rsi",
+    "add_stochastic_rsi_features",
     "add_oscillator_features",
     "compute_true_range",
     "compute_atr",

@@ -7,7 +7,11 @@ import pandas as pd
 import pytest
 import yaml
 
-from src.experiments.optuna_search import load_search_space_yaml, validate_search_space_feature_contract
+from src.experiments.optuna_search import (
+    load_search_space_yaml,
+    normalize_pruning_spec,
+    validate_search_space_feature_contract,
+)
 from src.experiments.orchestration.artifacts import _resolve_trade_diagnostic_feature_panels
 from src.experiments.orchestration.feature_stage import apply_feature_steps
 from src.experiments.registry import FEATURE_REGISTRY, SIGNAL_REGISTRY
@@ -219,6 +223,93 @@ def test_xauusd_dynamic_exit_optuna_yaml_only_tunes_exit_params() -> None:
         "backtest.dynamic_exits.no_progress.bars",
         "backtest.dynamic_exits.no_progress.min_favorable_r",
     }
+
+
+def test_spx500_v2_config_and_optuna_contracts() -> None:
+    base_path = Path("config/experiments/roc_long_only/V2/spx500_roc_long_only_xgboost_r_multiple_filter_v2.yaml")
+    optuna_path = Path("config/optuna/roc_long_only/V2/optuna_spx500_roc_long_only_xgboost_r_multiple_filter_v2.yaml")
+
+    cfg = load_experiment_config(base_path)
+    payload = yaml.safe_load(optuna_path.read_text(encoding="utf-8"))
+    search_space = load_search_space_yaml(optuna_path)
+
+    assert payload["base_config"] == str(base_path)
+    assert cfg["features"][6]["step"] == "swing_extrema_context"
+    assert cfg["features"][7]["step"] == "feature_transforms"
+    assert cfg["features"][8]["step"] == "roc_long_only_conditions"
+    assert cfg["features"][8]["params"]["require_bullish_candle"] is True
+    assert cfg["model"]["split"]["test_size"] == 5600
+    assert cfg["model"]["split"]["max_folds"] == 8
+    assert cfg["backtest"]["dynamic_exits"]["enabled"] is True
+    assert cfg["backtest"]["dynamic_exits"]["breakeven"]["enabled"] is True
+    assert cfg["backtest"]["dynamic_exits"]["profit_lock"]["enabled"] is True
+    assert cfg["backtest"]["dynamic_exits"]["no_progress"]["enabled"] is False
+
+    validate_search_space_feature_contract(cfg, search_space)
+    paths = {dimension.path for dimension in search_space}
+    assert "features.6.params.overextended_long_threshold_atr" in paths
+    assert "features.8.params.roc_min" in paths
+    assert "features.8.params.require_bullish_candle" in paths
+    assert "signals.params.threshold" in paths
+    assert "backtest.dynamic_exits.breakeven.trigger_r" in paths
+    assert "backtest.dynamic_exits.profit_lock.lock_r" in paths
+
+    excluded = set(cfg["model"]["feature_selectors"]["exclude"][0]["exact"])
+    assert {
+        "mtf_1h_atr",
+        "mtf_4h_atr",
+        "swing_raw_local_high",
+        "swing_raw_local_low",
+        "pre_local_high_3",
+        "pre_local_low_3",
+    }.issubset(excluded)
+
+
+def test_spx500_v2_relaxed_config_and_optuna_contracts() -> None:
+    base_path = Path(
+        "config/experiments/roc_long_only/V2/spx500_roc_long_only_xgboost_r_multiple_filter_v2_relaxed.yaml"
+    )
+    optuna_path = Path(
+        "config/optuna/roc_long_only/V2/optuna_spx500_roc_long_only_xgboost_r_multiple_filter_v2_relaxed.yaml"
+    )
+
+    cfg = load_experiment_config(base_path)
+    payload = yaml.safe_load(optuna_path.read_text(encoding="utf-8"))
+    search_space = load_search_space_yaml(optuna_path)
+    pruning = normalize_pruning_spec(payload["pruning"])
+
+    assert payload["base_config"] == str(base_path)
+    assert payload["study"]["n_trials"] == 160
+    assert cfg["features"][8]["params"]["mtf_1h_min"] == pytest.approx(0.0015)
+    assert cfg["features"][8]["params"]["mtf_4h_min"] == pytest.approx(0.0005)
+    assert cfg["features"][8]["params"]["min_score_required"] == 7
+    assert cfg["features"][8]["params"]["require_bullish_candle"] is False
+    assert cfg["signals"]["params"]["threshold"] == pytest.approx(0.44)
+    assert cfg["backtest"]["dynamic_exits"]["breakeven"]["trigger_r"] == pytest.approx(0.9)
+    assert cfg["backtest"]["dynamic_exits"]["breakeven"]["lock_r"] == pytest.approx(0.1)
+    assert cfg["backtest"]["dynamic_exits"]["profit_lock"]["trigger_r"] == pytest.approx(1.2)
+    assert cfg["backtest"]["dynamic_exits"]["profit_lock"]["lock_r"] == pytest.approx(0.4)
+
+    validate_search_space_feature_contract(cfg, search_space)
+    by_name = {dimension.name: dimension for dimension in search_space}
+    assert by_name["signal_mtf_1h_min"].low == pytest.approx(-0.0020)
+    assert by_name["signal_mtf_1h_min"].high == pytest.approx(0.0030)
+    assert by_name["signal_mtf_4h_min"].low == pytest.approx(-0.0005)
+    assert by_name["signal_mtf_4h_min"].high == pytest.approx(0.0030)
+    assert list(by_name["signal_min_score_required"].choices or []) == [6, 7, 8]
+    assert by_name["model_probability_threshold"].low == pytest.approx(0.41)
+    assert by_name["model_probability_threshold"].high == pytest.approx(0.46)
+    assert list(by_name["breakeven_trigger_r"].choices or []) == [0.9, 1.0]
+    assert list(by_name["profit_lock_trigger_r"].choices or []) == [1.2, 1.3]
+    assert list(by_name["profit_lock_r"].choices or []) == [0.3, 0.4]
+    assert pruning.enabled is True
+    assert pruning.metric_path == "classification_metrics.roc_auc"
+    assert pruning.direction == "maximize"
+    assert pruning.stage_filter == ("xgboost_clf",)
+    assert pruning.pruner == "median"
+    assert pruning.n_startup_trials == 20
+    assert pruning.n_warmup_steps == 2
+    assert pruning.interval_steps == 1
 
 
 def test_trade_diagnostics_feature_panels_follow_trial_specific_column_names() -> None:

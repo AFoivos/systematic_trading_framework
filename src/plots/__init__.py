@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .chart_config import plotly_chart_config
+from .chart_config import apply_dashboard_plotly_theme, plotly_chart_config, write_plotly_dashboard_html
 from .equity_drawdown import plot_equity_drawdown
 from .feature_signal_combo import plot_feature_signal_combo, plot_feature_signal_combo_suite
 from .positions_turnover import plot_positions_turnover
@@ -25,5 +25,7 @@ __all__ = [
     "plot_price_with_features",
     "plot_returns_distribution",
     "plot_trade_diagnostics",
+    "apply_dashboard_plotly_theme",
     "plotly_chart_config",
+    "write_plotly_dashboard_html",
 ]

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Callable
 
 import pandas as pd
@@ -17,6 +18,17 @@ SingleAssetLoader = Callable[..., pd.DataFrame]
 PanelLoader = Callable[..., dict[str, pd.DataFrame]]
 PitFn = Callable[..., tuple[pd.DataFrame, dict[str, Any]]]
 ValidateFrameFn = Callable[[pd.DataFrame], Any]
+_TRIAL_TOKEN_RE = re.compile(r"(trial_[A-Za-z0-9]+)$")
+
+
+def _processed_trial_token(logging_cfg: dict[str, Any] | None) -> str | None:
+    run_name = str(dict(logging_cfg or {}).get("run_name") or "").strip()
+    if not run_name:
+        return None
+    match = _TRIAL_TOKEN_RE.search(run_name)
+    if match is None:
+        return None
+    return str(match.group(1))
 
 
 def load_asset_frames(
@@ -138,6 +150,7 @@ def save_processed_snapshot_if_enabled(
     data_cfg: dict[str, Any],
     config_hash_sha256: str,
     feature_steps: list[dict[str, Any]],
+    logging_cfg: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     storage_cfg = dict(data_cfg.get("storage", {}) or {})
     if not bool(storage_cfg.get("save_processed", False)):
@@ -145,6 +158,9 @@ def save_processed_snapshot_if_enabled(
 
     dataset_id = str(storage_cfg.get("dataset_id") or default_dataset_id(data_cfg))
     processed_dataset_id = f"{dataset_id}_{config_hash_sha256[:8]}"
+    trial_token = _processed_trial_token(logging_cfg)
+    if trial_token:
+        processed_dataset_id = f"{processed_dataset_id}_{trial_token}"
     return save_dataset_snapshot(
         asset_frames,
         dataset_id=processed_dataset_id,
@@ -154,6 +170,8 @@ def save_processed_snapshot_if_enabled(
             "base_dataset_id": dataset_id,
             "config_hash_sha256": config_hash_sha256,
             "feature_steps": list(feature_steps),
+            "trial_token": trial_token,
+            "run_name": str(dict(logging_cfg or {}).get("run_name") or "").strip() or None,
         },
         overwrite=True,
     )

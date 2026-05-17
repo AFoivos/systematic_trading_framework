@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 import numpy as np
@@ -46,6 +47,8 @@ def roc_long_only_conditions_signal(
     macro_condition_col: str | None = None,
     min_score_required: int = 5,
     require_all_conditions: bool = False,
+    require_bullish_candle: bool = False,
+    required_condition_names: Sequence[str] | str | None = None,
     vol_adjustment_strength: float = 0.9,
     min_exposure: float = 0.10,
     max_exposure: float = 1.0,
@@ -78,6 +81,8 @@ def roc_long_only_conditions_signal(
         raise ValueError("min_exposure must be >= 0 and max_exposure must be > 0.")
     if float(min_exposure) > float(max_exposure):
         raise ValueError("min_exposure must be <= max_exposure.")
+    if not isinstance(require_bullish_candle, bool):
+        raise TypeError("require_bullish_candle must be boolean.")
 
     out = df.copy()
     output_col = resolve_signal_output_name(
@@ -131,10 +136,28 @@ def roc_long_only_conditions_signal(
         out[name] = values.fillna(False).astype("int8")
         condition_cols.append(name)
 
+    if required_condition_names is None:
+        required_conditions: tuple[str, ...] = ()
+    elif isinstance(required_condition_names, str):
+        required_conditions = (required_condition_names,)
+    else:
+        required_conditions = tuple(str(name) for name in required_condition_names)
+    if bool(require_bullish_candle) and "cond_bullish_candle" not in required_conditions:
+        required_conditions = (*required_conditions, "cond_bullish_candle")
+    unknown_required = [name for name in required_conditions if name not in conditions]
+    if unknown_required:
+        allowed = ", ".join(sorted(conditions))
+        raise ValueError(
+            "required_condition_names contains unknown conditions: "
+            f"{unknown_required}. Allowed: {allowed}."
+        )
+
     out[score_col] = out[condition_cols].sum(axis=1).astype("int16")
     out[all_conditions_col] = out[condition_cols].all(axis=1).astype("int8")
     score_ok = out[score_col].ge(int(min_score_required))
     gates_ok = out["cond_not_weekend"].eq(1) & out["cond_macro_not_bearish"].eq(1)
+    for condition_name in required_conditions:
+        gates_ok &= out[condition_name].eq(1)
     if bool(require_all_conditions):
         long_signal = gates_ok & out[all_conditions_col].eq(1)
     else:

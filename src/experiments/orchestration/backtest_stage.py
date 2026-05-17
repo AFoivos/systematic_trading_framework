@@ -207,6 +207,7 @@ def run_single_asset_backtest(
             max_leverage=float(risk_cfg.get("max_leverage", 1.0)),
             periods_per_year=int(backtest_cfg.get("periods_per_year", 252)),
             dynamic_exits=dict(backtest_cfg.get("dynamic_exits", {}) or {}),
+            allow_short=bool(backtest_cfg.get("allow_short", False)),
         )
         if result.trades is not None and not result.trades.empty and "asset" not in result.trades.columns:
             result.trades = result.trades.copy()
@@ -222,8 +223,9 @@ def run_single_asset_backtest(
     oos_mask: pd.Series | None = None
     if model_meta:
         bt_subset = backtest_cfg.get("subset", "test")
-        if bt_subset == "test" and "pred_is_oos" in df.columns:
-            oos_mask = df["pred_is_oos"].fillna(False).astype(bool)
+        pred_is_oos_col = str(model_meta.get("pred_is_oos_col") or "pred_is_oos")
+        if bt_subset == "test" and pred_is_oos_col in df.columns:
+            oos_mask = df[pred_is_oos_col].fillna(False).astype(bool)
             if bool(oos_mask.any()):
                 # Preserve any pre-backtest signal transforms such as FTMO risk-per-trade sizing.
                 # Rebuilding from the raw df here would drop bt_signal_col for OOS rows and
@@ -335,11 +337,12 @@ def run_portfolio_backtest(
         )
 
     if bt_subset == "test":
+        pred_is_oos_col = str(cfg.get("model", {}).get("pred_is_oos_col") or "pred_is_oos")
         oos_by_asset: dict[str, pd.Series] = {}
         for asset, frame in sorted(asset_frames.items()):
-            if "pred_is_oos" not in frame.columns:
+            if pred_is_oos_col not in frame.columns:
                 continue
-            oos_by_asset[asset] = frame["pred_is_oos"].astype(float)
+            oos_by_asset[asset] = frame[pred_is_oos_col].astype(float)
         if oos_by_asset:
             oos_df = pd.concat(oos_by_asset, axis=1, join=alignment).sort_index()
             if isinstance(oos_df.columns, pd.MultiIndex):
