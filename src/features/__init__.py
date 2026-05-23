@@ -26,6 +26,7 @@ from .technical import (
     add_atr_features,
     add_bollinger_features,
     add_indicator_features,
+    add_indicator_pullback_features,
     add_macd_features,
     add_mfi_features,
     add_ppo_features,
@@ -37,6 +38,7 @@ from .technical import (
     add_stochastic_features,
     add_vol_normalized_momentum_features,
     add_volume_features,
+    add_vwap_features,
 )
 from .technical.momentum import add_momentum_features
 from .technical.oscillators import add_oscillator_features
@@ -69,6 +71,7 @@ __all__ = [
     "add_atr_features",
     "add_adx_features",
     "add_volume_features",
+    "add_vwap_features",
     "add_mfi_features",
     "add_rsi_features",
     "add_stochastic_rsi_features",
@@ -77,6 +80,7 @@ __all__ = [
     "add_return_momentum_features",
     "add_vol_normalized_momentum_features",
     "add_indicator_features",
+    "add_indicator_pullback_features",
     "add_momentum_features",
     "add_oscillator_features",
 ]

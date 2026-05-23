@@ -20,6 +20,7 @@ def test_builder_catalog_exposes_registered_feature_signal_and_target_defaults()
     target_by_name = {builder.name: builder for builder in transform_catalog.target_builders()}
 
     assert "rsi" in feature_by_name
+    assert "vwap" in feature_by_name
     assert "trend_state" in signal_by_name
     assert "forward_return" in target_by_name
 

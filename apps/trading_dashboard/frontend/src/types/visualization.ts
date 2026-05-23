@@ -14,6 +14,8 @@ export type RenderType =
 
 export type ChartTarget = "main_price_chart" | "lower_panel" | "candle_marker" | "background";
 
+export type ManualLevelKind = "stop_loss" | "take_profit";
+
 export interface SeriesStyle {
   color?: string | null;
   lineWidth?: number | null;

@@ -13,7 +13,7 @@ import src.experiments.runner as runner_mod
 from src.backtesting.engine import BacktestResult, run_backtest
 from src.experiments.orchestration.stage_trace import build_stage_tail_snapshot, format_stage_tail_snapshot
 from src.features.technical.momentum import add_momentum_features
-from src.models.runtime import infer_feature_columns
+from src.models.common.runtime import infer_feature_columns
 from src.portfolio.construction import PortfolioPerformance
 from src.portfolio.covariance import build_rolling_covariance_by_date
 from src.signals.forecast_signal import compute_forecast_threshold_signal
@@ -75,11 +75,11 @@ def test_optional_model_modules_import_without_xgboost_or_lightgbm() -> None:
 import importlib
 import sys
 sys.modules.pop("src.models.classification", None)
-sys.modules.pop("src.models.lightgbm_baseline", None)
+sys.modules.pop("src.models.forecasting.lightgbm_baseline", None)
 sys.modules["xgboost"] = None
 sys.modules["lightgbm"] = None
 import src.models.classification
-import src.models.lightgbm_baseline
+import src.models.forecasting.lightgbm_baseline
 print("ok")
 """,
         ],

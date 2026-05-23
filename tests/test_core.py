@@ -7,10 +7,11 @@ from src.features.regime_context import add_regime_context_features
 from src.features.technical.adx import add_adx_features
 from src.features.technical.atr import add_atr_features
 from src.features.technical.trend import add_trend_features
+from src.features.technical.vwap import add_vwap_features, compute_vwap
 from src.src_data.validation import validate_ohlcv
 from src.backtesting.engine import run_backtest
 from src.backtesting.manual_barrier import run_manual_barrier_backtest
-from src.experiments.orchestration.feature_stage import apply_signal_step
+from src.experiments.orchestration.feature_stage import apply_feature_steps, apply_signal_step
 from src.models.classification import train_logistic_regression_classifier
 from src.signals.roc_long_only_conditions_signal import roc_long_only_conditions_signal
 from src.signals.volatility_signal import compute_volatility_regime_signal
@@ -18,6 +19,7 @@ from src.targets.forward_return import build_forward_return_target
 from src.targets.r_multiple import build_r_multiple_target
 from src.targets.triple_barrier import build_triple_barrier_target
 from src.utils.config import load_experiment_config
+from src.utils.config_validation import ConfigValidationError, validate_features_block
 
 
 def test_compute_returns_simple_and_log() -> None:
@@ -48,6 +50,79 @@ def test_add_trend_features_columns() -> None:
     assert "close_ema_2" in out.columns
     assert "close_over_sma_2" in out.columns
     assert "close_over_ema_2" in out.columns
+
+
+def _vwap_ohlcv_frame() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "open": [9.0, 10.0, 12.0, 13.0, 14.0],
+            "high": [10.0, 12.0, 14.0, 15.0, 16.0],
+            "low": [8.0, 10.0, 12.0, 13.0, 14.0],
+            "close": [9.0, 11.0, 13.0, 14.0, 15.0],
+            "volume": [2.0, 3.0, 5.0, 7.0, 11.0],
+        },
+        index=pd.date_range("2024-01-01", periods=5, freq="h"),
+    )
+
+
+def test_compute_vwap_uses_trailing_price_volume_window() -> None:
+    price = pd.Series([9.0, 11.0, 13.0], name="typical_price")
+    volume = pd.Series([2.0, 3.0, 5.0], name="volume")
+
+    vwap = compute_vwap(price, volume, window=2)
+
+    assert np.isnan(vwap.iloc[0])
+    assert vwap.iloc[1] == pytest.approx((9.0 * 2.0 + 11.0 * 3.0) / 5.0)
+    assert vwap.iloc[2] == pytest.approx((11.0 * 3.0 + 13.0 * 5.0) / 8.0)
+    assert vwap.name == "vwap_2"
+
+
+def test_vwap_feature_step_emits_vwap_and_close_distance() -> None:
+    step = {
+        "step": "vwap",
+        "params": {
+            "high_col": "high",
+            "low_col": "low",
+            "close_col": "close",
+            "volume_col": "volume",
+            "windows": [2, 3],
+        },
+    }
+
+    validate_features_block([step])
+    out = apply_feature_steps(_vwap_ohlcv_frame(), [step])
+
+    assert {"vwap_2", "close_over_vwap_2", "vwap_3", "close_over_vwap_3"}.issubset(out.columns)
+    expected_vwap_2 = (11.0 * 3.0 + 13.0 * 5.0) / 8.0
+    assert out["vwap_2"].iloc[2] == pytest.approx(expected_vwap_2)
+    assert out["close_over_vwap_2"].iloc[2] == pytest.approx(13.0 / expected_vwap_2 - 1.0)
+
+
+def test_vwap_feature_is_point_in_time_safe_when_future_changes() -> None:
+    baseline = add_vwap_features(_vwap_ohlcv_frame(), windows=[3])
+
+    future_changed = _vwap_ohlcv_frame()
+    future_changed.loc[future_changed.index[-1], ["high", "low", "close", "volume"]] = [
+        1000.0,
+        900.0,
+        950.0,
+        10000.0,
+    ]
+    changed = add_vwap_features(future_changed, windows=[3])
+
+    pd.testing.assert_series_equal(
+        baseline["vwap_3"].iloc[:4],
+        changed["vwap_3"].iloc[:4],
+    )
+    pd.testing.assert_series_equal(
+        baseline["close_over_vwap_3"].iloc[:4],
+        changed["close_over_vwap_3"].iloc[:4],
+    )
+
+
+def test_vwap_config_validation_rejects_invalid_window() -> None:
+    with pytest.raises(ConfigValidationError, match="features\\[\\]\\.params\\.windows\\[0\\]"):
+        validate_features_block([{"step": "vwap", "params": {"windows": [0]}}])
 
 
 def _output_alias_price_frame() -> pd.DataFrame:

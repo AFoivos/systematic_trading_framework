@@ -17,6 +17,7 @@ def normalize_dynamic_exit_config(dynamic_exits: Mapping[str, Any] | None) -> di
         "signal_off_exit": {"enabled": False, "min_bars_held": 1, "exit_price": "next_open"},
         "breakeven": {"enabled": False, "trigger_r": 0.8, "lock_r": 0.0},
         "profit_lock": {"enabled": False, "trigger_r": 1.2, "lock_r": 0.3},
+        "atr_trailing": {"enabled": False, "activation_r": 0.0, "distance_mult": 1.0},
         "no_progress": {"enabled": False, "bars": 6, "min_favorable_r": 0.2, "exit_price": "close"},
     }
     if not enabled:
@@ -25,6 +26,7 @@ def normalize_dynamic_exit_config(dynamic_exits: Mapping[str, Any] | None) -> di
     signal_off = dict(cfg.get("signal_off_exit", {}) or {})
     breakeven = dict(cfg.get("breakeven", {}) or {})
     profit_lock = dict(cfg.get("profit_lock", {}) or {})
+    atr_trailing = dict(cfg.get("atr_trailing", {}) or {})
     no_progress = dict(cfg.get("no_progress", {}) or {})
 
     out = {
@@ -43,6 +45,11 @@ def normalize_dynamic_exit_config(dynamic_exits: Mapping[str, Any] | None) -> di
             "enabled": enabled and _enabled(profit_lock),
             "trigger_r": float(profit_lock.get("trigger_r", 1.2)),
             "lock_r": float(profit_lock.get("lock_r", 0.3)),
+        },
+        "atr_trailing": {
+            "enabled": enabled and _enabled(atr_trailing),
+            "activation_r": float(atr_trailing.get("activation_r", 0.0)),
+            "distance_mult": float(atr_trailing.get("distance_mult", 1.0)),
         },
         "no_progress": {
             "enabled": enabled and _enabled(no_progress),
@@ -63,6 +70,10 @@ def normalize_dynamic_exit_config(dynamic_exits: Mapping[str, Any] | None) -> di
     for path in ("breakeven", "profit_lock"):
         if out[path]["trigger_r"] <= 0.0:
             raise ValueError(f"dynamic_exits.{path}.trigger_r must be > 0.")
+    if out["atr_trailing"]["activation_r"] < 0.0:
+        raise ValueError("dynamic_exits.atr_trailing.activation_r must be >= 0.")
+    if out["atr_trailing"]["distance_mult"] <= 0.0:
+        raise ValueError("dynamic_exits.atr_trailing.distance_mult must be > 0.")
     if out["no_progress"]["min_favorable_r"] < 0.0:
         raise ValueError("dynamic_exits.no_progress.min_favorable_r must be >= 0.")
     return out
@@ -114,6 +125,7 @@ def simulate_long_trade_path(
     initial_stop_price: float,
     take_profit_price: float,
     dynamic_exits: Mapping[str, Any] | None = None,
+    volatility: np.ndarray | None = None,
     tie_break: str = "conservative",
     legacy_same_bar_stop_reason: bool = False,
 ) -> dict[str, Any]:
@@ -176,6 +188,17 @@ def simulate_long_trade_path(
             if candidate_stop >= effective_stop_price:
                 effective_stop_price = float(candidate_stop)
                 stop_reason = "profit_lock_stop"
+
+        atr_trailing = dynamic_cfg["atr_trailing"]
+        if atr_trailing["enabled"] and max_favorable_r >= atr_trailing["activation_r"] and volatility is not None:
+            current_volatility = float(volatility[idx]) if idx < len(volatility) else np.nan
+            if np.isfinite(current_volatility) and current_volatility > 0.0:
+                trailing_distance = entry * current_volatility * atr_trailing["distance_mult"]
+                highest_price = entry + max_favorable_r * risk_distance
+                candidate_stop = highest_price - trailing_distance
+                if candidate_stop >= effective_stop_price:
+                    effective_stop_price = float(candidate_stop)
+                    stop_reason = "atr_trailing_stop"
 
         stop_hit = bar_low <= effective_stop_price
         take_profit_hit = bar_high >= take_profit
@@ -261,6 +284,7 @@ def simulate_short_trade_path(
     initial_stop_price: float,
     take_profit_price: float,
     dynamic_exits: Mapping[str, Any] | None = None,
+    volatility: np.ndarray | None = None,
     tie_break: str = "conservative",
     legacy_same_bar_stop_reason: bool = False,
 ) -> dict[str, Any]:
@@ -320,6 +344,17 @@ def simulate_short_trade_path(
             if candidate_stop <= effective_stop_price:
                 effective_stop_price = float(candidate_stop)
                 stop_reason = "profit_lock_stop"
+
+        atr_trailing = dynamic_cfg["atr_trailing"]
+        if atr_trailing["enabled"] and max_favorable_r >= atr_trailing["activation_r"] and volatility is not None:
+            current_volatility = float(volatility[idx]) if idx < len(volatility) else np.nan
+            if np.isfinite(current_volatility) and current_volatility > 0.0:
+                trailing_distance = entry * current_volatility * atr_trailing["distance_mult"]
+                lowest_price = entry - max_favorable_r * risk_distance
+                candidate_stop = lowest_price + trailing_distance
+                if candidate_stop <= effective_stop_price:
+                    effective_stop_price = float(candidate_stop)
+                    stop_reason = "atr_trailing_stop"
 
         stop_hit = bar_high >= effective_stop_price
         take_profit_hit = bar_low <= take_profit

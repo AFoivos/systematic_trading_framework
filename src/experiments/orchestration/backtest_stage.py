@@ -7,6 +7,7 @@ import pandas as pd
 
 from src.backtesting.engine import BacktestResult, run_backtest
 from src.backtesting.manual_barrier import run_manual_barrier_backtest
+from src.backtesting.portfolio_barrier import run_portfolio_barrier_backtest
 from src.backtesting.holding import apply_min_holding_bars_to_weights
 from src.evaluation.metrics import compute_backtest_metrics
 from src.experiments.orchestration.common import align_asset_column
@@ -208,6 +209,8 @@ def run_single_asset_backtest(
             periods_per_year=int(backtest_cfg.get("periods_per_year", 252)),
             dynamic_exits=dict(backtest_cfg.get("dynamic_exits", {}) or {}),
             allow_short=bool(backtest_cfg.get("allow_short", False)),
+            stop_mode=str(backtest_cfg.get("stop_mode", "fixed_return")),
+            vol_col=backtest_cfg.get("vol_col"),
         )
         if result.trades is not None and not result.trades.empty and "asset" not in result.trades.columns:
             result.trades = result.trades.copy()
@@ -282,6 +285,55 @@ def run_portfolio_backtest(
     returns_col = backtest_cfg["returns_col"]
     returns_type = backtest_cfg.get("returns_type", "simple")
     bt_subset = str(backtest_cfg.get("subset", "full"))
+    backtest_engine = str(backtest_cfg.get("engine", "vectorized"))
+
+    if backtest_engine == "portfolio_barrier":
+        if str(portfolio_cfg.get("construction", "signal_weights")) != "signal_weights":
+            raise ValueError("backtest.engine='portfolio_barrier' requires portfolio.construction='signal_weights'.")
+        if _ftmo_sizing_config(risk_cfg):
+            raise ValueError("backtest.engine='portfolio_barrier' does not support risk.sizing; size via portfolio constraints.")
+        if risk_cfg.get("target_vol") is not None:
+            raise ValueError("backtest.engine='portfolio_barrier' does not support risk.target_vol.")
+        if int(backtest_cfg.get("min_holding_bars", 0) or 0) != 0:
+            raise ValueError("backtest.engine='portfolio_barrier' uses vertical_barrier_bars; min_holding_bars must be 0.")
+        constraints = build_portfolio_constraints(portfolio_cfg)
+        performance, weights, diagnostics, barrier_meta = run_portfolio_barrier_backtest(
+            asset_frames,
+            signal_col=signal_col,
+            open_col=str(backtest_cfg.get("open_col", "open")),
+            high_col=str(backtest_cfg.get("high_col", "high")),
+            low_col=str(backtest_cfg.get("low_col", "low")),
+            close_col=str(backtest_cfg.get("close_col", "close")),
+            volatility_col=str(backtest_cfg.get("volatility_col", backtest_cfg.get("vol_col", "atr_14"))),
+            entry_price_mode=str(backtest_cfg.get("entry_price_mode", "next_open")),
+            profit_barrier_r=float(backtest_cfg.get("profit_barrier_r", 1.4)),
+            stop_barrier_r=float(backtest_cfg.get("stop_barrier_r", 1.0)),
+            vertical_barrier_bars=int(backtest_cfg.get("vertical_barrier_bars", 4)),
+            tie_break=str(backtest_cfg.get("tie_break", "closest_to_open")),
+            subset=bt_subset,
+            pred_is_oos_col=str(cfg.get("model", {}).get("pred_is_oos_col") or "pred_is_oos"),
+            alignment=alignment,
+            constraints=constraints,
+            gross_target=float(portfolio_cfg.get("gross_target", 1.0)),
+            cost_per_turnover=float(risk_cfg.get("cost_per_turnover", 0.0)),
+            slippage_per_turnover=float(risk_cfg.get("slippage_per_turnover", 0.0)),
+            periods_per_year=int(backtest_cfg.get("periods_per_year", 252)),
+        )
+        portfolio_meta = PortfolioMetaPayload(
+            construction="portfolio_barrier",
+            asset_count=int(len(asset_frames)),
+            alignment=alignment,
+            expected_return_col=None,
+            avg_gross_exposure=float(diagnostics["gross_exposure"].mean()) if not diagnostics.empty else 0.0,
+            avg_net_exposure=float(diagnostics["net_exposure"].mean()) if not diagnostics.empty else 0.0,
+            avg_turnover=float(diagnostics["turnover"].mean()) if not diagnostics.empty else 0.0,
+            extra={
+                "barrier": dict(barrier_meta),
+                "risk_guard_summary": dict(performance.risk_guard_summary or {}),
+                "sizing": {},
+            },
+        )
+        return performance, weights, diagnostics, portfolio_meta.to_dict()
 
     signals = align_asset_column(asset_frames, column=signal_col, how=alignment)
     asset_returns = align_asset_column(asset_frames, column=returns_col, how=alignment)

@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.models.runtime import probe_lightgbm_runtime, probe_xgboost_runtime
+from src.models.common.runtime import probe_lightgbm_runtime, probe_xgboost_runtime
 from src.utils.config import ConfigError, load_experiment_config
 from src.utils.repro import (
     RuntimeConfigError,

@@ -5,7 +5,7 @@ import math
 import sys
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 import pandas as pd
 
@@ -27,8 +27,54 @@ PROJECT_ROOT = get_paths().project_root
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.experiments.orchestration.feature_stage import apply_feature_steps, apply_signal_step  # noqa: E402
-from src.experiments.registry import FEATURE_REGISTRY, SIGNAL_REGISTRY, get_feature_fn, get_signal_fn  # noqa: E402
+from src.features import (  # noqa: E402
+    add_adx_features,
+    add_atr_features,
+    add_bollinger_features,
+    add_close_returns,
+    add_feature_transforms,
+    add_lagged_features,
+    add_macd_features,
+    add_macro_context_features,
+    add_mfi_features,
+    add_multi_timeframe_features,
+    add_opening_range_breakout_features,
+    add_ppo_features,
+    add_price_momentum_features,
+    add_regime_context_features,
+    add_return_momentum_features,
+    add_roc_features,
+    add_rsi_features,
+    add_session_context_features,
+    add_shock_context_features,
+    add_stochastic_features,
+    add_stochastic_rsi_features,
+    add_support_resistance_features,
+    add_support_resistance_v2_features,
+    add_vol_normalized_momentum_features,
+    add_volatility_features,
+    add_volume_features,
+    add_vwap_features,
+    swing_extrema_context,
+)
+from src.features.technical.trend import add_trend_features, add_trend_regime_features  # noqa: E402
+from src.signals import (  # noqa: E402
+    conviction_sizing_signal,
+    ema_stoch_rsi_pullback_signal,
+    forecast_threshold_signal,
+    forecast_vol_adjusted_signal,
+    manual_long_model_filter_signal,
+    meta_probability_side_signal,
+    momentum_strategy,
+    orb_candidate_side_signal,
+    probability_vol_adjusted_signal,
+    probabilistic_signal,
+    roc_long_only_conditions_signal,
+    rsi_strategy,
+    stochastic_strategy,
+    trend_state_signal,
+    volatility_regime_strategy,
+)
 from src.targets.classifier import build_classifier_target  # noqa: E402
 from src.targets.forward_return import build_forward_return_target  # noqa: E402
 from src.targets.r_multiple import build_r_multiple_target  # noqa: E402
@@ -36,6 +82,61 @@ from src.targets.triple_barrier import build_triple_barrier_target  # noqa: E402
 
 
 BuilderFn = Callable[..., Any]
+FeatureFn = Callable[..., pd.DataFrame]
+SignalFn = Callable[..., pd.DataFrame | pd.Series]
+
+FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
+    "returns": add_close_returns,
+    "volatility": add_volatility_features,
+    "trend": add_trend_features,
+    "trend_regime": add_trend_regime_features,
+    "lags": add_lagged_features,
+    "bollinger": add_bollinger_features,
+    "macd": add_macd_features,
+    "ppo": add_ppo_features,
+    "roc": add_roc_features,
+    "atr": add_atr_features,
+    "adx": add_adx_features,
+    "volume_features": add_volume_features,
+    "vwap": add_vwap_features,
+    "mfi": add_mfi_features,
+    "rsi": add_rsi_features,
+    "stochastic": add_stochastic_features,
+    "stochastic_rsi": add_stochastic_rsi_features,
+    "price_momentum": add_price_momentum_features,
+    "return_momentum": add_return_momentum_features,
+    "vol_normalized_momentum": add_vol_normalized_momentum_features,
+    "session_context": add_session_context_features,
+    "regime_context": add_regime_context_features,
+    "shock_context": add_shock_context_features,
+    "support_resistance": add_support_resistance_features,
+    "support_resistance_v2": add_support_resistance_v2_features,
+    "macro_context": add_macro_context_features,
+    "feature_transforms": add_feature_transforms,
+    "multi_timeframe": add_multi_timeframe_features,
+    "opening_range_breakout": add_opening_range_breakout_features,
+    "swing_extrema_context": swing_extrema_context,
+    "roc_long_only_conditions": roc_long_only_conditions_signal,
+    "ema_stoch_rsi_pullback": ema_stoch_rsi_pullback_signal,
+}
+
+SIGNAL_REGISTRY: Mapping[str, SignalFn] = {
+    "trend_state": trend_state_signal,
+    "probability_threshold": probabilistic_signal,
+    "probability_conviction": conviction_sizing_signal,
+    "probability_vol_adjusted": probability_vol_adjusted_signal,
+    "meta_probability_side": meta_probability_side_signal,
+    "orb_candidate_side": orb_candidate_side_signal,
+    "roc_long_only_conditions": roc_long_only_conditions_signal,
+    "ema_stoch_rsi_pullback": ema_stoch_rsi_pullback_signal,
+    "manual_long_model_filter": manual_long_model_filter_signal,
+    "forecast_threshold": forecast_threshold_signal,
+    "forecast_vol_adjusted": forecast_vol_adjusted_signal,
+    "rsi": rsi_strategy,
+    "momentum": momentum_strategy,
+    "stochastic": stochastic_strategy,
+    "volatility_regime": volatility_regime_strategy,
+}
 
 TARGET_REGISTRY: dict[str, Callable[[pd.DataFrame, dict[str, Any] | None], tuple[pd.DataFrame, str, str, dict[str, Any]]]] = {
     "forward_return": build_forward_return_target,
@@ -133,6 +234,18 @@ PARAM_OPTIONS: dict[str, list[Any]] = {
 }
 
 SKIPPED_RUNTIME_PARAMETERS = {"df"}
+
+
+def get_feature_fn(name: str) -> FeatureFn:
+    if name not in FEATURE_REGISTRY:
+        raise KeyError(f"Unknown feature step: {name}")
+    return FEATURE_REGISTRY[name]
+
+
+def get_signal_fn(name: str) -> SignalFn:
+    if name not in SIGNAL_REGISTRY:
+        raise KeyError(f"Unknown signal kind: {name}")
+    return SIGNAL_REGISTRY[name]
 
 
 def _safe_value(value: Any) -> Any:
@@ -246,6 +359,111 @@ def _docstring(fn: BuilderFn) -> str | None:
     if not raw:
         return None
     return raw.strip()
+
+
+def _apply_output_mapping(
+    df: pd.DataFrame,
+    outputs: dict[str, Any] | None,
+    *,
+    owner: str,
+    ignore_missing_keys: set[str] | None = None,
+) -> pd.DataFrame:
+    if not outputs:
+        return df
+    if not isinstance(outputs, dict):
+        raise TypeError(f"{owner}.outputs must be a mapping when provided.")
+
+    rename_map: dict[str, str] = {}
+    ignored = set(ignore_missing_keys or set())
+    for source_col, target_col in outputs.items():
+        if not isinstance(source_col, str) or not source_col.strip():
+            raise ValueError(f"{owner}.outputs keys must be non-empty strings.")
+        if not isinstance(target_col, str) or not target_col.strip():
+            raise ValueError(f"{owner}.outputs values must be non-empty strings.")
+        if source_col not in df.columns:
+            if source_col in ignored:
+                continue
+            raise KeyError(
+                f"{owner}.outputs refers to source column '{source_col}' which was not emitted by the step."
+            )
+        rename_map[source_col] = target_col
+
+    renamed = df.rename(columns=rename_map)
+    if len(set(renamed.columns)) != len(renamed.columns):
+        duplicates = renamed.columns[renamed.columns.duplicated()].unique().tolist()
+        raise ValueError(
+            f"{owner}.outputs resolves to duplicate column names after renaming: {duplicates}."
+        )
+    return renamed
+
+
+def _call_feature_fn(fn: FeatureFn, df: pd.DataFrame, params: dict[str, Any], *, asset: str | None) -> pd.DataFrame:
+    call_params = dict(params)
+    if asset is not None and "asset" not in call_params:
+        try:
+            accepts_asset = "asset" in inspect.signature(fn).parameters
+        except (TypeError, ValueError):
+            accepts_asset = False
+        if accepts_asset:
+            call_params["asset"] = asset
+    return fn(df, **call_params)
+
+
+def apply_feature_steps(
+    df: pd.DataFrame,
+    steps: list[dict[str, Any]],
+    *,
+    asset: str | None = None,
+) -> pd.DataFrame:
+    out = df
+    for idx, step in enumerate(steps):
+        if "step" not in step:
+            raise ValueError("Each feature step must include a 'step' key.")
+        if step.get("enabled", True) is False:
+            continue
+        name = step["step"]
+        params = step.get("params", {}) or {}
+        fn = get_feature_fn(name)
+        out = _call_feature_fn(fn, out, params, asset=asset)
+        out = _apply_output_mapping(out, step.get("outputs"), owner=f"features[{idx}]")
+    return out
+
+
+def apply_signal_step(df: pd.DataFrame, signals_cfg: dict[str, Any]) -> pd.DataFrame:
+    kind = signals_cfg.get("kind", "none")
+    if kind == "none":
+        params = signals_cfg.get("params", {}) or {}
+        signal_col = params.get("signal_col")
+        if signal_col not in (None, ""):
+            frame = df.copy()
+            frame[str(signal_col)] = 0.0
+            return _apply_output_mapping(
+                frame,
+                signals_cfg.get("outputs"),
+                owner="signals",
+                ignore_missing_keys={"signal_col"},
+            )
+        return df
+    params = signals_cfg.get("params", {}) or {}
+    fn = get_signal_fn(kind)
+    out = fn(df, **params)
+    if isinstance(out, pd.DataFrame):
+        return _apply_output_mapping(
+            out,
+            signals_cfg.get("outputs"),
+            owner="signals",
+            ignore_missing_keys={"signal_col"},
+        )
+    if isinstance(out, pd.Series):
+        frame = df.copy()
+        frame[out.name] = out
+        return _apply_output_mapping(
+            frame,
+            signals_cfg.get("outputs"),
+            owner="signals",
+            ignore_missing_keys={"signal_col"},
+        )
+    raise TypeError(f"Signal function for kind='{kind}' returned unsupported type: {type(out)}")
 
 
 def _definitions_from_registry(

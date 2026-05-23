@@ -231,11 +231,23 @@ def default_backtest_block(
     backtest = dict(backtest) if backtest else {}
     annualization_kwargs = _annualization_kwargs_for_data(data)
     backtest.setdefault("engine", "vectorized")
+    backtest.setdefault("stop_mode", "fixed_return")
     backtest.setdefault("periods_per_year", infer_periods_per_year(interval, **annualization_kwargs))
     backtest.setdefault("returns_type", "simple")
     backtest.setdefault("missing_return_policy", "raise_if_exposed")
     backtest.setdefault("min_holding_bars", 0)
     backtest.setdefault("allow_short", False)
+    if str(backtest.get("engine", "vectorized")) == "portfolio_barrier":
+        backtest.setdefault("open_col", "open")
+        backtest.setdefault("high_col", "high")
+        backtest.setdefault("low_col", "low")
+        backtest.setdefault("close_col", "close")
+        backtest.setdefault("volatility_col", "atr_14")
+        backtest.setdefault("entry_price_mode", "next_open")
+        backtest.setdefault("profit_barrier_r", 1.4)
+        backtest.setdefault("stop_barrier_r", 1.0)
+        backtest.setdefault("vertical_barrier_bars", 4)
+        backtest.setdefault("tie_break", "closest_to_open")
     return backtest
 
 

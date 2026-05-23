@@ -10,6 +10,7 @@ from src.features import (
     add_bollinger_features,
     add_close_returns,
     add_feature_transforms,
+    add_indicator_pullback_features,
     add_lagged_features,
     add_macd_features,
     add_macro_context_features,
@@ -32,11 +33,13 @@ from src.features import (
     add_vol_normalized_momentum_features,
     add_volatility_features,
     add_volume_features,
+    add_vwap_features,
 )
 from src.features.technical.trend import add_trend_features, add_trend_regime_features
 from src.signals import (
     conviction_sizing_signal,
     ema_stoch_rsi_pullback_signal,
+    indicator_model_adaptive_pullback_signal,
     forecast_threshold_signal,
     forecast_vol_adjusted_signal,
     manual_long_model_filter_signal,
@@ -45,6 +48,7 @@ from src.signals import (
     orb_candidate_side_signal,
     probability_vol_adjusted_signal,
     probabilistic_signal,
+    ppo_adx_stochrsi_trend_signal,
     rsi_strategy,
     roc_long_only_conditions_signal,
     stochastic_strategy,
@@ -89,6 +93,7 @@ FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
     "atr": add_atr_features,
     "adx": add_adx_features,
     "volume_features": add_volume_features,
+    "vwap": add_vwap_features,
     "mfi": add_mfi_features,
     "rsi": add_rsi_features,
     "stochastic": add_stochastic_features,
@@ -108,6 +113,8 @@ FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
     "swing_extrema_context": swing_extrema_context,
     "roc_long_only_conditions": roc_long_only_conditions_signal,
     "ema_stoch_rsi_pullback": ema_stoch_rsi_pullback_signal,
+    "indicator_pullback": add_indicator_pullback_features,
+    "indicator_model_adaptive_pullback": indicator_model_adaptive_pullback_signal,
 }
 
 SIGNAL_REGISTRY: Mapping[str, SignalFn] = {
@@ -117,8 +124,10 @@ SIGNAL_REGISTRY: Mapping[str, SignalFn] = {
     "probability_vol_adjusted": probability_vol_adjusted_signal,
     "meta_probability_side": meta_probability_side_signal,
     "orb_candidate_side": orb_candidate_side_signal,
+    "ppo_adx_stochrsi_trend": ppo_adx_stochrsi_trend_signal,
     "roc_long_only_conditions": roc_long_only_conditions_signal,
     "ema_stoch_rsi_pullback": ema_stoch_rsi_pullback_signal,
+    "indicator_model_adaptive_pullback": indicator_model_adaptive_pullback_signal,
     "manual_long_model_filter": manual_long_model_filter_signal,
     "forecast_threshold": forecast_threshold_signal,
     "forecast_vol_adjusted": forecast_vol_adjusted_signal,

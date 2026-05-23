@@ -58,6 +58,7 @@ class SearchDimension:
     step: int | float | None = None
     log: bool = False
     choices: Sequence[Any] | None = None
+    paths: Sequence[str | Sequence[str | int]] | None = None
 
 
 @dataclass(frozen=True)
@@ -161,6 +162,16 @@ def _normalize_search_dimension(raw_dimension: SearchDimension | Mapping[str, An
         raise ValueError(f"Unsupported search dimension kind: {dimension.kind}")
 
     normalize_config_path(dimension.path)
+    if dimension.paths is not None:
+        if isinstance(dimension.paths, (str, bytes)) or not isinstance(dimension.paths, Sequence):
+            raise ValueError(f"search_space[{dimension.name}].paths must be a list of config paths.")
+        for idx, linked_path in enumerate(dimension.paths):
+            try:
+                normalize_config_path(linked_path)
+            except Exception as exc:
+                raise ValueError(
+                    f"search_space[{dimension.name}].paths[{idx}] is not a valid config path."
+                ) from exc
 
     if dimension.kind in {"int", "float"}:
         if dimension.low is None or dimension.high is None:
@@ -190,6 +201,15 @@ def _normalize_search_dimension(raw_dimension: SearchDimension | Mapping[str, An
             raise ValueError(f"search_space[{dimension.name}] bool dimensions do not accept explicit choices.")
 
     return dimension
+
+
+def _dimension_paths(dimension: SearchDimension) -> tuple[tuple[str | int, ...], ...]:
+    paths = [normalize_config_path(dimension.path)]
+    for linked_path in list(dimension.paths or []):
+        normalized = normalize_config_path(linked_path)
+        if normalized not in paths:
+            paths.append(normalized)
+    return tuple(paths)
 
 
 def normalize_search_space(
@@ -354,7 +374,11 @@ def _dimension_candidate_values(dimension: SearchDimension) -> set[Any] | None:
 
 
 def _search_dimensions_by_path(search_space: Sequence[SearchDimension | Mapping[str, Any]]) -> dict[tuple[str | int, ...], SearchDimension]:
-    return {normalize_config_path(dimension.path): dimension for dimension in normalize_search_space(search_space)}
+    out: dict[tuple[str | int, ...], SearchDimension] = {}
+    for dimension in normalize_search_space(search_space):
+        for path in _dimension_paths(dimension):
+            out[path] = dimension
+    return out
 
 
 def _possible_path_values(
@@ -1018,7 +1042,8 @@ def prepare_trial_config(
     for name, value in dict(trial_params).items():
         if name not in by_name:
             raise KeyError(f"Trial parameter {name!r} does not exist in the configured search space.")
-        set_nested_value(cfg, by_name[name].path, value)
+        for path in _dimension_paths(by_name[name]):
+            set_nested_value(cfg, path, value)
 
     logging_cfg = dict(cfg.get("logging", {}) or {})
     stage_tails = dict(logging_cfg.get("stage_tails", {}) or {})

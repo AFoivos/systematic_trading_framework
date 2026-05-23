@@ -85,6 +85,54 @@ def test_catalogs_are_inferred_from_processed_snapshot_columns(tmp_path: Path) -
     assert [item["name"] for item in targets] == ["r_target_trade_r"]
 
 
+def test_feature_catalog_classifies_vwap_as_indicator(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    snapshot_dir = tmp_path / "data" / "processed" / "processed" / "vwap_snapshot"
+    snapshot_dir.mkdir(parents=True)
+    (snapshot_dir / "metadata.json").write_text(
+        '{"assets": ["XAUUSD"], "context": {"interval": "15m"}}',
+        encoding="utf-8",
+    )
+    (snapshot_dir / "dataset.csv").write_text(
+        "\n".join(
+            [
+                "timestamp,asset,open,high,low,close,volume,vwap_20,close_over_vwap_20",
+                "2024-01-01 00:00:00,XAUUSD,1,2,0.5,1.5,10,1.45,0.034",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    loader = DataLoader(paths)
+    dataset_id = "data/processed/processed/vwap_snapshot/dataset.csv"
+    features = loader.catalog(source_type="feature", asset="XAUUSD", dataset_id=dataset_id)
+
+    assert {item["name"] for item in features["indicators"]} == {"vwap_20", "close_over_vwap_20"}
+
+
+def test_discovers_flat_processed_dataset_from_filename(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    (tmp_path / "data" / "processed" / "eurusd_m15.csv").write_text(
+        "\n".join(
+            [
+                "timestamp,open,high,low,close,volume",
+                "2025-01-01 22:00:00,1.03503,1.03519,1.03483,1.03485,91.44",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    loader = DataLoader(paths)
+    dataset = next(item for item in loader.discover_datasets() if item.id == "data/processed/eurusd_m15.csv")
+
+    assert dataset.stage == "processed"
+    assert dataset.source == "processed"
+    assert dataset.assets == ("EURUSD",)
+    assert dataset.timeframe == "M15"
+    candles = loader.load_ohlcv(asset="EURUSD", timeframe="M15", source="processed")
+    assert candles[0]["close"] == 1.03485
+
+
 def test_ohlcv_loader_raises_clear_error_for_missing_volume(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
     source_dir = tmp_path / "data" / "raw" / "example"
@@ -103,4 +151,3 @@ def test_ohlcv_loader_raises_clear_error_for_missing_volume(tmp_path: Path) -> N
 
     with pytest.raises(DataSchemaError, match="missing OHLCV columns"):
         loader.load_ohlcv(asset="XAUUSD", timeframe="M5", source="example")
-

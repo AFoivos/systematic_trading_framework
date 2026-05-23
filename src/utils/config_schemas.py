@@ -386,6 +386,7 @@ class BacktestConfig:
     missing_return_policy: str
     min_holding_bars: int = 0
     subset: str | None = None
+    stop_mode: str = "fixed_return"
     vol_col: str | None = None
     open_col: str = "open"
     high_col: str = "high"
@@ -393,6 +394,12 @@ class BacktestConfig:
     close_col: str = "close"
     take_profit_r: float | None = None
     stop_loss_r: float | None = None
+    volatility_col: str | None = None
+    entry_price_mode: str | None = None
+    profit_barrier_r: float | None = None
+    stop_barrier_r: float | None = None
+    vertical_barrier_bars: int | None = None
+    tie_break: str | None = None
     risk_per_trade: float | None = None
     max_holding_bars: int | None = None
     dynamic_exits: dict[str, Any] = field(default_factory=dict)
@@ -410,6 +417,7 @@ class BacktestConfig:
             "missing_return_policy",
             "min_holding_bars",
             "subset",
+            "stop_mode",
             "vol_col",
             "open_col",
             "high_col",
@@ -417,12 +425,19 @@ class BacktestConfig:
             "close_col",
             "take_profit_r",
             "stop_loss_r",
+            "volatility_col",
+            "entry_price_mode",
+            "profit_barrier_r",
+            "stop_barrier_r",
+            "vertical_barrier_bars",
+            "tie_break",
             "risk_per_trade",
             "max_holding_bars",
             "dynamic_exits",
             "allow_short",
         }
         max_holding_bars = data.get("max_holding_bars")
+        vertical_barrier_bars = data.get("vertical_barrier_bars")
         return cls(
             engine=str(data.get("engine", "vectorized")),
             returns_col=str(data.get("returns_col", "")),
@@ -432,6 +447,7 @@ class BacktestConfig:
             missing_return_policy=str(data.get("missing_return_policy", "raise_if_exposed")),
             min_holding_bars=int(data.get("min_holding_bars", 0)),
             subset=data.get("subset"),
+            stop_mode=str(data.get("stop_mode", "fixed_return")),
             vol_col=data.get("vol_col"),
             open_col=str(data.get("open_col", "open")),
             high_col=str(data.get("high_col", "high")),
@@ -443,6 +459,22 @@ class BacktestConfig:
             stop_loss_r=(
                 float(data["stop_loss_r"]) if data.get("stop_loss_r") is not None else None
             ),
+            volatility_col=(
+                str(data["volatility_col"]) if data.get("volatility_col") is not None else None
+            ),
+            entry_price_mode=(
+                str(data["entry_price_mode"]) if data.get("entry_price_mode") is not None else None
+            ),
+            profit_barrier_r=(
+                float(data["profit_barrier_r"]) if data.get("profit_barrier_r") is not None else None
+            ),
+            stop_barrier_r=(
+                float(data["stop_barrier_r"]) if data.get("stop_barrier_r") is not None else None
+            ),
+            vertical_barrier_bars=(
+                int(vertical_barrier_bars) if vertical_barrier_bars is not None else None
+            ),
+            tie_break=(str(data["tie_break"]) if data.get("tie_break") is not None else None),
             risk_per_trade=(
                 float(data["risk_per_trade"]) if data.get("risk_per_trade") is not None else None
             ),
@@ -462,6 +494,7 @@ class BacktestConfig:
             "missing_return_policy": self.missing_return_policy,
             "min_holding_bars": self.min_holding_bars,
             "subset": self.subset,
+            "stop_mode": self.stop_mode,
             "vol_col": self.vol_col,
             "open_col": self.open_col,
             "high_col": self.high_col,
@@ -469,6 +502,12 @@ class BacktestConfig:
             "close_col": self.close_col,
             "take_profit_r": self.take_profit_r,
             "stop_loss_r": self.stop_loss_r,
+            "volatility_col": self.volatility_col,
+            "entry_price_mode": self.entry_price_mode,
+            "profit_barrier_r": self.profit_barrier_r,
+            "stop_barrier_r": self.stop_barrier_r,
+            "vertical_barrier_bars": self.vertical_barrier_bars,
+            "tie_break": self.tie_break,
             "risk_per_trade": self.risk_per_trade,
             "max_holding_bars": self.max_holding_bars,
             "dynamic_exits": dict(self.dynamic_exits),

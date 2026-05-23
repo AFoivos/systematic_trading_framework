@@ -16,6 +16,10 @@ body {
   min-height: 100vh;
 }
 
+body.dashboard-focus-active {
+  overflow: hidden;
+}
+
 button,
 input,
 select,
@@ -98,6 +102,12 @@ textarea {
   font-size: 11px;
   line-height: 1.2;
   font-weight: 650;
+}
+
+.field-hint {
+  color: #6b7280;
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .field input,
@@ -258,6 +268,130 @@ textarea {
   padding: 14px;
 }
 
+.workspace-focus-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: rgba(15, 23, 42, 0.42);
+}
+
+.workspace-expanded {
+  position: fixed;
+  inset: 12px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  max-height: none;
+  overflow: hidden;
+  padding: 16px;
+  border: 1px solid #d9dee5;
+  border-radius: 10px;
+  background: #f6f7f9;
+  box-shadow: 0 24px 56px rgba(15, 23, 42, 0.22);
+}
+
+.workspace-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.workspace-toggle-button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.workspace-focus-copy {
+  margin: 0 0 10px;
+  color: #5f6b7a;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.price-line-controls {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.price-line-form {
+  display: grid;
+  grid-template-columns: minmax(128px, 160px) auto;
+  gap: 6px;
+  align-items: end;
+}
+
+.price-line-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.price-line-field span {
+  color: #667085;
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 650;
+}
+
+.price-line-field input {
+  min-height: 32px;
+  width: 100%;
+  border: 1px solid #cfd6df;
+  border-radius: 6px;
+  padding: 0 9px;
+  color: #1f2933;
+  background: #ffffff;
+  font-size: 12px;
+}
+
+.price-line-add-button {
+  min-width: 52px;
+}
+
+.price-line-list {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.price-line-chip {
+  min-height: 28px;
+  max-width: 220px;
+  border: 1px solid #cfd6df;
+  border-radius: 999px;
+  padding: 0 9px;
+  overflow: hidden;
+  color: #1f2933;
+  background: #ffffff;
+  font-size: 11px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.price-line-chip-stop_loss {
+  border-color: #fed7aa;
+  color: #9a3412;
+  background: #fff7ed;
+}
+
+.price-line-chip-take_profit {
+  border-color: #99f6e4;
+  color: #0f766e;
+  background: #f0fdfa;
+}
+
+.price-line-chip-hidden {
+  opacity: 0.55;
+}
+
 .workspace-status {
   display: flex;
   gap: 10px;
@@ -290,6 +424,27 @@ textarea {
   background: #ffffff;
 }
 
+.linked-chart-shell-expanded {
+  min-width: 0;
+}
+
+.workspace-expanded .linked-chart-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.workspace-expanded .linked-chart-shell-with-panels {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.workspace-expanded .linked-chart-shell:not(.linked-chart-shell-with-panels) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
 .linked-chart-shell .chart-canvas {
   min-width: 0;
   border: 0;
@@ -312,12 +467,38 @@ textarea {
   border-top: 1px solid #edf0f3;
 }
 
+.linked-lower-stack {
+  min-height: 0;
+}
+
+.workspace-expanded .linked-lower-stack {
+  display: grid;
+  grid-template-rows: repeat(var(--lower-panel-count), minmax(0, 1fr));
+}
+
+.workspace-expanded .linked-lower-chart {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-top: 1px solid #edf0f3;
+}
+
+.workspace-expanded .linked-lower-chart:first-child {
+  border-top: 0;
+}
+
 .lower-canvas {
   height: 192px;
 }
 
 .linked-lower-canvas {
   height: 178px;
+}
+
+.workspace-expanded .linked-main-canvas,
+.workspace-expanded .linked-lower-canvas {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .panel-title {
@@ -399,6 +580,27 @@ textarea {
 
   .workspace {
     padding: 10px;
+  }
+
+  .workspace-expanded {
+    inset: 8px;
+    padding: 10px;
+  }
+
+  .workspace-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .workspace-toggle-button {
+    width: 100%;
+  }
+
+  .price-line-controls,
+  .price-line-form {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: stretch;
   }
 
   .chart-canvas {

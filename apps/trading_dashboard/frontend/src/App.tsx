@@ -316,6 +316,8 @@ export default function App() {
           trades={trades}
           loadingMessage={loadingMessage}
           errorMessage={errorMessage}
+          onAddManualLevel={state.addManualLevel}
+          onRemoveSeries={state.removeSeriesConfig}
         />
         <SeriesStyleEditor
           configs={seriesConfigs}

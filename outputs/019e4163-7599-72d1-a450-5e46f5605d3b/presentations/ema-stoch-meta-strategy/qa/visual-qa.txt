@@ -1,0 +1,6 @@
+Initial QA targets:
+- Greek text legible at full slide size
+- no overlapping labels
+- arrows follow execution direction
+- slide numbers and footer aligned
+- final PPTX exported through artifact-tool

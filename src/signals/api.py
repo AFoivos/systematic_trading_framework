@@ -5,12 +5,14 @@ from src.signals.conviction_sizing_signal import conviction_sizing_signal
 from src.signals.ema_stoch_rsi_pullback_signal import ema_stoch_rsi_pullback_signal
 from src.signals.forecast_threshold_signal import forecast_threshold_signal
 from src.signals.forecast_vol_adjusted_signal import forecast_vol_adjusted_signal
+from src.signals.indicator_model_adaptive_pullback import indicator_model_adaptive_pullback_signal
 from src.signals.meta_probability_side_signal import meta_probability_side_signal
 from src.signals.manual_long_model_filter_signal import manual_long_model_filter_signal
 from src.signals.momentum_strategy import momentum_strategy
 from src.signals.orb_candidate_side_signal import orb_candidate_side_signal
 from src.signals.probability_vol_adjusted_signal import probability_vol_adjusted_signal
 from src.signals.probabilistic_signal import probabilistic_signal
+from src.signals.ppo_adx_stochrsi_trend_signal import ppo_adx_stochrsi_trend_signal
 from src.signals.regime_filtered_signal import regime_filtered_signal
 from src.signals.roc_long_only_conditions_signal import roc_long_only_conditions_signal
 from src.signals.rsi_strategy import rsi_strategy
@@ -33,11 +35,13 @@ __all__ = [
     "conviction_sizing_signal",
     "forecast_threshold_signal",
     "forecast_vol_adjusted_signal",
+    "indicator_model_adaptive_pullback_signal",
     "manual_long_model_filter_signal",
     "meta_probability_side_signal",
     "orb_candidate_side_signal",
     "probability_vol_adjusted_signal",
     "regime_filtered_signal",
+    "ppo_adx_stochrsi_trend_signal",
     "roc_long_only_conditions_signal",
     "vol_targeted_signal",
 ]

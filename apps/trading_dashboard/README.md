@@ -43,6 +43,24 @@ Set a custom backend URL if needed:
 VITE_API_BASE_URL=http://127.0.0.1:8000 npm run dev
 ```
 
+## Docker
+
+The Dockerized dashboard serves the built React app from the FastAPI container, so the UI stays available for as long as the container is running.
+
+From the repository root:
+
+```bash
+docker compose up --build trading-dashboard
+```
+
+Open `http://127.0.0.1:8000`.
+
+Notes:
+
+- The container serves both the API and the frontend on port `8000`.
+- Local `data/`, `logs/`, and `apps/trading_dashboard/layouts/` are mounted into the container, so new datasets, experiment outputs, and saved layouts remain visible without rebuilding.
+- Stop it with `docker compose stop trading-dashboard` or remove it with `docker compose down`.
+
 ## Example API Calls
 
 ```bash

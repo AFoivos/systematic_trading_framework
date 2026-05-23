@@ -1,0 +1,1440 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/m95jyy",
+    "id": "m95jyy",
+    "slide": 3,
+    "layoutId": "2ad2ff86-9edc-4226-bf93-17713406bee5",
+    "layoutName": "Title Slide",
+    "layoutType": "title",
+    "masterLayoutId": "a6c9c7cc-2ff5-47f9-ba82-78f87cc69636",
+    "masterLayoutName": "Master",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "ChatGPT",
+    "colors": {
+      "accent1": "#156082",
+      "accent2": "#E97132",
+      "accent3": "#196B24",
+      "accent4": "#0F9ED5",
+      "accent5": "#A02B93",
+      "accent6": "#4EA72E",
+      "bg1": "#FFFFFF",
+      "bg2": "#000000",
+      "tx1": "#1F1F1F",
+      "tx2": "#FFFFFF",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#0E2841",
+      "lt2": "#E8E8E8",
+      "hlink": "#467886",
+      "folHlink": "#96607D"
+    },
+    "typefaces": [
+      "Aptos",
+      "Aptos Display"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "2ad2ff86-9edc-4226-bf93-17713406bee5",
+      "name": "Title Slide",
+      "type": "title",
+      "parentLayoutId": "a6c9c7cc-2ff5-47f9-ba82-78f87cc69636",
+      "elements": []
+    },
+    {
+      "scope": "master",
+      "id": "a6c9c7cc-2ff5-47f9-ba82-78f87cc69636",
+      "name": "Master",
+      "type": "master",
+      "elements": []
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/7u54zido",
+      "id": "1",
+      "bbox": [
+        0,
+        0,
+        1280,
+        720
+      ],
+      "geometry": "rect",
+      "fillColor": "#F7F4EF",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/wfyxobm5",
+      "id": "2",
+      "bbox": [
+        0,
+        0,
+        18,
+        720
+      ],
+      "geometry": "rect",
+      "fillColor": "#14213D",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/l0rqd4vm",
+      "id": "3",
+      "bbox": [
+        18,
+        0,
+        5,
+        720
+      ],
+      "geometry": "rect",
+      "fillColor": "#1B998B",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 4,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/eloj2t83",
+      "id": "4",
+      "bbox": [
+        56,
+        26,
+        520,
+        18
+      ],
+      "geometry": "rect",
+      "text": "ΑΡΧΙΤΕΚΤΟΝΙΚΉ",
+      "textPreview": "ΑΡΧΙΤΕΚΤΟΝΙΚΉ",
+      "resolvedFontSize": 13,
+      "resolvedTextStyle": {
+        "fontSize": 13,
+        "typeface": "Aptos",
+        "bold": true,
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "ΑΡΧΙΤΕΚΤΟΝΙΚΉ"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "ΑΡΧΙΤΕΚΤΟΝΙΚΉ",
+          "runs": [
+            {
+              "index": 1,
+              "text": "ΑΡΧΙΤΕΚΤΟΝΙΚΉ",
+              "fontSize": 13,
+              "typeface": "Aptos",
+              "color": "#1B998B",
+              "bold": true
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 5,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/36hcrmhk",
+      "id": "5",
+      "bbox": [
+        56,
+        54,
+        780,
+        92
+      ],
+      "geometry": "rect",
+      "text": "Η στρατηγική είναι στρωματοποιημένη",
+      "textPreview": "Η στρατηγική είναι στρωματοποιημένη",
+      "resolvedFontSize": 36,
+      "resolvedTextStyle": {
+        "fontSize": 36,
+        "typeface": "Aptos Display",
+        "bold": true,
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Η στρατηγική είναι στρωματοποιημένη"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Η στρατηγική είναι στρωματοποιημένη",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Η στρατηγική είναι στρωματοποιημένη",
+              "fontSize": 36,
+              "typeface": "Aptos Display",
+              "color": "#14213D",
+              "bold": true
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/wra5gbq1",
+      "id": "6",
+      "bbox": [
+        58,
+        148,
+        760,
+        42
+      ],
+      "geometry": "rect",
+      "text": "Κάθε επίπεδο έχει διαφορετική ευθύνη και καθαρά όρια.",
+      "textPreview": "Κάθε επίπεδο έχει διαφορετική ευθύνη και καθαρά όρια.",
+      "resolvedFontSize": 18,
+      "resolvedTextStyle": {
+        "fontSize": 18,
+        "typeface": "Aptos",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Κάθε επίπεδο έχει διαφορετική ευθύνη και καθαρά όρια."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Κάθε επίπεδο έχει διαφορετική ευθύνη και καθαρά όρια.",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Κάθε επίπεδο έχει διαφορετική ευθύνη και καθαρά όρια.",
+              "fontSize": 18,
+              "typeface": "Aptos",
+              "color": "#5E6472"
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/lc7u54zi",
+      "id": "7",
+      "bbox": [
+        70,
+        260,
+        162,
+        150
+      ],
+      "geometry": "rect",
+      "fillColor": "#FFFFFF",
+      "lineColor": "#D7D1C7",
+      "lineWidth": 1
+    },
+    {
+      "order": 8,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/epkzupwb",
+      "id": "8",
+      "bbox": [
+        70,
+        260,
+        162,
+        8
+      ],
+      "geometry": "rect",
+      "fillColor": "#283845",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 9,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/7adsji5s",
+      "id": "9",
+      "bbox": [
+        82,
+        280,
+        138,
+        28
+      ],
+      "geometry": "rect",
+      "text": "Δεδομένα",
+      "textPreview": "Δεδομένα",
+      "resolvedFontSize": 15,
+      "resolvedTextStyle": {
+        "fontSize": 15,
+        "typeface": "Aptos",
+        "bold": true,
+        "alignment": "center"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Δεδομένα"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Δεδομένα",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Δεδομένα",
+              "fontSize": 15,
+              "typeface": "Aptos",
+              "color": "#14213D",
+              "bold": true
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 10,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/nqxs72x4",
+      "id": "10",
+      "bbox": [
+        80,
+        314,
+        142,
+        92
+      ],
+      "geometry": "rect",
+      "text": "OHLCV με PIT κανόνες",
+      "textPreview": "OHLCV με PIT κανόνες",
+      "resolvedFontSize": 10.51,
+      "resolvedTextStyle": {
+        "fontSize": 10.51,
+        "typeface": "Aptos",
+        "alignment": "center"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "OHLCV με PIT κανόνες"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "OHLCV με PIT κανόνες",
+          "runs": [
+            {
+              "index": 1,
+              "text": "OHLCV με PIT κανόνες",
+              "fontSize": 10.51,
+              "typeface": "Aptos",
+              "color": "#283845"
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 11,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/u54zidon",
+      "id": "11",
+      "bbox": [
+        265,
+        260,
+        162,
+        150
+      ],
+      "geometry": "rect",
+      "fillColor": "#E2ECF4",
+      "lineColor": "#D7D1C7",
+      "lineWidth": 1
+    },
+    {
+      "order": 12,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/5sneloj2",
+      "id": "12",
+      "bbox": [
+        265,
+        260,
+        162,
+        8
+      ],
+      "geometry": "rect",
+      "fillColor": "#33658A",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 13,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/cbulwval",
+      "id": "13",
+      "bbox": [
+        277,
+        280,
+        138,
+        28
+      ],
+      "geometry": "rect",
+      "text": "Συμφραζόμενα",
+      "textPreview": "Συμφραζόμενα",
+      "resolvedFontSize": 15,
+      "resolvedTextStyle": {
+        "fontSize": 15,
+        "typeface": "Aptos",
+        "bold": true,
+        "alignment": "center"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Συμφραζόμενα"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Συμφραζόμενα",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Συμφραζόμενα",
+              "fontSize": 15,
+              "typeface": "Aptos",
+              "color": "#14213D",
+              "bold": true
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 14,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/neloj2t8",
+      "id": "14",
+      "bbox": [
+        275,
+        314,
+        142,
+        92
+      ],
+      "geometry": "rect",
+      "text": "ATR, VWAP, όγκος, ορμή, session",
+      "textPreview": "ATR, VWAP, όγκος, ορμή, session",
+      "resolvedFontSize": 10.51,
+      "resolvedTextStyle": {
+        "fontSize": 10.51,
+        "typeface": "Aptos",
+        "alignment": "center"
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "ATR, VWAP, όγκος, ορμή,"
+          },
+          {
+            "index": 2,
+            "text": "session"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "ATR, VWAP, όγκος, ορμή, session",
+          "runs": [
+            {
+              "index": 1,
+              "text": "ATR, VWAP, όγκος, ορμή, session",
+              "fontSize": 10.51,
+              "typeface": "Aptos",
+              "color": "#283845"
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 15,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ytsvu9kn",
+      "id": "15",
+      "bbox": [
+        460,
+        260,
+        162,
+        150
+      ],
+      "geometry": "rect",
+      "fillColor": "#F8E7C6",
+      "lineColor": "#D7D1C7",
+      "lineWidth": 1
+    },
+    {
+      "order": 16,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/5kb6xkf6",
+      "id": "16",
+      "bbox": [
+        460,
+        260,
+        162,
+        8
+      ],
+      "geometry": "rect",
+      "fillColor": "#E09F3E",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 17,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/czed8v6p",
+      "id": "17",
+      "bbox": [
+        472,
+        280,
+        138,
+        28
+      ],
+      "geometry": "rect",
+      "text": "Κανόνας",
+      "textPreview": "Κανόνας",
+      "resolvedFontSize": 15,
+      "resolvedTextStyle": {
+        "fontSize": 15,
+        "typeface": "Aptos",
+        "bold": true,
+        "alignment": "center"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Κανόνας"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Κανόνας",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Κανόνας",
+              "fontSize": 15,
+              "typeface": "Aptos",
+              "color": "#14213D",
+              "bold": true
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 18,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/n29gr2p8",
+      "id": "18",
+      "bbox": [
+        470,
+        314,
+        142,
+        92
+      ],
+      "geometry": "rect",
+      "text": "EMA trend + StochRSI pullback",
+      "textPreview": "EMA trend + StochRSI pullback",
+      "resolvedFontSize": 10.51,
+      "resolvedTextStyle": {
+        "fontSize": 10.51,
+        "typeface": "Aptos",
+        "alignment": "center"
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "EMA trend + StochRSI"
+          },
+          {
+            "index": 2,
+            "text": "pullback"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "EMA trend + StochRSI pullback",
+          "runs": [
+            {
+              "index": 1,
+              "text": "EMA trend + StochRSI pullback",
+              "fontSize": 10.51,
+              "typeface": "Aptos",
+              "color": "#283845"
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 19,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/yhgn29gr",
+      "id": "19",
+      "bbox": [
+        655,
+        260,
+        162,
+        150
+      ],
+      "geometry": "rect",
+      "fillColor": "#F3D8D2",
+      "lineColor": "#D7D1C7",
+      "lineWidth": 1
+    },
+    {
+      "order": 20,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/6hcrmhk3",
+      "id": "20",
+      "bbox": [
+        655,
+        260,
+        162,
+        8
+      ],
+      "geometry": "rect",
+      "fillColor": "#C44536",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 21,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/z25kb6xk",
+      "id": "21",
+      "bbox": [
+        667,
+        280,
+        138,
+        28
+      ],
+      "geometry": "rect",
+      "text": "Μετα-στόχος",
+      "textPreview": "Μετα-στόχος",
+      "resolvedFontSize": 15,
+      "resolvedTextStyle": {
+        "fontSize": 15,
+        "typeface": "Aptos",
+        "bold": true,
+        "alignment": "center"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Μετα-στόχος"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Μετα-στόχος",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Μετα-στόχος",
+              "fontSize": 15,
+              "typeface": "Aptos",
+              "color": "#14213D",
+              "bold": true
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 22,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/onyd0z61",
+      "id": "22",
+      "bbox": [
+        665,
+        314,
+        142,
+        92
+      ],
+      "geometry": "rect",
+      "text": "τριπλό όριο και R",
+      "textPreview": "τριπλό όριο και R",
+      "resolvedFontSize": 10.51,
+      "resolvedTextStyle": {
+        "fontSize": 10.51,
+        "typeface": "Aptos",
+        "alignment": "center"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "τριπλό όριο και R"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "τριπλό όριο και R",
+          "runs": [
+            {
+              "index": 1,
+              "text": "τριπλό όριο και R",
+              "fontSize": 10.51,
+              "typeface": "Aptos",
+              "color": "#283845"
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 23,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/d8v6psfi",
+      "id": "23",
+      "bbox": [
+        850,
+        260,
+        162,
+        150
+      ],
+      "geometry": "rect",
+      "fillColor": "#DDF0EC",
+      "lineColor": "#D7D1C7",
+      "lineWidth": 1
+    },
+    {
+      "order": 24,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/6tovahoz",
+      "id": "24",
+      "bbox": [
+        850,
+        260,
+        162,
+        8
+      ],
+      "geometry": "rect",
+      "fillColor": "#1B998B",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 25,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/vahoza1g",
+      "id": "25",
+      "bbox": [
+        862,
+        280,
+        138,
+        28
+      ],
+      "geometry": "rect",
+      "text": "Μοντέλο",
+      "textPreview": "Μοντέλο",
+      "resolvedFontSize": 15,
+      "resolvedTextStyle": {
+        "fontSize": 15,
+        "typeface": "Aptos",
+        "bold": true,
+        "alignment": "center"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Μοντέλο"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Μοντέλο",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Μοντέλο",
+              "fontSize": 15,
+              "typeface": "Aptos",
+              "color": "#14213D",
+              "bold": true
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 26,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ovahoza1",
+      "id": "26",
+      "bbox": [
+        860,
+        314,
+        142,
+        92
+      ],
+      "geometry": "rect",
+      "text": "XGBoost πιθανότητα επιτυχίας",
+      "textPreview": "XGBoost πιθανότητα επιτυχίας",
+      "resolvedFontSize": 10.51,
+      "resolvedTextStyle": {
+        "fontSize": 10.51,
+        "typeface": "Aptos",
+        "alignment": "center"
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "XGBoost πιθανότητα"
+          },
+          {
+            "index": 2,
+            "text": "επιτυχίας"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "XGBoost πιθανότητα επιτυχίας",
+          "runs": [
+            {
+              "index": 1,
+              "text": "XGBoost πιθανότητα επιτυχίας",
+              "fontSize": 10.51,
+              "typeface": "Aptos",
+              "color": "#283845"
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 27,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/dg7adsji",
+      "id": "27",
+      "bbox": [
+        1045,
+        260,
+        162,
+        150
+      ],
+      "geometry": "rect",
+      "fillColor": "#FFFFFF",
+      "lineColor": "#D7D1C7",
+      "lineWidth": 1
+    },
+    {
+      "order": 28,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/61032lsz",
+      "id": "28",
+      "bbox": [
+        1045,
+        260,
+        162,
+        8
+      ],
+      "geometry": "rect",
+      "fillColor": "#2A9D8F",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 29,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/vmtwra5g",
+      "id": "29",
+      "bbox": [
+        1057,
+        280,
+        138,
+        28
+      ],
+      "geometry": "rect",
+      "text": "Εκτέλεση",
+      "textPreview": "Εκτέλεση",
+      "resolvedFontSize": 15,
+      "resolvedTextStyle": {
+        "fontSize": 15,
+        "typeface": "Aptos",
+        "bold": true,
+        "alignment": "center"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Εκτέλεση"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Εκτέλεση",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Εκτέλεση",
+              "fontSize": 15,
+              "typeface": "Aptos",
+              "color": "#14213D",
+              "bold": true
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 30,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/loj2t83i",
+      "id": "30",
+      "bbox": [
+        1055,
+        314,
+        142,
+        92
+      ],
+      "geometry": "rect",
+      "text": "ίδια πλευρά ή επίπεδη θέση",
+      "textPreview": "ίδια πλευρά ή επίπεδη θέση",
+      "resolvedFontSize": 10.51,
+      "resolvedTextStyle": {
+        "fontSize": 10.51,
+        "typeface": "Aptos",
+        "alignment": "center"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "ίδια πλευρά ή επίπεδη θέση"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "ίδια πλευρά ή επίπεδη θέση",
+          "runs": [
+            {
+              "index": 1,
+              "text": "ίδια πλευρά ή επίπεδη θέση",
+              "fontSize": 10.51,
+              "typeface": "Aptos",
+              "color": "#283845"
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 31,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/w3m94fu1",
+      "id": "31",
+      "bbox": [
+        235,
+        334,
+        28,
+        2
+      ],
+      "geometry": "rect",
+      "fillColor": "#5E6472",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 32,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/3itgfmlk",
+      "id": "32",
+      "bbox": [
+        261,
+        329,
+        2,
+        12
+      ],
+      "geometry": "rect",
+      "fillColor": "#5E6472",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 33,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ex0nuxc3",
+      "id": "33",
+      "bbox": [
+        430,
+        334,
+        28,
+        2
+      ],
+      "geometry": "rect",
+      "fillColor": "#5E6472",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 34,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/lwval87e",
+      "id": "34",
+      "bbox": [
+        456,
+        329,
+        2,
+        12
+      ],
+      "geometry": "rect",
+      "fillColor": "#5E6472",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 35,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/wb2hwfyx",
+      "id": "35",
+      "bbox": [
+        625,
+        334,
+        28,
+        2
+      ],
+      "geometry": "rect",
+      "fillColor": "#5E6472",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 36,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/3q5o7qpg",
+      "id": "36",
+      "bbox": [
+        651,
+        329,
+        2,
+        12
+      ],
+      "geometry": "rect",
+      "fillColor": "#5E6472",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 37,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/e9cvixcz",
+      "id": "37",
+      "bbox": [
+        820,
+        334,
+        28,
+        2
+      ],
+      "geometry": "rect",
+      "fillColor": "#5E6472",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 38,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/l87ed8ba",
+      "id": "38",
+      "bbox": [
+        846,
+        329,
+        2,
+        12
+      ],
+      "geometry": "rect",
+      "fillColor": "#5E6472",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 39,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/sneloj2t",
+      "id": "39",
+      "bbox": [
+        1015,
+        334,
+        28,
+        2
+      ],
+      "geometry": "rect",
+      "fillColor": "#5E6472",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 40,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/0rqd4vmt",
+      "id": "40",
+      "bbox": [
+        1041,
+        329,
+        2,
+        12
+      ],
+      "geometry": "rect",
+      "fillColor": "#5E6472",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 41,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/tcj6tova",
+      "id": "41",
+      "bbox": [
+        160,
+        500,
+        920,
+        64
+      ],
+      "geometry": "rect",
+      "fillColor": "#14213D",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 42,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/il0rqd4v",
+      "id": "42",
+      "bbox": [
+        190,
+        516,
+        860,
+        48
+      ],
+      "geometry": "rect",
+      "text": "Ο τελικός κανόνας εισόδου δεν γίνεται χαρακτηριστικό πρόβλεψης. Μένει μόνο ως λειτουργική στήλη πλευράς και υποψηφιότητας.",
+      "textPreview": "Ο τελικός κανόνας εισόδου δεν γίνεται χαρακτηριστικό πρόβλεψης. Μένει μόνο ως λειτουργική στήλη πλευράς και υποψηφιότητας.",
+      "resolvedFontSize": 19,
+      "resolvedTextStyle": {
+        "fontSize": 19,
+        "typeface": "Aptos",
+        "bold": true,
+        "alignment": "center"
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Ο τελικός κανόνας εισόδου δεν γίνεται χαρακτηριστικό πρόβλεψης. Μένει μόνο ως λειτουργική"
+          },
+          {
+            "index": 2,
+            "text": "στήλη πλευράς και υποψηφιότητας."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Ο τελικός κανόνας εισόδου δεν γίνεται χαρακτηριστικό πρόβλεψης. Μένει μόνο ως λειτουργική στήλη πλευράς και υποψηφιότητας.",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Ο τελικός κανόνας εισόδου δεν γίνεται χαρακτηριστικό πρόβλεψης. Μένει μόνο ως λειτουργική στήλη πλευράς και υποψηφιότητας.",
+              "fontSize": 19,
+              "typeface": "Aptos",
+              "color": "#FFFFFF",
+              "bold": true
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 43,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/b6xkf6dc",
+      "id": "43",
+      "bbox": [
+        56,
+        674,
+        1110,
+        1
+      ],
+      "geometry": "rect",
+      "fillColor": "#D7D1C7",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 44,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/0je9cvix",
+      "id": "44",
+      "bbox": [
+        56,
+        685,
+        760,
+        18
+      ],
+      "geometry": "rect",
+      "text": "EMA + στοχαστικό μετα-φίλτρο",
+      "textPreview": "EMA + στοχαστικό μετα-φίλτρο",
+      "resolvedFontSize": 10,
+      "resolvedTextStyle": {
+        "fontSize": 10,
+        "typeface": "Aptos",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "EMA + στοχαστικό μετα-φίλτρο"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "EMA + στοχαστικό μετα-φίλτρο",
+          "runs": [
+            {
+              "index": 1,
+              "text": "EMA + στοχαστικό μετα-φίλτρο",
+              "fontSize": 10,
+              "typeface": "Aptos",
+              "color": "#5E6472"
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 45,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/t47y1kre",
+      "id": "45",
+      "bbox": [
+        1110,
+        685,
+        90,
+        18
+      ],
+      "geometry": "rect",
+      "text": "03",
+      "textPreview": "03",
+      "resolvedFontSize": 10,
+      "resolvedTextStyle": {
+        "fontSize": 10,
+        "typeface": "Aptos",
+        "alignment": "right"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "03"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "03",
+          "runs": [
+            {
+              "index": 1,
+              "text": "03",
+              "fontSize": 10,
+              "typeface": "Aptos",
+              "color": "#5E6472"
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    }
+  ],
+  "composeRuns": []
+}

@@ -1,5 +1,6 @@
 from .engine import run_backtest, BacktestResult
 from .manual_barrier import run_manual_barrier_backtest
+from .portfolio_barrier import run_portfolio_barrier_backtest
 from src.signals import (
     buy_and_hold_signal,
     trend_state_long_only_signal,
@@ -13,6 +14,7 @@ from src.signals import (
 __all__ = [
     "run_backtest",
     "run_manual_barrier_backtest",
+    "run_portfolio_barrier_backtest",
     "BacktestResult",
     "buy_and_hold_signal",
     "trend_state_long_only_signal",

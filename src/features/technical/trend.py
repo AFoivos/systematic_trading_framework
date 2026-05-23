@@ -14,6 +14,8 @@ def add_trend_features(
     price_col: str = "close",
     sma_windows: Sequence[int] = (20, 50, 200),
     ema_spans: Sequence[int] = (20, 50),
+    sma_col_template: str | None = None,
+    ema_col_template: str | None = None,
     inplace: bool = False,
 ) -> pd.DataFrame:
     if price_col not in df.columns:
@@ -24,12 +26,22 @@ def add_trend_features(
 
     for window in sma_windows:
         sma = compute_sma(prices, window=window)
-        out[f"{price_col}_sma_{window}"] = sma
+        sma_col = (
+            sma_col_template.format(price_col=price_col, window=window, span=window)
+            if sma_col_template is not None
+            else f"{price_col}_sma_{window}"
+        )
+        out[sma_col] = sma
         out[f"{price_col}_over_sma_{window}"] = prices / sma - 1
 
     for span in ema_spans:
         ema = compute_ema(prices, span=span)
-        out[f"{price_col}_ema_{span}"] = ema
+        ema_col = (
+            ema_col_template.format(price_col=price_col, window=span, span=span)
+            if ema_col_template is not None
+            else f"{price_col}_ema_{span}"
+        )
+        out[ema_col] = ema
         out[f"{price_col}_over_ema_{span}"] = prices / ema - 1
 
     return out

@@ -16,7 +16,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from src.experiments.orchestration.feature_stage import apply_feature_steps
 from src.experiments.runner import _load_asset_frames
-from src.models.runtime import infer_feature_columns
+from src.models.common.runtime import infer_feature_columns
 from src.plots import plot_price_with_feature_combo, plot_price_with_features, plotly_chart_config
 from src.utils.config import load_experiment_config
 

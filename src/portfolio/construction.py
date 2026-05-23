@@ -28,6 +28,7 @@ class PortfolioPerformance:
     applied_weights: pd.DataFrame | None = None
     risk_guard_summary: dict[str, Any] = field(default_factory=dict)
     risk_guard_timeline: pd.DataFrame | None = None
+    trades: pd.DataFrame | None = None
 
 
 @dataclass(frozen=True)

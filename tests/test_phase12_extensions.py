@@ -6,7 +6,7 @@ import pytest
 
 from src.targets import build_forward_return_target, build_triple_barrier_target
 from src.experiments.orchestration.feature_stage import apply_feature_steps, apply_signal_step
-from src.models.runtime import probe_xgboost_runtime
+from src.models.common.runtime import probe_xgboost_runtime
 from src.experiments.models import (
     train_logistic_regression_classifier,
     train_sarimax_forecaster,

@@ -1,0 +1,880 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/gwaxmx",
+    "id": "gwaxmx",
+    "slide": 2,
+    "layoutId": "2ad2ff86-9edc-4226-bf93-17713406bee5",
+    "layoutName": "Title Slide",
+    "layoutType": "title",
+    "masterLayoutId": "a6c9c7cc-2ff5-47f9-ba82-78f87cc69636",
+    "masterLayoutName": "Master",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "ChatGPT",
+    "colors": {
+      "accent1": "#156082",
+      "accent2": "#E97132",
+      "accent3": "#196B24",
+      "accent4": "#0F9ED5",
+      "accent5": "#A02B93",
+      "accent6": "#4EA72E",
+      "bg1": "#FFFFFF",
+      "bg2": "#000000",
+      "tx1": "#1F1F1F",
+      "tx2": "#FFFFFF",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#0E2841",
+      "lt2": "#E8E8E8",
+      "hlink": "#467886",
+      "folHlink": "#96607D"
+    },
+    "typefaces": [
+      "Aptos",
+      "Aptos Display"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "2ad2ff86-9edc-4226-bf93-17713406bee5",
+      "name": "Title Slide",
+      "type": "title",
+      "parentLayoutId": "a6c9c7cc-2ff5-47f9-ba82-78f87cc69636",
+      "elements": []
+    },
+    {
+      "scope": "master",
+      "id": "a6c9c7cc-2ff5-47f9-ba82-78f87cc69636",
+      "name": "Master",
+      "type": "master",
+      "elements": []
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/orytsvu9",
+      "id": "1",
+      "bbox": [
+        0,
+        0,
+        1280,
+        720
+      ],
+      "geometry": "rect",
+      "fillColor": "#F7F4EF",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/z61032ls",
+      "id": "2",
+      "bbox": [
+        0,
+        0,
+        18,
+        720
+      ],
+      "geometry": "rect",
+      "fillColor": "#14213D",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/al87ed8b",
+      "id": "3",
+      "bbox": [
+        18,
+        0,
+        5,
+        720
+      ],
+      "geometry": "rect",
+      "fillColor": "#1B998B",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 4,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/h0fepkzu",
+      "id": "4",
+      "bbox": [
+        56,
+        26,
+        520,
+        18
+      ],
+      "geometry": "rect",
+      "text": "ΣΚΟΠΌΣ",
+      "textPreview": "ΣΚΟΠΌΣ",
+      "resolvedFontSize": 13,
+      "resolvedTextStyle": {
+        "fontSize": 13,
+        "typeface": "Aptos",
+        "bold": true,
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "ΣΚΟΠΌΣ"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "ΣΚΟΠΌΣ",
+          "runs": [
+            {
+              "index": 1,
+              "text": "ΣΚΟΠΌΣ",
+              "fontSize": 13,
+              "typeface": "Aptos",
+              "color": "#1B998B",
+              "bold": true
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 5,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/sfil0rqd",
+      "id": "5",
+      "bbox": [
+        56,
+        54,
+        780,
+        92
+      ],
+      "geometry": "rect",
+      "text": "Πού αποσκοπεί",
+      "textPreview": "Πού αποσκοπεί",
+      "resolvedFontSize": 36,
+      "resolvedTextStyle": {
+        "fontSize": 36,
+        "typeface": "Aptos Display",
+        "bold": true,
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Πού αποσκοπεί"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Πού αποσκοπεί",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Πού αποσκοπεί",
+              "fontSize": 36,
+              "typeface": "Aptos Display",
+              "color": "#14213D",
+              "bold": true
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/zupwb2hw",
+      "id": "6",
+      "bbox": [
+        58,
+        148,
+        760,
+        42
+      ],
+      "geometry": "rect",
+      "text": "Να ξεχωρίσει ποιες τεχνικά εύλογες πράξεις αξίζουν έκθεση.",
+      "textPreview": "Να ξεχωρίσει ποιες τεχνικά εύλογες πράξεις αξίζουν έκθεση.",
+      "resolvedFontSize": 18,
+      "resolvedTextStyle": {
+        "fontSize": 18,
+        "typeface": "Aptos",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Να ξεχωρίσει ποιες τεχνικά εύλογες πράξεις αξίζουν έκθεση."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Να ξεχωρίσει ποιες τεχνικά εύλογες πράξεις αξίζουν έκθεση.",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Να ξεχωρίσει ποιες τεχνικά εύλογες πράξεις αξίζουν έκθεση.",
+              "fontSize": 18,
+              "typeface": "Aptos",
+              "color": "#5E6472"
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/a9w3m94f",
+      "id": "7",
+      "bbox": [
+        80,
+        205,
+        330,
+        275
+      ],
+      "geometry": "rect",
+      "fillColor": "#E2ECF4",
+      "lineColor": "#D7D1C7",
+      "lineWidth": 1
+    },
+    {
+      "order": 8,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/hwfyxobm",
+      "id": "8",
+      "bbox": [
+        80,
+        205,
+        6,
+        275
+      ],
+      "geometry": "rect",
+      "fillColor": "#33658A",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 9,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/obm58z25",
+      "id": "9",
+      "bbox": [
+        98,
+        221,
+        300,
+        28
+      ],
+      "geometry": "rect",
+      "text": "1. Καθαρό σύμπαν γεγονότων",
+      "textPreview": "1. Καθαρό σύμπαν γεγονότων",
+      "resolvedFontSize": 18,
+      "resolvedTextStyle": {
+        "fontSize": 18,
+        "typeface": "Aptos",
+        "bold": true,
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "1. Καθαρό σύμπαν γεγονότων"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "1. Καθαρό σύμπαν γεγονότων",
+          "runs": [
+            {
+              "index": 1,
+              "text": "1. Καθαρό σύμπαν γεγονότων",
+              "fontSize": 18,
+              "typeface": "Aptos",
+              "color": "#14213D",
+              "bold": true
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 10,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/e1w7mp0b",
+      "id": "10",
+      "bbox": [
+        98,
+        257,
+        300,
+        213
+      ],
+      "geometry": "rect",
+      "text": "Το μοντέλο εκπαιδεύεται μόνο σε στιγμές όπου ο κανόνας δημιούργησε υποψήφια πράξη. Έτσι το πρόβλημα είναι ποιότητα πράξης, όχι γενική πρόβλεψη τιμής.",
+      "textPreview": "Το μοντέλο εκπαιδεύεται μόνο σε στιγμές όπου ο κανόνας δημιούργησε υποψήφια πράξη. Έτσι το πρόβλημα είναι ποιότητα πράξης, όχι γενική πρό...",
+      "resolvedFontSize": 13,
+      "resolvedTextStyle": {
+        "fontSize": 13,
+        "typeface": "Aptos",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 4,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Το μοντέλο εκπαιδεύεται μόνο σε στιγμές όπου ο"
+          },
+          {
+            "index": 2,
+            "text": "κανόνας δημιούργησε υποψήφια πράξη. Έτσι το"
+          },
+          {
+            "index": 3,
+            "text": "πρόβλημα είναι ποιότητα πράξης, όχι γενική"
+          },
+          {
+            "index": 4,
+            "text": "πρόβλεψη τιμής."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Το μοντέλο εκπαιδεύεται μόνο σε στιγμές όπου ο κανόνας δημιούργησε υποψήφια πράξη. Έτσι το πρόβλημα είναι ποιότητα πράξης, όχι γενική πρόβλεψη τιμής.",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Το μοντέλο εκπαιδεύεται μόνο σε στιγμές όπου ο κανόνας δημιούργησε υποψήφια πράξη. Έτσι το πρόβλημα είναι ποιότητα πράξης, όχι γενική πρόβλεψη τιμής.",
+              "fontSize": 13,
+              "typeface": "Aptos",
+              "color": "#283845"
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 11,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/7mp0bi9s",
+      "id": "11",
+      "bbox": [
+        455,
+        205,
+        330,
+        275
+      ],
+      "geometry": "rect",
+      "fillColor": "#DDF0EC",
+      "lineColor": "#D7D1C7",
+      "lineWidth": 1
+    },
+    {
+      "order": 12,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/w7mp0bi9",
+      "id": "12",
+      "bbox": [
+        455,
+        205,
+        6,
+        275
+      ],
+      "geometry": "rect",
+      "fillColor": "#1B998B",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 13,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/psfil0rq",
+      "id": "13",
+      "bbox": [
+        473,
+        221,
+        300,
+        28
+      ],
+      "geometry": "rect",
+      "text": "2. Μείωση κακών εκτελέσεων",
+      "textPreview": "2. Μείωση κακών εκτελέσεων",
+      "resolvedFontSize": 18,
+      "resolvedTextStyle": {
+        "fontSize": 18,
+        "typeface": "Aptos",
+        "bold": true,
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "2. Μείωση κακών εκτελέσεων"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "2. Μείωση κακών εκτελέσεων",
+          "runs": [
+            {
+              "index": 1,
+              "text": "2. Μείωση κακών εκτελέσεων",
+              "fontSize": 18,
+              "typeface": "Aptos",
+              "color": "#14213D",
+              "bold": true
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 14,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/epkzupwb",
+      "id": "14",
+      "bbox": [
+        473,
+        257,
+        300,
+        213
+      ],
+      "geometry": "rect",
+      "text": "Το μετα-φίλτρο κόβει υποψήφιες πράξεις όταν το περιβάλλον μεταβλητότητας, όγκου, ορμής ή δομής δεν ευνοεί το setup.",
+      "textPreview": "Το μετα-φίλτρο κόβει υποψήφιες πράξεις όταν το περιβάλλον μεταβλητότητας, όγκου, ορμής ή δομής δεν ευνοεί το setup.",
+      "resolvedFontSize": 13,
+      "resolvedTextStyle": {
+        "fontSize": 13,
+        "typeface": "Aptos",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Το μετα-φίλτρο κόβει υποψήφιες πράξεις όταν το"
+          },
+          {
+            "index": 2,
+            "text": "περιβάλλον μεταβλητότητας, όγκου, ορμής ή"
+          },
+          {
+            "index": 3,
+            "text": "δομής δεν ευνοεί το setup."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Το μετα-φίλτρο κόβει υποψήφιες πράξεις όταν το περιβάλλον μεταβλητότητας, όγκου, ορμής ή δομής δεν ευνοεί το setup.",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Το μετα-φίλτρο κόβει υποψήφιες πράξεις όταν το περιβάλλον μεταβλητότητας, όγκου, ορμής ή δομής δεν ευνοεί το setup.",
+              "fontSize": 13,
+              "typeface": "Aptos",
+              "color": "#283845"
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 15,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/7adsji5s",
+      "id": "15",
+      "bbox": [
+        830,
+        205,
+        330,
+        275
+      ],
+      "geometry": "rect",
+      "fillColor": "#F8E7C6",
+      "lineColor": "#D7D1C7",
+      "lineWidth": 1
+    },
+    {
+      "order": 16,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/wval87ed",
+      "id": "16",
+      "bbox": [
+        830,
+        205,
+        6,
+        275
+      ],
+      "geometry": "rect",
+      "fillColor": "#E09F3E",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 17,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/pg3ex0nu",
+      "id": "17",
+      "bbox": [
+        848,
+        221,
+        300,
+        28
+      ],
+      "geometry": "rect",
+      "text": "3. Αναπαραγωγιμότητα",
+      "textPreview": "3. Αναπαραγωγιμότητα",
+      "resolvedFontSize": 18,
+      "resolvedTextStyle": {
+        "fontSize": 18,
+        "typeface": "Aptos",
+        "bold": true,
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "3. Αναπαραγωγιμότητα"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "3. Αναπαραγωγιμότητα",
+          "runs": [
+            {
+              "index": 1,
+              "text": "3. Αναπαραγωγιμότητα",
+              "fontSize": 18,
+              "typeface": "Aptos",
+              "color": "#14213D",
+              "bold": true
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 18,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/eloj2t83",
+      "id": "18",
+      "bbox": [
+        848,
+        257,
+        300,
+        213
+      ],
+      "geometry": "rect",
+      "text": "Η ροή κρατά σταθερό seed, purged διαίρεση, point-in-time χαρακτηριστικά και next-open είσοδο για να μην κρύβεται lookahead.",
+      "textPreview": "Η ροή κρατά σταθερό seed, purged διαίρεση, point-in-time χαρακτηριστικά και next-open είσοδο για να μην κρύβεται lookahead.",
+      "resolvedFontSize": 13,
+      "resolvedTextStyle": {
+        "fontSize": 13,
+        "typeface": "Aptos",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Η ροή κρατά σταθερό seed, purged διαίρεση,"
+          },
+          {
+            "index": 2,
+            "text": "point-in-time χαρακτηριστικά και next-open είσοδο"
+          },
+          {
+            "index": 3,
+            "text": "για να μην κρύβεται lookahead."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Η ροή κρατά σταθερό seed, purged διαίρεση, point-in-time χαρακτηριστικά και next-open είσοδο για να μην κρύβεται lookahead.",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Η ροή κρατά σταθερό seed, purged διαίρεση, point-in-time χαρακτηριστικά και next-open είσοδο για να μην κρύβεται lookahead.",
+              "fontSize": 13,
+              "typeface": "Aptos",
+              "color": "#283845"
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 19,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/36hcrmhk",
+      "id": "19",
+      "bbox": [
+        80,
+        540,
+        1080,
+        62
+      ],
+      "geometry": "rect",
+      "fillColor": "#14213D",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 20,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/zupwb2hw",
+      "id": "20",
+      "bbox": [
+        110,
+        556,
+        1020,
+        30
+      ],
+      "geometry": "rect",
+      "text": "Κεντρική θέση: ο κανόνας παράγει ευκαιρίες, το μοντέλο αποφασίζει αν το περιβάλλον αξίζει ρίσκο.",
+      "textPreview": "Κεντρική θέση: ο κανόνας παράγει ευκαιρίες, το μοντέλο αποφασίζει αν το περιβάλλον αξίζει ρίσκο.",
+      "resolvedFontSize": 20,
+      "resolvedTextStyle": {
+        "fontSize": 20,
+        "typeface": "Aptos",
+        "bold": true,
+        "alignment": "center"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Κεντρική θέση: ο κανόνας παράγει ευκαιρίες, το μοντέλο αποφασίζει αν το περιβάλλον αξίζει ρίσκο."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Κεντρική θέση: ο κανόνας παράγει ευκαιρίες, το μοντέλο αποφασίζει αν το περιβάλλον αξίζει ρίσκο.",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Κεντρική θέση: ο κανόνας παράγει ευκαιρίες, το μοντέλο αποφασίζει αν το περιβάλλον αξίζει ρίσκο.",
+              "fontSize": 20,
+              "typeface": "Aptos",
+              "color": "#FFFFFF",
+              "bold": true
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 21,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/a9w3m94f",
+      "id": "21",
+      "bbox": [
+        56,
+        674,
+        1110,
+        1
+      ],
+      "geometry": "rect",
+      "fillColor": "#D7D1C7",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 22,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/h0fepkzu",
+      "id": "22",
+      "bbox": [
+        56,
+        685,
+        760,
+        18
+      ],
+      "geometry": "rect",
+      "text": "EMA + στοχαστικό μετα-φίλτρο",
+      "textPreview": "EMA + στοχαστικό μετα-φίλτρο",
+      "resolvedFontSize": 10,
+      "resolvedTextStyle": {
+        "fontSize": 10,
+        "typeface": "Aptos",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "EMA + στοχαστικό μετα-φίλτρο"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "EMA + στοχαστικό μετα-φίλτρο",
+          "runs": [
+            {
+              "index": 1,
+              "text": "EMA + στοχαστικό μετα-φίλτρο",
+              "fontSize": 10,
+              "typeface": "Aptos",
+              "color": "#5E6472"
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 23,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/sfil0rqd",
+      "id": "23",
+      "bbox": [
+        1110,
+        685,
+        90,
+        18
+      ],
+      "geometry": "rect",
+      "text": "02",
+      "textPreview": "02",
+      "resolvedFontSize": 10,
+      "resolvedTextStyle": {
+        "fontSize": 10,
+        "typeface": "Aptos",
+        "alignment": "right"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "02"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "02",
+          "runs": [
+            {
+              "index": 1,
+              "text": "02",
+              "fontSize": 10,
+              "typeface": "Aptos",
+              "color": "#5E6472"
+            }
+          ]
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    }
+  ],
+  "composeRuns": []
+}

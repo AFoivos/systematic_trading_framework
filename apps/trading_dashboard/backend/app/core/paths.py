@@ -16,6 +16,7 @@ def _default_project_root() -> Path:
 class DashboardPaths:
     project_root: Path
     app_root: Path
+    frontend_dist_root: Path
     data_root: Path
     raw_data_root: Path
     processed_data_root: Path
@@ -26,9 +27,13 @@ class DashboardPaths:
     def from_project_root(cls, project_root: Path | None = None) -> "DashboardPaths":
         root = (project_root or _default_project_root()).expanduser().resolve()
         app_root = root / "apps" / "trading_dashboard"
+        frontend_dist_root = Path(
+            os.environ.get("TRADING_DASHBOARD_FRONTEND_DIST", app_root / "frontend" / "dist")
+        ).expanduser().resolve()
         return cls(
             project_root=root,
             app_root=app_root,
+            frontend_dist_root=frontend_dist_root,
             data_root=root / "data",
             raw_data_root=root / "data" / "raw",
             processed_data_root=root / "data" / "processed",
@@ -53,4 +58,3 @@ class DashboardPaths:
 
 def get_paths() -> DashboardPaths:
     return DashboardPaths.from_project_root()
-

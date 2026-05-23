@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 
 from src.features import add_close_returns, add_shock_context_features
-from src.models.sequence import build_sequence_samples, fit_sequence_scaler
+from src.models.forecasting.sequence import build_sequence_samples, fit_sequence_scaler
 
 
 def _torch_available_in_subprocess() -> bool:
@@ -308,7 +308,7 @@ import numpy as np
 import pandas as pd
 import torch
 from src.features import add_close_returns, add_shock_context_features
-from src.models.event_transformer import train_event_transformer_encoder
+from src.models.classification.event_transformer import train_event_transformer_encoder
 
 rng = np.random.default_rng(19)
 periods = 160

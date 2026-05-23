@@ -1,0 +1,426 @@
+strategy:
+  name: indicator_model_adaptive_pullback
+  timeframe: 30m
+  assets:
+    - XAUUSD
+    - US100
+    - US30
+    - SPX500
+    - GER40
+
+data:
+  source: dukascopy_csv
+  interval: 30m
+  start: null
+  end: null
+  alignment: inner
+  symbols:
+    - XAUUSD
+    - US100
+    - US30
+    - SPX500
+    - GER40
+  pit:
+    timestamp_alignment:
+      source_timezone: UTC
+      output_timezone: UTC
+      normalize_daily: false
+      duplicate_policy: last
+    corporate_actions:
+      policy: none
+      adj_close_col: adj_close
+    universe_snapshot:
+      inactive_policy: raise
+  storage:
+    mode: cached_only
+    dataset_id: indicator_model_adaptive_pullback_30m
+    save_raw: false
+    save_processed: true
+    load_paths:
+      XAUUSD: data/raw/dukascopy_30m_clean/xauusd_30m.csv
+      US100: data/raw/dukascopy_30m_clean/us100_30m.csv
+      US30: data/raw/dukascopy_30m_clean/us30_30m.csv
+      SPX500: data/raw/dukascopy_30m_clean/spx500_30m.csv
+      GER40: data/raw/dukascopy_30m_clean/ger40_30m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed
+
+features:
+  - step: returns
+    outputs:
+      close_ret: close_ret
+    params:
+      log: false
+      col_name: close_ret
+  - step: volatility
+    outputs:
+      vol_rolling_10: realized_vol_10
+      vol_rolling_20: realized_vol_20
+    params:
+      returns_col: close_ret
+      rolling_windows: [10, 20]
+      ewma_spans: []
+      annualization_factor: null
+  - step: trend
+    params:
+      price_col: close
+      sma_windows: []
+      ema_spans: [20, 50, 100]
+      ema_col_template: "ema_{span}"
+  - step: adx
+    outputs:
+      adx_14: adx_14
+      plus_di_14: plus_di_14
+      minus_di_14: minus_di_14
+    params:
+      high_col: high
+      low_col: low
+      close_col: close
+      window: 14
+      windows: [14]
+  - step: macd
+    outputs:
+      macd_12_26: macd
+      macd_signal_9: macd_signal
+      macd_hist_12_26_9: macd_hist
+    params:
+      price_col: close
+      fast: 12
+      slow: 26
+      signal: 9
+  - step: rsi
+    outputs:
+      close_rsi_14: rsi_14
+    params:
+      price_col: close
+      windows: [14]
+      method: wilder
+  - step: stochastic_rsi
+    outputs:
+      stoch_rsi_k: stoch_rsi_k
+      stoch_rsi_d: stoch_rsi_d
+      stoch_rsi_k_minus_d: stoch_rsi_k_minus_d
+      stoch_rsi_cross_up: stoch_rsi_cross_up
+      stoch_rsi_cross_down: stoch_rsi_cross_down
+      stoch_rsi_oversold: stoch_rsi_oversold
+      stoch_rsi_overbought: stoch_rsi_overbought
+      stoch_rsi_slope: stoch_rsi_slope
+      stoch_rsi_recover_from_oversold: stoch_rsi_recover_from_oversold
+      stoch_rsi_fall_from_overbought: stoch_rsi_fall_from_overbought
+    params:
+      price_col: close
+      rsi_period: 14
+      stoch_period: 14
+      k_period: 3
+      d_period: 3
+      oversold: 0.20
+      overbought: 0.80
+      prefix: stoch_rsi
+  - step: roc
+    outputs:
+      roc_3: roc_3
+      roc_6: roc_6
+    params:
+      price_col: close
+      windows: [3, 6]
+  - step: atr
+    outputs:
+      atr_14: atr_14
+      atr_over_price_14: atr_pct
+    params:
+      high_col: high
+      low_col: low
+      close_col: close
+      window: 14
+      windows: [14]
+      method: wilder
+      add_over_price: true
+  - step: bollinger
+    outputs:
+      bb_ma_20: bollinger_mid_20
+      bb_upper_20_2.0: bollinger_upper_20
+      bb_lower_20_2.0: bollinger_lower_20
+      bb_width_20_2.0: bollinger_bandwidth
+      bb_percent_b_20_2.0: bollinger_percent_b
+    params:
+      price_col: close
+      window: 20
+      n_std: 2.0
+  - step: indicator_pullback
+    params:
+      asset_vocab: [XAUUSD, US100, US30, SPX500, GER40]
+      asset_aliases:
+        NAS100: US100
+      open_col: open
+      high_col: high
+      low_col: low
+      close_col: close
+      ema_fast_period: 20
+      ema_mid_period: 50
+      ema_slow_period: 100
+      atr_period: 14
+      atr_pct_rank_window: 100
+      macd_hist_col: macd_hist
+      rsi_period: 14
+      stoch_k_col: stoch_rsi_k
+      stoch_d_col: stoch_rsi_d
+      bollinger_bandwidth_col: bollinger_bandwidth
+      bollinger_percent_b_col: bollinger_percent_b
+      bb_bandwidth_rank_window: 100
+      realized_vol_windows: [10, 20]
+      return_windows: [1, 2, 3, 6]
+      rolling_return_windows: [4, 8]
+  - step: indicator_model_adaptive_pullback
+    params:
+      ema_fast: 20
+      ema_mid: 50
+      ema_slow: 100
+      min_adx: 18.0
+      max_adx: 45.0
+      rsi_long_min: 45.0
+      rsi_long_max: 68.0
+      rsi_short_min: 32.0
+      rsi_short_max: 55.0
+      stoch_long_max: 60.0
+      stoch_short_min: 40.0
+      min_atr_pct_rank: 0.20
+      max_atr_pct_rank: 0.90
+      min_bb_bandwidth_rank: 0.20
+      max_distance_from_ema_atr: 0.75
+      require_macd_confirmation: true
+      candidate_long_col: candidate_long
+      candidate_short_col: candidate_short
+      direction_col: direction
+      signal_col: signal
+      candidate_col: signal_candidate
+      signal_name_col: signal_name
+      score_col: signal_score
+
+model:
+  kind: lightgbm_clf
+  outputs:
+    pred_prob_col: pred_prob
+    pred_is_oos_col: pred_is_oos
+  target:
+    kind: directional_triple_barrier
+    outputs:
+      label_col: label
+      event_ret_col: dtb_event_ret
+      fwd_col: dtb_event_ret
+      candidate_out_col: label_candidate
+      r_col: dtb_event_r
+      oriented_r_col: dtb_oriented_r
+    price_col: close
+    open_col: open
+    high_col: high
+    low_col: low
+    direction_col: direction
+    candidate_col: signal_candidate
+    entry_price_mode: next_open
+    profit_barrier_r: 1.4
+    stop_barrier_r: 1.0
+    vertical_barrier_bars: 4
+    volatility_col: atr_14
+    neutral_label: stop
+    tie_break: closest_to_open
+    add_r_multiple: true
+    r_clip: [-3, 3]
+  split:
+    method: purged
+    train_frac: 0.70
+    test_size: 5000
+    step_size: 5000
+    expanding: true
+    max_folds: 4
+    purge_bars: 6
+    embargo_bars: 4
+  feature_selectors:
+    include:
+      - startswith:
+          - ema_
+          - distance_from_ema
+      - exact:
+          - adx_14
+          - macd
+          - macd_signal
+          - macd_hist
+          - macd_hist_slope
+          - rsi_14
+          - rsi_14_slope
+          - stoch_rsi_k
+          - stoch_rsi_d
+          - stoch_rsi_cross_up
+          - stoch_rsi_cross_down
+          - roc_3
+          - roc_6
+          - atr_14
+          - atr_pct
+          - atr_pct_rank_100
+          - realized_vol_10
+          - realized_vol_20
+          - bollinger_mid_20
+          - bollinger_upper_20
+          - bollinger_lower_20
+          - bollinger_bandwidth
+          - bollinger_bandwidth_rank_100
+          - bollinger_percent_b
+          - body_ratio
+          - upper_wick_ratio
+          - lower_wick_ratio
+          - close_location
+          - range_to_atr
+          - return_1
+          - return_2
+          - return_3
+          - return_6
+          - rolling_return_4
+          - rolling_return_8
+          - asset_id
+          - direction
+          - signal_score
+    strict:
+      min_count: 42
+  params:
+    n_estimators: 300
+    learning_rate: 0.03
+    max_depth: -1
+    num_leaves: 31
+    subsample: 0.8
+    colsample_bytree: 0.8
+    random_state: 42
+    n_jobs: 1
+
+signals:
+  kind: meta_probability_side
+  outputs:
+    signal_col: signal
+  params:
+    prob_col: pred_prob
+    side_col: direction
+    candidate_col: signal_candidate
+    threshold: 0.58
+    min_expected_value_r: 0.10
+    profit_barrier_r: 1.4
+    stop_barrier_r: 1.0
+    clip: 1.0
+    mode: long_short
+
+decision:
+  model_threshold: 0.58
+  min_expected_value_r: 0.10
+
+validation:
+  method: purged_walk_forward
+  purge_bars: 6
+  embargo_bars: 4
+
+metrics:
+  primary:
+    - expectancy_r
+    - profit_factor
+    - max_drawdown
+    - sharpe
+    - sortino
+  classification:
+    - precision
+    - recall
+    - roc_auc
+    - calibration_error
+  trading:
+    - trades_per_asset
+    - win_rate
+    - avg_win_r
+    - avg_loss_r
+    - max_consecutive_losses
+
+runtime:
+  seed: 42
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+
+risk:
+  cost_per_turnover: 0.00015
+  slippage_per_turnover: 0.00010
+  target_vol: null
+  max_leverage: 1.0
+  sizing: {}
+  dd_guard:
+    enabled: true
+    max_drawdown: 0.08
+    rearm_drawdown: 0.04
+    cooloff_bars: 48
+  portfolio_guard: {}
+  drawdown_sizing: {}
+  vol_col: null
+
+backtest:
+  engine: vectorized
+  signal_col: signal
+  returns_col: close_ret
+  returns_type: simple
+  subset: test
+  min_holding_bars: 0
+  periods_per_year: 12096
+  missing_return_policy: raise_if_exposed
+  vol_col: null
+
+portfolio:
+  enabled: true
+  construction: signal_weights
+  long_short: true
+  gross_target: 1.0
+  expected_return_col: null
+  covariance_window: 240
+  covariance_rebalance_step: 48
+  risk_aversion: 8.0
+  trade_aversion: 0.0
+  constraints:
+    max_gross_leverage: 1.0
+    max_weight: 0.35
+    min_weight: -0.35
+    target_net_exposure: 0.0
+    enforce_target_net_exposure: false
+  asset_groups:
+    XAUUSD: metals
+    US100: us_indices
+    US30: us_indices
+    SPX500: us_indices
+    GER40: european_indices
+
+evaluation:
+  probability_thresholds: [0.52, 0.55, 0.58, 0.62, 0.65]
+  primary_metric: sharpe
+  secondary_metrics:
+    - win_rate
+    - profit_factor
+    - max_drawdown
+    - sharpe
+    - trade_count
+
+monitoring:
+  enabled: true
+  psi_threshold: 0.15
+  n_bins: 10
+
+execution:
+  enabled: false
+  mode: paper
+  capital: 100000.0
+  price_col: close
+  min_trade_notional: 0.0
+  current_weights: {}
+  current_prices: {}
+
+logging:
+  enabled: true
+  run_name: indicator_model_adaptive_pullback_base
+  output_dir: logs/experiments
+  stage_tails:
+    enabled: true
+    stdout: true
+    report: true
+    limit: 10
+    max_columns: 36
+    max_assets: 3

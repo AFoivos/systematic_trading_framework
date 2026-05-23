@@ -12,7 +12,17 @@ import type { DashboardLayout, LayoutSummary } from "../types/visualization";
 import type { ExperimentDetail, ExperimentSummary } from "../types/experiment";
 import type { BuilderDefinition, TransformSeriesRequest, TransformSeriesResponse } from "../types/transforms";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
+function resolveApiBase(): string {
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
+  }
+  if (import.meta.env.DEV) {
+    return "http://127.0.0.1:8000";
+  }
+  return window.location.origin;
+}
+
+const API_BASE = resolveApiBase();
 
 type Params = Record<string, string | number | null | undefined>;
 

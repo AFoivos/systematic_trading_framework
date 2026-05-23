@@ -1,0 +1,19 @@
+task mode: create
+primary deck-profile: engineering-platform
+secondary profile gates: strategy-leadership tone, because the deck explains intent and operating logic.
+required proof objects:
+- architecture/workflow map of signal layer, context layer, target layer, model layer, and backtest layer
+- product proof slide with concrete configured features and excluded columns
+- metric/process evidence tied to the system: purged split, next-open entry, R-multiple diagnostics, Optuna knobs
+- risk and limitation slide covering leakage controls and assumptions
+source/asset requirements:
+- use only local repository config and code snippets already inspected in this thread
+- no external logos or identity assets
+brand authenticity constraints:
+- no invented marks; rely on restrained technical visual language
+profile-specific QA gates:
+- diagram directions must match execution order
+- technical labels must be precise and legible
+- no generic feature-card grid without pipeline proof
+known missing inputs:
+- no historical performance results requested or generated; deck explains strategy design, not expected profitability

@@ -8,7 +8,16 @@ interface SeriesStyleEditorProps {
   onUpdate: (key: string, patch: Partial<VisualizationConfig>) => void;
 }
 
-const renderTypes: RenderType[] = ["line", "area", "histogram", "marker", "background_band", "prediction_line", "probability_band"];
+const renderTypes: RenderType[] = [
+  "line",
+  "area",
+  "histogram",
+  "marker",
+  "background_band",
+  "horizontal_level",
+  "prediction_line",
+  "probability_band"
+];
 const chartTargets: ChartTarget[] = ["main_price_chart", "lower_panel", "candle_marker", "background"];
 
 export function SeriesStyleEditor({ configs, activeKey, onSelect, onUpdate }: SeriesStyleEditorProps) {
@@ -69,7 +78,12 @@ export function SeriesStyleEditor({ configs, activeKey, onSelect, onUpdate }: Se
       </label>
       <label className="field">
         <span>Panel</span>
-        <input value={active.panel_id ?? ""} onChange={(event) => onUpdate(key, { panel_id: event.target.value })} />
+        <input
+          placeholder="empty = own panel / shared name"
+          value={active.panel_id ?? ""}
+          onChange={(event) => onUpdate(key, { panel_id: event.target.value || null })}
+        />
+        <small className="field-hint">Leave empty for a dedicated feature panel. Reuse the same name to stack series together.</small>
       </label>
       <label className="field">
         <span>Color</span>
@@ -92,4 +106,3 @@ export function SeriesStyleEditor({ configs, activeKey, onSelect, onUpdate }: Se
     </aside>
   );
 }
-

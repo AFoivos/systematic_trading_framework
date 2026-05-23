@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from src.models.runtime import infer_feature_columns, resolve_feature_selectors
+from src.models.common.runtime import infer_feature_columns, resolve_feature_selectors
 
 
 def test_resolve_feature_selectors_supports_exact_include_exclude_and_strict_count() -> None:

@@ -878,6 +878,39 @@ def test_validate_backtest_block_rejects_negative_min_holding_bars() -> None:
         )
 
 
+def test_validate_backtest_block_accepts_portfolio_barrier_engine() -> None:
+    validate_backtest_block(
+        {
+            "engine": "portfolio_barrier",
+            "returns_col": "close_ret",
+            "signal_col": "signal",
+            "periods_per_year": 12096,
+            "returns_type": "simple",
+            "missing_return_policy": "raise_if_exposed",
+            "min_holding_bars": 0,
+            "open_col": "open",
+            "high_col": "high",
+            "low_col": "low",
+            "close_col": "close",
+            "volatility_col": "atr_14",
+            "entry_price_mode": "next_open",
+            "profit_barrier_r": 1.4,
+            "stop_barrier_r": 1.0,
+            "vertical_barrier_bars": 4,
+            "tie_break": "closest_to_open",
+        }
+    )
+
+
+def test_validate_resolved_config_requires_portfolio_for_portfolio_barrier() -> None:
+    cfg = load_experiment_config("config/experiments/indicator_model_adaptive_pullback_barrier.yaml")
+    cfg["portfolio"] = dict(cfg["portfolio"])
+    cfg["portfolio"]["enabled"] = False
+
+    with pytest.raises(ConfigValidationError, match="portfolio.enabled=true"):
+        validate_resolved_config(cfg)
+
+
 def test_validate_model_block_rejects_lightgbm_only_params_for_xgboost() -> None:
     model = {
         "kind": "xgboost_clf",

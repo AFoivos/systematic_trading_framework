@@ -7,6 +7,8 @@ FEATURE_KINDS = frozenset(
         "bollinger",
         "ema_stoch_rsi_pullback",
         "feature_transforms",
+        "indicator_model_adaptive_pullback",
+        "indicator_pullback",
         "lags",
         "macd",
         "macro_context",
@@ -33,6 +35,7 @@ FEATURE_KINDS = frozenset(
         "vol_normalized_momentum",
         "volatility",
         "volume_features",
+        "vwap",
     }
 )
 
@@ -41,10 +44,12 @@ SIGNAL_KINDS = frozenset(
         "ema_stoch_rsi_pullback",
         "forecast_threshold",
         "forecast_vol_adjusted",
+        "indicator_model_adaptive_pullback",
         "manual_long_model_filter",
         "meta_probability_side",
         "momentum",
         "orb_candidate_side",
+        "ppo_adx_stochrsi_trend",
         "probability_conviction",
         "probability_threshold",
         "probability_vol_adjusted",

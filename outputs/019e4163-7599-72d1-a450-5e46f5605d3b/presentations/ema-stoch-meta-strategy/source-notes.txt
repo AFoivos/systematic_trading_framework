@@ -1,0 +1,10 @@
+Sources used:
+- config/experiments/stochrsi_cross_ma/ema_stoch_pullback_meta_vwap_context.yaml
+- config/optuna/ema_stoch_pullback_meta_vwap_context_optuna.yaml
+- src/signals/ema_stoch_rsi_pullback_signal.py
+- src/targets/triple_barrier.py
+- src/models/classification/base.py
+- src/signals/meta_probability_side_signal.py
+- src/experiments/orchestration/pipeline.py
+
+The deck avoids performance claims. It explains strategy intent, layer boundaries, leakage controls, and operating flow.

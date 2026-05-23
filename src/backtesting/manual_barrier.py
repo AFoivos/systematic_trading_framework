@@ -27,6 +27,13 @@ def _finite_price(value: Any, *, field: str) -> float:
     return out
 
 
+def _finite_positive(value: Any, *, field: str) -> float:
+    out = float(value)
+    if not np.isfinite(out) or out <= 0.0:
+        raise ValueError(f"{field} must be finite and > 0.")
+    return out
+
+
 def run_manual_barrier_backtest(
     df: pd.DataFrame,
     *,
@@ -45,6 +52,8 @@ def run_manual_barrier_backtest(
     periods_per_year: int = 252,
     dynamic_exits: dict[str, Any] | None = None,
     allow_short: bool = False,
+    stop_mode: str = "fixed_return",
+    vol_col: str | None = None,
 ) -> BacktestResult:
     """
     Event-based backtest for manual rule signals.
@@ -55,8 +64,14 @@ def run_manual_barrier_backtest(
 
     Dynamic exits are opt-in. With `dynamic_exits.enabled=false` or no dynamic exit config, the
     engine keeps the legacy stop/take-profit/max-holding behavior.
+
+    With ``stop_mode="volatility_stop"``, ``vol_col`` must contain a positive point-in-time
+    volatility or ATR-over-price estimate. Stop and take-profit distances are then computed as
+    ``vol_col * stop_loss_r`` and ``vol_col * take_profit_r`` from the signal bar.
     """
-    _require_columns(df, [signal_col, open_col, high_col, low_col, close_col])
+    stop_mode = str(stop_mode)
+    if stop_mode not in {"fixed_return", "volatility_stop"}:
+        raise ValueError("stop_mode must be 'fixed_return' or 'volatility_stop'.")
     if int(max_holding_bars) <= 0:
         raise ValueError("max_holding_bars must be positive.")
     if float(take_profit_r) <= 0.0 or float(stop_loss_r) <= 0.0:
@@ -68,6 +83,13 @@ def run_manual_barrier_backtest(
     if float(cost_per_unit_turnover) < 0.0 or float(slippage_per_unit_turnover) < 0.0:
         raise ValueError("cost_per_unit_turnover and slippage_per_unit_turnover must be >= 0.")
     dynamic_cfg = normalize_dynamic_exit_config(dynamic_exits)
+    needs_volatility = stop_mode == "volatility_stop" or bool(dynamic_cfg["atr_trailing"]["enabled"])
+    if needs_volatility and (vol_col is None or not str(vol_col).strip()):
+        raise ValueError("vol_col is required for volatility_stop or dynamic_exits.atr_trailing.")
+    required_cols = [signal_col, open_col, high_col, low_col, close_col]
+    if needs_volatility:
+        required_cols.append(str(vol_col))
+    _require_columns(df, required_cols)
 
     frame = df.copy()
     signal = pd.to_numeric(frame[signal_col], errors="coerce").fillna(0.0).astype(float)
@@ -81,6 +103,11 @@ def run_manual_barrier_backtest(
     lows = pd.to_numeric(frame[low_col], errors="coerce").to_numpy(dtype=float)
     closes = pd.to_numeric(frame[close_col], errors="coerce").to_numpy(dtype=float)
     signals = signal.to_numpy(dtype=float)
+    volatility = (
+        pd.to_numeric(frame[str(vol_col)], errors="coerce").to_numpy(dtype=float)
+        if needs_volatility
+        else None
+    )
 
     net_returns = pd.Series(0.0, index=index, name="returns", dtype=float)
     gross_returns = pd.Series(0.0, index=index, name="gross_returns", dtype=float)
@@ -101,9 +128,21 @@ def run_manual_barrier_backtest(
 
         entry_idx = i + 1
         entry_open = _finite_price(frame.iloc[entry_idx][open_col], field=f"{open_col}[entry]")
-        size = min(abs(raw_signal), float(max_leverage))
-        stop_distance_pct = max(float(risk_per_trade) * float(stop_loss_r), 1e-8)
-        target_distance_pct = max(float(risk_per_trade) * float(take_profit_r), 1e-8)
+        raw_size = min(abs(raw_signal), float(max_leverage))
+        if stop_mode == "volatility_stop":
+            assert volatility is not None
+            signal_volatility = _finite_positive(
+                volatility[i],
+                field=f"{vol_col}[signal]",
+            )
+            stop_distance_pct = max(signal_volatility * float(stop_loss_r), 1e-8)
+            target_distance_pct = max(signal_volatility * float(take_profit_r), 1e-8)
+            risk_sized_cap = float(risk_per_trade) / stop_distance_pct
+            size = min(raw_size, risk_sized_cap, float(max_leverage))
+        else:
+            size = raw_size
+            stop_distance_pct = max(float(risk_per_trade) * float(stop_loss_r), 1e-8)
+            target_distance_pct = max(float(risk_per_trade) * float(take_profit_r), 1e-8)
         max_exit_idx = min(n - 1, entry_idx + int(max_holding_bars) - 1)
         is_short = raw_signal < 0.0
         if is_short:
@@ -121,6 +160,7 @@ def run_manual_barrier_backtest(
                 initial_stop_price=stop_price,
                 take_profit_price=take_profit_price,
                 dynamic_exits=dynamic_cfg,
+                volatility=volatility,
                 tie_break="conservative",
                 legacy_same_bar_stop_reason=not bool(dynamic_cfg.get("enabled", False)),
             )
@@ -139,6 +179,7 @@ def run_manual_barrier_backtest(
                 initial_stop_price=stop_price,
                 take_profit_price=take_profit_price,
                 dynamic_exits=dynamic_cfg,
+                volatility=volatility,
                 tie_break="conservative",
                 legacy_same_bar_stop_reason=not bool(dynamic_cfg.get("enabled", False)),
             )
@@ -198,6 +239,7 @@ def run_manual_barrier_backtest(
                 "breakeven_activated": bool(path["breakeven_activated"]),
                 "profit_lock_activated": bool(path["profit_lock_activated"]),
                 "effective_stop_price": float(path["effective_stop_price"]),
+                "stop_mode": stop_mode,
             }
         )
         i = exit_idx + 1

@@ -12,7 +12,7 @@ from src.features import add_close_returns
 from src.features.regime_context import add_regime_context_features
 from src.features.session_context import add_session_context_features
 from src.features.macro import add_macro_context_features
-from src.models.sequence import build_sequence_samples, fit_sequence_scaler
+from src.models.forecasting.sequence import build_sequence_samples, fit_sequence_scaler
 
 
 def _torch_available_in_subprocess() -> bool:

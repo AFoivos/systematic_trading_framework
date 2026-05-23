@@ -12,6 +12,7 @@ from .extrema import (
     make_pre_extrema_research_label,
 )
 from .indicators import add_indicator_features
+from .indicator_pullback import add_indicator_pullback_features
 from .macd import compute_macd
 from .macd import add_macd_features
 from .mfi import compute_mfi
@@ -40,6 +41,8 @@ from .vol_normalized_momentum import compute_vol_normalized_momentum
 from .vol_normalized_momentum import add_vol_normalized_momentum_features
 from .volume_features import compute_volume_over_atr, compute_volume_zscore
 from .volume_features import add_volume_features
+from .vwap import compute_vwap
+from .vwap import add_vwap_features
 
 __all__ = [
     "compute_sma",
@@ -79,9 +82,12 @@ __all__ = [
     "compute_volume_zscore",
     "compute_volume_over_atr",
     "add_volume_features",
+    "compute_vwap",
+    "add_vwap_features",
     "compute_adx",
     "add_adx_features",
     "compute_mfi",
     "add_mfi_features",
     "add_indicator_features",
+    "add_indicator_pullback_features",
 ]

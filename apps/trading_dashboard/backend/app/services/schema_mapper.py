@@ -256,7 +256,7 @@ def feature_category(column: str) -> str:
         return "volatility"
     if any(token in name for token in ("ema", "sma", "trend", "roc", "momentum", "macd", "ppo")):
         return "trend"
-    if any(token in name for token in ("adx", "mfi", "bollinger", "bb_", "support", "resistance", "volume")):
+    if any(token in name for token in ("adx", "mfi", "bollinger", "bb_", "support", "resistance", "volume", "vwap")):
         return "indicators"
     if any(token in name for token in ("rsi", "stoch", "oscillator")):
         return "oscillators"
@@ -309,4 +309,3 @@ def group_catalog_items(items: list[dict[str, Any]]) -> dict[str, list[dict[str,
         category = str(item.get("category") or "custom")
         grouped.setdefault(category, []).append(item)
     return grouped
-

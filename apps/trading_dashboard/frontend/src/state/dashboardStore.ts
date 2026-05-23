@@ -11,7 +11,7 @@ import type {
 } from "../types/market";
 import type { ExperimentSummary } from "../types/experiment";
 import type { BuilderDefinition, BuilderSourceType, TransformStepConfig } from "../types/transforms";
-import type { DashboardLayout, DashboardSelection, LayoutSummary, VisualizationConfig } from "../types/visualization";
+import type { DashboardLayout, DashboardSelection, LayoutSummary, ManualLevelKind, VisualizationConfig } from "../types/visualization";
 import { buildDefaultSeriesConfig, seriesKey } from "../utils/transforms";
 
 interface DashboardState {
@@ -35,6 +35,7 @@ interface DashboardState {
   selectedTargetIds: string[];
   seriesConfigs: VisualizationConfig[];
   activeSeriesKey: string | null;
+  manualLevelCounter: number;
   candles: OHLCVCandle[];
   seriesData: Record<string, TimeValuePoint[]>;
   trades: TradeRecord[];
@@ -61,6 +62,8 @@ interface DashboardState {
   setSelection: (selection: Partial<DashboardSelection>) => void;
   setSelectedSeries: (sourceType: "feature" | "signal" | "target", ids: string[]) => void;
   setTransformSteps: (sourceType: BuilderSourceType, steps: TransformStepConfig[]) => void;
+  addManualLevel: (kind: ManualLevelKind, price: number) => void;
+  removeSeriesConfig: (key: string) => void;
   mergeComputedSeries: (series: NamedSeries[]) => void;
   updateSeriesConfig: (key: string, patch: Partial<VisualizationConfig>) => void;
   setActiveSeriesKey: (key: string | null) => void;
@@ -110,6 +113,52 @@ function ensureSeriesConfigs(
   return [...retained, ...additions];
 }
 
+const manualLevelFormatter = new Intl.NumberFormat(undefined, {
+  maximumFractionDigits: 6
+});
+
+function manualLevelLabel(kind: ManualLevelKind): string {
+  return kind === "stop_loss" ? "Stop loss" : "Take profit";
+}
+
+function buildManualLevelConfig(kind: ManualLevelKind, price: number, index: number): VisualizationConfig {
+  const label = manualLevelLabel(kind);
+  return {
+    series_id: `${kind}_${index}`,
+    source_type: "manual_level",
+    display_name: `${label} ${manualLevelFormatter.format(price)}`,
+    chart_target: "main_price_chart",
+    render_type: "horizontal_level",
+    panel_id: null,
+    y_axis: "right",
+    visible: true,
+    style: {
+      color: kind === "stop_loss" ? "#c2410c" : "#0f766e",
+      lineWidth: 2,
+      opacity: 1,
+      extra: {
+        kind,
+        price
+      }
+    }
+  };
+}
+
+function nextActiveSeriesKey(configs: VisualizationConfig[]): string | null {
+  const first = configs[0];
+  return first ? seriesKey(first.source_type, first.series_id) : null;
+}
+
+function manualLevelCounterFromConfigs(configs: VisualizationConfig[]): number {
+  return configs.reduce((current, config) => {
+    if (config.source_type !== "manual_level") {
+      return current;
+    }
+    const match = config.series_id.match(/_(\d+)$/);
+    return match ? Math.max(current, Number(match[1])) : current;
+  }, 0);
+}
+
 export const useDashboardStore = create<DashboardState>((set, get) => ({
   assets: [],
   timeframes: [],
@@ -131,6 +180,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   selectedTargetIds: [],
   seriesConfigs: [],
   activeSeriesKey: null,
+  manualLevelCounter: 0,
   candles: [],
   seriesData: {},
   trades: [],
@@ -185,6 +235,24 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       signalSteps: sourceType === "signal" ? steps : state.signalSteps,
       targetSteps: sourceType === "target" ? steps : state.targetSteps
     })),
+  addManualLevel: (kind, price) =>
+    set((state) => {
+      const manualLevelCounter = state.manualLevelCounter + 1;
+      const config = buildManualLevelConfig(kind, price, manualLevelCounter);
+      return {
+        manualLevelCounter,
+        seriesConfigs: [...state.seriesConfigs, config],
+        activeSeriesKey: seriesKey(config.source_type, config.series_id)
+      };
+    }),
+  removeSeriesConfig: (key) =>
+    set((state) => {
+      const seriesConfigs = state.seriesConfigs.filter((config) => seriesKey(config.source_type, config.series_id) !== key);
+      return {
+        seriesConfigs,
+        activeSeriesKey: state.activeSeriesKey === key ? nextActiveSeriesKey(seriesConfigs) : state.activeSeriesKey
+      };
+    }),
   mergeComputedSeries: (series) =>
     set((state) => {
       const nextData = { ...state.seriesData };
@@ -224,6 +292,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     set((state) => ({
       selection: { ...state.selection, ...layout.selection },
       seriesConfigs: layout.series,
+      manualLevelCounter: Math.max(state.manualLevelCounter, manualLevelCounterFromConfigs(layout.series)),
       featureSteps: layout.transformations?.features ?? state.featureSteps,
       signalSteps: layout.transformations?.signals ?? state.signalSteps,
       targetSteps: layout.transformations?.targets ?? state.targetSteps,

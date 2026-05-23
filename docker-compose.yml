@@ -12,3 +12,26 @@ services:
     stdin_open: true
     tty: true
     command: bash
+
+  trading-dashboard:
+    build:
+      context: .
+      dockerfile: apps/trading_dashboard/Dockerfile
+    image: trading-dashboard:latest
+    working_dir: /workspace/apps/trading_dashboard/backend
+    environment:
+      TRADING_DASHBOARD_PROJECT_ROOT: /workspace
+      TRADING_DASHBOARD_FRONTEND_DIST: /opt/trading-dashboard/frontend-dist
+    volumes:
+      - ./data:/workspace/data
+      - ./logs:/workspace/logs
+      - ./apps/trading_dashboard/layouts:/workspace/apps/trading_dashboard/layouts
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped

@@ -11,7 +11,7 @@ from src.experiments.orchestration.feature_stage import apply_feature_steps
 from src.features.technical.indicators import compute_mfi
 from src.features.technical.oscillators import compute_rsi
 from src.features.technical.stochastic_rsi import add_stochastic_rsi_features
-from src.models.runtime import classify_feature_family
+from src.models.common.runtime import classify_feature_family
 from src.src_data.pit import (
     align_ohlcv_timestamps,
     apply_corporate_actions_policy,

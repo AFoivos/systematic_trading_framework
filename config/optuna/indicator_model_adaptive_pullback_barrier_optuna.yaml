@@ -1,0 +1,197 @@
+base_config: config/experiments/indicator_model_adaptive_pullback_barrier.yaml
+
+study:
+  study_name: optuna_indicator_model_adaptive_pullback_barrier
+  storage: null
+  load_if_exists: false
+  sampler: tpe
+  seed: 42
+  n_trials: 100
+  timeout: null
+  n_jobs: 1
+  logging_enabled: true
+  catch_exceptions: true
+
+report:
+  enabled: true
+  output_dir: logs/experiments
+  run_name: optuna_indicator_model_adaptive_pullback_barrier
+
+objective:
+  metric_path: evaluation.primary_summary.sharpe
+  direction: maximize
+  failure_score: -1000000000000.0
+  base_metric_weight: 1.0
+  stability_weight: 0.25
+  stability_metric_path: metrics.sharpe
+  stability_std_penalty: 1.0
+  fold_summary_path: evaluation.fold_backtest_summaries
+  constraints:
+    - metric_path: evaluation.primary_summary.profit_factor
+      op: lt
+      threshold: 1.05
+      penalty: 1.0
+      missing_penalty: 0.5
+    - metric_path: evaluation.primary_summary.max_drawdown
+      op: lt
+      threshold: -0.12
+      penalty: 3.0
+      missing_penalty: 1.0
+    - metric_path: evaluation.primary_summary.trade_count
+      op: lt
+      threshold: 120.0
+      penalty: 3.0
+      missing_penalty: 3.0
+    - metric_path: derived.active_week_ratio
+      op: lt
+      threshold: 0.35
+      penalty: 2.0
+      missing_penalty: 2.0
+    - metric_path: derived.turnover_event_count
+      op: lt
+      threshold: 180.0
+      penalty: 1.5
+      missing_penalty: 1.5
+
+pruning:
+  enabled: false
+  metric_path: classification_metrics.roc_auc
+  direction: maximize
+  stage_filter: [lightgbm_clf]
+  pruner: none
+  n_startup_trials: 5
+  n_warmup_steps: 1
+  interval_steps: 1
+
+search_space:
+  - name: ema_fast
+    path: features.2.params.ema_spans.0
+    paths:
+      - features.10.params.ema_fast_period
+      - features.11.params.ema_fast
+    kind: int
+    low: 10
+    high: 30
+  - name: ema_mid
+    path: features.2.params.ema_spans.1
+    paths:
+      - features.10.params.ema_mid_period
+      - features.11.params.ema_mid
+    kind: int
+    low: 40
+    high: 80
+  - name: ema_slow
+    path: features.2.params.ema_spans.2
+    paths:
+      - features.10.params.ema_slow_period
+      - features.11.params.ema_slow
+    kind: int
+    low: 90
+    high: 160
+  - name: min_adx
+    path: features.11.params.min_adx
+    kind: float
+    low: 14.0
+    high: 28.0
+    step: 1.0
+  - name: max_adx
+    path: features.11.params.max_adx
+    kind: float
+    low: 35.0
+    high: 55.0
+    step: 1.0
+  - name: rsi_long_min
+    path: features.11.params.rsi_long_min
+    kind: float
+    low: 40.0
+    high: 52.0
+    step: 1.0
+  - name: rsi_long_max
+    path: features.11.params.rsi_long_max
+    kind: float
+    low: 62.0
+    high: 72.0
+    step: 1.0
+  - name: rsi_short_min
+    path: features.11.params.rsi_short_min
+    kind: float
+    low: 28.0
+    high: 38.0
+    step: 1.0
+  - name: rsi_short_max
+    path: features.11.params.rsi_short_max
+    kind: float
+    low: 48.0
+    high: 60.0
+    step: 1.0
+  - name: stoch_long_max
+    path: features.11.params.stoch_long_max
+    kind: float
+    low: 50.0
+    high: 75.0
+    step: 2.5
+  - name: stoch_short_min
+    path: features.11.params.stoch_short_min
+    kind: float
+    low: 25.0
+    high: 50.0
+    step: 2.5
+  - name: min_atr_pct_rank
+    path: features.11.params.min_atr_pct_rank
+    kind: float
+    low: 0.10
+    high: 0.35
+    step: 0.05
+  - name: max_atr_pct_rank
+    path: features.11.params.max_atr_pct_rank
+    kind: float
+    low: 0.75
+    high: 0.98
+    step: 0.01
+  - name: max_distance_from_ema_atr
+    path: features.11.params.max_distance_from_ema_atr
+    kind: float
+    low: 0.40
+    high: 1.20
+    step: 0.05
+  - name: profit_barrier_r
+    path: model.target.profit_barrier_r
+    paths:
+      - signals.params.profit_barrier_r
+      - backtest.profit_barrier_r
+    kind: float
+    low: 1.10
+    high: 1.80
+    step: 0.05
+  - name: stop_barrier_r
+    path: model.target.stop_barrier_r
+    paths:
+      - signals.params.stop_barrier_r
+      - backtest.stop_barrier_r
+    kind: float
+    low: 0.80
+    high: 1.20
+    step: 0.05
+  - name: vertical_barrier_bars
+    path: model.target.vertical_barrier_bars
+    paths:
+      - backtest.vertical_barrier_bars
+    kind: int
+    low: 2
+    high: 6
+  - name: model_threshold
+    path: signals.params.threshold
+    paths:
+      - decision.model_threshold
+    kind: float
+    low: 0.52
+    high: 0.68
+    step: 0.01
+  - name: min_expected_value_r
+    path: signals.params.min_expected_value_r
+    paths:
+      - decision.min_expected_value_r
+    kind: float
+    low: 0.00
+    high: 0.25
+    step: 0.01

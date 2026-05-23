@@ -66,6 +66,12 @@ This MVP is intentionally additive and local-first. It does not import, modify, 
 - Saved dashboard layouts are JSON files under `apps/trading_dashboard/layouts`.
 - Layouts store selection state and visualization series configs only; they do not snapshot market data.
 
+## Panel Defaults
+
+- Dataset and computed feature series default to one dedicated lower panel each when `panel_id` is empty.
+- Assigning the same non-empty `panel_id` to multiple lower-panel series groups them into a shared panel.
+- `vwap_*` price series default to the main price chart as overlays, while derived distance series such as `close_over_vwap_*` remain lower-panel series by default.
+
 ## Current MVP Boundaries
 
 - The dashboard reads existing datasets and experiment outputs but does not launch experiments.

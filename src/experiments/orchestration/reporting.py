@@ -2013,10 +2013,16 @@ def build_portfolio_evaluation(
     risk_cfg: dict[str, Any] | None = None,
     backtest_cfg: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    trade_diagnostics = _trade_diagnostics_from_trades(getattr(performance, "trades", None))
+    primary_summary = dict(performance.summary)
+    for key in ("trade_count", "average_r", "median_r"):
+        if key in trade_diagnostics:
+            primary_summary[key] = trade_diagnostics[key]
     evaluation = EvaluationPayload(
         scope="timeline",
-        primary_summary=dict(performance.summary),
+        primary_summary=primary_summary,
         timeline_summary=dict(performance.summary),
+        extra={"trade_diagnostics": trade_diagnostics} if trade_diagnostics else {},
     ).to_dict()
 
     if not model_meta:
@@ -2050,6 +2056,9 @@ def build_portfolio_evaluation(
         mask=oos_mask,
     )
     primary_summary = dict(oos_summary or performance.summary)
+    for key in ("trade_count", "average_r", "median_r"):
+        if key in trade_diagnostics:
+            primary_summary[key] = trade_diagnostics[key]
     portfolio_guard_cfg = dict(dict(risk_cfg or {}).get("portfolio_guard", {}) or {})
     ftmo_metrics = compute_ftmo_style_metrics(
         net_returns=performance.net_returns.loc[oos_mask],
@@ -2148,6 +2157,7 @@ def build_portfolio_evaluation(
             "model_oos_policy_summary": policy_summary,
             "signal_diagnostics_by_asset": per_asset_policy_map,
             "orb_diagnostics": orb_diagnostics,
+            "trade_diagnostics": trade_diagnostics,
             "folds_by_asset": {
                 asset: list(meta.get("folds", []) or [])
                 for asset, meta in dict(model_meta.get("per_asset", {}) or {}).items()

@@ -153,13 +153,15 @@ class DataLoader:
         for path in sorted(root.rglob("*")):
             if not path.is_file() or path.name.startswith(".") or path.suffix.lower() not in SUPPORTED_DATA_SUFFIXES:
                 continue
-            if path.name != "dataset.csv" and path.name != "dataset.parquet":
+            is_snapshot_dataset = path.name == "dataset.csv" or path.name == "dataset.parquet"
+            is_flat_dataset = path.parent == root
+            if not is_snapshot_dataset and not is_flat_dataset:
                 continue
-            metadata_path = path.with_name("metadata.json")
+            metadata_path = path.with_name("metadata.json") if is_snapshot_dataset else path.with_suffix(".metadata.json")
             metadata = _safe_load_json(metadata_path)
             assets = tuple(str(asset).upper() for asset in metadata.get("assets", []) or [])
             if not assets:
-                asset = infer_asset_from_name(path.parent.name)
+                asset = infer_asset_from_name(path.parent.name if is_snapshot_dataset else path.name)
                 assets = (asset,) if asset else ()
             datasets.append(
                 DatasetInfo(
@@ -168,7 +170,7 @@ class DataLoader:
                     stage="processed",
                     source="processed",
                     assets=assets,
-                    timeframe=_extract_timeframe_from_metadata(metadata, path.parent.name),
+                    timeframe=_extract_timeframe_from_metadata(metadata, path.parent.name if is_snapshot_dataset else path.name),
                     format=path.suffix.lower().lstrip("."),
                     columns=_read_columns(path),
                     metadata_path=metadata_path if metadata_path.exists() else None,
