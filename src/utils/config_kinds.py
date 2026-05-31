@@ -75,6 +75,7 @@ SINGLE_ASSET_MODEL_KINDS = frozenset(
         "patchtst_forecaster",
         "ppo_agent",
         "sarimax_forecaster",
+        "tsfresh_extrema_feature_discovery",
         "tft_forecaster",
         "xgboost_clf",
     }

@@ -21,6 +21,9 @@ from src.models.rl import (
     train_ppo_agent,
     train_ppo_portfolio_agent,
 )
+from src.experiments.support.tsfresh_extrema_feature_discovery import (
+    train_tsfresh_extrema_feature_discovery,
+)
 
 __all__ = [
     "train_dqn_agent",
@@ -37,6 +40,7 @@ __all__ = [
     "train_ppo_agent",
     "train_ppo_portfolio_agent",
     "train_sarimax_forecaster",
+    "train_tsfresh_extrema_feature_discovery",
     "train_tft_forecaster",
     "train_xgboost_classifier",
 ]

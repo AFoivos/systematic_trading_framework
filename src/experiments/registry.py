@@ -70,6 +70,7 @@ from src.experiments.models import (
     train_lstm_forecaster,
     train_patchtst_forecaster,
     train_tft_forecaster,
+    train_tsfresh_extrema_feature_discovery,
     train_xgboost_classifier,
 )
 from src.utils.config_kinds import PORTFOLIO_MODEL_KINDS as CONFIG_PORTFOLIO_MODEL_KINDS
@@ -151,6 +152,7 @@ SINGLE_ASSET_MODEL_REGISTRY: Mapping[str, SingleAssetModelFn] = {
     "lstm_forecaster": train_lstm_forecaster,
     "patchtst_forecaster": train_patchtst_forecaster,
     "tft_forecaster": train_tft_forecaster,
+    "tsfresh_extrema_feature_discovery": train_tsfresh_extrema_feature_discovery,
     "ppo_agent": train_ppo_agent,
     "dqn_agent": train_dqn_agent,
 }

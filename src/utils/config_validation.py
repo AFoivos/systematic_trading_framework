@@ -20,6 +20,7 @@ _RL_EXTRACTOR_KINDS = {"flatten", "cnn1d", "lstm", "transformer"}
 _CLASSIFIER_MODEL_KINDS = {"lightgbm_clf", "logistic_regression_clf", "xgboost_clf"}
 _EMBEDDING_MODEL_KINDS = {"event_transformer_encoder"}
 _DEEP_FORECASTER_MODEL_KINDS = {"lstm_forecaster", "patchtst_forecaster", "tft_forecaster"}
+_EXPERIMENTAL_DISCOVERY_MODEL_KINDS = {"tsfresh_extrema_feature_discovery"}
 _FORECASTER_MODEL_KINDS = {
     "sarimax_forecaster",
     "garch_forecaster",
@@ -94,6 +95,46 @@ _MODEL_OUTPUT_KEYS = {
     "signal_col",
     "action_col",
 }
+
+
+def _validate_tsfresh_extrema_discovery_params(params: dict[str, Any]) -> None:
+    for key in ("high_col", "low_col"):
+        value = params.get(key)
+        if value is not None and (not isinstance(value, str) or not value.strip()):
+            raise ConfigValidationError(f"model.params.{key} must be a non-empty string when provided.")
+
+    _positive_int(params.get("window_size", 48), field="model.params.window_size")
+    _positive_int(params.get("label_horizon", 8), field="model.params.label_horizon")
+    _positive_int(params.get("n_jobs", 1), field="model.params.n_jobs")
+    if params.get("chunksize") is not None:
+        _positive_int(params.get("chunksize"), field="model.params.chunksize")
+    if params.get("n_significant") is not None:
+        _positive_int(params.get("n_significant"), field="model.params.n_significant")
+
+    feature_preset = str(params.get("feature_preset", "minimal")).strip().lower()
+    if feature_preset not in {"minimal", "efficient", "comprehensive"}:
+        raise ConfigValidationError(
+            "model.params.feature_preset must be one of: minimal, efficient, comprehensive."
+        )
+
+    fdr_level = _finite_number(params.get("fdr_level", 0.05), field="model.params.fdr_level")
+    if not 0.0 < fdr_level <= 1.0:
+        raise ConfigValidationError("model.params.fdr_level must be in (0,1].")
+
+    if "hypotheses_independent" in params and not isinstance(params.get("hypotheses_independent"), bool):
+        raise ConfigValidationError("model.params.hypotheses_independent must be boolean.")
+    for key in ("disable_progressbar", "show_warnings"):
+        if key in params and not isinstance(params.get(key), bool):
+            raise ConfigValidationError(f"model.params.{key} must be boolean.")
+    if "export_feature_dataset" in params and not isinstance(params.get("export_feature_dataset"), bool):
+        raise ConfigValidationError("model.params.export_feature_dataset must be boolean.")
+    export_dataset_path = params.get("export_dataset_path")
+    if export_dataset_path is not None and (not isinstance(export_dataset_path, str) or not export_dataset_path.strip()):
+        raise ConfigValidationError("model.params.export_dataset_path must be a non-empty string when provided.")
+    if bool(params.get("export_feature_dataset", False)) and export_dataset_path is None:
+        raise ConfigValidationError(
+            "model.params.export_dataset_path must be provided when model.params.export_feature_dataset is true."
+        )
 
 
 def _resolve_event_embedding_columns(model: dict[str, Any]) -> list[str]:
@@ -1096,99 +1137,106 @@ def validate_model_block(model: dict[str, Any]) -> None:
         target = model.get("target", {}) or {}
         if not isinstance(target, dict):
             raise ConfigValidationError("model.target must be a mapping when provided.")
-        target = _flatten_target_cfg_for_validation(target)
-        _validate_string_mapping(
-            target.get("outputs"),
-            field="model.target.outputs",
-            allowed_keys=_TARGET_OUTPUT_KEYS,
-        )
-        target_kind = target.get("kind", "forward_return")
-        if target_kind not in {
-            "forward_return",
-            "future_return_regression",
-            "triple_barrier",
-            "directional_triple_barrier",
-            "r_multiple",
-        }:
-            raise ConfigValidationError(
-                "model.target.kind must be 'forward_return', 'future_return_regression', "
-                "'triple_barrier', 'directional_triple_barrier', or 'r_multiple'."
+        if model["kind"] in _EXPERIMENTAL_DISCOVERY_MODEL_KINDS:
+            if target not in ({}, None):
+                raise ConfigValidationError(
+                    "tsfresh_extrema_feature_discovery manages its own future-horizon labels; "
+                    "do not set model.target."
+                )
+        else:
+            target = _flatten_target_cfg_for_validation(target)
+            _validate_string_mapping(
+                target.get("outputs"),
+                field="model.target.outputs",
+                allowed_keys=_TARGET_OUTPUT_KEYS,
             )
-        if target_kind == "r_multiple":
-            if model["kind"] not in _CLASSIFIER_MODEL_KINDS:
+            target_kind = target.get("kind", "forward_return")
+            if target_kind not in {
+                "forward_return",
+                "future_return_regression",
+                "triple_barrier",
+                "directional_triple_barrier",
+                "r_multiple",
+            }:
                 raise ConfigValidationError(
-                    "model.target.kind='r_multiple' is currently supported only for classifiers "
-                    "or model.kind='none' target-only diagnostics."
+                    "model.target.kind must be 'forward_return', 'future_return_regression', "
+                    "'triple_barrier', 'directional_triple_barrier', or 'r_multiple'."
                 )
-            _validate_r_multiple_target_block(target)
-        if target_kind in {"triple_barrier", "directional_triple_barrier"} and model["kind"] not in _CLASSIFIER_MODEL_KINDS:
-            if model["kind"] not in _EMBEDDING_MODEL_KINDS and model["kind"] not in _FORECASTER_MODEL_KINDS:
-                raise ConfigValidationError(
-                    "model.target.kind='triple_barrier' or 'directional_triple_barrier' is currently "
-                    "supported only for classifiers, event_transformer_encoder, and regression "
-                    "forecasters with a target_col."
-                )
-            if model["kind"] in _FORECASTER_MODEL_KINDS:
-                regression_target_col = target.get("target_col", target.get("regression_target_col"))
-                if regression_target_col is None:
+            if target_kind == "r_multiple":
+                if model["kind"] not in _CLASSIFIER_MODEL_KINDS:
                     raise ConfigValidationError(
-                        "regression forecasters using target.kind='triple_barrier' or "
-                        "'directional_triple_barrier' must set model.target.target_col or "
-                        "model.target.regression_target_col."
+                        "model.target.kind='r_multiple' is currently supported only for classifiers "
+                        "or model.kind='none' target-only diagnostics."
                     )
-                if not isinstance(regression_target_col, str) or not regression_target_col.strip():
+                _validate_r_multiple_target_block(target)
+            if target_kind in {"triple_barrier", "directional_triple_barrier"} and model["kind"] not in _CLASSIFIER_MODEL_KINDS:
+                if model["kind"] not in _EMBEDDING_MODEL_KINDS and model["kind"] not in _FORECASTER_MODEL_KINDS:
                     raise ConfigValidationError(
-                        "model.target.target_col must be a non-empty string when provided."
+                        "model.target.kind='triple_barrier' or 'directional_triple_barrier' is currently "
+                        "supported only for classifiers, event_transformer_encoder, and regression "
+                        "forecasters with a target_col."
                     )
-        if target_kind == "forward_return" and model["kind"] in _CLASSIFIER_MODEL_KINDS:
-            pass
-        if "price_col" in target and not isinstance(target["price_col"], str):
-            raise ConfigValidationError("model.target.price_col must be a string.")
-        if target_kind == "forward_return":
-            _positive_int(target.get("horizon", 1), field="model.target.horizon")
-            if "returns_col" in target and target["returns_col"] is not None and not isinstance(target["returns_col"], str):
-                raise ConfigValidationError("model.target.returns_col must be a string or null.")
-            returns_type = str(target.get("returns_type", "simple"))
-            if returns_type not in {"simple", "log"}:
-                raise ConfigValidationError("model.target.returns_type must be 'simple' or 'log'.")
-            if target.get("returns_col") is None and returns_type != "simple":
-                raise ConfigValidationError("model.target.returns_type='log' requires model.target.returns_col.")
-        if target_kind == "future_return_regression":
-            if model["kind"] not in _FORECASTER_MODEL_KINDS:
-                raise ConfigValidationError(
-                    "model.target.kind='future_return_regression' is supported only for regression forecasters."
+                if model["kind"] in _FORECASTER_MODEL_KINDS:
+                    regression_target_col = target.get("target_col", target.get("regression_target_col"))
+                    if regression_target_col is None:
+                        raise ConfigValidationError(
+                            "regression forecasters using target.kind='triple_barrier' or "
+                            "'directional_triple_barrier' must set model.target.target_col or "
+                            "model.target.regression_target_col."
+                        )
+                    if not isinstance(regression_target_col, str) or not regression_target_col.strip():
+                        raise ConfigValidationError(
+                            "model.target.target_col must be a non-empty string when provided."
+                        )
+            if target_kind == "forward_return" and model["kind"] in _CLASSIFIER_MODEL_KINDS:
+                pass
+            if "price_col" in target and not isinstance(target["price_col"], str):
+                raise ConfigValidationError("model.target.price_col must be a string.")
+            if target_kind == "forward_return":
+                _positive_int(target.get("horizon", 1), field="model.target.horizon")
+                if "returns_col" in target and target["returns_col"] is not None and not isinstance(target["returns_col"], str):
+                    raise ConfigValidationError("model.target.returns_col must be a string or null.")
+                returns_type = str(target.get("returns_type", "simple"))
+                if returns_type not in {"simple", "log"}:
+                    raise ConfigValidationError("model.target.returns_type must be 'simple' or 'log'.")
+                if target.get("returns_col") is None and returns_type != "simple":
+                    raise ConfigValidationError("model.target.returns_type='log' requires model.target.returns_col.")
+            if target_kind == "future_return_regression":
+                if model["kind"] not in _FORECASTER_MODEL_KINDS:
+                    raise ConfigValidationError(
+                        "model.target.kind='future_return_regression' is supported only for regression forecasters."
+                    )
+                _positive_int(
+                    target.get("horizon_bars", target.get("horizon", 1)),
+                    field="model.target.horizon_bars",
                 )
-            _positive_int(
-                target.get("horizon_bars", target.get("horizon", 1)),
-                field="model.target.horizon_bars",
-            )
-            if "returns_col" in target and target["returns_col"] is not None and not isinstance(target["returns_col"], str):
-                raise ConfigValidationError("model.target.returns_col must be a string or null.")
-            returns_type = str(target.get("returns_type", "simple"))
-            if returns_type not in {"simple", "log"}:
-                raise ConfigValidationError("model.target.returns_type must be 'simple' or 'log'.")
-            if target.get("returns_col") is None and returns_type != "simple":
-                raise ConfigValidationError("model.target.returns_type='log' requires model.target.returns_col.")
-            if "volatility_col" in target and not isinstance(target["volatility_col"], str):
-                raise ConfigValidationError("model.target.volatility_col must be a string.")
-            if "normalize_by_volatility" in target and not isinstance(target["normalize_by_volatility"], bool):
-                raise ConfigValidationError("model.target.normalize_by_volatility must be boolean.")
-            clip = target.get("clip")
-            if clip is not None:
-                if not isinstance(clip, (list, tuple)) or len(clip) != 2:
-                    raise ConfigValidationError("model.target.clip must be a [low, high] pair.")
-                if float(clip[0]) >= float(clip[1]):
-                    raise ConfigValidationError("model.target.clip must satisfy low < high.")
-        quantiles = target.get("quantiles")
-        if quantiles is not None:
-            if not isinstance(quantiles, (list, tuple)) or len(quantiles) != 2:
-                raise ConfigValidationError("model.target.quantiles must be a [low, high] pair.")
-            q_low, q_high = float(quantiles[0]), float(quantiles[1])
-            if not (0.0 <= q_low < q_high <= 1.0):
-                raise ConfigValidationError("model.target.quantiles must satisfy 0 <= low < high <= 1.")
-            if target_kind != "forward_return":
-                raise ConfigValidationError("model.target.quantiles are only supported for target.kind='forward_return'.")
-        if target_kind == "triple_barrier":
+                if "returns_col" in target and target["returns_col"] is not None and not isinstance(target["returns_col"], str):
+                    raise ConfigValidationError("model.target.returns_col must be a string or null.")
+                returns_type = str(target.get("returns_type", "simple"))
+                if returns_type not in {"simple", "log"}:
+                    raise ConfigValidationError("model.target.returns_type must be 'simple' or 'log'.")
+                if target.get("returns_col") is None and returns_type != "simple":
+                    raise ConfigValidationError("model.target.returns_type='log' requires model.target.returns_col.")
+                if "volatility_col" in target and not isinstance(target["volatility_col"], str):
+                    raise ConfigValidationError("model.target.volatility_col must be a string.")
+                if "normalize_by_volatility" in target and not isinstance(target["normalize_by_volatility"], bool):
+                    raise ConfigValidationError("model.target.normalize_by_volatility must be boolean.")
+                clip = target.get("clip")
+                if clip is not None:
+                    if not isinstance(clip, (list, tuple)) or len(clip) != 2:
+                        raise ConfigValidationError("model.target.clip must be a [low, high] pair.")
+                    if float(clip[0]) >= float(clip[1]):
+                        raise ConfigValidationError("model.target.clip must satisfy low < high.")
+            quantiles = target.get("quantiles")
+            if quantiles is not None:
+                if not isinstance(quantiles, (list, tuple)) or len(quantiles) != 2:
+                    raise ConfigValidationError("model.target.quantiles must be a [low, high] pair.")
+                q_low, q_high = float(quantiles[0]), float(quantiles[1])
+                if not (0.0 <= q_low < q_high <= 1.0):
+                    raise ConfigValidationError("model.target.quantiles must satisfy 0 <= low < high <= 1.")
+                if target_kind != "forward_return":
+                    raise ConfigValidationError("model.target.quantiles are only supported for target.kind='forward_return'.")
+        if model["kind"] not in _EXPERIMENTAL_DISCOVERY_MODEL_KINDS and target_kind == "triple_barrier":
             for key in (
                 "open_col",
                 "high_col",
@@ -1257,7 +1305,7 @@ def validate_model_block(model: dict[str, Any]) -> None:
             candidate_mode = str(target.get("candidate_mode", "all_nonzero"))
             if candidate_mode not in {"all_nonzero", "side_change"}:
                 raise ConfigValidationError("model.target.candidate_mode must be one of: all_nonzero, side_change.")
-        if target_kind == "directional_triple_barrier":
+        if model["kind"] not in _EXPERIMENTAL_DISCOVERY_MODEL_KINDS and target_kind == "directional_triple_barrier":
             for key in (
                 "open_col",
                 "high_col",
@@ -1335,6 +1383,10 @@ def validate_model_block(model: dict[str, Any]) -> None:
 
         preprocessing = model.get("preprocessing", {}) or {}
         if preprocessing:
+            if model["kind"] in _EXPERIMENTAL_DISCOVERY_MODEL_KINDS:
+                raise ConfigValidationError(
+                    "tsfresh_extrema_feature_discovery does not support model.preprocessing."
+                )
             if not isinstance(preprocessing, dict):
                 raise ConfigValidationError("model.preprocessing must be a mapping when provided.")
             scaler = str(preprocessing.get("scaler", "none"))
@@ -1343,6 +1395,10 @@ def validate_model_block(model: dict[str, Any]) -> None:
 
         overlay = model.get("overlay", {}) or {}
         if overlay:
+            if model["kind"] in _EXPERIMENTAL_DISCOVERY_MODEL_KINDS:
+                raise ConfigValidationError(
+                    "tsfresh_extrema_feature_discovery does not support model.overlay."
+                )
             if not isinstance(overlay, dict):
                 raise ConfigValidationError("model.overlay must be a mapping when provided.")
             if model["kind"] not in _GARCH_OVERLAY_COMPATIBLE_MODEL_KINDS:
@@ -1418,6 +1474,8 @@ def validate_model_block(model: dict[str, Any]) -> None:
         params = model.get("params", {}) or {}
         if not isinstance(params, dict):
             raise ConfigValidationError("model.params must be a mapping.")
+        if model["kind"] in _EXPERIMENTAL_DISCOVERY_MODEL_KINDS:
+            _validate_tsfresh_extrema_discovery_params(params)
         if model["kind"] == "xgboost_clf":
             invalid_keys = [
                 key
@@ -1745,7 +1803,7 @@ def validate_model_stages_block(model_stages: Any) -> None:
         kind = str(stage.get("kind", "none"))
         if kind == "none":
             raise ConfigValidationError(f"{field_prefix}.kind must not be 'none'.")
-        if kind in RL_MODEL_KINDS or kind in PORTFOLIO_MODEL_KINDS:
+        if kind in RL_MODEL_KINDS or kind in PORTFOLIO_MODEL_KINDS or kind in _EXPERIMENTAL_DISCOVERY_MODEL_KINDS:
             raise ConfigValidationError(
                 "model_stages currently supports only forecasting/classification stages, "
                 f"not '{kind}'."

@@ -1,0 +1,150 @@
+data:
+  source: dukascopy_csv
+  symbol: SPX500
+  interval: 30m
+  start: "2024-06-03"
+  end: "2024-08-30"
+  alignment: inner
+  storage:
+    mode: cached_only
+    load_path: data/raw/dukascopy_30m_clean/spx500_30m.csv
+
+features:
+  - step: returns
+    params:
+      log: true
+      col_name: close_logret
+  - step: volatility
+    params:
+      returns_col: close_logret
+      rolling_windows: [12, 24]
+      ewma_spans: [12]
+      annualization_factor: 12096
+  - step: atr
+    params:
+      window: 14
+      method: wilder
+      add_over_price: true
+  - step: rsi
+    params:
+      price_col: close
+      windows: [14]
+      method: wilder
+  - step: swing_extrema_context
+    params:
+      high_col: high
+      low_col: low
+      close_col: close
+      normalizer_col: atr_14
+      normalizer_mode: price
+      left_bars: 3
+      right_bars: 3
+      include_research_labels: false
+      prefix: swing
+
+model:
+  kind: tsfresh_extrema_feature_discovery
+  feature_cols:
+    - close_logret
+    - vol_rolling_12
+    - vol_rolling_24
+    - vol_ewma_12
+    - atr_14
+    - atr_over_price_14
+    - close_rsi_14
+    - spread_close
+    - spread_bps
+    - swing_confirmed_local_high
+    - swing_confirmed_local_low
+    - swing_confirmed_local_high_price
+    - swing_confirmed_local_low_price
+    - swing_last_high
+    - swing_last_low
+    - swing_last_high_age
+    - swing_last_low_age
+    - swing_dist_to_last_high_atr
+    - swing_dist_from_last_low_atr
+    - swing_range_atr
+    - swing_position_in_range
+    - swing_higher_high
+    - swing_higher_low
+    - swing_lower_high
+    - swing_lower_low
+    - swing_structure_score
+    - swing_bars_since_high_breakout
+    - swing_bars_since_low_breakdown
+    - swing_near_last_high
+    - swing_near_last_low
+    - swing_overextended_long
+  params:
+    high_col: high
+    low_col: low
+    window_size: 48
+    label_horizon: 8
+    feature_preset: minimal
+    n_jobs: 1
+    chunksize: 32
+    fdr_level: 0.05
+    hypotheses_independent: false
+    n_significant: 1
+    disable_progressbar: true
+    show_warnings: false
+    export_feature_dataset: true
+    export_dataset_path: data/proccesed/tsfrash/asset_datetime.csv
+  split:
+    method: walk_forward
+    train_size: 500
+    test_size: 120
+    step_size: 120
+    expanding: true
+    max_folds: 4
+
+signals:
+  kind: none
+  params:
+    signal_col: eda_flat_signal
+
+risk:
+  cost_per_turnover: 0.0
+  slippage_per_turnover: 0.0
+  target_vol: null
+  max_leverage: 1.0
+  dd_guard:
+    enabled: false
+    max_drawdown: 0.2
+    cooloff_bars: 0
+
+backtest:
+  returns_col: close_logret
+  signal_col: eda_flat_signal
+  engine: vectorized
+  stop_mode: fixed_return
+  returns_type: log
+  periods_per_year: 12096
+  missing_return_policy: raise_if_exposed
+  min_holding_bars: 0
+  subset: full
+
+portfolio:
+  enabled: false
+
+monitoring:
+  enabled: true
+  psi_threshold: 0.2
+  n_bins: 10
+
+diagnostics:
+  enabled: false
+
+execution:
+  enabled: false
+  mode: paper
+  capital: 100000.0
+  price_col: close
+
+logging:
+  enabled: true
+  run_name: tsfresh_extrema_discovery
+  output_dir: logs/experiments
+  stage_tails:
+    enabled: false

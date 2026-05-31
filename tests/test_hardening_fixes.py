@@ -63,7 +63,7 @@ def test_runner_sensitive_redaction_is_recursive() -> None:
     assert redacted["safe"]["value"] == 7
 
 
-def test_optional_model_modules_import_without_xgboost_or_lightgbm() -> None:
+def test_optional_model_modules_import_without_xgboost_lightgbm_or_tsfresh() -> None:
     """
     Optional estimator dependencies should not break module import at framework load time.
     """
@@ -76,10 +76,13 @@ import importlib
 import sys
 sys.modules.pop("src.models.classification", None)
 sys.modules.pop("src.models.forecasting.lightgbm_baseline", None)
+sys.modules.pop("src.experiments.support.tsfresh_extrema_feature_discovery", None)
 sys.modules["xgboost"] = None
 sys.modules["lightgbm"] = None
+sys.modules["tsfresh"] = None
 import src.models.classification
 import src.models.forecasting.lightgbm_baseline
+import src.experiments.support.tsfresh_extrema_feature_discovery
 print("ok")
 """,
         ],

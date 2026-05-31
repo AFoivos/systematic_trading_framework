@@ -412,6 +412,121 @@ def _write_dense_forecast_diagnostic_artifacts(
     return artifact_paths
 
 
+def _selected_feature_detail_rows(model_meta: dict[str, Any]) -> list[dict[str, Any]]:
+    per_asset_meta = dict(model_meta.get("per_asset", {}) or {})
+    if per_asset_meta:
+        rows: list[dict[str, Any]] = []
+        for asset, asset_meta in sorted(per_asset_meta.items()):
+            feature_selection = dict(asset_meta.get("feature_selection", {}) or {})
+            for row in list(feature_selection.get("selected_feature_details", []) or []):
+                rows.append({"asset": str(asset)} | dict(row or {}))
+        return rows
+
+    feature_selection = dict(model_meta.get("feature_selection", {}) or {})
+    return [dict(row or {}) for row in list(feature_selection.get("selected_feature_details", []) or [])]
+
+
+def _fold_selected_feature_rows(model_meta: dict[str, Any]) -> list[dict[str, Any]]:
+    per_asset_meta = dict(model_meta.get("per_asset", {}) or {})
+    if per_asset_meta:
+        rows: list[dict[str, Any]] = []
+        for asset, asset_meta in sorted(per_asset_meta.items()):
+            for fold in list(asset_meta.get("folds", []) or []):
+                for row in list(fold.get("selected_features", []) or []):
+                    rows.append(
+                        {
+                            "asset": str(asset),
+                            "fold": int(fold.get("fold", 0)),
+                        }
+                        | dict(row or {})
+                    )
+        return rows
+
+    rows = []
+    for fold in list(model_meta.get("folds", []) or []):
+        for row in list(fold.get("selected_features", []) or []):
+            rows.append({"fold": int(fold.get("fold", 0))} | dict(row or {}))
+    return rows
+
+
+def _tsfresh_feature_dataset_rows(
+    frame: pd.DataFrame,
+    *,
+    feature_name_prefixes: list[str],
+    label_col: str,
+    label_code_col: str,
+    eligible_col: str,
+) -> pd.DataFrame:
+    prefix_tokens = tuple(f"{prefix}__" for prefix in feature_name_prefixes if str(prefix).strip())
+    feature_cols = [
+        col
+        for col in frame.columns
+        if prefix_tokens and any(str(col).startswith(token) for token in prefix_tokens)
+    ]
+    if not feature_cols or eligible_col not in frame.columns:
+        return pd.DataFrame()
+
+    eligible_mask = frame[eligible_col].fillna(False).astype(bool)
+    if not bool(eligible_mask.any()):
+        return pd.DataFrame()
+
+    export_cols = [
+        col
+        for col in frame.columns
+        if col in {"open", "high", "low", "close", "volume", label_col, label_code_col, eligible_col}
+        or col in feature_cols
+    ]
+    export_frame = frame.loc[eligible_mask, export_cols].copy()
+    export_frame.index.name = frame.index.name or "datetime"
+    return export_frame.reset_index()
+
+
+def _write_tsfresh_feature_dataset_artifacts(
+    *,
+    run_dir: Path,
+    data: pd.DataFrame | dict[str, pd.DataFrame],
+    model_meta: dict[str, Any],
+) -> dict[str, str]:
+    feature_dataset_meta = dict(model_meta.get("feature_dataset", {}) or {})
+    if not bool(feature_dataset_meta.get("available", False)):
+        return {}
+
+    if isinstance(data, dict):
+        return {}
+
+    feature_name_prefixes = [str(value) for value in list(feature_dataset_meta.get("feature_name_prefixes", []) or [])]
+    label_col = str(feature_dataset_meta.get("label_col", "tsfresh_extrema_label"))
+    label_code_col = str(feature_dataset_meta.get("label_code_col", "tsfresh_extrema_label_code"))
+    eligible_col = str(feature_dataset_meta.get("eligible_col", "tsfresh_extrema_eligible"))
+    export_frame = _tsfresh_feature_dataset_rows(
+        data,
+        feature_name_prefixes=feature_name_prefixes,
+        label_col=label_col,
+        label_code_col=label_code_col,
+        eligible_col=eligible_col,
+    )
+    if export_frame.empty:
+        return {}
+
+    artifact_paths: dict[str, str] = {}
+    run_dir.mkdir(parents=True, exist_ok=True)
+    run_copy_path = run_dir / "tsfresh_feature_dataset.csv"
+    export_frame.to_csv(run_copy_path, index=False)
+    artifact_paths["tsfresh_feature_dataset"] = str(run_copy_path.relative_to(run_dir))
+
+    if bool(feature_dataset_meta.get("export_enabled", False)):
+        raw_export_path = feature_dataset_meta.get("export_dataset_path")
+        if isinstance(raw_export_path, str) and raw_export_path.strip():
+            external_path = Path(raw_export_path)
+            if not external_path.is_absolute():
+                external_path = Path.cwd() / external_path
+            external_path.parent.mkdir(parents=True, exist_ok=True)
+            export_frame.to_csv(external_path, index=False)
+            artifact_paths["tsfresh_feature_dataset_export"] = str(external_path.resolve())
+
+    return artifact_paths
+
+
 def _write_model_diagnostic_artifacts(
     *,
     run_dir: Path,
@@ -439,6 +554,18 @@ def _write_model_diagnostic_artifacts(
         )
         if feature_chart_path.exists():
             chart_paths["feature_importance_chart"] = str(feature_chart_path.relative_to(run_dir))
+
+    selected_feature_rows = _selected_feature_detail_rows(model_meta)
+    if selected_feature_rows:
+        selected_features_path = run_dir / "selected_features.csv"
+        pd.DataFrame(selected_feature_rows).to_csv(selected_features_path, index=False)
+        artifact_paths["selected_features"] = str(selected_features_path.relative_to(run_dir))
+
+    fold_selected_feature_rows = _fold_selected_feature_rows(model_meta)
+    if fold_selected_feature_rows:
+        fold_selected_features_path = run_dir / "fold_selected_features.csv"
+        pd.DataFrame(fold_selected_feature_rows).to_csv(fold_selected_features_path, index=False)
+        artifact_paths["fold_selected_features"] = str(fold_selected_features_path.relative_to(run_dir))
 
     target_meta = dict(model_meta.get("target", {}) or {})
     target_label_distribution = dict(target_meta.get("label_distribution", {}) or {})
@@ -1626,6 +1753,17 @@ def save_artifacts(
     )
     for label, rel_path in dense_diagnostic_paths.items():
         artifacts[label] = str((run_dir / rel_path).resolve())
+
+    tsfresh_dataset_artifacts = _write_tsfresh_feature_dataset_artifacts(
+        run_dir=run_dir,
+        data=data,
+        model_meta=model_meta,
+    )
+    for label, rel_path in tsfresh_dataset_artifacts.items():
+        if Path(rel_path).is_absolute():
+            artifacts[label] = rel_path
+        else:
+            artifacts[label] = str((run_dir / rel_path).resolve())
 
     artifacts.update(write_experiment_report_from_run_dir(run_dir))
 

@@ -13,9 +13,10 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.lock.txt /tmp/requirements.lock.txt
+COPY requirements.lock.txt requirements.tsfresh.txt /tmp/
 RUN pip install --upgrade pip \
-    && pip install -r /tmp/requirements.lock.txt
+    && pip install -r /tmp/requirements.lock.txt \
+    && pip install -r /tmp/requirements.tsfresh.txt
 
 COPY . /workspace
 RUN useradd --create-home --uid 10001 appuser \

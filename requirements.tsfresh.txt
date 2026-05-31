@@ -1,0 +1,4 @@
+# Optional dependency set for experimental tsfresh extrema discovery.
+# Installed on demand to avoid changing the default numerical stack.
+scipy==1.14.1
+tsfresh==0.21.1
