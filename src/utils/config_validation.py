@@ -20,7 +20,12 @@ _RL_EXTRACTOR_KINDS = {"flatten", "cnn1d", "lstm", "transformer"}
 _CLASSIFIER_MODEL_KINDS = {"lightgbm_clf", "logistic_regression_clf", "xgboost_clf"}
 _EMBEDDING_MODEL_KINDS = {"event_transformer_encoder"}
 _DEEP_FORECASTER_MODEL_KINDS = {"lstm_forecaster", "patchtst_forecaster", "tft_forecaster"}
-_FORECASTER_MODEL_KINDS = {"sarimax_forecaster", "garch_forecaster", *_DEEP_FORECASTER_MODEL_KINDS}
+_FORECASTER_MODEL_KINDS = {
+    "sarimax_forecaster",
+    "garch_forecaster",
+    "lightgbm_regressor",
+    *_DEEP_FORECASTER_MODEL_KINDS,
+}
 _GARCH_OVERLAY_COMPATIBLE_MODEL_KINDS = {
     "lightgbm_clf",
     "logistic_regression_clf",
@@ -1098,10 +1103,16 @@ def validate_model_block(model: dict[str, Any]) -> None:
             allowed_keys=_TARGET_OUTPUT_KEYS,
         )
         target_kind = target.get("kind", "forward_return")
-        if target_kind not in {"forward_return", "triple_barrier", "directional_triple_barrier", "r_multiple"}:
+        if target_kind not in {
+            "forward_return",
+            "future_return_regression",
+            "triple_barrier",
+            "directional_triple_barrier",
+            "r_multiple",
+        }:
             raise ConfigValidationError(
-                "model.target.kind must be 'forward_return', 'triple_barrier', "
-                "'directional_triple_barrier', or 'r_multiple'."
+                "model.target.kind must be 'forward_return', 'future_return_regression', "
+                "'triple_barrier', 'directional_triple_barrier', or 'r_multiple'."
             )
         if target_kind == "r_multiple":
             if model["kind"] not in _CLASSIFIER_MODEL_KINDS:
@@ -1142,6 +1153,32 @@ def validate_model_block(model: dict[str, Any]) -> None:
                 raise ConfigValidationError("model.target.returns_type must be 'simple' or 'log'.")
             if target.get("returns_col") is None and returns_type != "simple":
                 raise ConfigValidationError("model.target.returns_type='log' requires model.target.returns_col.")
+        if target_kind == "future_return_regression":
+            if model["kind"] not in _FORECASTER_MODEL_KINDS:
+                raise ConfigValidationError(
+                    "model.target.kind='future_return_regression' is supported only for regression forecasters."
+                )
+            _positive_int(
+                target.get("horizon_bars", target.get("horizon", 1)),
+                field="model.target.horizon_bars",
+            )
+            if "returns_col" in target and target["returns_col"] is not None and not isinstance(target["returns_col"], str):
+                raise ConfigValidationError("model.target.returns_col must be a string or null.")
+            returns_type = str(target.get("returns_type", "simple"))
+            if returns_type not in {"simple", "log"}:
+                raise ConfigValidationError("model.target.returns_type must be 'simple' or 'log'.")
+            if target.get("returns_col") is None and returns_type != "simple":
+                raise ConfigValidationError("model.target.returns_type='log' requires model.target.returns_col.")
+            if "volatility_col" in target and not isinstance(target["volatility_col"], str):
+                raise ConfigValidationError("model.target.volatility_col must be a string.")
+            if "normalize_by_volatility" in target and not isinstance(target["normalize_by_volatility"], bool):
+                raise ConfigValidationError("model.target.normalize_by_volatility must be boolean.")
+            clip = target.get("clip")
+            if clip is not None:
+                if not isinstance(clip, (list, tuple)) or len(clip) != 2:
+                    raise ConfigValidationError("model.target.clip must be a [low, high] pair.")
+                if float(clip[0]) >= float(clip[1]):
+                    raise ConfigValidationError("model.target.clip must satisfy low < high.")
         quantiles = target.get("quantiles")
         if quantiles is not None:
             if not isinstance(quantiles, (list, tuple)) or len(quantiles) != 2:
@@ -1609,14 +1646,20 @@ def validate_standalone_target_block(target: Any) -> None:
         allowed_keys=_TARGET_OUTPUT_KEYS,
     )
     target_kind = target_cfg.get("kind", "forward_return")
-    if target_kind not in {"forward_return", "triple_barrier", "directional_triple_barrier", "r_multiple"}:
+    if target_kind not in {
+        "forward_return",
+        "future_return_regression",
+        "triple_barrier",
+        "directional_triple_barrier",
+        "r_multiple",
+    }:
         raise ConfigValidationError(
-            "target.kind must be 'forward_return', 'triple_barrier', "
-            "'directional_triple_barrier', or 'r_multiple'."
+            "target.kind must be 'forward_return', 'future_return_regression', "
+            "'triple_barrier', 'directional_triple_barrier', or 'r_multiple'."
         )
     validate_model_block(
         {
-            "kind": "xgboost_clf",
+            "kind": "lightgbm_regressor" if target_kind == "future_return_regression" else "xgboost_clf",
             "feature_cols": ["__standalone_target_validation__"],
             "target": target_cfg,
         }
@@ -1740,6 +1783,21 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
         raise ConfigValidationError("signals.params.signal_name is no longer supported; use signals.params.signal_col.")
     if "signal_col" in params and params["signal_col"] is not None and not isinstance(params["signal_col"], str):
         raise ConfigValidationError("signals.params.signal_col must be a string.")
+    if signals["kind"] == "dense_return_forecast":
+        for key in ("forecast_col", "expected_net_return_col", "estimated_cost_col", "volatility_col", "price_col"):
+            if key in params and params[key] is not None and not isinstance(params[key], str):
+                raise ConfigValidationError(f"signals.params.{key} must be a string.")
+        for key in ("cost_per_turnover", "slippage_per_turnover", "cost_round_trip_mult", "volatility_floor"):
+            if key in params and _finite_number(params[key], field=f"signals.params.{key}") < 0:
+                raise ConfigValidationError(f"signals.params.{key} must be >= 0.")
+        if "volatility_floor" in params and float(params["volatility_floor"]) <= 0.0:
+            raise ConfigValidationError("signals.params.volatility_floor must be > 0.")
+        if "forecast_is_vol_normalized" in params and not isinstance(params["forecast_is_vol_normalized"], bool):
+            raise ConfigValidationError("signals.params.forecast_is_vol_normalized must be boolean.")
+        if "signed_cost_adjustment" in params and not isinstance(params["signed_cost_adjustment"], bool):
+            raise ConfigValidationError("signals.params.signed_cost_adjustment must be boolean.")
+        if "clip" in params and params["clip"] is not None and _finite_number(params["clip"], field="signals.params.clip") <= 0:
+            raise ConfigValidationError("signals.params.clip must be > 0 when provided.")
     if signals["kind"] == "probability_threshold":
         for key in ("prob_col", "base_signal_col"):
             if key in params and params[key] is not None and not isinstance(params[key], str):
@@ -2245,6 +2303,33 @@ def validate_portfolio_block(portfolio: dict[str, Any]) -> None:
         raise ConfigValidationError("portfolio.risk_aversion must be >= 0.")
     if _finite_number(portfolio.get("trade_aversion", 0.0), field="portfolio.trade_aversion") < 0:
         raise ConfigValidationError("portfolio.trade_aversion must be >= 0.")
+    selection_cfg = portfolio.get("selection", {})
+    if not isinstance(selection_cfg, dict):
+        raise ConfigValidationError("portfolio.selection must be a mapping.")
+    selection_cfg = dict(selection_cfg or {})
+    if not isinstance(selection_cfg.get("enabled", False), bool):
+        raise ConfigValidationError("portfolio.selection.enabled must be boolean.")
+    if bool(selection_cfg.get("enabled", False)):
+        top_k = selection_cfg.get("top_k", 1)
+        if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k <= 0:
+            raise ConfigValidationError("portfolio.selection.top_k must be a positive integer.")
+        if _finite_number(
+            selection_cfg.get("min_expected_net_return", 0.0),
+            field="portfolio.selection.min_expected_net_return",
+        ) < 0:
+            raise ConfigValidationError("portfolio.selection.min_expected_net_return must be >= 0.")
+        if not isinstance(selection_cfg.get("rank_by_abs", True), bool):
+            raise ConfigValidationError("portfolio.selection.rank_by_abs must be boolean.")
+        weighting = str(selection_cfg.get("weighting", "score"))
+        if weighting not in {"equal", "score"}:
+            raise ConfigValidationError("portfolio.selection.weighting must be 'equal' or 'score'.")
+        rebalance_every_n_bars = selection_cfg.get("rebalance_every_n_bars", 1)
+        if (
+            isinstance(rebalance_every_n_bars, bool)
+            or not isinstance(rebalance_every_n_bars, int)
+            or rebalance_every_n_bars <= 0
+        ):
+            raise ConfigValidationError("portfolio.selection.rebalance_every_n_bars must be a positive integer.")
     constraints_cfg = portfolio.get("constraints", {})
     if not isinstance(constraints_cfg, dict):
         raise ConfigValidationError("portfolio.constraints must be a mapping.")
@@ -2318,6 +2403,49 @@ def validate_monitoring_block(monitoring: dict[str, Any]) -> None:
         raise ConfigValidationError("monitoring.n_bins must be an integer > 1.")
 
 
+def validate_diagnostics_block(diagnostics: dict[str, Any]) -> None:
+    if not isinstance(diagnostics, dict):
+        raise ConfigValidationError("diagnostics must be a mapping.")
+    if not isinstance(diagnostics.get("enabled", False), bool):
+        raise ConfigValidationError("diagnostics.enabled must be boolean.")
+    model = diagnostics.get("model", {})
+    if not isinstance(model, dict):
+        raise ConfigValidationError("diagnostics.model must be a mapping.")
+    if not isinstance(model.get("enabled", False), bool):
+        raise ConfigValidationError("diagnostics.model.enabled must be boolean.")
+    shap_cfg = model.get("shap", {})
+    if not isinstance(shap_cfg, dict):
+        raise ConfigValidationError("diagnostics.model.shap must be a mapping.")
+    if not isinstance(shap_cfg.get("enabled", False), bool):
+        raise ConfigValidationError("diagnostics.model.shap.enabled must be boolean.")
+    shap_defaults = {
+        "max_rows": 200,
+        "top_n_features": 12,
+        "per_prediction_top_k": 5,
+        "per_prediction_row_limit": 3,
+    }
+    for key, default in shap_defaults.items():
+        value = shap_cfg.get(key, default)
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ConfigValidationError(f"diagnostics.model.shap.{key} must be an integer > 0.")
+    random_state = shap_cfg.get("random_state", 42)
+    if isinstance(random_state, bool) or not isinstance(random_state, int) or random_state < 0:
+        raise ConfigValidationError("diagnostics.model.shap.random_state must be an integer >= 0.")
+
+    forecast = diagnostics.get("forecast", {})
+    if not isinstance(forecast, dict):
+        raise ConfigValidationError("diagnostics.forecast must be a mapping.")
+    quantiles = forecast.get("quantiles", 10)
+    if isinstance(quantiles, bool) or not isinstance(quantiles, int) or quantiles < 2:
+        raise ConfigValidationError("diagnostics.forecast.quantiles must be an integer >= 2.")
+    lags = forecast.get("autocorrelation_lags", [])
+    if not isinstance(lags, list) or any(isinstance(lag, bool) or not isinstance(lag, int) or lag <= 0 for lag in lags):
+        raise ConfigValidationError("diagnostics.forecast.autocorrelation_lags must be a list of positive integers.")
+    volatility_col = forecast.get("volatility_col", "atr_pct_rank_100")
+    if volatility_col is not None and (not isinstance(volatility_col, str) or not volatility_col.strip()):
+        raise ConfigValidationError("diagnostics.forecast.volatility_col must be null or a non-empty string.")
+
+
 def validate_execution_block(execution: dict[str, Any]) -> None:
     if not isinstance(execution.get("enabled", False), bool):
         raise ConfigValidationError("execution.enabled must be boolean.")
@@ -2332,6 +2460,29 @@ def validate_execution_block(execution: dict[str, Any]) -> None:
         field="execution.min_trade_notional",
     ) < 0:
         raise ConfigValidationError("execution.min_trade_notional must be >= 0.")
+    hysteresis_cfg = execution.get("hysteresis", {})
+    if not isinstance(hysteresis_cfg, dict):
+        raise ConfigValidationError("execution.hysteresis must be a mapping.")
+    hysteresis_cfg = dict(hysteresis_cfg or {})
+    if not isinstance(hysteresis_cfg.get("enabled", False), bool):
+        raise ConfigValidationError("execution.hysteresis.enabled must be boolean.")
+    entry_threshold = _finite_number(
+        hysteresis_cfg.get("entry_threshold", 0.0),
+        field="execution.hysteresis.entry_threshold",
+    )
+    exit_threshold = _finite_number(
+        hysteresis_cfg.get("exit_threshold", 0.0),
+        field="execution.hysteresis.exit_threshold",
+    )
+    if entry_threshold < 0 or exit_threshold < 0:
+        raise ConfigValidationError("execution.hysteresis thresholds must be >= 0.")
+    if bool(hysteresis_cfg.get("enabled", False)) and exit_threshold > entry_threshold:
+        raise ConfigValidationError(
+            "execution.hysteresis.exit_threshold must be <= entry_threshold when hysteresis is enabled."
+        )
+    min_holding_bars = hysteresis_cfg.get("min_holding_bars", 0)
+    if isinstance(min_holding_bars, bool) or not isinstance(min_holding_bars, int) or min_holding_bars < 0:
+        raise ConfigValidationError("execution.hysteresis.min_holding_bars must be an integer >= 0.")
     current_weights = execution.get("current_weights", {})
     if not isinstance(current_weights, dict):
         raise ConfigValidationError("execution.current_weights must be a mapping.")
@@ -2370,6 +2521,85 @@ def validate_logging_block(logging_cfg: dict[str, Any]) -> None:
                 raise ConfigValidationError(f"logging.stage_tails.{key} must be > 0.")
 
 
+def _barrier_parity_equal(left: Any, right: Any) -> bool:
+    if not isinstance(left, bool) and not isinstance(right, bool):
+        if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+            return math.isclose(float(left), float(right), rel_tol=1e-12, abs_tol=1e-12)
+    return str(left) == str(right)
+
+
+def _require_barrier_parity(left_path: str, left_value: Any, right_path: str, right_value: Any) -> None:
+    if not _barrier_parity_equal(left_value, right_value):
+        raise ConfigValidationError(
+            "portfolio_barrier parity mismatch: "
+            f"{right_path}={right_value!r} must match {left_path}={left_value!r}."
+        )
+
+
+def _validate_portfolio_barrier_parity(cfg: dict[str, Any]) -> None:
+    model = dict(cfg.get("model", {}) or {})
+    target = dict(model.get("target", {}) or {})
+    if str(target.get("kind", "none")) != "directional_triple_barrier":
+        return
+
+    backtest = dict(cfg.get("backtest", {}) or {})
+    signals = dict(cfg.get("signals", {}) or {})
+    signal_params = dict(signals.get("params", {}) or {})
+
+    target_profit = target.get("profit_barrier_r", target.get("upper_mult", 1.4))
+    target_stop = target.get("stop_barrier_r", target.get("lower_mult", 1.0))
+    target_vertical = target.get("vertical_barrier_bars", target.get("max_holding", target.get("horizon", 4)))
+
+    comparisons = [
+        ("model.target.profit_barrier_r", target_profit, "backtest.profit_barrier_r", backtest.get("profit_barrier_r", 1.4)),
+        ("model.target.stop_barrier_r", target_stop, "backtest.stop_barrier_r", backtest.get("stop_barrier_r", 1.0)),
+        (
+            "model.target.vertical_barrier_bars",
+            target_vertical,
+            "backtest.vertical_barrier_bars",
+            backtest.get("vertical_barrier_bars", 4),
+        ),
+        (
+            "model.target.entry_price_mode",
+            target.get("entry_price_mode", "current_close"),
+            "backtest.entry_price_mode",
+            backtest.get("entry_price_mode", "next_open"),
+        ),
+        (
+            "model.target.volatility_col",
+            target.get("volatility_col", "atr_14"),
+            "backtest.volatility_col",
+            backtest.get("volatility_col", "atr_14"),
+        ),
+        ("model.target.price_col", target.get("price_col", "close"), "backtest.close_col", backtest.get("close_col", "close")),
+        ("model.target.open_col", target.get("open_col", "open"), "backtest.open_col", backtest.get("open_col", "open")),
+        ("model.target.high_col", target.get("high_col", "high"), "backtest.high_col", backtest.get("high_col", "high")),
+        ("model.target.low_col", target.get("low_col", "low"), "backtest.low_col", backtest.get("low_col", "low")),
+        (
+            "model.target.tie_break",
+            target.get("tie_break", "closest_to_open"),
+            "backtest.tie_break",
+            backtest.get("tie_break", "closest_to_open"),
+        ),
+    ]
+    for left_path, left_value, right_path, right_value in comparisons:
+        _require_barrier_parity(left_path, left_value, right_path, right_value)
+
+    if str(signals.get("kind", "none")) == "meta_probability_side":
+        _require_barrier_parity(
+            "model.target.profit_barrier_r",
+            target_profit,
+            "signals.params.profit_barrier_r",
+            signal_params.get("profit_barrier_r", 1.0),
+        )
+        _require_barrier_parity(
+            "model.target.stop_barrier_r",
+            target_stop,
+            "signals.params.stop_barrier_r",
+            signal_params.get("stop_barrier_r", 1.0),
+        )
+
+
 def validate_resolved_config(cfg: dict[str, Any]) -> dict[str, Any]:
     """
     Validate all top-level blocks and normalize the runtime sub-config.
@@ -2389,6 +2619,7 @@ def validate_resolved_config(cfg: dict[str, Any]) -> dict[str, Any]:
     validate_backtest_block(cfg["backtest"])
     validate_portfolio_block(cfg["portfolio"])
     validate_monitoring_block(cfg["monitoring"])
+    validate_diagnostics_block(cfg.get("diagnostics", {}))
     validate_execution_block(cfg["execution"])
     validate_logging_block(cfg["logging"])
     cfg["runtime"] = validate_runtime_block(dict(cfg.get("runtime", {}) or {}))
@@ -2428,14 +2659,20 @@ def validate_resolved_config(cfg: dict[str, Any]) -> dict[str, Any]:
     if str(cfg["backtest"].get("engine", "vectorized")) == "portfolio_barrier":
         if not bool(cfg["portfolio"].get("enabled", False)):
             raise ConfigValidationError("backtest.engine='portfolio_barrier' requires portfolio.enabled=true.")
+        if str(cfg["data"].get("alignment", "inner")) != "inner":
+            raise ConfigValidationError("backtest.engine='portfolio_barrier' requires data.alignment='inner'.")
         if str(cfg["portfolio"].get("construction", "signal_weights")) != "signal_weights":
             raise ConfigValidationError(
                 "backtest.engine='portfolio_barrier' requires portfolio.construction='signal_weights'."
             )
         if cfg["risk"].get("target_vol") is not None:
             raise ConfigValidationError("backtest.engine='portfolio_barrier' requires risk.target_vol=null.")
-        if dict(cfg["risk"].get("sizing", {}) or {}):
-            raise ConfigValidationError("backtest.engine='portfolio_barrier' requires risk.sizing={}.")
+        sizing_cfg = dict(cfg["risk"].get("sizing", {}) or {})
+        if sizing_cfg and str(sizing_cfg.get("kind", "none")) != "ftmo_risk_per_trade":
+            raise ConfigValidationError(
+                "backtest.engine='portfolio_barrier' supports only risk.sizing.kind='ftmo_risk_per_trade'."
+            )
+        _validate_portfolio_barrier_parity(cfg)
     return cfg
 
 
@@ -2443,6 +2680,7 @@ __all__ = [
     "ConfigValidationError",
     "validate_backtest_block",
     "validate_data_block",
+    "validate_diagnostics_block",
     "validate_execution_block",
     "validate_logging_block",
     "validate_features_block",

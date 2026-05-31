@@ -52,6 +52,7 @@ def test_discovers_raw_dataset_and_loads_ohlcv_with_epoch_timestamps(tmp_path: P
         "close": 1.1,
         "volume": 100,
     }
+    assert loader.load_ohlcv(dataset_id=datasets[0].id)[0]["close"] == 1.1
 
 
 def test_catalogs_are_inferred_from_processed_snapshot_columns(tmp_path: Path) -> None:
@@ -131,6 +132,30 @@ def test_discovers_flat_processed_dataset_from_filename(tmp_path: Path) -> None:
     assert dataset.timeframe == "M15"
     candles = loader.load_ohlcv(asset="EURUSD", timeframe="M15", source="processed")
     assert candles[0]["close"] == 1.03485
+
+
+def test_discovers_supported_files_anywhere_under_data_tree(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    data_dir = tmp_path / "data" / "vendor" / "category" / "nested"
+    data_dir.mkdir(parents=True)
+    (data_dir / "gbpusd_h1.csv").write_text(
+        "\n".join(
+            [
+                "timestamp,open,high,low,close,volume",
+                "2025-01-01 00:00:00,1.2500,1.2600,1.2400,1.2550,100",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    loader = DataLoader(paths)
+    dataset = next(item for item in loader.discover_datasets() if item.id == "data/vendor/category/nested/gbpusd_h1.csv")
+
+    assert dataset.stage == "vendor"
+    assert dataset.source == "category"
+    assert dataset.assets == ("GBPUSD",)
+    assert dataset.timeframe == "H1"
+    assert loader.load_ohlcv(dataset_id=dataset.id)[0]["close"] == 1.255
 
 
 def test_ohlcv_loader_raises_clear_error_for_missing_volume(tmp_path: Path) -> None:

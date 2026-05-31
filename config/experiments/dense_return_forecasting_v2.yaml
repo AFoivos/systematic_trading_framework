@@ -1,5 +1,5 @@
 strategy:
-  name: indicator_model_adaptive_pullback
+  name: dense_return_forecasting_v2
   timeframe: 30m
   assets:
     - XAUUSD
@@ -33,7 +33,7 @@ data:
       inactive_policy: raise
   storage:
     mode: cached_only
-    dataset_id: indicator_model_adaptive_pullback_30m
+    dataset_id: dense_return_forecasting_v2_30m
     save_raw: false
     save_processed: true
     load_paths:
@@ -168,63 +168,72 @@ features:
       bollinger_percent_b_col: bollinger_percent_b
       bb_bandwidth_rank_window: 100
       realized_vol_windows: [10, 20]
-      return_windows: [1, 2, 3, 6]
+      return_windows: [1, 2, 3, 5, 6, 10, 20]
       rolling_return_windows: [4, 8]
-  - step: indicator_model_adaptive_pullback
+  - step: lags
     params:
-      ema_fast: 20
-      ema_mid: 50
-      ema_slow: 100
-      min_adx: 10.0
-      max_adx: 60.0
-      rsi_long_min: 45.0
-      rsi_long_max: 68.0
-      rsi_short_min: 32.0
-      rsi_short_max: 55.0
-      stoch_long_max: 60.0
-      stoch_short_min: 40.0
-      min_atr_pct_rank: 0.0
-      max_atr_pct_rank: 1.0
-      min_bb_bandwidth_rank: 0.0
-      max_distance_from_ema_atr: 1.5
-      require_macd_confirmation: false
-      candidate_long_col: candidate_long
-      candidate_short_col: candidate_short
-      direction_col: direction
-      signal_col: signal
-      candidate_col: signal_candidate
-      signal_name_col: signal_name
-      score_col: signal_score
+      cols:
+        - close_ret
+      lags: [1, 3, 5, 10, 20]
+      prefix: lag
+  - step: lags
+    params:
+      cols:
+        - rolling_return_4
+        - rolling_return_8
+        - rsi_14
+        - macd_hist
+        - adx_14
+        - bollinger_percent_b
+      lags: [3, 5]
+      prefix: lag
+  - step: feature_transforms
+    params:
+      transforms:
+        - source_col: ret_1
+          kind: rolling_zscore
+          output_col: ret_1_z_100
+          window: 100
+          shift: 1
+        - source_col: ret_3
+          kind: rolling_zscore
+          output_col: ret_3_z_100
+          window: 100
+          shift: 1
+        - source_col: ret_5
+          kind: rolling_zscore
+          output_col: ret_5_z_100
+          window: 100
+          shift: 1
+        - source_col: ret_10
+          kind: rolling_zscore
+          output_col: ret_10_z_100
+          window: 100
+          shift: 1
+        - source_col: ret_20
+          kind: rolling_zscore
+          output_col: ret_20_z_100
+          window: 100
+          shift: 1
 
 model:
-  kind: lightgbm_clf
+  kind: lightgbm_regressor
+  minimum_expected_features: 50
   outputs:
+    pred_ret_col: pred_ret
     pred_prob_col: pred_prob
     pred_is_oos_col: pred_is_oos
   target:
-    kind: directional_triple_barrier
-    outputs:
-      label_col: label
-      event_ret_col: dtb_event_ret
-      fwd_col: dtb_event_ret
-      candidate_out_col: label_candidate
-      r_col: dtb_event_r
-      oriented_r_col: dtb_oriented_r
+    kind: future_return_regression
     price_col: close
-    open_col: open
-    high_col: high
-    low_col: low
-    direction_col: direction
-    candidate_col: signal_candidate
-    entry_price_mode: next_open
-    profit_barrier_r: 1.4
-    stop_barrier_r: 1.0
-    vertical_barrier_bars: 4
+    returns_col: close_ret
+    returns_type: simple
+    horizon_bars: 8
+    normalize_by_volatility: true
     volatility_col: atr_14
-    neutral_label: stop
-    tie_break: closest_to_open
-    add_r_multiple: true
-    r_clip: [-3, 3]
+    clip: [-3.0, 3.0]
+    fwd_col: target_future_return_v2
+    label_col: target_future_return_v2
   split:
     method: purged
     train_frac: 0.70
@@ -232,14 +241,15 @@ model:
     step_size: 5000
     expanding: true
     max_folds: 4
-    purge_bars: 12
+    purge_bars: 8
     embargo_bars: 4
   feature_selectors:
     include:
-      - startswith:
-          - ema_
-          - distance_from_ema
+      - regex: "^close_over_ema_"
+      - regex: "^ema_slope_"
+      - regex: "^distance_from_ema[0-9]+_atr$"
       - exact:
+          - ema_alignment_score
           - adx_14
           - macd
           - macd_signal
@@ -258,9 +268,6 @@ model:
           - atr_pct_rank_100
           - realized_vol_10
           - realized_vol_20
-          - bollinger_mid_20
-          - bollinger_upper_20
-          - bollinger_lower_20
           - bollinger_bandwidth
           - bollinger_bandwidth_rank_100
           - bollinger_percent_b
@@ -269,49 +276,70 @@ model:
           - lower_wick_ratio
           - close_location
           - range_to_atr
-          - return_1
-          - return_2
-          - return_3
-          - return_6
+          - ret_1
+          - ret_3
+          - ret_5
+          - ret_10
+          - ret_20
+          - ret_1_z_100
+          - ret_3_z_100
+          - ret_5_z_100
+          - ret_10_z_100
+          - ret_20_z_100
           - rolling_return_4
           - rolling_return_8
+          - lag_close_ret_1
+          - lag_close_ret_3
+          - lag_close_ret_5
+          - lag_close_ret_10
+          - lag_close_ret_20
+          - lag_rolling_return_4_3
+          - lag_rolling_return_4_5
+          - lag_rolling_return_8_3
+          - lag_rolling_return_8_5
+          - lag_rsi_14_3
+          - lag_rsi_14_5
+          - lag_macd_hist_3
+          - lag_macd_hist_5
+          - lag_adx_14_3
+          - lag_adx_14_5
+          - lag_bollinger_percent_b_3
+          - lag_bollinger_percent_b_5
           - asset_id
-          - direction
-          - signal_score
     strict:
-      min_count: 42
+      min_count: 50
   params:
     n_estimators: 300
     learning_rate: 0.03
     max_depth: 6
     num_leaves: 31
+    min_child_samples: 40
     subsample: 0.9
     colsample_bytree: 0.8
     random_state: 42
     n_jobs: 1
+    verbosity: -1
 
 signals:
-  kind: meta_probability_side
+  kind: dense_return_forecast
   outputs:
-    signal_col: signal
+    signal_col: expected_net_return
   params:
-    prob_col: pred_prob
-    side_col: direction
-    candidate_col: signal_candidate
-    threshold: 0.52
-    min_expected_value_r: 0.10
-    profit_barrier_r: 1.4
-    stop_barrier_r: 1.0
-    clip: 1.0
-    mode: long_short
-
-decision:
-  model_threshold: 0.0
-  min_expected_value_r: null
+    forecast_col: pred_ret
+    signal_col: expected_net_return
+    expected_net_return_col: expected_net_return
+    estimated_cost_col: estimated_round_trip_cost
+    cost_per_turnover: 0.00015
+    slippage_per_turnover: 0.00010
+    cost_round_trip_mult: 2.0
+    forecast_is_vol_normalized: true
+    volatility_col: atr_14
+    price_col: close
+    signed_cost_adjustment: true
 
 validation:
   method: purged_walk_forward
-  purge_bars: 6
+  purge_bars: 8
   embargo_bars: 4
 
 metrics:
@@ -321,11 +349,12 @@ metrics:
     - max_drawdown
     - sharpe
     - sortino
-  classification:
-    - precision
-    - recall
-    - roc_auc
-    - calibration_error
+  regression:
+    - mae
+    - rmse
+    - r2
+    - correlation
+    - directional_accuracy
   trading:
     - trades_per_asset
     - win_rate
@@ -356,20 +385,10 @@ risk:
   vol_col: null
 
 backtest:
-  engine: portfolio_barrier
-  signal_col: signal
+  engine: vectorized
+  signal_col: expected_net_return
   returns_col: close_ret
   returns_type: simple
-  open_col: open
-  high_col: high
-  low_col: low
-  close_col: close
-  volatility_col: atr_14
-  entry_price_mode: next_open
-  profit_barrier_r: 1.4
-  stop_barrier_r: 1.0
-  vertical_barrier_bars: 4
-  tie_break: closest_to_open
   subset: test
   min_holding_bars: 0
   periods_per_year: 12096
@@ -381,7 +400,14 @@ portfolio:
   construction: signal_weights
   long_short: true
   gross_target: 1.0
-  expected_return_col: null
+  expected_return_col: expected_net_return
+  selection:
+    enabled: true
+    top_k: 2
+    min_expected_net_return: 0.05
+    rank_by_abs: true
+    weighting: score
+    rebalance_every_n_bars: 4
   covariance_window: 240
   covariance_rebalance_step: 48
   risk_aversion: 8.0
@@ -400,19 +426,35 @@ portfolio:
     GER40: european_indices
 
 evaluation:
-  probability_thresholds: [0.52, 0.55, 0.58, 0.62, 0.65]
   primary_metric: sharpe
   secondary_metrics:
-    - win_rate
     - profit_factor
     - max_drawdown
     - sharpe
     - trade_count
+    - turnover
+    - cost_to_gross_pnl
 
 monitoring:
   enabled: true
   psi_threshold: 0.15
   n_bins: 10
+
+diagnostics:
+  enabled: true
+  model:
+    enabled: true
+    shap:
+      enabled: true
+      max_rows: 200
+      top_n_features: 12
+      per_prediction_top_k: 5
+      per_prediction_row_limit: 3
+      random_state: 42
+  forecast:
+    quantiles: 10
+    autocorrelation_lags: [1, 2, 4, 8, 16]
+    volatility_col: atr_pct_rank_100
 
 execution:
   enabled: false
@@ -422,10 +464,15 @@ execution:
   min_trade_notional: 0.0
   current_weights: {}
   current_prices: {}
+  hysteresis:
+    enabled: true
+    entry_threshold: 0.15
+    exit_threshold: 0.05
+    min_holding_bars: 4
 
 logging:
   enabled: true
-  run_name: indicator_model_adaptive_pullback_barrier
+  run_name: dense_return_forecasting_v2
   output_dir: logs/experiments
   stage_tails:
     enabled: true

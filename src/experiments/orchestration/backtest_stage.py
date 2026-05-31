@@ -16,6 +16,7 @@ from src.portfolio import (
     PortfolioPerformance,
     build_constrained_weights_from_exposures_over_time,
     build_optimized_weights_over_time,
+    build_ranked_weights_from_scores_over_time,
     build_rolling_covariance_by_date,
     build_weights_from_signals_over_time,
     compute_portfolio_performance,
@@ -290,16 +291,27 @@ def run_portfolio_backtest(
     if backtest_engine == "portfolio_barrier":
         if str(portfolio_cfg.get("construction", "signal_weights")) != "signal_weights":
             raise ValueError("backtest.engine='portfolio_barrier' requires portfolio.construction='signal_weights'.")
-        if _ftmo_sizing_config(risk_cfg):
-            raise ValueError("backtest.engine='portfolio_barrier' does not support risk.sizing; size via portfolio constraints.")
         if risk_cfg.get("target_vol") is not None:
             raise ValueError("backtest.engine='portfolio_barrier' does not support risk.target_vol.")
         if int(backtest_cfg.get("min_holding_bars", 0) or 0) != 0:
             raise ValueError("backtest.engine='portfolio_barrier' uses vertical_barrier_bars; min_holding_bars must be 0.")
+        sizing_cfg = _ftmo_sizing_config(risk_cfg)
+        barrier_asset_frames = asset_frames
+        barrier_signal_col = signal_col
+        if sizing_cfg:
+            barrier_asset_frames = {}
+            for asset, frame in sorted(asset_frames.items()):
+                sized_frame, sized_signal_col = _scale_single_asset_signal_for_ftmo(
+                    frame,
+                    signal_col=signal_col,
+                    sizing_cfg=sizing_cfg,
+                )
+                barrier_asset_frames[asset] = sized_frame
+                barrier_signal_col = sized_signal_col
         constraints = build_portfolio_constraints(portfolio_cfg)
         performance, weights, diagnostics, barrier_meta = run_portfolio_barrier_backtest(
-            asset_frames,
-            signal_col=signal_col,
+            barrier_asset_frames,
+            signal_col=barrier_signal_col,
             open_col=str(backtest_cfg.get("open_col", "open")),
             high_col=str(backtest_cfg.get("high_col", "high")),
             low_col=str(backtest_cfg.get("low_col", "low")),
@@ -330,7 +342,7 @@ def run_portfolio_backtest(
             extra={
                 "barrier": dict(barrier_meta),
                 "risk_guard_summary": dict(performance.risk_guard_summary or {}),
-                "sizing": {},
+                "sizing": dict(sizing_cfg or {}),
             },
         )
         return performance, weights, diagnostics, portfolio_meta.to_dict()
@@ -380,13 +392,26 @@ def run_portfolio_backtest(
         )
     else:
         expected_return_col = None
-        weights, diagnostics = build_weights_from_signals_over_time(
-            signals,
-            constraints=constraints,
-            asset_to_group=asset_groups or None,
-            long_short=bool(portfolio_cfg.get("long_short", True)),
-            gross_target=float(portfolio_cfg.get("gross_target", 1.0)),
-        )
+        selection_cfg = dict(portfolio_cfg.get("selection", {}) or {})
+        if bool(selection_cfg.get("enabled", False)):
+            weights, diagnostics = build_ranked_weights_from_scores_over_time(
+                signals,
+                selection=selection_cfg,
+                hysteresis=dict(cfg.get("execution", {}).get("hysteresis", {}) or {}),
+                constraints=constraints,
+                asset_to_group=asset_groups or None,
+                long_short=bool(portfolio_cfg.get("long_short", True)),
+                gross_target=float(portfolio_cfg.get("gross_target", 1.0)),
+            )
+            construction = "ranked_signal_weights"
+        else:
+            weights, diagnostics = build_weights_from_signals_over_time(
+                signals,
+                constraints=constraints,
+                asset_to_group=asset_groups or None,
+                long_short=bool(portfolio_cfg.get("long_short", True)),
+                gross_target=float(portfolio_cfg.get("gross_target", 1.0)),
+            )
 
     if bt_subset == "test":
         pred_is_oos_col = str(cfg.get("model", {}).get("pred_is_oos_col") or "pred_is_oos")
@@ -446,6 +471,8 @@ def run_portfolio_backtest(
         extra={
             "risk_guard_summary": dict(performance.risk_guard_summary or {}),
             "sizing": dict(sizing_cfg or {}),
+            "selection": dict(portfolio_cfg.get("selection", {}) or {}),
+            "hysteresis": dict(cfg.get("execution", {}).get("hysteresis", {}) or {}),
         },
     )
     return performance, weights, diagnostics, portfolio_meta.to_dict()

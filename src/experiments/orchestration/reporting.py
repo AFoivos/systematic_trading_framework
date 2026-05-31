@@ -11,6 +11,11 @@ import pandas as pd
 import yaml
 
 from src.backtesting.engine import BacktestResult
+from src.evaluation.model_diagnostics import (
+    prediction_quantile_table,
+    prediction_realized_metrics,
+    quantile_monotonicity,
+)
 from src.evaluation.metrics import compute_backtest_metrics, compute_ftmo_style_metrics
 from src.experiments.schemas import EvaluationPayload, MonitoringPayload
 from src.monitoring.drift import compute_feature_drift
@@ -779,6 +784,11 @@ def build_experiment_report_markdown(
     target_cfg = dict(model_cfg.get("target", {}) or {})
     target_kind = target_meta.get("kind", target_cfg.get("kind", "n/a"))
     target_horizon = target_meta.get("max_holding", target_meta.get("horizon", target_cfg.get("horizon", "n/a")))
+    feature_pipeline = dict(model_meta.get("feature_pipeline", {}) or {})
+    reported_feature_count = feature_pipeline.get(
+        "actual_model_feature_count",
+        model_meta.get("contracts", {}).get("n_features", len(summary_payload.get("resolved_feature_columns", []) or [])),
+    )
     lines: list[str] = [
         f"# Experiment Report: {run_name}",
         "",
@@ -790,7 +800,7 @@ def build_experiment_report_markdown(
         f"- Data window: `{data_cfg.get('start', 'n/a')}` to `{data_stats.get('end', data_cfg.get('end', 'latest'))}`",
         f"- Rows / columns: `{data_stats.get('rows', 'n/a')}` rows, `{data_stats.get('columns', 'n/a')}` columns",
         f"- Target: `{target_kind}` horizon `{target_horizon}`",
-        f"- Feature count: `{model_meta.get('contracts', {}).get('n_features', len(summary_payload.get('resolved_feature_columns', []) or []))}`",
+        f"- Feature count: `{reported_feature_count}`",
         f"- Runtime seed: `{runtime_cfg.get('seed', 'n/a')}`",
         "",
         _build_pipeline_trace_markdown(cfg=cfg, summary_payload=summary_payload).rstrip(),
@@ -908,6 +918,20 @@ def build_experiment_report_markdown(
                 "",
                 "## Prediction Diagnostics",
                 _markdown_table(["Metric", "Value"], _dict_metric_rows(prediction_diagnostics)),
+            ]
+        )
+
+    dense_diagnostic_links = [
+        [label.replace("diagnostics_", ""), f"[open]({rel_path})"]
+        for label, rel_path in sorted(artifact_paths.items())
+        if str(label).startswith("diagnostics_") and not str(rel_path).lower().endswith(".png")
+    ]
+    if dense_diagnostic_links:
+        lines.extend(
+            [
+                "",
+                "## Dense Forecast Diagnostics",
+                _markdown_table(["Artifact", "Link"], dense_diagnostic_links),
             ]
         )
 
@@ -1517,24 +1541,71 @@ def _portfolio_feature_diagnostics(model_meta: dict[str, Any]) -> dict[str, Any]
     per_asset: dict[str, Any] = {}
     profiles = set()
     enabled_family_sets: set[tuple[str, ...]] = set()
+    resolved_counts: list[int] = []
+    missing_feature_rows_total = 0
+    family_totals: dict[str, int] = {}
     for asset, meta in sorted(per_asset_meta.items()):
         feature_selection = dict(meta.get("feature_selection", {}) or {})
+        feature_pipeline = dict(meta.get("feature_pipeline", {}) or {})
         profile = feature_selection.get("profile")
         if profile:
             profiles.add(str(profile))
         enabled_families = tuple(str(item) for item in list(feature_selection.get("enabled_families", []) or []))
         if enabled_families:
             enabled_family_sets.add(enabled_families)
+        resolved_feature_count = int(
+            feature_pipeline.get(
+                "resolved_feature_count",
+                feature_selection.get("resolved_feature_count", len(meta.get("feature_cols", []) or [])),
+            )
+        )
+        model_feature_count = int(
+            feature_pipeline.get(
+                "actual_model_feature_count",
+                feature_pipeline.get("model_feature_count", len(meta.get("feature_cols", []) or [])),
+            )
+        )
+        reported_feature_count = int(
+            feature_pipeline.get("reported_feature_count", model_feature_count)
+        )
+        if reported_feature_count != model_feature_count:
+            raise AssertionError("reported_feature_count must equal actual model_feature_count.")
+        family_counts = dict(meta.get("feature_family_counts", {}) or feature_selection.get("family_counts", {}) or {})
+        missing_feature_rows = int(dict(meta.get("missing_value_diagnostics", {}) or {}).get("test_rows_missing_features", 0) or 0)
+        resolved_counts.append(resolved_feature_count)
+        missing_feature_rows_total += missing_feature_rows
+        for family, count in family_counts.items():
+            try:
+                family_totals[str(family)] = int(family_totals.get(str(family), 0)) + int(count)
+            except (TypeError, ValueError):
+                continue
         per_asset[asset] = {
-            "resolved_feature_count": int(feature_selection.get("resolved_feature_count", len(meta.get("feature_cols", []) or []))),
-            "feature_family_counts": dict(meta.get("feature_family_counts", {}) or {}),
-            "missing_feature_rows": int(dict(meta.get("missing_value_diagnostics", {}) or {}).get("test_rows_missing_features", 0) or 0),
+            "resolved_feature_count": resolved_feature_count,
+            "model_feature_count": model_feature_count,
+            "reported_feature_count": reported_feature_count,
+            "raw_feature_count": int(feature_pipeline.get("raw_feature_count", 0) or 0),
+            "selected_feature_count": int(feature_pipeline.get("selected_feature_count", model_feature_count) or 0),
+            "dropped_missing_count": int(feature_pipeline.get("dropped_missing_count", 0) or 0),
+            "dropped_constant_count": int(feature_pipeline.get("dropped_constant_count", 0) or 0),
+            "dropped_selector_count": int(feature_pipeline.get("dropped_selector_count", 0) or 0),
+            "final_feature_names": list(feature_pipeline.get("final_feature_names", meta.get("feature_cols", []) or []) or []),
+            "feature_family_counts": family_counts,
+            "missing_feature_rows": missing_feature_rows,
             "feature_selection": feature_selection,
+            "feature_pipeline": feature_pipeline,
             "feature_importance_stability": dict(meta.get("feature_importance_stability", {}) or {}),
         }
     return {
         "profile": next(iter(profiles)) if len(profiles) == 1 else None,
         "enabled_families": list(next(iter(enabled_family_sets))) if len(enabled_family_sets) == 1 else [],
+        "summary": {
+            "asset_count": int(len(per_asset)),
+            "min_resolved_feature_count": int(min(resolved_counts)) if resolved_counts else 0,
+            "max_resolved_feature_count": int(max(resolved_counts)) if resolved_counts else 0,
+            "mean_resolved_feature_count": float(np.mean(resolved_counts)) if resolved_counts else 0.0,
+            "total_missing_feature_rows": int(missing_feature_rows_total),
+            "feature_family_totals": family_totals,
+        },
         "per_asset": per_asset,
     }
 
@@ -1600,7 +1671,9 @@ def _signal_execution_summary(
 
 
 def _trade_diagnostics_from_trades(trades: pd.DataFrame | None) -> dict[str, Any]:
-    if trades is None or trades.empty:
+    if trades is None:
+        return {}
+    if trades.empty:
         return {
             "trade_count": 0,
             "average_r": None,
@@ -1623,6 +1696,65 @@ def _trade_diagnostics_from_trades(trades: pd.DataFrame | None) -> dict[str, Any
         if col in trades.columns:
             out[f"{col}_count"] = int(pd.Series(trades[col]).fillna(False).astype(bool).sum())
     return out
+
+
+def _portfolio_forecast_quality_summary(
+    asset_frames: dict[str, pd.DataFrame],
+    *,
+    model_meta: dict[str, Any],
+    signal_col: str,
+    quantiles: int = 10,
+) -> dict[str, Any]:
+    predictions: list[pd.Series] = []
+    realized: list[pd.Series] = []
+    per_asset_meta = dict(model_meta.get("per_asset", {}) or {})
+    for asset, frame in sorted(asset_frames.items()):
+        meta = dict(per_asset_meta.get(asset, {}) or model_meta or {})
+        target_meta = dict(meta.get("target", {}) or {})
+        target_col = str(target_meta.get("label_col") or target_meta.get("fwd_col") or "")
+        pred_col = signal_col if signal_col and signal_col in frame.columns else str(meta.get("pred_ret_col") or "")
+        if not pred_col or not target_col or pred_col not in frame.columns or target_col not in frame.columns:
+            continue
+        oos_col = str(meta.get("pred_is_oos_col") or model_meta.get("pred_is_oos_col") or "pred_is_oos")
+        if oos_col in frame.columns:
+            mask = frame[oos_col].astype(bool)
+        else:
+            mask = pd.Series(True, index=frame.index, dtype=bool)
+        pair = frame.loc[mask, [pred_col, target_col]].replace([np.inf, -np.inf], np.nan).dropna()
+        if pair.empty:
+            continue
+        predictions.append(pair[pred_col].astype(float).reset_index(drop=True))
+        realized.append(pair[target_col].astype(float).reset_index(drop=True))
+
+    if not predictions:
+        return {
+            "evaluation_rows": 0,
+            "prediction_correlation": None,
+            "rank_ic": None,
+            "quantile_monotonicity": None,
+            "quantile_count": 0,
+        }
+
+    prediction = pd.concat(predictions, ignore_index=True)
+    realized_return = pd.concat(realized, ignore_index=True)
+    metrics = prediction_realized_metrics(prediction, realized_return)
+    quantile_table = prediction_quantile_table(
+        prediction,
+        realized_return,
+        expected_net_return=prediction,
+        quantiles=quantiles,
+    )
+    monotonicity = quantile_monotonicity(quantile_table)
+    return {
+        "evaluation_rows": int(metrics.get("evaluation_rows", 0) or 0),
+        "prediction_correlation": metrics.get("correlation"),
+        "rank_ic": metrics.get("spearman_rank_correlation"),
+        "calibration_slope": metrics.get("calibration_slope"),
+        "directional_accuracy": metrics.get("directional_accuracy"),
+        "quantile_monotonicity": monotonicity.get("monotonicity"),
+        "quantile_increasing_steps": monotonicity.get("monotonic_increasing_steps"),
+        "quantile_count": monotonicity.get("quantile_count"),
+    }
 
 
 def _weighted_signal_summary(summaries: list[dict[str, Any]]) -> dict[str, Any]:
@@ -2056,6 +2188,15 @@ def build_portfolio_evaluation(
         mask=oos_mask,
     )
     primary_summary = dict(oos_summary or performance.summary)
+    for key in (
+        "trade_count",
+        "position_change_count",
+        "rebalance_count",
+        "discrete_trade_count",
+        "barrier_trade_count",
+    ):
+        if key in performance.summary:
+            primary_summary[key] = performance.summary[key]
     for key in ("trade_count", "average_r", "median_r"):
         if key in trade_diagnostics:
             primary_summary[key] = trade_diagnostics[key]
@@ -2123,6 +2264,12 @@ def build_portfolio_evaluation(
         per_asset_policy_map[only_asset] = summary
     policy_summary = dict(model_meta.get("oos_policy_summary", {}) or {})
     policy_summary.update(_weighted_signal_summary(per_asset_policy))
+    forecast_quality = _portfolio_forecast_quality_summary(
+        asset_frames,
+        model_meta=model_meta,
+        signal_col=signal_col,
+        quantiles=10,
+    )
     target_meta = dict(model_meta.get("target", {}) or {})
     orb_diagnostics = _compute_orb_diagnostics(
         asset_frames,
@@ -2135,6 +2282,15 @@ def build_portfolio_evaluation(
         pred_is_oos_col=pred_is_oos_col,
     )
     primary_summary.update(dict(orb_diagnostics.get("primary_summary_fields", {}) or {}))
+    for key in (
+        "prediction_correlation",
+        "rank_ic",
+        "calibration_slope",
+        "directional_accuracy",
+        "quantile_monotonicity",
+    ):
+        if forecast_quality.get(key) is not None:
+            primary_summary[key] = forecast_quality[key]
     for key in ("flat_rate", "long_rate", "short_rate"):
         if policy_summary.get(key) is not None:
             primary_summary[key] = policy_summary[key]
@@ -2155,6 +2311,7 @@ def build_portfolio_evaluation(
             "model_oos_regression_summary": dict(model_meta.get("oos_regression_summary", {}) or {}),
             "model_oos_volatility_summary": dict(model_meta.get("oos_volatility_summary", {}) or {}),
             "model_oos_policy_summary": policy_summary,
+            "forecast_quality": forecast_quality,
             "signal_diagnostics_by_asset": per_asset_policy_map,
             "orb_diagnostics": orb_diagnostics,
             "trade_diagnostics": trade_diagnostics,

@@ -11,13 +11,19 @@ import { seriesKey } from "./utils/transforms";
 const DEFAULT_CANDLE_LIMIT = 5000;
 
 function seriesParams(selection: ReturnType<typeof useDashboardStore.getState>["selection"]) {
+  if (selection.datasetId) {
+    return {
+      dataset_id: selection.datasetId,
+      start: selection.start || undefined,
+      end: selection.end || undefined
+    };
+  }
   return {
-    asset: selection.asset,
-    timeframe: selection.timeframe,
-    source: selection.source,
-    dataset_id: selection.datasetId,
-    start: selection.start,
-    end: selection.end
+    asset: selection.asset || undefined,
+    timeframe: selection.timeframe || undefined,
+    source: selection.source || undefined,
+    start: selection.start || undefined,
+    end: selection.end || undefined
   };
 }
 
@@ -31,8 +37,6 @@ function mergeSeries(sourceType: string, series: NamedSeries[]): Record<string, 
 export default function App() {
   const state = useDashboardStore();
   const {
-    assets,
-    timeframes,
     datasets,
     experiments,
     layouts,
@@ -62,7 +66,6 @@ export default function App() {
     let cancelled = false;
     state.setLoadingMessage("Loading local catalogs");
     Promise.all([
-      api.assets(),
       api.datasets(),
       api.experiments(),
       api.layouts(),
@@ -70,10 +73,9 @@ export default function App() {
       api.signalBuilders(),
       api.targetBuilders()
     ])
-      .then(([assetData, datasetData, experimentData, layoutData, featureBuilderData, signalBuilderData, targetBuilderData]) => {
+      .then(([datasetData, experimentData, layoutData, featureBuilderData, signalBuilderData, targetBuilderData]) => {
         if (!cancelled) {
           state.setBootstrapData({
-            assets: assetData,
             datasets: datasetData,
             experiments: experimentData,
             layouts: layoutData
@@ -101,35 +103,17 @@ export default function App() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!selection.asset) {
-      return;
-    }
-    let cancelled = false;
-    api
-      .timeframes(selection.asset)
-      .then((values) => {
-        if (!cancelled) {
-          state.setTimeframes(values);
-          if (!selection.timeframe && values[0]) {
-            state.setSelection({ timeframe: values[0] });
-          }
-        }
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          state.setErrorMessage(error instanceof Error ? error.message : String(error));
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selection.asset]);
-
-  const dataParams = useMemo(() => seriesParams(selection), [selection]);
+  const dataParams = useMemo(
+    () => seriesParams(selection),
+    [selection.asset, selection.datasetId, selection.end, selection.source, selection.start, selection.timeframe]
+  );
+  const selectedDataset = useMemo(
+    () => datasets.find((dataset) => dataset.id === selection.datasetId),
+    [datasets, selection.datasetId]
+  );
 
   useEffect(() => {
-    if (!selection.asset) {
+    if (!selection.datasetId && !selection.asset) {
       return;
     }
     let cancelled = false;
@@ -137,7 +121,7 @@ export default function App() {
     Promise.all([
       api.ohlcv({
         ...dataParams,
-        limit: selection.start || selection.end ? undefined : DEFAULT_CANDLE_LIMIT
+        limit: selection.start || selection.end || selection.runId ? undefined : DEFAULT_CANDLE_LIMIT
       }),
       api.featureCatalog(dataParams),
       api.signalCatalog(dataParams),
@@ -163,10 +147,10 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [dataParams]);
+  }, [dataParams, selection.runId]);
 
   useEffect(() => {
-    if (!selection.asset) {
+    if (!selection.datasetId && !selection.asset) {
       return;
     }
     let cancelled = false;
@@ -213,7 +197,7 @@ export default function App() {
       return;
     }
     let cancelled = false;
-    Promise.all([api.trades(selection.runId), api.equity(selection.runId)])
+    Promise.all([api.trades(selection.runId, { asset: selection.asset || undefined }), api.equity(selection.runId)])
       .then(([tradeData, equityData]) => {
         if (!cancelled) {
           state.setMarketData({ trades: tradeData, equity: equityData });
@@ -228,13 +212,13 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [selection.runId]);
+  }, [selection.asset, selection.runId]);
 
   const saveLayout = (name: string) => {
     api
       .saveLayout(state.toLayout(name))
       .then(() => api.layouts())
-      .then((layoutData) => state.setBootstrapData({ assets, datasets, experiments, layouts: layoutData }))
+      .then((layoutData) => state.setBootstrapData({ datasets, experiments, layouts: layoutData }))
       .catch((error: unknown) => state.setErrorMessage(error instanceof Error ? error.message : String(error)));
   };
 
@@ -246,8 +230,8 @@ export default function App() {
   };
 
   const runParameterizedSeries = () => {
-    if (!selection.asset) {
-      state.setErrorMessage("Select an asset before running parameterized series.");
+    if (!selection.datasetId && !selection.asset) {
+      state.setErrorMessage("Select a dataset before running parameterized series.");
       return;
     }
     const enabledCount = [...featureSteps, ...signalSteps, ...targetSteps].filter((step) => step.enabled).length;
@@ -259,8 +243,6 @@ export default function App() {
     api
       .transformSeries({
         ...dataParams,
-        asset: selection.asset,
-        dataset_id: selection.datasetId,
         limit: selection.start || selection.end ? undefined : DEFAULT_CANDLE_LIMIT,
         features: featureSteps,
         signals: signalSteps,
@@ -279,13 +261,11 @@ export default function App() {
       <header className="top-bar">
         <div>
           <h1>Trading Research Dashboard</h1>
-          <p>{selection.asset || "No asset"} · {selection.timeframe || "No timeframe"} · local artifacts</p>
+          <p>{selectedDataset?.relative_path || selection.datasetId || "No dataset"} · local artifacts</p>
         </div>
       </header>
       <div className="dashboard-grid">
         <ControlPanel
-          assets={assets}
-          timeframes={timeframes}
           datasets={datasets}
           experiments={experiments}
           layouts={layouts}

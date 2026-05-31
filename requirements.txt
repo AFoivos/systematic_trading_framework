@@ -11,6 +11,7 @@ statsmodels
 scikit-learn
 xgboost
 lightgbm
+shap
 
 torch
 torchmetrics

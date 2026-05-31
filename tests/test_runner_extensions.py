@@ -14,8 +14,16 @@ import src.src_data.storage as storage_mod
 from src.execution.paper import build_rebalance_orders
 from src.experiments.models import train_logistic_regression_classifier
 from src.experiments.orchestration.data_stage import save_processed_snapshot_if_enabled
+from src.experiments.orchestration.reporting import _portfolio_feature_diagnostics
+from src.portfolio import (
+    PortfolioConstraints,
+    build_ranked_weights_from_scores_over_time,
+    compute_portfolio_performance,
+)
 from src.portfolio.construction import PortfolioPerformance
 from src.src_data.storage import load_dataset_snapshot, load_ohlcv_csv, save_dataset_snapshot
+from src.utils.config import load_experiment_config
+from src.utils.config_validation import validate_resolved_config
 
 
 def _synthetic_ohlcv(
@@ -42,6 +50,271 @@ def _synthetic_ohlcv(
     df["low"] = np.minimum(df["open"], df["close"]) * 0.998
     df["volume"] = 1_000_000 + rng.integers(0, 10_000, size=periods)
     return df[["open", "high", "low", "close", "volume"]]
+
+
+def test_portfolio_feature_diagnostics_reports_coverage_summary() -> None:
+    diagnostics = _portfolio_feature_diagnostics(
+        {
+            "per_asset": {
+                "AAA": {
+                    "feature_cols": ["ema_20", "rsi_14"],
+                    "feature_selection": {
+                        "resolved_feature_count": 2,
+                        "family_counts": {"trend": 1, "momentum": 1},
+                    },
+                    "missing_value_diagnostics": {"test_rows_missing_features": 3},
+                },
+                "BBB": {
+                    "feature_cols": ["ema_20"],
+                    "feature_selection": {
+                        "resolved_feature_count": 1,
+                        "family_counts": {"trend": 1},
+                    },
+                    "missing_value_diagnostics": {"test_rows_missing_features": 0},
+                },
+            }
+        }
+    )
+
+    assert diagnostics["summary"]["asset_count"] == 2
+    assert diagnostics["summary"]["min_resolved_feature_count"] == 1
+    assert diagnostics["summary"]["max_resolved_feature_count"] == 2
+    assert diagnostics["summary"]["total_missing_feature_rows"] == 3
+    assert diagnostics["summary"]["feature_family_totals"] == {"momentum": 1, "trend": 2}
+
+
+def test_ranked_weights_use_top_k_and_hysteresis_min_holding() -> None:
+    idx = pd.date_range("2024-01-01", periods=6, freq="30min")
+    scores = pd.DataFrame(
+        {
+            "AAA": [0.20, 0.18, 0.12, 0.01, 0.00, 0.00],
+            "BBB": [0.10, 0.25, 0.24, 0.22, 0.21, 0.01],
+            "CCC": [-0.05, -0.30, -0.31, -0.02, -0.01, -0.20],
+        },
+        index=idx,
+    )
+
+    weights, diagnostics = build_ranked_weights_from_scores_over_time(
+        scores,
+        selection={"enabled": True, "top_k": 1, "min_expected_net_return": 0.0, "rank_by_abs": True},
+        hysteresis={"enabled": True, "entry_threshold": 0.15, "exit_threshold": 0.05, "min_holding_bars": 3},
+        constraints=PortfolioConstraints(
+            max_gross_leverage=1.0,
+            max_weight=1.0,
+            min_weight=-1.0,
+            enforce_target_net_exposure=False,
+        ),
+        long_short=True,
+        gross_target=1.0,
+    )
+
+    assert weights.loc[idx[0], "AAA"] > 0.0
+    assert weights.loc[idx[1], "AAA"] > 0.0
+    assert weights.loc[idx[2], "AAA"] > 0.0
+    assert weights.loc[idx[3], "BBB"] > 0.0
+    assert weights.loc[idx[3], "AAA"] == 0.0
+    assert weights.abs().sum(axis=1).max() <= 1.0 + 1e-12
+    assert diagnostics["ranked_selected_count"].max() == 1
+
+
+def test_ranked_weights_create_signed_long_short_exposure_when_enabled() -> None:
+    idx = pd.date_range("2024-01-01", periods=3, freq="30min")
+    scores = pd.DataFrame(
+        {
+            "AAA": [0.30, 0.28, 0.26],
+            "BBB": [-0.25, -0.24, -0.22],
+            "CCC": [0.01, 0.01, 0.01],
+        },
+        index=idx,
+    )
+
+    weights, diagnostics = build_ranked_weights_from_scores_over_time(
+        scores,
+        selection={
+            "enabled": True,
+            "top_k": 2,
+            "min_expected_net_return": 0.05,
+            "rank_by_abs": True,
+            "rebalance_every_n_bars": 1,
+        },
+        hysteresis={"enabled": False},
+        constraints=PortfolioConstraints(
+            max_gross_leverage=1.0,
+            max_weight=1.0,
+            min_weight=-1.0,
+            enforce_target_net_exposure=False,
+        ),
+        long_short=True,
+        gross_target=1.0,
+    )
+
+    assert weights.loc[idx[0], "AAA"] > 0.0
+    assert weights.loc[idx[0], "BBB"] < 0.0
+    assert weights.abs().sum(axis=1).iloc[0] > abs(weights.sum(axis=1).iloc[0])
+    assert diagnostics.loc[idx[0], "gross_exposure"] > abs(diagnostics.loc[idx[0], "net_exposure"])
+
+
+def test_ranked_weights_long_only_excludes_negative_scores_and_can_abstain() -> None:
+    idx = pd.date_range("2024-01-01", periods=2, freq="30min")
+    scores = pd.DataFrame(
+        {
+            "AAA": [-0.90, -0.90],
+            "BBB": [0.04, 0.04],
+            "CCC": [0.03, 0.03],
+        },
+        index=idx,
+    )
+
+    weights, diagnostics = build_ranked_weights_from_scores_over_time(
+        scores,
+        selection={
+            "enabled": True,
+            "top_k": 2,
+            "min_expected_net_return": 0.05,
+            "rank_by_abs": True,
+        },
+        hysteresis={"enabled": False},
+        constraints=PortfolioConstraints(
+            max_gross_leverage=1.0,
+            max_weight=1.0,
+            min_weight=0.0,
+            enforce_target_net_exposure=False,
+        ),
+        long_short=False,
+        gross_target=1.0,
+    )
+
+    assert float(weights.abs().sum(axis=1).max()) == pytest.approx(0.0)
+    assert diagnostics["ranked_candidate_count"].max() == 0
+
+
+def test_ranked_weights_respect_rebalance_cadence() -> None:
+    idx = pd.date_range("2024-01-01", periods=5, freq="30min")
+    scores = pd.DataFrame(
+        {
+            "AAA": [0.30, 0.01, 0.01, 0.01, 0.01],
+            "BBB": [0.01, 0.40, 0.40, 0.40, 0.40],
+        },
+        index=idx,
+    )
+
+    weights, diagnostics = build_ranked_weights_from_scores_over_time(
+        scores,
+        selection={
+            "enabled": True,
+            "top_k": 1,
+            "min_expected_net_return": 0.05,
+            "rank_by_abs": False,
+            "rebalance_every_n_bars": 4,
+        },
+        hysteresis={"enabled": False},
+        constraints=PortfolioConstraints(
+            max_gross_leverage=1.0,
+            max_weight=1.0,
+            min_weight=0.0,
+            enforce_target_net_exposure=False,
+        ),
+        long_short=False,
+        gross_target=1.0,
+    )
+
+    assert weights.loc[idx[0], "AAA"] > 0.0
+    assert weights.loc[idx[1], "AAA"] == pytest.approx(weights.loc[idx[0], "AAA"])
+    assert diagnostics.loc[idx[1], "is_rebalance_bar"] == 0
+    assert diagnostics.loc[idx[1], "turnover"] == pytest.approx(0.0)
+    assert weights.loc[idx[4], "BBB"] > 0.0
+    assert weights.loc[idx[4], "AAA"] == pytest.approx(0.0)
+
+
+def test_portfolio_performance_reports_vectorized_trade_accounting() -> None:
+    idx = pd.date_range("2024-01-01", periods=5, freq="30min")
+    weights = pd.DataFrame(
+        {
+            "AAA": [0.0, 0.5, 0.5, -0.5, 0.0],
+            "BBB": [0.0, 0.0, 0.2, 0.2, 0.0],
+        },
+        index=idx,
+    )
+    returns = pd.DataFrame(0.0, index=idx, columns=["AAA", "BBB"])
+
+    performance = compute_portfolio_performance(
+        weights,
+        returns,
+        missing_return_policy="raise_if_exposed",
+        cost_per_turnover=0.0,
+        slippage_per_turnover=0.0,
+    )
+
+    summary = performance.summary
+    assert summary["position_change_count"] == pytest.approx(5.0)
+    assert summary["rebalance_count"] == pytest.approx(4.0)
+    assert summary["discrete_trade_count"] == pytest.approx(6.0)
+    assert summary["barrier_trade_count"] == pytest.approx(0.0)
+    assert summary["trade_count"] == pytest.approx(6.0)
+
+
+def test_portfolio_evaluation_preserves_vectorized_trade_count_without_trade_table() -> None:
+    idx = pd.date_range("2024-01-01", periods=4, freq="30min", tz="UTC")
+    weights = pd.DataFrame({"AAA": [0.0, 0.5, 0.5, 0.0]}, index=idx)
+    returns = pd.DataFrame({"AAA": [0.0, 0.0, 0.0, 0.0]}, index=idx)
+    performance = compute_portfolio_performance(weights, returns)
+    asset_frames = {
+        "AAA": pd.DataFrame(
+            {
+                "pred_is_oos": [True, True, True, True],
+                "expected_net_return": [0.0, 0.2, 0.1, 0.0],
+                "target_future_return_v2": [0.0, 0.1, 0.05, 0.0],
+            },
+            index=idx,
+        )
+    }
+
+    evaluation = runner_mod._build_portfolio_evaluation(
+        asset_frames,
+        performance=performance,
+        model_meta={
+            "per_asset": {
+                "AAA": {
+                    "pred_is_oos_col": "pred_is_oos",
+                    "target": {"label_col": "target_future_return_v2"},
+                }
+            }
+        },
+        periods_per_year=252,
+        alignment="inner",
+        backtest_cfg={"signal_col": "expected_net_return", "returns_col": "close_ret"},
+    )
+
+    assert evaluation["primary_summary"]["trade_count"] == pytest.approx(2.0)
+    assert evaluation["primary_summary"]["discrete_trade_count"] == pytest.approx(2.0)
+    assert evaluation["forecast_quality"]["rank_ic"] is not None
+
+
+def test_dense_return_forecasting_v2_config_uses_stationary_features_and_abstention() -> None:
+    cfg = load_experiment_config("config/experiments/dense_return_forecasting_v2.yaml")
+    validate_resolved_config(cfg)
+
+    include_rules = cfg["model"]["feature_selectors"]["include"]
+    exact_features = set()
+    regex_features = set()
+    for rule in include_rules:
+        exact_features.update(rule.get("exact", []) if isinstance(rule, dict) else [])
+        if isinstance(rule, dict) and "regex" in rule:
+            values = rule["regex"]
+            regex_features.update(values if isinstance(values, list) else [values])
+    assert {"ema_20", "ema_50", "ema_100"}.isdisjoint(exact_features)
+    assert {"bollinger_mid_20", "bollinger_upper_20", "bollinger_lower_20"}.isdisjoint(exact_features)
+    assert {"return_1", "return_2", "return_3", "return_5", "return_6", "return_10", "return_20"}.isdisjoint(exact_features)
+    assert {"^close_over_ema_", "^distance_from_ema[0-9]+_atr$"}.issubset(regex_features)
+    assert "lag_close_ret_20" in exact_features
+    assert {"ret_1", "ret_3", "ret_5", "ret_10", "ret_20"}.issubset(exact_features)
+    assert {"ret_1_z_100", "ret_3_z_100", "ret_5_z_100", "ret_10_z_100", "ret_20_z_100"}.issubset(exact_features)
+    assert cfg["model"]["target"]["horizon_bars"] == 8
+    assert cfg["model"]["split"]["purge_bars"] == 8
+    assert cfg["validation"]["purge_bars"] == 8
+    assert cfg["portfolio"]["long_short"] is True
+    assert cfg["portfolio"]["selection"]["min_expected_net_return"] > 0.0
+    assert cfg["portfolio"]["selection"]["rebalance_every_n_bars"] == 4
 
 
 def test_dataset_snapshot_roundtrip(tmp_path) -> None:

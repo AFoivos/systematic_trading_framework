@@ -11,6 +11,53 @@ from src.portfolio.constraints import PortfolioConstraints, apply_constraints
 from src.portfolio.optimizer import optimize_mean_variance
 
 _ALLOWED_MISSING_RETURN_POLICIES = {"raise", "raise_if_exposed", "fill_zero"}
+_POSITION_EPS = 1e-12
+
+
+def compute_weight_transition_accounting(
+    weights: pd.DataFrame,
+    *,
+    barrier_trade_count: int = 0,
+) -> dict[str, float]:
+    """
+    Count vectorized portfolio activity with explicit semantics.
+
+    `position_change_count` counts asset-level weight changes, including resizes.
+    `rebalance_count` counts timestamps with any non-zero turnover.
+    `discrete_trade_count` counts entry/exit state transitions and sign flips as exit+entry.
+    `barrier_trade_count` is non-zero only for explicit trade-path engines.
+    """
+    if not isinstance(weights, pd.DataFrame):
+        raise TypeError("weights must be a pandas DataFrame.")
+    if weights.empty:
+        return {
+            "position_change_count": 0.0,
+            "rebalance_count": 0.0,
+            "discrete_trade_count": 0.0,
+            "barrier_trade_count": float(barrier_trade_count),
+            "trade_count": float(barrier_trade_count),
+        }
+
+    w = weights.fillna(0.0).astype(float)
+    prev = w.shift(1).fillna(0.0)
+    delta = w - prev
+    position_change_count = int(delta.abs().gt(_POSITION_EPS).sum().sum())
+    rebalance_count = int(delta.abs().sum(axis=1).gt(_POSITION_EPS).sum())
+
+    prev_sign = np.sign(prev.where(prev.abs().gt(_POSITION_EPS), 0.0))
+    curr_sign = np.sign(w.where(w.abs().gt(_POSITION_EPS), 0.0))
+    entries = prev_sign.eq(0.0) & curr_sign.ne(0.0)
+    exits = prev_sign.ne(0.0) & curr_sign.eq(0.0)
+    flips = prev_sign.ne(0.0) & curr_sign.ne(0.0) & prev_sign.ne(curr_sign)
+    discrete_trade_count = int(entries.sum().sum() + exits.sum().sum() + 2 * flips.sum().sum())
+    canonical_trade_count = int(barrier_trade_count) if barrier_trade_count > 0 else discrete_trade_count
+    return {
+        "position_change_count": float(position_change_count),
+        "rebalance_count": float(rebalance_count),
+        "discrete_trade_count": float(discrete_trade_count),
+        "barrier_trade_count": float(barrier_trade_count),
+        "trade_count": float(canonical_trade_count),
+    }
 
 
 @dataclass
@@ -401,6 +448,7 @@ def _run_guarded_portfolio_performance(
         costs=costs,
         gross_returns=gross_returns,
     )
+    summary.update(compute_weight_transition_accounting(applied_weights))
     risk_guard_summary = {
         "enabled": bool(guard_cfg.enabled),
         "weekly_return_target": guard_cfg.weekly_return_target,
@@ -534,6 +582,198 @@ def build_weights_from_signals_over_time(
             }
         )
         prev_w = constrained_w
+
+    diagnostics = pd.DataFrame(diagnostics_rows).set_index("timestamp")
+    return weights.fillna(0.0), diagnostics
+
+
+def build_ranked_weights_from_scores_over_time(
+    scores: pd.DataFrame,
+    *,
+    selection: Mapping[str, Any] | None = None,
+    hysteresis: Mapping[str, Any] | None = None,
+    constraints: PortfolioConstraints | None = None,
+    asset_to_group: Mapping[str, str] | None = None,
+    long_short: bool = True,
+    gross_target: float = 1.0,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Build portfolio weights from dense expected-return scores using cross-sectional ranking.
+
+    This keeps PR2 dense forecasting separate from the legacy per-asset threshold stack: the
+    model emits continuous scores for all bars, and the portfolio layer chooses the top current
+    opportunities while optionally stabilizing holdings with hysteresis.
+    """
+    if not isinstance(scores, pd.DataFrame):
+        raise TypeError("scores must be a pandas DataFrame.")
+
+    selection_cfg = dict(selection or {})
+    hysteresis_cfg = dict(hysteresis or {})
+    constraints = constraints or PortfolioConstraints()
+    score_df = scores.astype(float).sort_index().copy()
+    columns = list(score_df.columns)
+
+    top_k = int(selection_cfg.get("top_k", len(columns) if columns else 0))
+    if top_k <= 0:
+        raise ValueError("portfolio.selection.top_k must be a positive integer.")
+    top_k = min(top_k, len(columns))
+    min_expected_net_return = float(selection_cfg.get("min_expected_net_return", 0.0))
+    if min_expected_net_return < 0.0:
+        raise ValueError("portfolio.selection.min_expected_net_return must be >= 0.")
+    rank_by_abs = bool(selection_cfg.get("rank_by_abs", long_short))
+    weighting = str(selection_cfg.get("weighting", "score"))
+    if weighting not in {"equal", "score"}:
+        raise ValueError("portfolio.selection.weighting must be 'equal' or 'score'.")
+    rebalance_every_n_bars = int(selection_cfg.get("rebalance_every_n_bars", 1) or 1)
+    if rebalance_every_n_bars <= 0:
+        raise ValueError("portfolio.selection.rebalance_every_n_bars must be a positive integer.")
+
+    hysteresis_enabled = bool(hysteresis_cfg.get("enabled", False))
+    entry_threshold = max(
+        min_expected_net_return,
+        float(hysteresis_cfg.get("entry_threshold", min_expected_net_return))
+        if hysteresis_enabled
+        else min_expected_net_return,
+    )
+    exit_threshold = (
+        float(hysteresis_cfg.get("exit_threshold", min_expected_net_return))
+        if hysteresis_enabled
+        else min_expected_net_return
+    )
+    if entry_threshold < 0.0 or exit_threshold < 0.0:
+        raise ValueError("execution.hysteresis thresholds must be >= 0.")
+    min_holding_bars = (
+        int(hysteresis_cfg.get("min_holding_bars", 0) or 0)
+        if hysteresis_enabled
+        else 0
+    )
+    if min_holding_bars < 0:
+        raise ValueError("execution.hysteresis.min_holding_bars must be >= 0.")
+
+    weights = pd.DataFrame(0.0, index=score_df.index, columns=columns, dtype=float)
+    diagnostics_rows: list[dict[str, float | int]] = []
+    prev_w: pd.Series | None = None
+    active_side: dict[str, float] = {}
+    active_age: dict[str, int] = {}
+    active_strength: dict[str, float] = {}
+
+    for row_number, (ts, score_t) in enumerate(score_df.iterrows()):
+        should_rebalance = row_number == 0 or (row_number % rebalance_every_n_bars == 0)
+        if not should_rebalance:
+            for asset in list(active_side):
+                active_age[asset] = int(active_age.get(asset, 0)) + 1
+            held_w = (
+                prev_w.reindex(columns).fillna(0.0).astype(float)
+                if prev_w is not None
+                else pd.Series(0.0, index=columns, dtype=float)
+            )
+            weights.loc[ts] = held_w
+            diagnostics_rows.append(
+                {
+                    "timestamp": ts,
+                    "net_exposure": float(held_w.sum()),
+                    "gross_exposure": float(held_w.abs().sum()),
+                    "turnover": 0.0,
+                    "ranked_selected_count": int(len(active_side)),
+                    "ranked_candidate_count": 0,
+                    "hysteresis_active_count": int(len(active_side)),
+                    "is_rebalance_bar": 0,
+                    "rebalance_every_n_bars": int(rebalance_every_n_bars),
+                }
+            )
+            prev_w = held_w
+            continue
+
+        numeric = pd.to_numeric(score_t, errors="coerce").astype(float)
+        finite = numeric[np.isfinite(numeric)]
+        current_active: dict[str, float] = {}
+
+        for asset, side in list(active_side.items()):
+            active_age[asset] = int(active_age.get(asset, 0)) + 1
+            score_value = numeric.get(asset, np.nan)
+            score_abs = abs(float(score_value)) if np.isfinite(score_value) else 0.0
+            current_sign = float(np.sign(score_value)) if np.isfinite(score_value) and score_value != 0.0 else side
+            can_exit = active_age[asset] >= min_holding_bars
+            sign_flipped = bool(current_sign != side and np.isfinite(score_value) and score_value != 0.0)
+            should_exit = can_exit and (score_abs < exit_threshold or sign_flipped)
+            if should_exit:
+                active_side.pop(asset, None)
+                active_age.pop(asset, None)
+                active_strength.pop(asset, None)
+                continue
+            current_active[asset] = side
+            if score_abs > 0.0:
+                active_strength[asset] = score_abs
+
+        slots = max(top_k - len(current_active), 0)
+        candidates: list[tuple[float, str, float, float]] = []
+        for asset, score_value in finite.items():
+            asset_name = str(asset)
+            if asset_name in current_active:
+                continue
+            score_float = float(score_value)
+            if score_float == 0.0:
+                continue
+            side = float(np.sign(score_float))
+            if not long_short and side < 0.0:
+                continue
+            score_abs = abs(score_float)
+            rank_score = score_abs if rank_by_abs else score_float
+            hurdle_value = score_abs if long_short else score_float
+            if hurdle_value < entry_threshold:
+                continue
+            candidates.append((float(rank_score), asset_name, side, score_abs))
+        candidates.sort(key=lambda item: (-item[0], item[1]))
+
+        for _, asset, side, score_abs in candidates[:slots]:
+            current_active[asset] = side
+            active_side[asset] = side
+            active_age[asset] = 1
+            active_strength[asset] = score_abs
+
+        raw_w = pd.Series(0.0, index=columns, dtype=float)
+        if current_active:
+            if weighting == "equal":
+                strengths = pd.Series(1.0, index=list(current_active), dtype=float)
+            else:
+                strengths = pd.Series(
+                    {
+                        asset: max(float(active_strength.get(asset, 0.0)), exit_threshold, 0.0)
+                        for asset in current_active
+                    },
+                    dtype=float,
+                )
+                if float(strengths.sum()) <= 0.0:
+                    strengths = pd.Series(1.0, index=list(current_active), dtype=float)
+            denom = float(strengths.abs().sum())
+            target_gross = min(float(gross_target), float(constraints.max_gross_leverage))
+            for asset, side in current_active.items():
+                raw_w.loc[asset] = float(side) * float(strengths.loc[asset]) / denom * target_gross
+
+        constrained_w, diag = apply_constraints(
+            raw_w,
+            constraints=constraints,
+            prev_weights=prev_w,
+            asset_to_group=asset_to_group,
+        )
+        weights.loc[ts] = constrained_w
+        diagnostics_rows.append(
+            {
+                "timestamp": ts,
+                "net_exposure": float(diag["net_exposure"]),
+                "gross_exposure": float(diag["gross_exposure"]),
+                "turnover": float(diag["turnover"]),
+                "ranked_selected_count": int(len(current_active)),
+                "ranked_candidate_count": int(len(candidates)),
+                "hysteresis_active_count": int(len(active_side)),
+                "is_rebalance_bar": 1,
+                "rebalance_every_n_bars": int(rebalance_every_n_bars),
+            }
+        )
+        prev_w = constrained_w
+        active_side = dict(current_active)
+        active_age = {asset: active_age.get(asset, 1) for asset in active_side}
+        active_strength = {asset: active_strength.get(asset, 0.0) for asset in active_side}
 
     diagnostics = pd.DataFrame(diagnostics_rows).set_index("timestamp")
     return weights.fillna(0.0), diagnostics
@@ -721,6 +961,7 @@ def compute_portfolio_performance(
         costs=costs,
         gross_returns=gross_returns,
     )
+    summary.update(compute_weight_transition_accounting(w))
 
     return PortfolioPerformance(
         equity_curve=equity,
@@ -736,6 +977,7 @@ def compute_portfolio_performance(
 
 
 __all__ = [
+    "compute_weight_transition_accounting",
     "PortfolioPerformance",
     "PortfolioRiskGuardConfig",
     "signal_to_raw_weights",

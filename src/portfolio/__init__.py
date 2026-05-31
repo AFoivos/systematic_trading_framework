@@ -12,8 +12,10 @@ from .construction import (
     PortfolioRiskGuardConfig,
     build_constrained_weights_from_exposures_over_time,
     build_optimized_weights_over_time,
+    build_ranked_weights_from_scores_over_time,
     build_weights_from_signals_over_time,
     compute_portfolio_performance,
+    compute_weight_transition_accounting,
     signal_to_raw_weights,
 )
 from .covariance import build_rolling_covariance_by_date
@@ -30,8 +32,10 @@ __all__ = [
     "signal_to_raw_weights",
     "build_constrained_weights_from_exposures_over_time",
     "build_weights_from_signals_over_time",
+    "build_ranked_weights_from_scores_over_time",
     "build_optimized_weights_over_time",
     "compute_portfolio_performance",
+    "compute_weight_transition_accounting",
     "PortfolioPerformance",
     "PortfolioRiskGuardConfig",
     "build_rolling_covariance_by_date",

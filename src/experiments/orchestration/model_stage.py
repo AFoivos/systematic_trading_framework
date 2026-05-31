@@ -5,7 +5,11 @@ from typing import Any
 
 import pandas as pd
 
-from src.experiments.support.diagnostics import aggregate_feature_importance, aggregate_label_distributions
+from src.experiments.support.diagnostics import (
+    aggregate_feature_importance,
+    aggregate_label_distributions,
+    summarize_feature_importance_stability,
+)
 from src.experiments.registry import get_model_fn, is_portfolio_model_kind
 
 
@@ -143,6 +147,31 @@ def aggregate_model_meta(per_asset_meta: dict[str, dict[str, Any]]) -> dict[str,
                 target[key] = float(sum(values) / len(values))
         return target
 
+    def aggregate_feature_pipeline() -> dict[str, Any]:
+        items = [dict(meta.get("feature_pipeline", {}) or {}) for meta in per_asset_meta.values()]
+        items = [item for item in items if item]
+        if not items:
+            return {}
+        first_item = dict(items[0])
+        out: dict[str, Any] = {
+            "raw_feature_count": int(max(int(item.get("raw_feature_count", 0) or 0) for item in items)),
+            "resolved_feature_count": int(max(int(item.get("resolved_feature_count", 0) or 0) for item in items)),
+            "selected_feature_count": int(max(int(item.get("selected_feature_count", 0) or 0) for item in items)),
+            "model_feature_count": int(max(int(item.get("model_feature_count", 0) or 0) for item in items)),
+            "actual_model_feature_count": int(max(int(item.get("actual_model_feature_count", 0) or 0) for item in items)),
+            "reported_feature_count": int(max(int(item.get("reported_feature_count", 0) or 0) for item in items)),
+            "dropped_missing_count": int(sum(int(item.get("dropped_missing_count", 0) or 0) for item in items)),
+            "dropped_constant_count": int(sum(int(item.get("dropped_constant_count", 0) or 0) for item in items)),
+            "dropped_selector_count": int(sum(int(item.get("dropped_selector_count", 0) or 0) for item in items)),
+            "train_density": float(sum(float(item.get("train_density", 0.0) or 0.0) for item in items) / len(items)),
+            "target_density": float(sum(float(item.get("target_density", 0.0) or 0.0) for item in items) / len(items)),
+            "usable_row_pct": float(sum(float(item.get("usable_row_pct", 0.0) or 0.0) for item in items) / len(items)),
+            "final_feature_names": list(first_item.get("final_feature_names", []) or []),
+        }
+        if out["reported_feature_count"] != out["actual_model_feature_count"]:
+            raise AssertionError("reported_feature_count must equal actual_model_feature_count.")
+        return out
+
     first = next(iter(per_asset_meta.values()))
     weighted_classification_summary = weighted_summary(
         summary_key="oos_classification_summary",
@@ -167,6 +196,9 @@ def aggregate_model_meta(per_asset_meta: dict[str, dict[str, Any]]) -> dict[str,
     )
 
     feature_importance = aggregate_feature_importance(
+        [list(dict(meta.get("feature_importance", {}) or {}).get("top_features", []) or []) for meta in per_asset_meta.values()]
+    )
+    feature_importance_stability = summarize_feature_importance_stability(
         [list(dict(meta.get("feature_importance", {}) or {}).get("top_features", []) or []) for meta in per_asset_meta.values()]
     )
 
@@ -224,6 +256,8 @@ def aggregate_model_meta(per_asset_meta: dict[str, dict[str, Any]]) -> dict[str,
         "oos_volatility_summary": weighted_volatility_summary,
         "oos_policy_summary": weighted_policy_summary(),
         "feature_importance": feature_importance,
+        "feature_importance_stability": feature_importance_stability,
+        "feature_pipeline": aggregate_feature_pipeline(),
         "label_distribution": label_distribution,
         "target": aggregate_target_meta(),
         "prediction_diagnostics": {
@@ -290,6 +324,7 @@ def _stage_record(
         "oos_regression_summary": dict(stage_meta.get("oos_regression_summary", {}) or {}),
         "oos_volatility_summary": dict(stage_meta.get("oos_volatility_summary", {}) or {}),
         "prediction_diagnostics": dict(stage_meta.get("prediction_diagnostics", {}) or {}),
+        "feature_pipeline": dict(stage_meta.get("feature_pipeline", {}) or {}),
         "preprocessing": dict(stage_meta.get("preprocessing", {}) or {}),
         "target": dict(stage_meta.get("target", {}) or {}),
         "anti_leakage": dict(stage_meta.get("anti_leakage", {}) or {}),

@@ -527,6 +527,7 @@ class PortfolioConfig:
     covariance_rebalance_step: int | None = 1
     risk_aversion: float = 5.0
     trade_aversion: float = 0.0
+    selection: dict[str, Any] = field(default_factory=dict)
     constraints: dict[str, Any] = field(default_factory=dict)
     asset_groups: dict[str, Any] = field(default_factory=dict)
     extra: dict[str, Any] = field(default_factory=dict)
@@ -543,6 +544,7 @@ class PortfolioConfig:
             "covariance_rebalance_step",
             "risk_aversion",
             "trade_aversion",
+            "selection",
             "constraints",
             "asset_groups",
         }
@@ -564,6 +566,7 @@ class PortfolioConfig:
             ),
             risk_aversion=float(data.get("risk_aversion", 5.0)),
             trade_aversion=float(data.get("trade_aversion", 0.0)),
+            selection=dict(data.get("selection", {}) or {}),
             constraints=dict(data.get("constraints", {}) or {}),
             asset_groups=dict(data.get("asset_groups", {}) or {}),
             extra=_extras(data, known),
@@ -580,6 +583,7 @@ class PortfolioConfig:
             "covariance_rebalance_step": self.covariance_rebalance_step,
             "risk_aversion": self.risk_aversion,
             "trade_aversion": self.trade_aversion,
+            "selection": dict(self.selection),
             "constraints": dict(self.constraints),
             "asset_groups": dict(self.asset_groups),
         }
@@ -618,6 +622,7 @@ class ExecutionConfig:
     capital: float
     price_col: str
     min_trade_notional: float
+    hysteresis: dict[str, Any] = field(default_factory=dict)
     current_weights: dict[str, Any] = field(default_factory=dict)
     current_prices: dict[str, Any] = field(default_factory=dict)
     extra: dict[str, Any] = field(default_factory=dict)
@@ -630,6 +635,7 @@ class ExecutionConfig:
             "capital",
             "price_col",
             "min_trade_notional",
+            "hysteresis",
             "current_weights",
             "current_prices",
         }
@@ -639,6 +645,7 @@ class ExecutionConfig:
             capital=float(data.get("capital", 1_000_000.0)),
             price_col=str(data.get("price_col", "close")),
             min_trade_notional=float(data.get("min_trade_notional", 0.0)),
+            hysteresis=dict(data.get("hysteresis", {}) or {}),
             current_weights=dict(data.get("current_weights", {}) or {}),
             current_prices=dict(data.get("current_prices", {}) or {}),
             extra=_extras(data, known),
@@ -651,6 +658,7 @@ class ExecutionConfig:
             "capital": self.capital,
             "price_col": self.price_col,
             "min_trade_notional": self.min_trade_notional,
+            "hysteresis": dict(self.hysteresis),
             "current_weights": dict(self.current_weights),
             "current_prices": dict(self.current_prices),
         }
@@ -698,6 +706,7 @@ class ResolvedExperimentConfig:
     backtest: BacktestConfig
     portfolio: PortfolioConfig
     monitoring: MonitoringConfig
+    diagnostics: dict[str, Any]
     execution: ExecutionConfig
     logging: LoggingConfig
     target: dict[str, Any] = field(default_factory=dict)
@@ -717,6 +726,7 @@ class ResolvedExperimentConfig:
             "backtest",
             "portfolio",
             "monitoring",
+            "diagnostics",
             "execution",
             "logging",
             "target",
@@ -736,6 +746,7 @@ class ResolvedExperimentConfig:
             backtest=BacktestConfig.from_dict(dict(data.get("backtest", {}) or {})),
             portfolio=PortfolioConfig.from_dict(dict(data.get("portfolio", {}) or {})),
             monitoring=MonitoringConfig.from_dict(dict(data.get("monitoring", {}) or {})),
+            diagnostics=dict(data.get("diagnostics", {}) or {}),
             execution=ExecutionConfig.from_dict(dict(data.get("execution", {}) or {})),
             logging=LoggingConfig.from_dict(dict(data.get("logging", {}) or {})),
             target=dict(data.get("target", {}) or {}),
@@ -754,6 +765,7 @@ class ResolvedExperimentConfig:
             "backtest": self.backtest.to_dict(),
             "portfolio": self.portfolio.to_dict(),
             "monitoring": self.monitoring.to_dict(),
+            "diagnostics": dict(self.diagnostics),
             "execution": self.execution.to_dict(),
             "logging": self.logging.to_dict(),
         }

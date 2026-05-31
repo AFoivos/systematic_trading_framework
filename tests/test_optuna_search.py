@@ -346,6 +346,48 @@ def test_compute_derived_metrics_weekly_participation_uses_portfolio_weights() -
     assert metrics["active_week_ratio"] == pytest.approx(2.0 / 3.0)
 
 
+def test_dense_return_forecasting_v2_optuna_penalizes_rank_cost_and_turnover() -> None:
+    optuna_cfg_path = Path("config/optuna/dense_return_forecasting_v2_optuna.yaml")
+    payload = yaml.safe_load(optuna_cfg_path.read_text(encoding="utf-8"))
+
+    search_space = load_search_space_yaml(optuna_cfg_path)
+    objective = normalize_objective_spec(payload["objective"])
+    base_cfg = load_experiment_config(payload["base_config"])
+    validate_search_space_feature_contract(base_cfg, search_space)
+
+    constraints_by_path = {constraint.metric_path: constraint for constraint in objective.constraints}
+    assert constraints_by_path["evaluation.primary_summary.rank_ic"].threshold == pytest.approx(0.02)
+    assert constraints_by_path["evaluation.primary_summary.quantile_monotonicity"].threshold == pytest.approx(0.25)
+    assert constraints_by_path["evaluation.primary_summary.cost_to_gross_pnl"].threshold == pytest.approx(1.0)
+    assert constraints_by_path["evaluation.primary_summary.gross_pnl"].penalty == pytest.approx(4.0)
+
+    dims_by_name = {dimension.name: dimension for dimension in search_space}
+    assert dims_by_name["horizon_bars"].low == pytest.approx(8)
+    assert dims_by_name["horizon_bars"].high == pytest.approx(16)
+    assert dims_by_name["horizon_bars"].step == pytest.approx(4)
+    assert dims_by_name["rebalance_every_n_bars"].path == "portfolio.selection.rebalance_every_n_bars"
+    assert dims_by_name["rebalance_every_n_bars"].low == pytest.approx(4)
+    assert dims_by_name["rebalance_every_n_bars"].high == pytest.approx(12)
+    assert dims_by_name["rebalance_every_n_bars"].step == pytest.approx(4)
+
+    trial_params = {}
+    for dimension in search_space:
+        if dimension.kind == "categorical":
+            trial_params[dimension.name] = list(dimension.choices or [])[0]
+        elif dimension.kind == "int":
+            trial_params[dimension.name] = int(dimension.low)
+        elif dimension.kind == "float":
+            trial_params[dimension.name] = float(dimension.low)
+    trial_cfg = prepare_trial_config(
+        base_cfg,
+        trial_params=trial_params,
+        search_space=search_space,
+        logging_enabled=False,
+    )
+    validate_resolved_config(trial_cfg)
+    assert trial_cfg["portfolio"]["selection"]["rebalance_every_n_bars"] == 4
+
+
 def test_build_study_objective_returns_failure_score_when_runner_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     from src.experiments import optuna_search as optuna_mod
 

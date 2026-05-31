@@ -43,7 +43,7 @@ interface DashboardState {
   loadingMessage: string | null;
   errorMessage: string | null;
   setBootstrapData: (data: {
-    assets: AssetSummary[];
+    assets?: AssetSummary[];
     datasets: DatasetSummary[];
     experiments: ExperimentSummary[];
     layouts: LayoutSummary[];
@@ -187,9 +187,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   equity: [],
   loadingMessage: null,
   errorMessage: null,
-  setBootstrapData: ({ assets, datasets, experiments, layouts }) => {
-    const firstDataset = datasets.find((dataset) => dataset.assets.length > 0) ?? datasets[0];
-    const firstAsset = firstDataset?.assets[0] ?? assets[0]?.symbol ?? "";
+  setBootstrapData: ({ assets = [], datasets, experiments, layouts }) => {
+    const firstDataset = datasets[0];
     set((state) => ({
       assets,
       datasets,
@@ -197,9 +196,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       layouts,
       selection: {
         ...state.selection,
-        asset: state.selection.asset || firstAsset,
-        timeframe: state.selection.timeframe || firstDataset?.timeframe || "",
-        source: state.selection.source || firstDataset?.source || firstDataset?.stage || "raw",
+        asset: state.selection.datasetId ? state.selection.asset : firstDataset?.assets[0] ?? "",
+        timeframe: state.selection.datasetId ? state.selection.timeframe : firstDataset?.timeframe ?? "",
+        source: state.selection.datasetId ? state.selection.source : firstDataset?.source ?? firstDataset?.stage ?? "",
         datasetId: state.selection.datasetId || firstDataset?.id || ""
       }
     }));

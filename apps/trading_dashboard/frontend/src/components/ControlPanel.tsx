@@ -1,8 +1,7 @@
-import type { AssetSummary, CatalogItem, DatasetSummary, FeatureCatalog } from "../types/market";
+import type { CatalogItem, DatasetSummary, FeatureCatalog } from "../types/market";
 import type { ExperimentSummary } from "../types/experiment";
 import type { BuilderDefinition, BuilderSourceType, TransformStepConfig } from "../types/transforms";
 import type { DashboardSelection, LayoutSummary } from "../types/visualization";
-import { AssetSelector } from "./AssetSelector";
 import { BacktestOverlaySelector } from "./BacktestOverlaySelector";
 import { BuilderConfigurator } from "./BuilderConfigurator";
 import { DateRangeSelector } from "./DateRangeSelector";
@@ -11,11 +10,8 @@ import { LayoutManager } from "./LayoutManager";
 import { PredictionSelector } from "./PredictionSelector";
 import { SignalSelector } from "./SignalSelector";
 import { TargetSelector } from "./TargetSelector";
-import { TimeframeSelector } from "./TimeframeSelector";
 
 interface ControlPanelProps {
-  assets: AssetSummary[];
-  timeframes: string[];
   datasets: DatasetSummary[];
   experiments: ExperimentSummary[];
   layouts: LayoutSummary[];
@@ -40,9 +36,37 @@ interface ControlPanelProps {
   onLoadLayout: (layoutId: string) => void;
 }
 
+function datasetGroupLabel(dataset: DatasetSummary): string {
+  const parts = dataset.relative_path.split("/").filter(Boolean);
+  const folders = parts.slice(0, -1);
+  return folders.length > 0 ? folders.join(" / ") : "data";
+}
+
+function datasetOptionLabel(dataset: DatasetSummary): string {
+  const parts = dataset.relative_path.split("/").filter(Boolean);
+  return parts[parts.length - 1] || dataset.id;
+}
+
+function groupDatasets(datasets: DatasetSummary[]): Array<{ label: string; items: DatasetSummary[] }> {
+  const groups = new Map<string, DatasetSummary[]>();
+  for (const dataset of datasets) {
+    const label = datasetGroupLabel(dataset);
+    groups.set(label, [...(groups.get(label) ?? []), dataset]);
+  }
+  return Array.from(groups, ([label, items]) => ({ label, items }));
+}
+
+function selectionFromDataset(datasetId: string, datasets: DatasetSummary[]): Partial<DashboardSelection> {
+  const dataset = datasets.find((item) => item.id === datasetId);
+  return {
+    datasetId,
+    asset: dataset?.assets[0] ?? "",
+    timeframe: dataset?.timeframe ?? "",
+    source: dataset?.source ?? dataset?.stage ?? ""
+  };
+}
+
 export function ControlPanel({
-  assets,
-  timeframes,
   datasets,
   experiments,
   layouts,
@@ -66,39 +90,26 @@ export function ControlPanel({
   onSaveLayout,
   onLoadLayout
 }: ControlPanelProps) {
-  const visibleDatasets = datasets.filter((dataset) => {
-    const assetMatch = !selection.asset || dataset.assets.includes(selection.asset);
-    const timeframeMatch = !selection.timeframe || dataset.timeframe === selection.timeframe;
-    return assetMatch && timeframeMatch;
-  });
+  const datasetGroups = groupDatasets(datasets);
 
   return (
     <aside className="left-panel">
       <section className="control-section">
         <h2>Data</h2>
-        <AssetSelector assets={assets} value={selection.asset} onChange={(asset) => onSelectionChange({ asset, datasetId: "" })} />
-        <TimeframeSelector timeframes={timeframes} value={selection.timeframe} onChange={(timeframe) => onSelectionChange({ timeframe, datasetId: "" })} />
-        <label className="field">
-          <span>Data source</span>
-          <select value={selection.source} onChange={(event) => onSelectionChange({ source: event.target.value, datasetId: "" })}>
-            <option value="raw">raw</option>
-            <option value="processed">processed</option>
-            <option value="all">all</option>
-            {Array.from(new Set(datasets.map((dataset) => dataset.source))).map((source) => (
-              <option key={source} value={source}>
-                {source}
-              </option>
-            ))}
-          </select>
-        </label>
         <label className="field">
           <span>Dataset</span>
-          <select value={selection.datasetId} onChange={(event) => onSelectionChange({ datasetId: event.target.value })}>
-            <option value="">Auto</option>
-            {visibleDatasets.map((dataset) => (
-              <option key={dataset.id} value={dataset.id}>
-                {dataset.relative_path}
-              </option>
+          <select value={selection.datasetId} onChange={(event) => onSelectionChange(selectionFromDataset(event.target.value, datasets))}>
+            <option value="" disabled={datasets.length > 0}>
+              {datasets.length > 0 ? "Select dataset" : "No datasets found"}
+            </option>
+            {datasetGroups.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.items.map((dataset) => (
+                  <option key={dataset.id} value={dataset.id}>
+                    {datasetOptionLabel(dataset)}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </label>

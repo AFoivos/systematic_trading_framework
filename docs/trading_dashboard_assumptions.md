@@ -4,8 +4,8 @@ This MVP is intentionally additive and local-first. It does not import, modify, 
 
 ## Repository Discovery
 
-- Raw OHLCV datasets are discovered under `data/raw/**/*.csv` and `data/raw/**/*.parquet`.
-- Processed framework snapshots are discovered under `data/processed/**/dataset.csv` and `data/processed/**/dataset.parquet`.
+- CSV/parquet datasets are discovered anywhere under `data/**`.
+- The dashboard's dataset selector groups entries by folder path, so nested data folders become category/subcategory groups in the UI.
 - Experiment runs are discovered under `logs/experiments/**` when a directory contains one of:
   - `run_metadata.json`
   - `summary.json`
@@ -21,6 +21,7 @@ This MVP is intentionally additive and local-first. It does not import, modify, 
   - `XAUUSD_M5_bid.csv` -> `XAUUSD`, `M5`
 - Processed snapshot assets are read from adjacent `metadata.json` when available.
 - Processed snapshot timeframe is read from metadata context if present; otherwise it falls back to filename or directory inference.
+- Dataset-id based API calls do not require an explicit asset or timeframe. If a dataset declares exactly one asset and contains an `asset` column, the loader uses that asset as the implicit row filter.
 
 ## Date Filtering
 

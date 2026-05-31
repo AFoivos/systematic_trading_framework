@@ -35,7 +35,7 @@ export interface DashboardTransformations {
 }
 
 export interface TransformSeriesRequest {
-  asset: string;
+  asset?: string | null;
   timeframe?: string | null;
   source?: string | null;
   dataset_id?: string | null;

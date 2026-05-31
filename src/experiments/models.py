@@ -9,6 +9,7 @@ from src.models.classification import (
 from src.models.common.runtime import infer_feature_columns, resolve_feature_selectors
 from src.models.forecasting import (
     train_garch_forecaster,
+    train_lightgbm_regressor,
     train_lstm_forecaster,
     train_patchtst_forecaster,
     train_sarimax_forecaster,
@@ -29,6 +30,7 @@ __all__ = [
     "train_event_transformer_encoder",
     "train_garch_forecaster",
     "train_lightgbm_classifier",
+    "train_lightgbm_regressor",
     "train_lstm_forecaster",
     "train_logistic_regression_classifier",
     "train_patchtst_forecaster",

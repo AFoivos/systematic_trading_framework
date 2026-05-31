@@ -16,6 +16,7 @@ from src.models.classification import train_logistic_regression_classifier
 from src.signals.roc_long_only_conditions_signal import roc_long_only_conditions_signal
 from src.signals.volatility_signal import compute_volatility_regime_signal
 from src.targets.forward_return import build_forward_return_target
+from src.targets.future_return_regression import build_future_return_regression_target
 from src.targets.r_multiple import build_r_multiple_target
 from src.targets.triple_barrier import build_triple_barrier_target
 from src.utils.config import load_experiment_config
@@ -159,6 +160,57 @@ def test_forward_return_target_outputs_aliases_columns() -> None:
     assert fwd_col == "my_forward_return"
     assert {"my_label", "my_forward_return"}.issubset(out.columns)
     assert meta["output_cols"] == ["my_forward_return", "my_label"]
+
+
+def test_future_return_regression_target_is_dense_and_point_in_time_safe() -> None:
+    idx = pd.date_range("2024-01-01", periods=6, freq="30min")
+    df = pd.DataFrame(
+        {
+            "close": [100.0, 101.0, 103.0, 104.0, 105.0, 106.0],
+            "close_ret": [0.0, 0.01, 103.0 / 101.0 - 1.0, 104.0 / 103.0 - 1.0, 105.0 / 104.0 - 1.0, 106.0 / 105.0 - 1.0],
+            "atr_14": [1.0] * 6,
+        },
+        index=idx,
+    )
+
+    out, label_col, fwd_col, meta = build_future_return_regression_target(
+        df,
+        {
+            "kind": "future_return_regression",
+            "price_col": "close",
+            "returns_col": "close_ret",
+            "horizon_bars": 2,
+            "normalize_by_volatility": True,
+            "volatility_col": "atr_14",
+            "clip": [-3.0, 3.0],
+            "fwd_col": "future_r",
+            "label_col": "future_r",
+        },
+    )
+
+    raw_expected = 103.0 / 100.0 - 1.0
+    assert label_col == "future_r"
+    assert fwd_col == "future_r"
+    assert out["future_r"].iloc[0] == pytest.approx(raw_expected / 0.01)
+    assert out["future_r"].iloc[-2:].isna().all()
+    assert meta["kind"] == "future_return_regression"
+    assert meta["target_density"] == pytest.approx(4 / 6)
+    assert "skew" in meta["target_stats"]
+
+    future_changed = df.copy()
+    future_changed.loc[idx[-1], "close"] = 1000.0
+    changed, _, _, _ = build_future_return_regression_target(
+        future_changed,
+        {
+            "price_col": "close",
+            "returns_col": "close_ret",
+            "horizon_bars": 2,
+            "normalize_by_volatility": True,
+            "volatility_col": "atr_14",
+            "fwd_col": "future_r",
+        },
+    )
+    pd.testing.assert_series_equal(out["future_r"].iloc[:3], changed["future_r"].iloc[:3])
 
 
 def test_triple_barrier_target_outputs_aliases_all_diagnostic_columns() -> None:

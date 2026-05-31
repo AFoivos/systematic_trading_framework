@@ -89,12 +89,33 @@ def _relative_id(path: Path, project_root: Path) -> str:
         return path.resolve().as_posix()
 
 
-def _source_from_raw_path(path: Path, raw_root: Path) -> str:
+def _source_from_data_path(path: Path, data_root: Path) -> str:
     try:
-        rel = path.relative_to(raw_root)
+        rel = path.relative_to(data_root)
     except ValueError:
-        return "raw"
-    return rel.parts[0] if len(rel.parts) > 1 else "raw"
+        return "data"
+    if not rel.parts:
+        return "data"
+    stage = rel.parts[0]
+    if stage == "processed":
+        return "processed"
+    if len(rel.parts) > 2:
+        return rel.parts[1]
+    return stage
+
+
+def _stage_from_data_path(path: Path, data_root: Path) -> str:
+    try:
+        rel = path.relative_to(data_root)
+    except ValueError:
+        return "data"
+    return rel.parts[0] if len(rel.parts) > 1 else "data"
+
+
+def _metadata_path_for_dataset(path: Path) -> Path:
+    if path.name in {"dataset.csv", "dataset.parquet"}:
+        return path.with_name("metadata.json")
+    return path.with_suffix(".metadata.json")
 
 
 def _extract_timeframe_from_metadata(metadata: dict[str, Any], fallback_name: str) -> str | None:
@@ -114,63 +135,32 @@ class DataLoader:
         self.paths = paths or get_paths()
 
     def discover_datasets(self) -> list[DatasetInfo]:
-        datasets: list[DatasetInfo] = []
-        datasets.extend(self._discover_raw_datasets())
-        datasets.extend(self._discover_processed_datasets())
+        datasets = self._discover_data_datasets()
         return sorted(datasets, key=lambda item: (item.stage, item.source, item.id))
 
-    def _discover_raw_datasets(self) -> list[DatasetInfo]:
-        root = self.paths.raw_data_root
+    def _discover_data_datasets(self) -> list[DatasetInfo]:
+        root = self.paths.data_root
         if not root.exists():
             return []
         datasets: list[DatasetInfo] = []
         for path in sorted(root.rglob("*")):
             if not path.is_file() or path.name.startswith(".") or path.suffix.lower() not in SUPPORTED_DATA_SUFFIXES:
                 continue
-            columns = _read_columns(path)
-            asset = infer_asset_from_name(path.name)
-            timeframe = infer_timeframe_from_name(path.name)
-            source = _source_from_raw_path(path, root)
-            datasets.append(
-                DatasetInfo(
-                    id=_relative_id(path, self.paths.project_root),
-                    path=path,
-                    stage="raw",
-                    source=source,
-                    assets=(asset,) if asset else (),
-                    timeframe=timeframe,
-                    format=path.suffix.lower().lstrip("."),
-                    columns=columns,
-                )
-            )
-        return datasets
-
-    def _discover_processed_datasets(self) -> list[DatasetInfo]:
-        root = self.paths.processed_data_root
-        if not root.exists():
-            return []
-        datasets: list[DatasetInfo] = []
-        for path in sorted(root.rglob("*")):
-            if not path.is_file() or path.name.startswith(".") or path.suffix.lower() not in SUPPORTED_DATA_SUFFIXES:
-                continue
-            is_snapshot_dataset = path.name == "dataset.csv" or path.name == "dataset.parquet"
-            is_flat_dataset = path.parent == root
-            if not is_snapshot_dataset and not is_flat_dataset:
-                continue
-            metadata_path = path.with_name("metadata.json") if is_snapshot_dataset else path.with_suffix(".metadata.json")
+            metadata_path = _metadata_path_for_dataset(path)
             metadata = _safe_load_json(metadata_path)
+            fallback_name = path.parent.name if path.name in {"dataset.csv", "dataset.parquet"} else path.name
             assets = tuple(str(asset).upper() for asset in metadata.get("assets", []) or [])
             if not assets:
-                asset = infer_asset_from_name(path.parent.name if is_snapshot_dataset else path.name)
+                asset = infer_asset_from_name(fallback_name)
                 assets = (asset,) if asset else ()
             datasets.append(
                 DatasetInfo(
                     id=_relative_id(path, self.paths.project_root),
                     path=path,
-                    stage="processed",
-                    source="processed",
+                    stage=_stage_from_data_path(path, root),
+                    source=_source_from_data_path(path, root),
                     assets=assets,
-                    timeframe=_extract_timeframe_from_metadata(metadata, path.parent.name if is_snapshot_dataset else path.name),
+                    timeframe=_extract_timeframe_from_metadata(metadata, fallback_name),
                     format=path.suffix.lower().lstrip("."),
                     columns=_read_columns(path),
                     metadata_path=metadata_path if metadata_path.exists() else None,
@@ -245,8 +235,9 @@ class DataLoader:
         dataset = self._resolve_dataset(asset=asset, timeframe=timeframe, source=source, dataset_id=dataset_id)
         raw = _read_frame(dataset.path)
         frame = normalize_market_frame(raw, require_ohlcv=require_ohlcv)
-        if asset and "asset" in frame.columns:
-            frame = frame.loc[frame["asset"].astype(str).str.upper() == asset.upper()]
+        effective_asset = asset or (dataset.assets[0] if len(dataset.assets) == 1 else None)
+        if effective_asset and "asset" in frame.columns:
+            frame = frame.loc[frame["asset"].astype(str).str.upper() == effective_asset.upper()]
         frame = filter_by_date(frame, start=start, end=end)
         if frame.empty:
             raise DataSchemaError(
@@ -278,7 +269,7 @@ class DataLoader:
     def load_ohlcv(
         self,
         *,
-        asset: str,
+        asset: str | None = None,
         timeframe: str | None = None,
         source: str | None = None,
         dataset_id: str | None = None,
@@ -299,7 +290,7 @@ class DataLoader:
     def load_series(
         self,
         *,
-        asset: str,
+        asset: str | None = None,
         columns: list[str],
         timeframe: str | None = None,
         source: str | None = None,

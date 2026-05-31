@@ -4,8 +4,7 @@ Local-first FastAPI + React dashboard for inspecting market data, engineered fea
 
 ## What It Reads
 
-- Raw CSV/parquet data under `data/raw`
-- Processed snapshots under `data/processed/**/dataset.csv`
+- CSV/parquet datasets anywhere under `data/**`, grouped in the UI by folder path
 - Experiment runs under `logs/experiments`
 - Trade overlays from `report_assets/trades.csv` or `trade_events.csv`
 - Equity curves from `equity_curve.csv`
@@ -64,11 +63,9 @@ Notes:
 ## Example API Calls
 
 ```bash
-curl http://127.0.0.1:8000/api/assets
-curl "http://127.0.0.1:8000/api/timeframes?asset=XAUUSD"
 curl http://127.0.0.1:8000/api/datasets
-curl "http://127.0.0.1:8000/api/ohlcv?asset=XAUUSD&timeframe=M30&source=raw&start=2024-01-01&end=2024-02-01"
-curl "http://127.0.0.1:8000/api/features/catalog?asset=XAUUSD&timeframe=M30&source=raw"
+curl "http://127.0.0.1:8000/api/ohlcv?dataset_id=data/raw/dukascopy_30m_clean/xauusd_30m.csv&start=2024-01-01&end=2024-02-01"
+curl "http://127.0.0.1:8000/api/features/catalog?dataset_id=data/raw/dukascopy_30m_clean/xauusd_30m.csv"
 curl http://127.0.0.1:8000/api/features/builders
 curl http://127.0.0.1:8000/api/signals/builders
 curl http://127.0.0.1:8000/api/targets/builders
@@ -81,9 +78,7 @@ Parameterized preview example:
 curl -X POST http://127.0.0.1:8000/api/transform/series \
   -H "Content-Type: application/json" \
   -d '{
-    "asset": "XAUUSD",
-    "timeframe": "M30",
-    "source": "raw",
+    "dataset_id": "data/raw/dukascopy_30m_clean/xauusd_30m.csv",
     "limit": 5000,
     "features": [
       {"step": "trend", "params": {"price_col": "close", "sma_windows": [20, 50], "ema_spans": [20]}, "enabled": true},
@@ -102,9 +97,6 @@ curl -X POST http://127.0.0.1:8000/api/transform/series \
 {
   "name": "xauusd-m30-research",
   "selection": {
-    "asset": "XAUUSD",
-    "timeframe": "M30",
-    "source": "raw",
     "datasetId": "data/raw/dukascopy_30m_clean/xauusd_30m.csv",
     "start": "2024-01-01",
     "end": "2024-06-01",
@@ -174,5 +166,5 @@ curl -X POST http://127.0.0.1:8000/api/transform/series \
 
 - The API is read-only for research artifacts except `POST /api/layouts`, which writes layout JSON under this app directory.
 - Parameterized feature/signal/target runs are in-memory previews. They do not update datasets, experiment configs, or logged artifacts.
-- The first MVP uses filename and column-name inference where this repo does not yet expose a dashboard-specific manifest.
+- The first MVP uses folder path, filename, metadata, and column-name inference where this repo does not yet expose a dashboard-specific manifest.
 - See `docs/trading_dashboard_assumptions.md` for the explicit assumptions.

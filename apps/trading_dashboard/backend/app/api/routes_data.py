@@ -18,7 +18,7 @@ def get_datasets() -> list[dict]:
 
 @router.get("/ohlcv", response_model=list[OHLCVCandle])
 def get_ohlcv(
-    asset: str,
+    asset: str | None = None,
     timeframe: str | None = None,
     source: str | None = "processed",
     dataset_id: str | None = None,
@@ -39,4 +39,3 @@ def get_ohlcv(
     except Exception as exc:
         raise_http_error(exc)
         return []
-

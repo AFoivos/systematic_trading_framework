@@ -16,6 +16,7 @@ from src.evaluation.diagnostics import (
     aggregate_feature_importance,
     extract_feature_importance,
     summarize_feature_availability,
+    summarize_feature_importance_stability,
     summarize_label_distribution,
     summarize_numeric_distribution,
     summarize_prediction_alignment,
@@ -30,10 +31,15 @@ from src.evaluation.model_metrics import (
     volatility_metrics,
 )
 from src.models.common.overlay import resolve_garch_overlay
-from src.models.common.runtime import infer_feature_columns, resolve_runtime_for_model
-from src.targets import build_forward_return_target, build_triple_barrier_target
+from src.models.common.runtime import describe_feature_set, infer_feature_columns, resolve_runtime_for_model
+from src.targets import (
+    build_forward_return_target,
+    build_future_return_regression_target,
+    build_triple_barrier_target,
+)
 from src.models.types import ForecasterFoldPredictor
 from src.models.forecasting.garch import make_garch_fold_predictor
+from src.models.forecasting.lightgbm import make_lightgbm_regressor_fold_predictor
 from src.models.forecasting.lstm import make_lstm_fold_predictor
 from src.models.forecasting.patchtst import make_patchtst_fold_predictor
 from src.models.forecasting.sarimax import train_sarimax_fold
@@ -58,6 +64,7 @@ def prepare_forecaster_inputs(
     dict[str, Any],
     dict[str, Any],
     dict[str, Any],
+    dict[str, Any],
 ]:
     runtime_meta = resolve_runtime_for_model(
         model_cfg=model_cfg,
@@ -68,6 +75,11 @@ def prepare_forecaster_inputs(
     target_kind = target_cfg.get("kind", "forward_return")
     if target_kind == "forward_return":
         out, label_col, fwd_col, target_meta = build_forward_return_target(df=df, target_cfg=target_cfg)
+    elif target_kind == "future_return_regression":
+        out, label_col, fwd_col, target_meta = build_future_return_regression_target(
+            df=df,
+            target_cfg=target_cfg,
+        )
     elif target_kind == "triple_barrier":
         out, label_col, event_col, target_meta = build_triple_barrier_target(df=df, target_cfg=target_cfg)
         regression_target_col = str(
@@ -103,6 +115,57 @@ def prepare_forecaster_inputs(
     active_feature_cols = feature_cols if use_exogenous_features else []
     if required_features and not active_feature_cols:
         raise ValueError("No feature columns resolved for model training.")
+    minimum_expected_features = model_cfg.get(
+        "minimum_expected_features",
+        model_params.get("minimum_expected_features"),
+    )
+    if minimum_expected_features is not None:
+        minimum_expected = int(minimum_expected_features)
+        if len(active_feature_cols) <= minimum_expected:
+            raise ValueError(
+                "Resolved model feature count is below the configured integrity floor: "
+                f"{len(active_feature_cols)} <= minimum_expected_features={minimum_expected}."
+            )
+    feature_selection_meta = describe_feature_set(
+        active_feature_cols,
+        feature_selectors=model_cfg.get("feature_selectors"),
+    )
+    feature_coverage: list[dict[str, Any]] = []
+    if active_feature_cols:
+        for feature in active_feature_cols:
+            series = pd.to_numeric(out[feature], errors="coerce")
+            non_missing = series.notna()
+            feature_coverage.append(
+                {
+                    "feature": str(feature),
+                    "coverage_pct": float(non_missing.mean()) if len(series) else 0.0,
+                    "missingness_pct": float(1.0 - non_missing.mean()) if len(series) else 1.0,
+                    "variance": float(series.dropna().var(ddof=1)) if int(non_missing.sum()) >= 2 else 0.0,
+                }
+            )
+    feature_selection_meta.update(
+        {
+            "raw_feature_count": int(len(out.select_dtypes(include=["number"]).columns)),
+            "active_feature_count": int(len(active_feature_cols)),
+            "selected_feature_count": int(len(active_feature_cols)),
+            "model_feature_count": int(len(active_feature_cols)),
+            "actual_model_feature_count": int(len(active_feature_cols)),
+            "reported_feature_count": int(len(active_feature_cols)),
+            "resolved_features": list(active_feature_cols),
+            "active_features": list(active_feature_cols),
+            "selected_features": list(active_feature_cols),
+            "final_feature_names": list(active_feature_cols),
+            "dropped_features": [],
+            "missing_features": [],
+            "dropped_missing_count": 0,
+            "dropped_constant_count": 0,
+            "dropped_selector_count": 0,
+            "feature_coverage": feature_coverage,
+            "feature_coverage_heatmap": feature_coverage,
+        }
+    )
+    if feature_selection_meta["reported_feature_count"] != feature_selection_meta["actual_model_feature_count"]:
+        raise AssertionError("reported_feature_count must equal actual_model_feature_count.")
     contract_meta: dict[str, Any] = {}
     if active_feature_cols:
         contract_meta = validate_feature_target_contract(
@@ -125,6 +188,7 @@ def prepare_forecaster_inputs(
         splits,
         runtime_meta,
         contract_meta,
+        feature_selection_meta,
         {"split_method": split_method},
     )
 
@@ -158,6 +222,7 @@ def train_forward_forecaster(
         splits,
         runtime_meta,
         contract_meta,
+        feature_selection_meta,
         split_meta,
     ) = prepare_forecaster_inputs(
         df=work_df,
@@ -208,13 +273,17 @@ def train_forward_forecaster(
         trimmed_rows = int(len(raw_train_idx) - len(safe_train_idx))
         total_trimmed_rows += trimmed_rows
 
+        model_params_for_fold = dict(model_params)
+        if model_cfg.get("diagnostics") is not None:
+            model_params_for_fold["_diagnostics"] = dict(model_cfg.get("diagnostics", {}) or {})
+
         pred_ret_fold, extra_cols_fold, fitted_model, fold_extra_meta = fold_predictor(
             out,
             safe_train_idx,
             np.asarray(split.test_idx, dtype=int),
             feature_cols,
             fwd_col,
-            model_params,
+            model_params_for_fold,
             runtime_meta,
         )
         model = fitted_model
@@ -310,6 +379,30 @@ def train_forward_forecaster(
         train_target_rows = int(out.iloc[safe_train_idx][fwd_col].notna().sum())
         total_train_rows += train_target_rows
         total_test_pred_rows += pred_rows
+        model_train_rows = int(fold_extra_meta.get("model_train_rows", train_target_rows) or 0)
+        selected_feature_count = int(fold_extra_meta.get("selected_feature_count", len(feature_cols)) or 0)
+        model_feature_count = int(fold_extra_meta.get("model_feature_count", len(feature_cols)) or 0)
+        reported_feature_count = int(fold_extra_meta.get("reported_feature_count", model_feature_count) or 0)
+        if reported_feature_count != model_feature_count:
+            raise AssertionError("reported_feature_count must equal actual model_feature_count.")
+        train_density = float(model_train_rows / max(int(len(safe_train_idx)), 1))
+        target_density = float(train_target_rows / max(int(len(safe_train_idx)), 1))
+        feature_pipeline_fold = {
+            "raw_feature_count": int(feature_selection_meta.get("raw_feature_count", len(feature_cols)) or 0),
+            "resolved_feature_count": int(feature_selection_meta.get("resolved_feature_count", len(feature_cols)) or 0),
+            "active_feature_count": int(feature_selection_meta.get("active_feature_count", len(feature_cols)) or 0),
+            "selected_feature_count": selected_feature_count,
+            "model_feature_count": model_feature_count,
+            "actual_model_feature_count": model_feature_count,
+            "reported_feature_count": reported_feature_count,
+            "dropped_missing_count": int(fold_extra_meta.get("dropped_missing_count", 0) or 0),
+            "dropped_constant_count": int(fold_extra_meta.get("dropped_constant_count", 0) or 0),
+            "dropped_selector_count": int(fold_extra_meta.get("dropped_selector_count", 0) or 0),
+            "final_feature_names": list(fold_extra_meta.get("final_feature_names", feature_cols) or []),
+            "train_density": train_density,
+            "target_density": target_density,
+            "usable_row_pct": train_density,
+        }
 
         fold_record = {
             "fold": int(split.fold),
@@ -333,6 +426,11 @@ def train_forward_forecaster(
             "classification_metrics": classification_summary,
             "regression_metrics": regression_summary,
             "volatility_metrics": volatility_summary,
+            "feature_pipeline": feature_pipeline_fold,
+            "train_density": train_density,
+            "target_density": target_density,
+            "usable_row_pct": train_density,
+            "regression_target_stats": target_distribution,
         }
         fold_record.update(dict(fold_extra_meta or {}))
         if overlay_fold_meta:
@@ -398,6 +496,30 @@ def train_forward_forecaster(
         "oos_regression_summary": oos_regression_summary,
         "oos_volatility_summary": oos_volatility_summary,
         "feature_importance": aggregate_feature_importance(fold_feature_importances),
+        "feature_importance_stability": summarize_feature_importance_stability(fold_feature_importances),
+        "feature_selection": feature_selection_meta,
+        "feature_pipeline": {
+            "raw_feature_count": int(feature_selection_meta.get("raw_feature_count", len(feature_cols)) or 0),
+            "resolved_feature_count": int(feature_selection_meta.get("resolved_feature_count", len(feature_cols)) or 0),
+            "active_feature_count": int(feature_selection_meta.get("active_feature_count", len(feature_cols)) or 0),
+            "selected_feature_count": int(feature_selection_meta.get("selected_feature_count", len(feature_cols)) or 0),
+            "model_feature_count": int(feature_selection_meta.get("model_feature_count", len(feature_cols)) or 0),
+            "actual_model_feature_count": int(feature_selection_meta.get("actual_model_feature_count", len(feature_cols)) or 0),
+            "reported_feature_count": int(feature_selection_meta.get("reported_feature_count", len(feature_cols)) or 0),
+            "dropped_missing_count": int(
+                sum(int(fold.get("feature_pipeline", {}).get("dropped_missing_count", 0) or 0) for fold in fold_meta)
+            ),
+            "dropped_constant_count": int(
+                sum(int(fold.get("feature_pipeline", {}).get("dropped_constant_count", 0) or 0) for fold in fold_meta)
+            ),
+            "dropped_selector_count": int(
+                sum(int(fold.get("feature_pipeline", {}).get("dropped_selector_count", 0) or 0) for fold in fold_meta)
+            ),
+            "final_feature_names": list(feature_cols),
+            "train_density": float(total_train_rows / max(sum(int(fold.get("train_rows_raw", 0) or 0) for fold in fold_meta), 1)),
+            "target_density": float(total_train_rows / max(sum(int(fold.get("train_rows_raw", 0) or 0) for fold in fold_meta), 1)),
+            "usable_row_pct": float(total_train_rows / max(sum(int(fold.get("train_rows_raw", 0) or 0) for fold in fold_meta), 1)),
+        },
         "target_distribution": {
             "oos_target": summarize_numeric_distribution(np.concatenate(y_eval_all) if y_eval_all else []),
             "oos_prediction": summarize_numeric_distribution(np.concatenate(y_pred_all) if y_pred_all else []),
@@ -474,6 +596,22 @@ def train_garch_forecaster(
     return out, model, meta
 
 
+def train_lightgbm_regressor(
+    df: pd.DataFrame,
+    model_cfg: dict[str, Any],
+    returns_col: str | None = None,
+) -> tuple[pd.DataFrame, object, dict[str, Any]]:
+    return train_forward_forecaster(
+        df=df,
+        model_cfg=model_cfg,
+        model_kind="lightgbm_regressor",
+        fold_predictor=make_lightgbm_regressor_fold_predictor(),
+        returns_col=returns_col,
+        required_features=True,
+        runtime_estimator_family="lightgbm",
+    )
+
+
 def train_tft_forecaster(
     df: pd.DataFrame,
     model_cfg: dict[str, Any],
@@ -526,6 +664,7 @@ __all__ = [
     "prepare_forecaster_inputs",
     "train_forward_forecaster",
     "train_garch_forecaster",
+    "train_lightgbm_regressor",
     "train_lstm_forecaster",
     "train_patchtst_forecaster",
     "train_sarimax_forecaster",

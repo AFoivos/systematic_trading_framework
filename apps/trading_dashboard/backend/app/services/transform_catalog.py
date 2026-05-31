@@ -597,7 +597,7 @@ def _signal_step_dict(step: TransformStepConfig) -> dict[str, Any]:
     return payload
 
 
-def _apply_feature_step(frame: pd.DataFrame, step: TransformStepConfig, *, asset: str) -> tuple[pd.DataFrame, list[str]]:
+def _apply_feature_step(frame: pd.DataFrame, step: TransformStepConfig, *, asset: str | None) -> tuple[pd.DataFrame, list[str]]:
     before = list(frame.columns)
     out = apply_feature_steps(frame, [_step_dict(step)], asset=asset)
     columns = _configured_output_columns(before=before, after=out.columns, outputs=step.outputs)
@@ -638,13 +638,14 @@ def run_transform_series(payload: TransformSeriesRequest) -> TransformSeriesResp
     )
 
     working = frame
+    effective_asset = payload.asset or (dataset.assets[0] if len(dataset.assets) == 1 else None)
     step_results: list[TransformStepResult] = []
     selected: list[tuple[str, list[str]]] = []
 
     for step in payload.features:
         if not step.enabled:
             continue
-        working, columns = _apply_feature_step(working, step, asset=payload.asset)
+        working, columns = _apply_feature_step(working, step, asset=effective_asset)
         selected.append(("feature", columns))
         step_results.append(TransformStepResult(source_type="feature", step=step.step, output_columns=columns))
 

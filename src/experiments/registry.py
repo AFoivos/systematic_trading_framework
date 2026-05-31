@@ -38,6 +38,7 @@ from src.features import (
 from src.features.technical.trend import add_trend_features, add_trend_regime_features
 from src.signals import (
     conviction_sizing_signal,
+    dense_return_forecast_signal,
     ema_stoch_rsi_pullback_signal,
     indicator_model_adaptive_pullback_signal,
     forecast_threshold_signal,
@@ -61,6 +62,7 @@ from src.experiments.models import (
     train_event_transformer_encoder,
     train_garch_forecaster,
     train_lightgbm_classifier,
+    train_lightgbm_regressor,
     train_logistic_regression_classifier,
     train_ppo_agent,
     train_ppo_portfolio_agent,
@@ -129,6 +131,7 @@ SIGNAL_REGISTRY: Mapping[str, SignalFn] = {
     "ema_stoch_rsi_pullback": ema_stoch_rsi_pullback_signal,
     "indicator_model_adaptive_pullback": indicator_model_adaptive_pullback_signal,
     "manual_long_model_filter": manual_long_model_filter_signal,
+    "dense_return_forecast": dense_return_forecast_signal,
     "forecast_threshold": forecast_threshold_signal,
     "forecast_vol_adjusted": forecast_vol_adjusted_signal,
     "rsi": rsi_strategy,
@@ -139,6 +142,7 @@ SIGNAL_REGISTRY: Mapping[str, SignalFn] = {
 
 SINGLE_ASSET_MODEL_REGISTRY: Mapping[str, SingleAssetModelFn] = {
     "lightgbm_clf": train_lightgbm_classifier,
+    "lightgbm_regressor": train_lightgbm_regressor,
     "logistic_regression_clf": train_logistic_regression_classifier,
     "xgboost_clf": train_xgboost_classifier,
     "event_transformer_encoder": train_event_transformer_encoder,

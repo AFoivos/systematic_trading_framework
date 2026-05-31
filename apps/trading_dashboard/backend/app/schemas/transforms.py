@@ -37,7 +37,7 @@ class TransformStepConfig(BaseModel):
 
 
 class TransformSeriesRequest(BaseModel):
-    asset: str
+    asset: str | None = None
     timeframe: str | None = None
     source: str | None = None
     dataset_id: str | None = None

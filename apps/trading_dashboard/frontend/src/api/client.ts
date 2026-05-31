@@ -73,7 +73,7 @@ export const api = {
     }),
   experiments: () => request<ExperimentSummary[]>("/api/experiments"),
   experiment: (runId: string) => request<ExperimentDetail>(`/api/experiments/${encodeURIComponent(runId)}`),
-  trades: (runId: string) => request<TradeRecord[]>(`/api/backtests/${encodeURIComponent(runId)}/trades`),
+  trades: (runId: string, params?: Params) => request<TradeRecord[]>(`/api/backtests/${encodeURIComponent(runId)}/trades`, params),
   equity: (runId: string) => request<TimeValuePoint[]>(`/api/backtests/${encodeURIComponent(runId)}/equity`),
   layouts: () => request<LayoutSummary[]>("/api/layouts"),
   layout: (layoutId: string) => request<DashboardLayout>(`/api/layouts/${encodeURIComponent(layoutId)}`),

@@ -11,6 +11,10 @@ import pandas as pd
 import yaml
 
 from src.backtesting.engine import BacktestResult
+from src.evaluation.model_diagnostics import (
+    build_dense_forecast_diagnostic_frames,
+    write_dense_diagnostic_plots,
+)
 from src.experiments.orchestration.common import data_stats_payload, redact_sensitive_values, resolved_feature_columns
 from src.experiments.orchestration.reporting import build_experiment_report_markdown, render_markdown_report_html
 from src.plots.trade_diagnostics import (
@@ -318,6 +322,94 @@ def _save_portfolio_exposure_chart(path: Path, *, weights: pd.DataFrame) -> None
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     with path.open("w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2, default=str)
+
+
+def _write_dense_forecast_diagnostic_artifacts(
+    *,
+    run_dir: Path,
+    data: pd.DataFrame | dict[str, pd.DataFrame],
+    cfg: dict[str, Any],
+    performance: BacktestResult | PortfolioPerformance,
+    model_meta: dict[str, Any],
+    portfolio_weights: pd.DataFrame | None,
+) -> dict[str, str]:
+    diagnostics_cfg = dict(cfg.get("diagnostics", {}) or {})
+    if not bool(diagnostics_cfg.get("enabled", False)):
+        return {}
+    model_kind = str(dict(cfg.get("model", {}) or {}).get("kind", "none"))
+    strategy_name = str(dict(cfg.get("strategy", {}) or {}).get("name", ""))
+    if model_kind != "lightgbm_regressor" and strategy_name != "dense_return_forecasting_v2":
+        return {}
+
+    if isinstance(data, dict):
+        asset_frames = {str(asset): frame for asset, frame in sorted(data.items())}
+    else:
+        data_cfg = dict(cfg.get("data", {}) or {})
+        asset = str(data_cfg.get("symbol") or next(iter(data_cfg.get("symbols", []) or ["asset"])))
+        asset_frames = {asset: data}
+
+    diagnostics_dir = run_dir / "artifacts" / "diagnostics"
+    diagnostics_dir.mkdir(parents=True, exist_ok=True)
+
+    if isinstance(performance, BacktestResult):
+        net_returns = performance.returns
+    else:
+        net_returns = performance.net_returns
+
+    frames = build_dense_forecast_diagnostic_frames(
+        asset_frames,
+        model_meta=model_meta,
+        portfolio_weights=portfolio_weights,
+        net_returns=net_returns,
+        gross_returns=performance.gross_returns,
+        costs=performance.costs,
+        turnover=performance.turnover,
+        cfg=cfg,
+    )
+    artifact_paths: dict[str, str] = {}
+
+    table_specs = {
+        "prediction_distribution": frames.get("prediction_frame"),
+        "prediction_metrics": frames.get("prediction_metrics"),
+        "prediction_quantiles": frames.get("prediction_quantiles"),
+        "prediction_autocorrelation": frames.get("prediction_autocorrelation"),
+        "regime_diagnostics": frames.get("regime_diagnostics"),
+    }
+    shap_summary, shap_sample, shap_per_prediction = frames.get(
+        "shap",
+        (pd.DataFrame(), pd.DataFrame(), pd.DataFrame()),
+    )
+    table_specs.update(
+        {
+            "shap_feature_importance": shap_summary,
+            "shap_values_sample": shap_sample,
+            "shap_per_prediction": shap_per_prediction,
+            "shap_status": frames.get("shap_status"),
+            "lightgbm_importance": frames.get("lightgbm_importance"),
+        }
+    )
+    turnover_cost = dict(frames.get("turnover_cost", {}) or {})
+    turnover_ts = turnover_cost.get("timeseries")
+    if isinstance(turnover_ts, pd.DataFrame):
+        table_specs["turnover_cost_timeseries"] = turnover_ts
+
+    for name, table in table_specs.items():
+        if isinstance(table, pd.DataFrame) and not table.empty:
+            path = diagnostics_dir / f"{name}.csv"
+            table.to_csv(path, index=True if name == "turnover_cost_timeseries" else False)
+            artifact_paths[f"diagnostics_{name}"] = str(path.relative_to(run_dir))
+
+    summary_path = diagnostics_dir / "summary.json"
+    summary_payload = dict(frames.get("summary", {}) or {})
+    summary_payload["turnover_cost"] = dict(turnover_cost.get("summary", {}) or {})
+    summary_payload["residual_diagnostics"] = dict(frames.get("residual_diagnostics", {}) or {})
+    _write_json(summary_path, summary_payload)
+    artifact_paths["diagnostics_summary"] = str(summary_path.relative_to(run_dir))
+
+    chart_paths = write_dense_diagnostic_plots(diagnostics_dir, frames)
+    for label, path in chart_paths.items():
+        artifact_paths[f"diagnostics_{label}"] = str(path.relative_to(run_dir))
+    return artifact_paths
 
 
 def _write_model_diagnostic_artifacts(
@@ -1182,6 +1274,19 @@ def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
     for trade_plot_path in sorted(report_assets_dir.glob("trade_diagnostics_*.html")):
         chart_paths[trade_plot_path.stem] = str(trade_plot_path.relative_to(run_dir))
 
+    diagnostics_dir = run_dir / "artifacts" / "diagnostics"
+    diagnostic_artifact_paths: dict[str, str] = {}
+    if diagnostics_dir.exists():
+        for path in sorted(diagnostics_dir.glob("*")):
+            if not path.is_file() or path.name == ".DS_Store":
+                continue
+            label = f"diagnostics_{path.stem}"
+            rel_path = str(path.relative_to(run_dir))
+            if path.suffix.lower() == ".png":
+                chart_paths[label] = rel_path
+            elif path.suffix.lower() in {".csv", ".json", ".html", ".htm"}:
+                diagnostic_artifact_paths[label] = rel_path
+
     if not equity_curve.empty:
         equity_path = report_assets_dir / "equity_curve.png"
         _save_line_chart(
@@ -1327,6 +1432,7 @@ def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
     artifact_paths.update(model_artifact_paths)
     if (run_dir / "stage_tails.json").exists():
         artifact_paths["stage_tails"] = "stage_tails.json"
+    artifact_paths.update(diagnostic_artifact_paths)
     for label, rel_path in chart_paths.items():
         artifact_paths[label] = rel_path
 
@@ -1508,6 +1614,17 @@ def save_artifacts(
             portfolio_weights=portfolio_weights,
         )
     for label, rel_path in {**trade_chart_paths, **trade_artifact_paths}.items():
+        artifacts[label] = str((run_dir / rel_path).resolve())
+
+    dense_diagnostic_paths = _write_dense_forecast_diagnostic_artifacts(
+        run_dir=run_dir,
+        data=data,
+        cfg=cfg,
+        performance=performance,
+        model_meta=model_meta,
+        portfolio_weights=portfolio_weights,
+    )
+    for label, rel_path in dense_diagnostic_paths.items():
         artifacts[label] = str((run_dir / rel_path).resolve())
 
     artifacts.update(write_experiment_report_from_run_dir(run_dir))

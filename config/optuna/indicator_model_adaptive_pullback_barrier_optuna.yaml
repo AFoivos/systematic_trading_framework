@@ -52,6 +52,16 @@ objective:
       threshold: 180.0
       penalty: 1.5
       missing_penalty: 1.5
+    - metric_path: evaluation.primary_summary.cost_to_gross_pnl
+      op: gt
+      threshold: 0.75
+      penalty: 3.0
+      missing_penalty: 2.0
+    - metric_path: evaluation.primary_summary.gross_pnl
+      op: le
+      threshold: 0.0
+      penalty: 2.0
+      missing_penalty: 1.0
 
 pruning:
   enabled: false

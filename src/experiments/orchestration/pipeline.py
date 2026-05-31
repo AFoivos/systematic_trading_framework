@@ -141,6 +141,7 @@ def run_experiment_pipeline(
             "portfolio": cfg.get("portfolio", {}),
             "backtest": cfg.get("backtest", {}),
             "data_alignment": cfg.get("data", {}).get("alignment", "inner"),
+            "diagnostics": cfg.get("diagnostics", {}),
         }
         model_cfg = dict(cfg.get("model", {"kind": "none"}) or {})
         for key, value in base_model_cfg.items():

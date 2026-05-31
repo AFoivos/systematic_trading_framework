@@ -665,13 +665,12 @@ def _strict_oos_mask(result: Any, index: Any) -> Any:
 
     data = getattr(result, "data", None)
     model_meta = getattr(result, "model_meta", {}) or {}
-    pred_is_oos_col = str(
+    raw_pred_is_oos_col = (
         model_meta.get("pred_is_oos_col")
         if isinstance(model_meta, Mapping)
-        else "pred_is_oos"
+        else None
     )
-    if not pred_is_oos_col:
-        pred_is_oos_col = "pred_is_oos"
+    pred_is_oos_col = str(raw_pred_is_oos_col or "pred_is_oos")
     if isinstance(data, Mapping):
         masks = [
             frame[pred_is_oos_col].astype(bool)

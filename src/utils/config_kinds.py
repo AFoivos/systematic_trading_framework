@@ -42,6 +42,7 @@ FEATURE_KINDS = frozenset(
 SIGNAL_KINDS = frozenset(
     {
         "ema_stoch_rsi_pullback",
+        "dense_return_forecast",
         "forecast_threshold",
         "forecast_vol_adjusted",
         "indicator_model_adaptive_pullback",
@@ -68,6 +69,7 @@ SINGLE_ASSET_MODEL_KINDS = frozenset(
         "event_transformer_encoder",
         "garch_forecaster",
         "lightgbm_clf",
+        "lightgbm_regressor",
         "logistic_regression_clf",
         "lstm_forecaster",
         "patchtst_forecaster",

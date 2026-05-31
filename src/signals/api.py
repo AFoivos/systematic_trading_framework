@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from src.signals.buy_and_hold_signal import buy_and_hold_signal
 from src.signals.conviction_sizing_signal import conviction_sizing_signal
+from src.signals.dense_return_forecast_signal import dense_return_forecast_signal
 from src.signals.ema_stoch_rsi_pullback_signal import ema_stoch_rsi_pullback_signal
 from src.signals.forecast_threshold_signal import forecast_threshold_signal
 from src.signals.forecast_vol_adjusted_signal import forecast_vol_adjusted_signal
@@ -33,6 +34,7 @@ __all__ = [
     "volatility_regime_strategy",
     "probabilistic_signal",
     "conviction_sizing_signal",
+    "dense_return_forecast_signal",
     "forecast_threshold_signal",
     "forecast_vol_adjusted_signal",
     "indicator_model_adaptive_pullback_signal",

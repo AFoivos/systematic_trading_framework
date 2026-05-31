@@ -7,6 +7,7 @@ import pandas as pd
 
 from src.evaluation.metrics import compute_backtest_metrics
 from src.portfolio import PortfolioConstraints, PortfolioPerformance
+from src.portfolio.construction import compute_weight_transition_accounting
 from src.targets.directional_triple_barrier import resolve_directional_barrier_double_touch
 
 _ALLOWED_ENTRY_PRICE_MODES = frozenset({"current_close", "next_open"})
@@ -72,6 +73,15 @@ def _align_signal_index(
         out.columns = out.columns.get_level_values(0)
     out.columns = [str(column) for column in out.columns]
     return out
+
+
+def _remap_to_next_aligned_timestamp(index: pd.Index, timestamp: Any) -> tuple[Any | None, bool]:
+    if timestamp in index:
+        return timestamp, False
+    pos = int(index.searchsorted(timestamp, side="left"))
+    if pos >= len(index):
+        return None, False
+    return index[pos], True
 
 
 def _global_oos_mask(
@@ -342,6 +352,9 @@ def run_portfolio_barrier_backtest(
     trades: list[dict[str, Any]] = []
     skipped_no_capacity = 0
     skipped_tail = 0
+    skipped_unalignable_timestamp = 0
+    remapped_entry_timestamps = 0
+    remapped_exit_timestamps = 0
     ignored_open_signals = 0
 
     for timestamp, signal_row in signals.iterrows():
@@ -394,13 +407,15 @@ def run_portfolio_barrier_backtest(
             if event is None:
                 skipped_tail += 1
                 continue
-            entry_time = event["entry_time"]
-            exit_time = event["exit_time"]
-            if entry_time not in weights.index or exit_time not in weights.index:
-                raise ValueError(
-                    "portfolio_barrier trade timestamps must exist in the aligned portfolio index; "
-                    f"asset='{asset}', entry_time='{entry_time}', exit_time='{exit_time}'."
-                )
+            raw_entry_time = event["entry_time"]
+            raw_exit_time = event["exit_time"]
+            entry_time, entry_remapped = _remap_to_next_aligned_timestamp(weights.index, raw_entry_time)
+            exit_time, exit_remapped = _remap_to_next_aligned_timestamp(weights.index, raw_exit_time)
+            if entry_time is None or exit_time is None:
+                skipped_unalignable_timestamp += 1
+                continue
+            remapped_entry_timestamps += int(entry_remapped)
+            remapped_exit_timestamps += int(exit_remapped)
 
             pnl = _realized_trade_pnl(
                 side=side,
@@ -428,10 +443,17 @@ def run_portfolio_barrier_backtest(
                 "asset": asset,
                 "signal_time": event["signal_time"],
                 "signal_timestamp": event["signal_time"],
+                "raw_signal_time": event["signal_time"],
                 "entry_time": entry_time,
                 "entry_timestamp": entry_time,
+                "raw_entry_time": raw_entry_time,
+                "raw_entry_timestamp": raw_entry_time,
+                "entry_time_remapped": bool(entry_remapped),
                 "exit_time": exit_time,
                 "exit_timestamp": exit_time,
+                "raw_exit_time": raw_exit_time,
+                "raw_exit_timestamp": raw_exit_time,
+                "exit_time_remapped": bool(exit_remapped),
                 "side": side_name,
                 "signal": float(signal_value),
                 "position_weight": float(weight),
@@ -477,6 +499,10 @@ def run_portfolio_barrier_backtest(
                 "signal_time",
                 "entry_time",
                 "exit_time",
+                "raw_entry_time",
+                "raw_exit_time",
+                "entry_time_remapped",
+                "exit_time_remapped",
                 "side",
                 "entry_price",
                 "exit_price",
@@ -499,6 +525,7 @@ def run_portfolio_barrier_backtest(
         summary["average_r"] = float(trade_r.mean()) if not trade_r.empty else np.nan
         summary["median_r"] = float(trade_r.median()) if not trade_r.empty else np.nan
         summary["win_rate"] = float((trade_r > 0.0).mean()) if not trade_r.empty else np.nan
+    summary.update(compute_weight_transition_accounting(weights, barrier_trade_count=len(trades_df)))
 
     diagnostics = pd.DataFrame(
         {
@@ -533,6 +560,9 @@ def run_portfolio_barrier_backtest(
         "trade_count": int(len(trades_df)),
         "skipped_no_capacity": int(skipped_no_capacity),
         "skipped_tail": int(skipped_tail),
+        "skipped_unalignable_timestamp": int(skipped_unalignable_timestamp),
+        "remapped_entry_timestamps": int(remapped_entry_timestamps),
+        "remapped_exit_timestamps": int(remapped_exit_timestamps),
         "ignored_open_signals": int(ignored_open_signals),
         "oos_filtered": bool(oos_mask is not None),
     }

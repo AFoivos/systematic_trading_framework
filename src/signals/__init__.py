@@ -1,5 +1,6 @@
 from .buy_and_hold_signal import buy_and_hold_signal
 from .conviction_sizing_signal import conviction_sizing_signal
+from .dense_return_forecast_signal import dense_return_forecast_signal
 from .ema_stoch_rsi_pullback_signal import (
     build_ema_stoch_rsi_signal,
     ema_stoch_rsi_pullback_signal,
@@ -43,6 +44,7 @@ __all__ = [
     "buy_and_hold_signal",
     "build_ema_stoch_rsi_signal",
     "conviction_sizing_signal",
+    "dense_return_forecast_signal",
     "ema_stoch_rsi_pullback_signal",
     "compute_rsi_signal",
     "compute_trend_state_signal",

@@ -215,7 +215,9 @@ def add_indicator_pullback_features(
     out[f"distance_from_ema{ema_mid_period}_atr"] = _safe_divide((close - ema_mid).abs(), atr).astype("float32")
 
     for window in _resolve_windows(return_windows, default=(1, 2, 3, 6), field="return_windows"):
-        out[f"return_{window}"] = (close / close.shift(window) - 1.0).astype("float32")
+        values = (close / close.shift(window) - 1.0).astype("float32")
+        out[f"return_{window}"] = values
+        out[f"ret_{window}"] = values
     for window in _resolve_windows(
         rolling_return_windows,
         default=(4, 8),

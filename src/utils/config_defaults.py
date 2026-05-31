@@ -130,7 +130,7 @@ def default_model_block(model: dict[str, Any]) -> dict[str, Any]:
     model = dict(model) if model else {}
     target = dict(model.get("target", {}) or {})
     if target:
-        if str(target.get("kind", "forward_return")) == "forward_return":
+        if str(target.get("kind", "forward_return")) in {"forward_return", "future_return_regression"}:
             target.setdefault("returns_col", None)
             target.setdefault("returns_type", "simple")
         model["target"] = target
@@ -262,6 +262,14 @@ def default_portfolio_block(portfolio: dict[str, Any]) -> dict[str, Any]:
     portfolio.setdefault("covariance_rebalance_step", 1)
     portfolio.setdefault("risk_aversion", 5.0)
     portfolio.setdefault("trade_aversion", 0.0)
+    selection = dict(portfolio.get("selection", {}) or {})
+    selection.setdefault("enabled", False)
+    selection.setdefault("top_k", 1)
+    selection.setdefault("min_expected_net_return", 0.0)
+    selection.setdefault("rank_by_abs", True)
+    selection.setdefault("weighting", "score")
+    selection.setdefault("rebalance_every_n_bars", 1)
+    portfolio["selection"] = selection
     portfolio["constraints"] = dict(portfolio.get("constraints", {}) or {})
     portfolio["constraints"].setdefault("enforce_target_net_exposure", True)
     portfolio["asset_groups"] = dict(portfolio.get("asset_groups", {}) or {})
@@ -276,6 +284,28 @@ def default_monitoring_block(monitoring: dict[str, Any]) -> dict[str, Any]:
     return monitoring
 
 
+def default_diagnostics_block(diagnostics: dict[str, Any]) -> dict[str, Any]:
+    diagnostics = dict(diagnostics) if diagnostics else {}
+    diagnostics.setdefault("enabled", False)
+    model = dict(diagnostics.get("model", {}) or {})
+    model.setdefault("enabled", False)
+    shap_cfg = dict(model.get("shap", {}) or {})
+    shap_cfg.setdefault("enabled", False)
+    shap_cfg.setdefault("max_rows", 200)
+    shap_cfg.setdefault("top_n_features", 12)
+    shap_cfg.setdefault("per_prediction_top_k", 5)
+    shap_cfg.setdefault("per_prediction_row_limit", 3)
+    shap_cfg.setdefault("random_state", 42)
+    model["shap"] = shap_cfg
+    diagnostics["model"] = model
+    forecast = dict(diagnostics.get("forecast", {}) or {})
+    forecast.setdefault("quantiles", 10)
+    forecast.setdefault("autocorrelation_lags", [1, 2, 4, 8, 16])
+    forecast.setdefault("volatility_col", "atr_pct_rank_100")
+    diagnostics["forecast"] = forecast
+    return diagnostics
+
+
 def default_execution_block(execution: dict[str, Any]) -> dict[str, Any]:
     execution = dict(execution) if execution else {}
     execution.setdefault("enabled", False)
@@ -283,6 +313,12 @@ def default_execution_block(execution: dict[str, Any]) -> dict[str, Any]:
     execution.setdefault("capital", 1_000_000.0)
     execution.setdefault("price_col", "close")
     execution.setdefault("min_trade_notional", 0.0)
+    hysteresis = dict(execution.get("hysteresis", {}) or {})
+    hysteresis.setdefault("enabled", False)
+    hysteresis.setdefault("entry_threshold", 0.0)
+    hysteresis.setdefault("exit_threshold", 0.0)
+    hysteresis.setdefault("min_holding_bars", 0)
+    execution["hysteresis"] = hysteresis
     execution["current_weights"] = dict(execution.get("current_weights", {}) or {})
     execution["current_prices"] = dict(execution.get("current_prices", {}) or {})
     return execution
@@ -357,6 +393,7 @@ def apply_top_level_defaults(cfg: dict[str, Any], *, config_path: Path) -> dict[
     out["backtest"] = default_backtest_block(out.get("backtest", {}), interval=interval, data=out["data"])
     out["portfolio"] = default_portfolio_block(out.get("portfolio", {}))
     out["monitoring"] = default_monitoring_block(out.get("monitoring", {}))
+    out["diagnostics"] = default_diagnostics_block(out.get("diagnostics", {}))
     out["execution"] = default_execution_block(out.get("execution", {}))
     out["logging"] = resolve_logging_block(out.get("logging", {}), config_path)
     return out
@@ -368,6 +405,7 @@ __all__ = [
     "default_data_block",
     "default_execution_block",
     "default_feature_steps",
+    "default_diagnostics_block",
     "default_model_block",
     "default_model_stages_block",
     "default_monitoring_block",

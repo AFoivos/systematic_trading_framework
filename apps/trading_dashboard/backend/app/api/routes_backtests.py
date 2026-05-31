@@ -12,9 +12,9 @@ router = APIRouter()
 
 
 @router.get("/backtests/{run_id}/trades", response_model=list[TradeRecord])
-def get_trades(run_id: str) -> list[dict]:
+def get_trades(run_id: str, asset: str | None = None) -> list[dict]:
     try:
-        return BacktestLoader().load_trades(run_id)
+        return BacktestLoader().load_trades(run_id, asset=asset)
     except Exception as exc:
         raise_http_error(exc)
         return []
@@ -27,4 +27,3 @@ def get_equity(run_id: str) -> list[dict]:
     except Exception as exc:
         raise_http_error(exc)
         return []
-

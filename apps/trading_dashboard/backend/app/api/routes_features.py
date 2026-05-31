@@ -32,8 +32,8 @@ def get_feature_catalog(
 
 @router.get("/features/series", response_model=SeriesResponse)
 def get_feature_series(
-    asset: str,
     features: str,
+    asset: str | None = None,
     timeframe: str | None = None,
     source: str | None = None,
     dataset_id: str | None = None,
@@ -60,4 +60,3 @@ def get_feature_series(
     except Exception as exc:
         raise_http_error(exc)
         return SeriesResponse(series=[])
-
