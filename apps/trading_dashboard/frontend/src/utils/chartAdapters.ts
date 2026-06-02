@@ -19,6 +19,26 @@ function numericValue(value: TimeValuePoint["value"]): number | null {
   return null;
 }
 
+const exitReasonLabels: Record<string, string> = {
+  take_profit: "TP",
+  stop_loss: "SL",
+  stop_and_target_same_bar_stop_first: "SL*",
+  max_holding_close: "TIME",
+  end_of_data_close: "EOD",
+  signal_off_exit: "SIG",
+  no_progress_exit: "NP",
+  breakeven_stop: "BE",
+  profit_lock_stop: "PL",
+  atr_trailing_stop: "ATR"
+};
+
+function exitMarkerText(trade: TradeRecord): string {
+  const returnLabel = trade.return === null ? null : `${(trade.return * 100).toFixed(2)}%`;
+  const normalizedReason = trade.exit_reason?.trim().toLowerCase();
+  const reasonLabel = normalizedReason ? (exitReasonLabels[normalizedReason] ?? normalizedReason.toUpperCase()) : null;
+  return ["Exit", returnLabel, reasonLabel].filter(Boolean).join(" ");
+}
+
 export function toCandles(candles: OHLCVCandle[]) {
   return candles.map((candle) => ({
     time: asTime(candle.time),
@@ -66,7 +86,7 @@ export function toTradeMarkers(trades: TradeRecord[]): SeriesMarker<Time>[] {
         position: "aboveBar",
         color: "#6b7280",
         shape: "circle",
-        text: trade.return === null ? "Exit" : `Exit ${(trade.return * 100).toFixed(2)}%`
+        text: exitMarkerText(trade)
       });
     }
     return markers;

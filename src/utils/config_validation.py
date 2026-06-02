@@ -65,6 +65,18 @@ _FEATURE_SELECTOR_PROFILES = {
     "ftmo_fx_intraday_regime_v1",
     "ftmo_fx_intraday_momentum_v1",
 }
+_TSFRESH_ROLLING_CALCULATORS = {
+    "sum_values",
+    "median",
+    "mean",
+    "length",
+    "standard_deviation",
+    "variance",
+    "root_mean_square",
+    "maximum",
+    "absolute_maximum",
+    "minimum",
+}
 _TARGET_OUTPUT_KEYS = {
     "label_col",
     "fwd_col",
@@ -126,6 +138,36 @@ def _validate_tsfresh_extrema_discovery_params(params: dict[str, Any]) -> None:
     for key in ("disable_progressbar", "show_warnings"):
         if key in params and not isinstance(params.get(key), bool):
             raise ConfigValidationError(f"model.params.{key} must be boolean.")
+    if "include_raw_ohlcv" in params and not isinstance(params.get("include_raw_ohlcv"), bool):
+        raise ConfigValidationError("model.params.include_raw_ohlcv must be boolean.")
+    kind_to_fc_parameters = params.get("kind_to_fc_parameters")
+    if kind_to_fc_parameters is not None:
+        if not isinstance(kind_to_fc_parameters, dict):
+            raise ConfigValidationError("model.params.kind_to_fc_parameters must be a mapping.")
+        for kind_name, calculators in kind_to_fc_parameters.items():
+            if not isinstance(kind_name, str) or not kind_name.strip():
+                raise ConfigValidationError("model.params.kind_to_fc_parameters keys must be non-empty strings.")
+            if not isinstance(calculators, dict):
+                raise ConfigValidationError(
+                    "model.params.kind_to_fc_parameters values must be mappings of calculator names to parameter specs."
+                )
+            for calculator_name, raw_spec in calculators.items():
+                if not isinstance(calculator_name, str) or not calculator_name.strip():
+                    raise ConfigValidationError(
+                        "model.params.kind_to_fc_parameters calculator names must be non-empty strings."
+                    )
+                if raw_spec is None:
+                    continue
+                if isinstance(raw_spec, dict):
+                    continue
+                if not isinstance(raw_spec, list):
+                    raise ConfigValidationError(
+                        "model.params.kind_to_fc_parameters calculator specs must be null, a mapping, or a list of mappings."
+                    )
+                if any(not isinstance(item, dict) for item in raw_spec):
+                    raise ConfigValidationError(
+                        "model.params.kind_to_fc_parameters list specs must contain only mappings."
+                    )
     if "export_feature_dataset" in params and not isinstance(params.get("export_feature_dataset"), bool):
         raise ConfigValidationError("model.params.export_feature_dataset must be boolean.")
     export_dataset_path = params.get("export_dataset_path")
@@ -679,6 +721,72 @@ def _validate_ppo_adx_stochrsi_trend_params(params: dict[str, Any], *, field_pre
         )
 
 
+def _validate_ema_rms_ppo_vwap_params(params: dict[str, Any], *, field_prefix: str) -> None:
+    string_keys = {
+        "close_col",
+        "atr_col",
+        "ema_fast_rms_col",
+        "ema_mid_rms_col",
+        "ema_slow_rms_col",
+        "vwap_col",
+        "vwap_rms_col",
+        "ppo_col",
+        "ppo_signal_col",
+        "signal_col",
+        "candidate_col",
+    }
+    for key in string_keys:
+        if key in params and (not isinstance(params[key], str) or not params[key].strip()):
+            raise ConfigValidationError(f"{field_prefix}.{key} must be a non-empty string.")
+    if "mode" in params:
+        mode = str(params["mode"])
+        if mode not in {"long_only", "short_only", "long_short"}:
+            raise ConfigValidationError(
+                f"{field_prefix}.mode must be one of: long_only, short_only, long_short."
+            )
+    for key in ("require_vwap_rms_filter", "require_rms_slope_filter"):
+        if key in params and not isinstance(params[key], bool):
+            raise ConfigValidationError(f"{field_prefix}.{key} must be boolean.")
+    if "max_vwap_distance_atr" in params:
+        value = _finite_number(
+            params["max_vwap_distance_atr"],
+            field=f"{field_prefix}.max_vwap_distance_atr",
+        )
+        if value <= 0.0:
+            raise ConfigValidationError(f"{field_prefix}.max_vwap_distance_atr must be > 0.")
+    if "min_rms_slope" in params:
+        value = _finite_number(
+            params["min_rms_slope"],
+            field=f"{field_prefix}.min_rms_slope",
+        )
+        if value < 0.0:
+            raise ConfigValidationError(f"{field_prefix}.min_rms_slope must be >= 0.")
+
+
+def _validate_vwap_rms_ema_cross_long_params(params: dict[str, Any], *, field_prefix: str) -> None:
+    string_keys = {
+        "ema_mid_col",
+        "ema_slow_col",
+        "ema_mid_rms_col",
+        "vwap_rms_col",
+        "ppo_col",
+        "ppo_signal_col",
+        "regime_col",
+        "cross_up_col",
+        "ppo_hist_col",
+        "ppo_hist_positive_col",
+        "ppo_above_signal_col",
+        "long_setup_col",
+        "signal_col",
+        "candidate_col",
+    }
+    for key in string_keys:
+        if key in params and (not isinstance(params[key], str) or not params[key].strip()):
+            raise ConfigValidationError(f"{field_prefix}.{key} must be a non-empty string.")
+    if "ppo_hist_min" in params:
+        _finite_number(params["ppo_hist_min"], field=f"{field_prefix}.ppo_hist_min")
+
+
 def validate_features_block(features: Any) -> None:
     if not isinstance(features, list):
         raise ConfigValidationError("features must be a list of steps.")
@@ -708,14 +816,40 @@ def validate_features_block(features: Any) -> None:
                 if not isinstance(transform, dict):
                     raise ConfigValidationError(f"{field_prefix} must be a mapping.")
                 kind = transform.get("kind")
-                if kind not in {"rolling_clip", "ratio", "rolling_zscore"}:
+                if kind not in {"rolling_clip", "ratio", "rolling_zscore", "tsfresh_rolling"}:
                     raise ConfigValidationError(
-                        f"{field_prefix}.kind must be one of: rolling_clip, ratio, rolling_zscore."
+                        f"{field_prefix}.kind must be one of: rolling_clip, ratio, rolling_zscore, tsfresh_rolling."
                     )
                 output_col = transform.get("output_col")
-                if not isinstance(output_col, str) or not output_col.strip():
+                if kind != "tsfresh_rolling" and (not isinstance(output_col, str) or not output_col.strip()):
                     raise ConfigValidationError(f"{field_prefix}.output_col must be a non-empty string.")
-                if kind == "rolling_clip":
+                if kind == "tsfresh_rolling":
+                    _validate_column_ref_or_selector(
+                        transform,
+                        col_key="source_col",
+                        selector_key="source_selector",
+                        field=field_prefix,
+                    )
+                    _positive_int(transform.get("window", 48), field=f"{field_prefix}.window")
+                    _non_negative_int(transform.get("shift", 0), field=f"{field_prefix}.shift")
+                    output_prefix = transform.get("output_prefix")
+                    if output_prefix is not None and (not isinstance(output_prefix, str) or not output_prefix.strip()):
+                        raise ConfigValidationError(f"{field_prefix}.output_prefix must be a non-empty string.")
+                    calculators = transform.get("calculators")
+                    if calculators is not None:
+                        if not isinstance(calculators, list) or not calculators:
+                            raise ConfigValidationError(f"{field_prefix}.calculators must be a non-empty list[str].")
+                        for calculator_idx, calculator in enumerate(calculators):
+                            if not isinstance(calculator, str) or not calculator.strip():
+                                raise ConfigValidationError(
+                                    f"{field_prefix}.calculators[{calculator_idx}] must be a non-empty string."
+                                )
+                            if calculator not in _TSFRESH_ROLLING_CALCULATORS:
+                                allowed = ", ".join(sorted(_TSFRESH_ROLLING_CALCULATORS))
+                                raise ConfigValidationError(
+                                    f"{field_prefix}.calculators[{calculator_idx}] must be one of: {allowed}."
+                                )
+                elif kind == "rolling_clip":
                     _validate_column_ref_or_selector(
                         transform,
                         col_key="source_col",
@@ -2068,6 +2202,10 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
             raise ConfigValidationError("signals.params.require_all_conditions must be boolean.")
     if signals["kind"] == "ppo_adx_stochrsi_trend":
         _validate_ppo_adx_stochrsi_trend_params(params, field_prefix="signals.params")
+    if signals["kind"] == "ema_rms_ppo_vwap":
+        _validate_ema_rms_ppo_vwap_params(params, field_prefix="signals.params")
+    if signals["kind"] == "vwap_rms_ema_cross_long":
+        _validate_vwap_rms_ema_cross_long_params(params, field_prefix="signals.params")
 
 
 def validate_risk_block(risk: dict[str, Any]) -> None:
@@ -2259,7 +2397,9 @@ def validate_backtest_block(backtest: dict[str, Any]) -> None:
             value = _finite_number(backtest.get(key), field=f"backtest.{key}")
             if value <= 0.0:
                 raise ConfigValidationError(f"backtest.{key} must be > 0.")
-        _positive_int(backtest.get("max_holding_bars"), field="backtest.max_holding_bars")
+        max_holding_bars = backtest.get("max_holding_bars", 16)
+        if max_holding_bars is not None:
+            _positive_int(max_holding_bars, field="backtest.max_holding_bars")
         dynamic_exits = backtest.get("dynamic_exits", {}) or {}
         _validate_dynamic_exits_block(dynamic_exits)
         atr_trailing_enabled = bool(dict(dynamic_exits).get("enabled", False)) and bool(
@@ -2577,6 +2717,11 @@ def validate_logging_block(logging_cfg: dict[str, Any]) -> None:
                 raise ConfigValidationError(f"logging.stage_tails.{key} must be a positive integer.")
             if int(stage_tails.get(key)) <= 0:
                 raise ConfigValidationError(f"logging.stage_tails.{key} must be > 0.")
+    execution_source_audit = logging_cfg.get("execution_source_audit", {})
+    if not isinstance(execution_source_audit, dict):
+        raise ConfigValidationError("logging.execution_source_audit must be a mapping.")
+    if "enabled" in execution_source_audit and not isinstance(execution_source_audit.get("enabled"), bool):
+        raise ConfigValidationError("logging.execution_source_audit.enabled must be boolean.")
 
 
 def _barrier_parity_equal(left: Any, right: Any) -> bool:

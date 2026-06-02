@@ -39,6 +39,7 @@ from src.features.technical.trend import add_trend_features, add_trend_regime_fe
 from src.signals import (
     conviction_sizing_signal,
     dense_return_forecast_signal,
+    ema_rms_ppo_vwap_signal,
     ema_stoch_rsi_pullback_signal,
     indicator_model_adaptive_pullback_signal,
     forecast_threshold_signal,
@@ -55,6 +56,7 @@ from src.signals import (
     stochastic_strategy,
     trend_state_signal,
     volatility_regime_strategy,
+    vwap_rms_ema_cross_long_signal,
 )
 from src.experiments.models import (
     train_dqn_agent,
@@ -122,6 +124,7 @@ FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
 
 SIGNAL_REGISTRY: Mapping[str, SignalFn] = {
     "trend_state": trend_state_signal,
+    "ema_rms_ppo_vwap": ema_rms_ppo_vwap_signal,
     "probability_threshold": probabilistic_signal,
     "probability_conviction": conviction_sizing_signal,
     "probability_vol_adjusted": probability_vol_adjusted_signal,
@@ -139,6 +142,7 @@ SIGNAL_REGISTRY: Mapping[str, SignalFn] = {
     "momentum": momentum_strategy,
     "stochastic": stochastic_strategy,
     "volatility_regime": volatility_regime_strategy,
+    "vwap_rms_ema_cross_long": vwap_rms_ema_cross_long_signal,
 }
 
 SINGLE_ASSET_MODEL_REGISTRY: Mapping[str, SingleAssetModelFn] = {

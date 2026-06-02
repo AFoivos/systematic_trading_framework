@@ -9,7 +9,7 @@ import {
 } from "lightweight-charts";
 import type { OHLCVCandle, TimeValuePoint, TradeRecord } from "../types/market";
 import type { VisualizationConfig } from "../types/visualization";
-import type { LowerPanelGroup } from "../utils/transforms";
+import { isFeatureSourceType, type LowerPanelGroup } from "../utils/transforms";
 import { toCandles, toHistogramData, toLineData, toTradeMarkers, toWhitespaceData } from "../utils/chartAdapters";
 import { seriesKey } from "../utils/transforms";
 
@@ -53,6 +53,16 @@ interface ChartHeights {
   main: number;
   linkedMain: number;
   lower: number;
+}
+
+const FEATURE_PRICE_FORMAT = {
+  type: "price" as const,
+  precision: 6,
+  minMove: 0.000001
+};
+
+function priceFormatForConfig(config: VisualizationConfig) {
+  return isFeatureSourceType(config.source_type) ? FEATURE_PRICE_FORMAT : undefined;
 }
 
 function chartHeights(sizeMode: ChartSizeMode): ChartHeights {
@@ -141,13 +151,18 @@ function addConfiguredSeries(
         return;
       }
       if (config.render_type === "histogram") {
-        const series = chart.addHistogramSeries({ color, priceScaleId: config.style.priceScaleId ?? "" });
+        const series = chart.addHistogramSeries({
+          color,
+          priceFormat: priceFormatForConfig(config),
+          priceScaleId: config.style.priceScaleId ?? ""
+        });
         series.setData(toHistogramData(points, color));
         return;
       }
       const series = chart.addLineSeries({
         color,
         lineWidth: (config.style.lineWidth ?? 2) as 1 | 2 | 3 | 4,
+        priceFormat: priceFormatForConfig(config),
         priceLineVisible: false,
         priceScaleId: config.style.priceScaleId ?? undefined
       });
@@ -370,13 +385,14 @@ export function SeriesPanelChart({ title, configs, seriesData }: SeriesPanelChar
       const points = seriesData[key] ?? [];
       const color = config.style.color ?? "#0f766e";
       if (config.render_type === "histogram") {
-        const histogram = chart.addHistogramSeries({ color });
+        const histogram = chart.addHistogramSeries({ color, priceFormat: priceFormatForConfig(config) });
         histogram.setData(toHistogramData(points, color));
         return;
       }
       const line = chart.addLineSeries({
         color,
         lineWidth: (config.style.lineWidth ?? 2) as 1 | 2 | 3 | 4,
+        priceFormat: priceFormatForConfig(config),
         priceLineVisible: false
       });
       line.setData(toLineData(points));

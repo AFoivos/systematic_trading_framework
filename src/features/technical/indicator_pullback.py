@@ -7,6 +7,13 @@ import zlib
 import numpy as np
 import pandas as pd
 
+from .atr import compute_atr
+from .bollinger import add_bollinger_bands
+from .ema import compute_ema
+from .macd import compute_macd
+from .rsi import compute_rsi
+from .stochastic_rsi import compute_stochastic_rsi
+
 
 def _require_columns(df: pd.DataFrame, columns: Sequence[str], *, owner: str) -> None:
     missing = [col for col in columns if col not in df.columns]
@@ -79,6 +86,67 @@ def _stable_asset_id(
 
     # Avoid Python's randomized hash and keep the value numeric for model use.
     return float(zlib.crc32(normalized.encode("utf-8")) % 1_000_000)
+
+
+def _ensure_indicator_dependencies(
+    df: pd.DataFrame,
+    *,
+    open_col: str,
+    high_col: str,
+    low_col: str,
+    close_col: str,
+    ema_fast_period: int,
+    ema_mid_period: int,
+    ema_slow_period: int,
+    ema_fast_col: str,
+    ema_mid_col: str,
+    ema_slow_col: str,
+    atr_period: int,
+    atr_col: str,
+    macd_hist_col: str,
+    rsi_period: int,
+    rsi_col: str,
+    stoch_k_col: str,
+    stoch_d_col: str,
+    bollinger_bandwidth_col: str,
+    bollinger_percent_b_col: str,
+) -> pd.DataFrame:
+    _require_columns(
+        df,
+        [open_col, high_col, low_col, close_col],
+        owner="indicator_pullback_features",
+    )
+    out = df
+    close = _numeric(out, close_col)
+    high = _numeric(out, high_col)
+    low = _numeric(out, low_col)
+
+    if ema_fast_col not in out.columns:
+        out[ema_fast_col] = compute_ema(close, span=ema_fast_period)
+    if ema_mid_col not in out.columns:
+        out[ema_mid_col] = compute_ema(close, span=ema_mid_period)
+    if ema_slow_col not in out.columns:
+        out[ema_slow_col] = compute_ema(close, span=ema_slow_period)
+    if atr_col not in out.columns:
+        out[atr_col] = compute_atr(high, low, close, window=atr_period, method="wilder")
+    if macd_hist_col not in out.columns:
+        macd = compute_macd(close, fast=12, slow=26, signal=9)
+        out[macd_hist_col] = macd["macd_hist_12_26_9"]
+    if rsi_col not in out.columns:
+        out[rsi_col] = compute_rsi(close, window=rsi_period, method="wilder")
+    if stoch_k_col not in out.columns or stoch_d_col not in out.columns:
+        stoch = compute_stochastic_rsi(close)
+        if stoch_k_col not in out.columns:
+            out[stoch_k_col] = stoch["stoch_rsi_k"]
+        if stoch_d_col not in out.columns:
+            out[stoch_d_col] = stoch["stoch_rsi_d"]
+    if bollinger_bandwidth_col not in out.columns or bollinger_percent_b_col not in out.columns:
+        bollinger = add_bollinger_bands(close, window=20, n_std=2.0)
+        if bollinger_bandwidth_col not in out.columns:
+            out[bollinger_bandwidth_col] = bollinger["bb_width_20_2.0"]
+        if bollinger_percent_b_col not in out.columns:
+            out[bollinger_percent_b_col] = bollinger["bb_percent_b_20_2.0"]
+    return out
 
 
 def add_indicator_pullback_features(
@@ -158,9 +226,32 @@ def add_indicator_pullback_features(
         bollinger_bandwidth_col,
         bollinger_percent_b_col,
     ]
-    _require_columns(df, required, owner="indicator_pullback_features")
 
     out = df if inplace else df.copy()
+    out = _ensure_indicator_dependencies(
+        out,
+        open_col=open_col,
+        high_col=high_col,
+        low_col=low_col,
+        close_col=close_col,
+        ema_fast_period=ema_fast_period,
+        ema_mid_period=ema_mid_period,
+        ema_slow_period=ema_slow_period,
+        ema_fast_col=ema_fast_col,
+        ema_mid_col=ema_mid_col,
+        ema_slow_col=ema_slow_col,
+        atr_period=atr_period,
+        atr_col=atr_col,
+        macd_hist_col=macd_hist_col,
+        rsi_period=rsi_period,
+        rsi_col=rsi_col,
+        stoch_k_col=stoch_k_col,
+        stoch_d_col=stoch_d_col,
+        bollinger_bandwidth_col=bollinger_bandwidth_col,
+        bollinger_percent_b_col=bollinger_percent_b_col,
+    )
+    _require_columns(out, required, owner="indicator_pullback_features")
+
     open_ = _numeric(out, open_col)
     high = _numeric(out, high_col)
     low = _numeric(out, low_col)

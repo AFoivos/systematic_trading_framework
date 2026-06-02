@@ -1,5 +1,6 @@
+# Ablation 02: add the ML trade filter without FTMO sizing or transaction costs.
 strategy:
-  name: ftmo_fx_swing_singleasset_eurusd_m15_lightgbm_alpha_meta_barrier_v3
+  name: ftmo_fx_swing_singleasset_eurusd_m15_ablation_02_ml_filter
   timeframe: 15m
   assets:
     - EURUSD
@@ -25,7 +26,7 @@ data:
       inactive_policy: raise
   storage:
     mode: cached_only
-    dataset_id: ftmo_fx_swing_singleasset_eurusd_m15_lightgbm_alpha_meta_barrier_v3
+    dataset_id: ftmo_fx_swing_singleasset_eurusd_m15_ablation_02_ml_filter
     save_raw: false
     save_processed: true
     load_path: data/processed/eurusd_m15.csv
@@ -619,23 +620,11 @@ runtime:
   seed_torch: false
 
 risk:
-  cost_per_turnover: 0.00006
-  slippage_per_turnover: 0.00002
+  cost_per_turnover: 0.0
+  slippage_per_turnover: 0.0
   target_vol: null
   max_leverage: 1.0
-  sizing:
-    kind: ftmo_risk_per_trade
-    output_col: signal_ftmo_sized
-    vol_col: atr_pct
-    confidence_col: pred_prob
-    confidence_mode: meta_success
-    confidence_floor: 0.56
-    confidence_power: 1.0
-    risk_per_trade: 0.0025
-    stop_mult: 1.5
-    max_leverage: 0.35
-    min_leverage: 0.0
-    min_abs_signal: 0.5
+  sizing: {}
   dd_guard:
     enabled: false
     max_drawdown: 0.08
@@ -699,7 +688,7 @@ execution:
 
 logging:
   enabled: true
-  run_name: ftmo_fx_swing_singleasset_eurusd_m15_lightgbm_alpha_meta_barrier_v3
+  run_name: ftmo_fx_swing_singleasset_eurusd_m15_ablation_02_ml_filter
   output_dir: logs/experiments
   stage_tails:
     enabled: true

@@ -576,48 +576,6 @@ def validate_search_space_feature_contract(
     guaranteed_regime_pairs = _guaranteed_regime_vol_ratio_pairs(base_config, dimensions_by_path)
 
     errors: list[str] = []
-    for feature_idx, params in _iter_feature_steps(base_config, "trend_regime"):
-        for key in ("base_sma_for_sign", "short_sma", "long_sma"):
-            possible_values = _possible_path_values(
-                base_config,
-                dimensions_by_path,
-                ("features", feature_idx, "params", key),
-            )
-            required_values = {
-                required
-                for value in (possible_values or [])
-                if (required := _positive_int(value)) is not None
-            }
-            if possible_values is None or not required_values:
-                errors.append(
-                    f"features[{feature_idx}].trend_regime.{key} is not guaranteed by a singleton/categorical "
-                    "Optuna search_space value."
-                )
-                continue
-            missing = sorted(required_values - guaranteed_sma_windows)
-            if missing:
-                errors.append(
-                    f"features[{feature_idx}].trend_regime.{key} requires SMA windows {missing}, "
-                    "but search_space does not guarantee trend.sma_windows contains it."
-                )
-
-    for feature_idx, params in _iter_feature_steps(base_config, "vol_normalized_momentum"):
-        possible_vol_cols = _possible_path_values(
-            base_config,
-            dimensions_by_path,
-            ("features", feature_idx, "params", "vol_col"),
-        )
-        if possible_vol_cols is None or not possible_vol_cols:
-            vol_window = _positive_int(params.get("vol_window")) or 20
-            possible_vol_cols = {f"vol_rolling_{vol_window}"}
-        for vol_col in possible_vol_cols:
-            match = re.fullmatch(r"vol_rolling_(\d+)", str(vol_col))
-            if match and int(match.group(1)) not in guaranteed_vol_windows:
-                errors.append(
-                    f"features[{feature_idx}].vol_normalized_momentum.vol_col requires {vol_col}, "
-                    "but search_space does not guarantee volatility.rolling_windows contains it."
-                )
-
     for filter_idx, exact_values in _activation_filter_exact_selector_values(base_config, dimensions_by_path):
         for exact in sorted(exact_values):
             if match := re.fullmatch(r"adx_(\d+)", exact):

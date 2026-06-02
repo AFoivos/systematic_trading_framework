@@ -60,6 +60,7 @@ from src.features import (  # noqa: E402
 from src.features.technical.trend import add_trend_features, add_trend_regime_features  # noqa: E402
 from src.signals import (  # noqa: E402
     conviction_sizing_signal,
+    ema_rms_ppo_vwap_signal,
     ema_stoch_rsi_pullback_signal,
     forecast_threshold_signal,
     forecast_vol_adjusted_signal,
@@ -74,11 +75,13 @@ from src.signals import (  # noqa: E402
     stochastic_strategy,
     trend_state_signal,
     volatility_regime_strategy,
+    vwap_rms_ema_cross_long_signal,
 )
 from src.targets.classifier import build_classifier_target  # noqa: E402
 from src.targets.forward_return import build_forward_return_target  # noqa: E402
 from src.targets.r_multiple import build_r_multiple_target  # noqa: E402
 from src.targets.triple_barrier import build_triple_barrier_target  # noqa: E402
+from app.services.transform_dependencies import call_with_materialized_dependencies  # noqa: E402
 
 
 BuilderFn = Callable[..., Any]
@@ -122,6 +125,7 @@ FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
 
 SIGNAL_REGISTRY: Mapping[str, SignalFn] = {
     "trend_state": trend_state_signal,
+    "ema_rms_ppo_vwap": ema_rms_ppo_vwap_signal,
     "probability_threshold": probabilistic_signal,
     "probability_conviction": conviction_sizing_signal,
     "probability_vol_adjusted": probability_vol_adjusted_signal,
@@ -136,6 +140,7 @@ SIGNAL_REGISTRY: Mapping[str, SignalFn] = {
     "momentum": momentum_strategy,
     "stochastic": stochastic_strategy,
     "volatility_regime": volatility_regime_strategy,
+    "vwap_rms_ema_cross_long": vwap_rms_ema_cross_long_signal,
 }
 
 TARGET_REGISTRY: dict[str, Callable[[pd.DataFrame, dict[str, Any] | None], tuple[pd.DataFrame, str, str, dict[str, Any]]]] = {
@@ -234,6 +239,42 @@ PARAM_OPTIONS: dict[str, list[Any]] = {
 }
 
 SKIPPED_RUNTIME_PARAMETERS = {"df"}
+SIGNAL_PARAM_DEFAULTS: dict[str, dict[str, Any]] = {
+    "ema_rms_ppo_vwap": {
+        "close_col": "close",
+        "atr_col": "atr_14",
+        "ema_fast_rms_col": "ema_20__root_mean_square",
+        "ema_mid_rms_col": "ema_50__root_mean_square",
+        "ema_slow_rms_col": "ema_100__root_mean_square",
+        "vwap_col": "vwap_20",
+        "vwap_rms_col": "vwap_20__root_mean_square",
+        "ppo_col": "ppo",
+        "ppo_signal_col": "ppo_signal",
+        "mode": "long_short",
+        "require_vwap_rms_filter": False,
+        "require_rms_slope_filter": False,
+        "max_vwap_distance_atr": 1.0,
+        "min_rms_slope": 0.0,
+        "signal_col": "signal_side",
+        "candidate_col": "signal_candidate",
+    },
+    "vwap_rms_ema_cross_long": {
+        "ema_mid_col": "ema_50",
+        "ema_slow_col": "ema_100",
+        "ema_mid_rms_col": "ema_50__root_mean_square",
+        "vwap_rms_col": "vwap_20__root_mean_square",
+        "ppo_col": "ppo",
+        "ppo_signal_col": "ppo_signal",
+        "ppo_hist_min": 0.0,
+        "signal_col": "signal_side",
+        "candidate_col": "signal_candidate",
+    },
+    "momentum": {"momentum_col": "close_mom_20"},
+    "rsi": {"rsi_col": "close_rsi_14"},
+    "stochastic": {"k_col": "close_stoch_k_14"},
+    "trend_state": {"state_col": "close_trend_state_sma_20_50"},
+    "volatility_regime": {"vol_col": "vol_rolling_20"},
+}
 
 
 def get_feature_fn(name: str) -> FeatureFn:
@@ -315,21 +356,26 @@ def _callable_import_path(fn: BuilderFn) -> str | None:
     return f"{module}.{name}"
 
 
-def _parameter_definitions(fn: BuilderFn) -> list[ParameterDefinition]:
+def _parameter_definitions(
+    fn: BuilderFn,
+    *,
+    default_overrides: dict[str, Any] | None = None,
+) -> list[ParameterDefinition]:
     try:
         signature = inspect.signature(fn)
     except (TypeError, ValueError):
         return []
     parameters: list[ParameterDefinition] = []
+    overrides = dict(default_overrides or {})
     for name, param in signature.parameters.items():
         if name in SKIPPED_RUNTIME_PARAMETERS:
             continue
-        default = param.default
+        default = overrides.get(name, param.default)
         parameters.append(
             ParameterDefinition(
                 name=name,
                 kind=_infer_kind(default, param.annotation),
-                required=default is inspect._empty,
+                required=param.default is inspect._empty and name not in overrides,
                 default_value=_safe_value(default),
                 annotation=_annotation_text(param.annotation),
                 options=PARAM_OPTIONS.get(name),
@@ -496,11 +542,22 @@ def feature_builders() -> list[BuilderDefinition]:
 
 
 def signal_builders() -> list[BuilderDefinition]:
-    return _definitions_from_registry(
-        registry=SIGNAL_REGISTRY,
-        source_type="signal",
-        resolver=get_signal_fn,
-    )
+    definitions: list[BuilderDefinition] = []
+    for name in sorted(SIGNAL_REGISTRY):
+        fn = get_signal_fn(name)
+        definitions.append(
+            BuilderDefinition(
+                name=name,
+                source_type="signal",
+                import_path=_callable_import_path(fn),
+                parameters=_parameter_definitions(
+                    fn,
+                    default_overrides=SIGNAL_PARAM_DEFAULTS.get(name),
+                ),
+                docstring=_docstring(fn),
+            )
+        )
+    return definitions
 
 
 def target_builders() -> list[BuilderDefinition]:
@@ -531,6 +588,7 @@ def _configured_output_columns(
     outputs: dict[str, str] | None,
     meta: dict[str, Any] | None = None,
     preferred: Iterable[str] = (),
+    exclude: Iterable[str] = (),
 ) -> list[str]:
     after_list = [str(column) for column in after]
     candidates: list[str] = []
@@ -547,9 +605,10 @@ def _configured_output_columns(
     candidates.extend(str(value) for value in preferred)
     candidates.extend(_new_columns(before, after_list))
     seen: set[str] = set()
+    excluded = set(exclude)
     selected: list[str] = []
     for column in candidates:
-        if column in seen or column not in after_list:
+        if column in seen or column in excluded or column not in after_list:
             continue
         selected.append(column)
         seen.add(column)
@@ -589,7 +648,7 @@ def _step_dict(step: TransformStepConfig) -> dict[str, Any]:
 def _signal_step_dict(step: TransformStepConfig) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "kind": step.step,
-        "params": step.params,
+        "params": {**SIGNAL_PARAM_DEFAULTS.get(step.step, {}), **step.params},
         "enabled": step.enabled,
     }
     if step.outputs:
@@ -597,33 +656,62 @@ def _signal_step_dict(step: TransformStepConfig) -> dict[str, Any]:
     return payload
 
 
-def _apply_feature_step(frame: pd.DataFrame, step: TransformStepConfig, *, asset: str | None) -> tuple[pd.DataFrame, list[str]]:
+def _apply_feature_step(
+    frame: pd.DataFrame,
+    step: TransformStepConfig,
+    *,
+    asset: str | None,
+) -> tuple[pd.DataFrame, list[str], list[str]]:
     before = list(frame.columns)
-    out = apply_feature_steps(frame, [_step_dict(step)], asset=asset)
-    columns = _configured_output_columns(before=before, after=out.columns, outputs=step.outputs)
-    return out, _numeric_columns(out, columns)
+    out, prerequisites = call_with_materialized_dependencies(
+        frame,
+        lambda materialized: apply_feature_steps(materialized, [_step_dict(step)], asset=asset),
+    )
+    columns = _configured_output_columns(
+        before=before,
+        after=out.columns,
+        outputs=step.outputs,
+        exclude=prerequisites,
+    )
+    return out, _numeric_columns(out, columns), prerequisites
 
 
-def _apply_signal(frame: pd.DataFrame, step: TransformStepConfig) -> tuple[pd.DataFrame, list[str]]:
+def _apply_signal(frame: pd.DataFrame, step: TransformStepConfig) -> tuple[pd.DataFrame, list[str], list[str]]:
     before = list(frame.columns)
-    out = apply_signal_step(frame, _signal_step_dict(step))
-    columns = _configured_output_columns(before=before, after=out.columns, outputs=step.outputs)
-    return out, _numeric_columns(out, columns)
+    out, prerequisites = call_with_materialized_dependencies(
+        frame,
+        lambda materialized: apply_signal_step(materialized, _signal_step_dict(step)),
+    )
+    columns = _configured_output_columns(
+        before=before,
+        after=out.columns,
+        outputs=step.outputs,
+        exclude=prerequisites,
+    )
+    return out, _numeric_columns(out, columns), prerequisites
 
 
-def _apply_target(frame: pd.DataFrame, step: TransformStepConfig) -> tuple[pd.DataFrame, list[str], dict[str, Any]]:
+def _apply_target(
+    frame: pd.DataFrame,
+    step: TransformStepConfig,
+) -> tuple[pd.DataFrame, list[str], dict[str, Any], list[str]]:
     if step.step not in TARGET_REGISTRY:
         raise KeyError(f"Unknown target builder: {step.step}")
     before = list(frame.columns)
-    out, label_col, fwd_col, meta = TARGET_REGISTRY[step.step](frame, dict(step.params))
+    result, prerequisites = call_with_materialized_dependencies(
+        frame,
+        lambda materialized: TARGET_REGISTRY[step.step](materialized, dict(step.params)),
+    )
+    out, label_col, fwd_col, meta = result
     columns = _configured_output_columns(
         before=before,
         after=out.columns,
         outputs=step.outputs,
         meta=meta,
         preferred=[label_col, fwd_col],
+        exclude=prerequisites,
     )
-    return out, _numeric_columns(out, columns), meta
+    return out, _numeric_columns(out, columns), meta, prerequisites
 
 
 def run_transform_series(payload: TransformSeriesRequest) -> TransformSeriesResponse:
@@ -645,24 +733,43 @@ def run_transform_series(payload: TransformSeriesRequest) -> TransformSeriesResp
     for step in payload.features:
         if not step.enabled:
             continue
-        working, columns = _apply_feature_step(working, step, asset=effective_asset)
+        working, columns, prerequisites = _apply_feature_step(working, step, asset=effective_asset)
         selected.append(("feature", columns))
-        step_results.append(TransformStepResult(source_type="feature", step=step.step, output_columns=columns))
+        step_results.append(
+            TransformStepResult(
+                source_type="feature",
+                step=step.step,
+                output_columns=columns,
+                metadata={"materialized_prerequisites": prerequisites},
+            )
+        )
 
     for step in payload.signals:
         if not step.enabled:
             continue
-        working, columns = _apply_signal(working, step)
+        working, columns, prerequisites = _apply_signal(working, step)
         selected.append(("signal", columns))
-        step_results.append(TransformStepResult(source_type="signal", step=step.step, output_columns=columns))
+        step_results.append(
+            TransformStepResult(
+                source_type="signal",
+                step=step.step,
+                output_columns=columns,
+                metadata={"materialized_prerequisites": prerequisites},
+            )
+        )
 
     for step in payload.targets:
         if not step.enabled:
             continue
-        working, columns, meta = _apply_target(working, step)
+        working, columns, meta, prerequisites = _apply_target(working, step)
         selected.append(("target", columns))
         step_results.append(
-            TransformStepResult(source_type="target", step=step.step, output_columns=columns, metadata=meta)
+            TransformStepResult(
+                source_type="target",
+                step=step.step,
+                output_columns=columns,
+                metadata={**meta, "materialized_prerequisites": prerequisites},
+            )
         )
 
     response_frame = working.tail(payload.limit) if payload.limit else working

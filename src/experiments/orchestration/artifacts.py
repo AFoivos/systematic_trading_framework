@@ -17,6 +17,7 @@ from src.evaluation.model_diagnostics import (
 )
 from src.experiments.orchestration.common import data_stats_payload, redact_sensitive_values, resolved_feature_columns
 from src.experiments.orchestration.reporting import build_experiment_report_markdown, render_markdown_report_html
+from src.experiments.support.execution_source_audit import write_execution_source_audit
 from src.plots.trade_diagnostics import (
     build_trade_event_frame,
     plot_trade_diagnostics,
@@ -449,6 +450,48 @@ def _fold_selected_feature_rows(model_meta: dict[str, Any]) -> list[dict[str, An
     return rows
 
 
+def _extracted_feature_detail_rows(model_meta: dict[str, Any]) -> list[dict[str, Any]]:
+    per_asset_meta = dict(model_meta.get("per_asset", {}) or {})
+    if per_asset_meta:
+        rows: list[dict[str, Any]] = []
+        for asset, asset_meta in sorted(per_asset_meta.items()):
+            feature_selection = dict(asset_meta.get("feature_selection", {}) or {})
+            for row in list(feature_selection.get("extracted_feature_details", []) or []):
+                rows.append({"asset": str(asset)} | dict(row or {}))
+        return rows
+
+    feature_selection = dict(model_meta.get("feature_selection", {}) or {})
+    return [dict(row or {}) for row in list(feature_selection.get("extracted_feature_details", []) or [])]
+
+
+def _dropped_feature_detail_rows(model_meta: dict[str, Any]) -> list[dict[str, Any]]:
+    per_asset_meta = dict(model_meta.get("per_asset", {}) or {})
+    if per_asset_meta:
+        rows: list[dict[str, Any]] = []
+        for asset, asset_meta in sorted(per_asset_meta.items()):
+            feature_selection = dict(asset_meta.get("feature_selection", {}) or {})
+            for row in list(feature_selection.get("dropped_feature_details", []) or []):
+                rows.append({"asset": str(asset)} | dict(row or {}))
+        return rows
+
+    feature_selection = dict(model_meta.get("feature_selection", {}) or {})
+    return [dict(row or {}) for row in list(feature_selection.get("dropped_feature_details", []) or [])]
+
+
+def _fold_feature_cleaning_rows(model_meta: dict[str, Any]) -> list[dict[str, Any]]:
+    per_asset_meta = dict(model_meta.get("per_asset", {}) or {})
+    if per_asset_meta:
+        rows: list[dict[str, Any]] = []
+        for asset, asset_meta in sorted(per_asset_meta.items()):
+            feature_selection = dict(asset_meta.get("feature_selection", {}) or {})
+            for row in list(feature_selection.get("fold_feature_cleaning", []) or []):
+                rows.append({"asset": str(asset)} | dict(row or {}))
+        return rows
+
+    feature_selection = dict(model_meta.get("feature_selection", {}) or {})
+    return [dict(row or {}) for row in list(feature_selection.get("fold_feature_cleaning", []) or [])]
+
+
 def _tsfresh_feature_dataset_rows(
     frame: pd.DataFrame,
     *,
@@ -566,6 +609,24 @@ def _write_model_diagnostic_artifacts(
         fold_selected_features_path = run_dir / "fold_selected_features.csv"
         pd.DataFrame(fold_selected_feature_rows).to_csv(fold_selected_features_path, index=False)
         artifact_paths["fold_selected_features"] = str(fold_selected_features_path.relative_to(run_dir))
+
+    extracted_feature_rows = _extracted_feature_detail_rows(model_meta)
+    if extracted_feature_rows:
+        extracted_features_path = run_dir / "extracted_features.csv"
+        pd.DataFrame(extracted_feature_rows).to_csv(extracted_features_path, index=False)
+        artifact_paths["extracted_features"] = str(extracted_features_path.relative_to(run_dir))
+
+    dropped_feature_rows = _dropped_feature_detail_rows(model_meta)
+    if dropped_feature_rows:
+        dropped_features_path = run_dir / "dropped_features.csv"
+        pd.DataFrame(dropped_feature_rows).to_csv(dropped_features_path, index=False)
+        artifact_paths["dropped_features"] = str(dropped_features_path.relative_to(run_dir))
+
+    fold_feature_cleaning_rows = _fold_feature_cleaning_rows(model_meta)
+    if fold_feature_cleaning_rows:
+        fold_feature_cleaning_path = run_dir / "fold_feature_cleaning.csv"
+        pd.DataFrame(fold_feature_cleaning_rows).to_csv(fold_feature_cleaning_path, index=False)
+        artifact_paths["fold_feature_cleaning"] = str(fold_feature_cleaning_path.relative_to(run_dir))
 
     target_meta = dict(model_meta.get("target", {}) or {})
     target_label_distribution = dict(target_meta.get("label_distribution", {}) or {})
@@ -1621,6 +1682,14 @@ def save_artifacts(
     with cfg_path.open("w", encoding="utf-8") as handle:
         yaml.safe_dump(safe_cfg, handle, sort_keys=False)
 
+    source_audit_path = None
+    source_audit_cfg = dict(dict(cfg.get("logging", {}) or {}).get("execution_source_audit", {}) or {})
+    if bool(source_audit_cfg.get("enabled", False)):
+        source_audit_path = write_execution_source_audit(
+            run_dir / "execution_source_audit.py",
+            cfg=safe_cfg,
+        )
+
     summary_path = run_dir / "summary.json"
     payload = {
         "summary": evaluation.get("primary_summary", performance.summary),
@@ -1711,6 +1780,8 @@ def save_artifacts(
     }
     if stage_tails_path is not None:
         artifacts["stage_tails"] = str(stage_tails_path)
+    if source_audit_path is not None:
+        artifacts["execution_source_audit"] = str(source_audit_path)
     if positions_path is not None:
         artifacts["positions"] = str(positions_path)
     if monitoring_path is not None:

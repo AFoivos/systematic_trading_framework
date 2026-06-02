@@ -134,6 +134,7 @@ processed/
 AGENTS.md
 docs/*
 !docs/trading_dashboard_assumptions.md
+!docs/execution_source_audit.md
 notebooks/
 tests/
 data/

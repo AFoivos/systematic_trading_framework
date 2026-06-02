@@ -61,6 +61,8 @@ def infer_asset_from_name(name: str) -> str | None:
     ignored = {"bid", "ask", "mid", "clean", "raw", "ohlcv", "data"}
     candidates: list[str] = []
     for part in parts:
+        if part.isdigit():
+            continue
         normalized_tf = normalize_timeframe(part)
         if normalized_tf == part.upper() and re.fullmatch(r"[MHDW]\d+", normalized_tf):
             continue

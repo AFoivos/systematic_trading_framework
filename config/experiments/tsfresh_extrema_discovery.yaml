@@ -30,21 +30,97 @@ features:
       price_col: close
       windows: [14]
       method: wilder
-  - step: swing_extrema_context
+  - step: trend
+    outputs:
+      close_ema_20: ema_20
+      close_ema_50: ema_50
+      close_ema_100: ema_100
+    params:
+      price_col: close
+      sma_windows: []
+      ema_spans: [20, 50, 100]
+  - step: adx
+    outputs:
+      plus_di_14: plus_di_14
+      minus_di_14: minus_di_14
+      adx_14: adx_14
     params:
       high_col: high
       low_col: low
       close_col: close
-      normalizer_col: atr_14
-      normalizer_mode: price
-      left_bars: 3
-      right_bars: 3
-      include_research_labels: false
-      prefix: swing
+      window: 14
+      windows: [14]
+  - step: stochastic_rsi
+    outputs:
+      stoch_rsi_k: stoch_rsi_k
+      stoch_rsi_d: stoch_rsi_d
+      stoch_rsi_k_minus_d: stoch_rsi_k_minus_d
+      stoch_rsi_cross_up: stoch_rsi_cross_up
+      stoch_rsi_cross_down: stoch_rsi_cross_down
+      stoch_rsi_oversold: stoch_rsi_oversold
+      stoch_rsi_overbought: stoch_rsi_overbought
+      stoch_rsi_slope: stoch_rsi_slope
+      stoch_rsi_recover_from_oversold: stoch_rsi_recover_from_oversold
+      stoch_rsi_fall_from_overbought: stoch_rsi_fall_from_overbought
+    params:
+      price_col: close
+      rsi_period: 14
+      stoch_period: 14
+      k_period: 3
+      d_period: 3
+      oversold: 0.20
+      overbought: 0.80
+      prefix: stoch_rsi
+  - step: regime_context
+    outputs:
+      regime_vol_ratio_24_168: regime_vol_ratio_24_168
+      regime_high_vol_state_24_168: regime_high_vol_state_24_168
+      regime_low_vol_state_24_168: regime_low_vol_state_24_168
+      regime_vol_ratio_z_24_168: regime_vol_ratio_z_24_168
+      regime_absret_z_24_168: regime_absret_z_24_168
+      regime_trend_ratio_24_72: regime_trend_ratio_24_72
+      regime_trend_state_24_72: regime_trend_state_24_72
+    params:
+      price_col: close
+      returns_col: close_ret
+      vol_short_window: 24
+      vol_long_window: 168
+      vol_window_pairs:
+        - [24, 168]
+      trend_fast_span: 24
+      trend_slow_span: 72
+      vol_ratio_high_threshold: 1.20
+      vol_ratio_low_threshold: 0.85
+  - step: ppo
+    outputs:
+      ppo_12_26: ppo
+      ppo_signal_9: ppo_signal
+      ppo_hist_12_26_9: ppo_hist
+    params:
+      price_col: close
+      fast: 12
+      slow: 26
+      signal: 9
+  - step: vwap
+    outputs:
+      vwap_20: vwap_20
+      close_over_vwap_20: close_over_vwap_20
+    params:
+      high_col: high
+      low_col: low
+      close_col: close
+      volume_col: volume
+      windows: [20]
+      add_distance: true
 
 model:
   kind: tsfresh_extrema_feature_discovery
   feature_cols:
+    - ppo
+    - vwap_20
+    - close_over_vwap_20
+    - ppo_signal
+    - ppo_hist
     - close_logret
     - vol_rolling_12
     - vol_rolling_24
@@ -54,34 +130,34 @@ model:
     - close_rsi_14
     - spread_close
     - spread_bps
-    - swing_confirmed_local_high
-    - swing_confirmed_local_low
-    - swing_confirmed_local_high_price
-    - swing_confirmed_local_low_price
-    - swing_last_high
-    - swing_last_low
-    - swing_last_high_age
-    - swing_last_low_age
-    - swing_dist_to_last_high_atr
-    - swing_dist_from_last_low_atr
-    - swing_range_atr
-    - swing_position_in_range
-    - swing_higher_high
-    - swing_higher_low
-    - swing_lower_high
-    - swing_lower_low
-    - swing_structure_score
-    - swing_bars_since_high_breakout
-    - swing_bars_since_low_breakdown
-    - swing_near_last_high
-    - swing_near_last_low
-    - swing_overextended_long
+    - ema_20
+    - ema_50
+    - ema_100
+    - plus_di_14
+    - minus_di_14
+    - adx_14
+    - stoch_rsi_k
+    - stoch_rsi_d
+    - stoch_rsi_recover_from_oversold
+    - stoch_rsi_fall_from_overbought
   params:
     high_col: high
     low_col: low
     window_size: 48
     label_horizon: 8
     feature_preset: minimal
+    include_raw_ohlcv: false
+    kind_to_fc_parameters:
+      stoch_rsi_recover_from_oversold:
+        sum_values: null
+        mean: null
+        variance: null
+        absolute_sum_of_changes: null
+      stoch_rsi_fall_from_overbought:
+        sum_values: null
+        mean: null
+        variance: null
+        absolute_sum_of_changes: null
     n_jobs: 1
     chunksize: 32
     fdr_level: 0.05
@@ -90,7 +166,7 @@ model:
     disable_progressbar: true
     show_warnings: false
     export_feature_dataset: true
-    export_dataset_path: data/proccesed/tsfrash/asset_datetime.csv
+    export_dataset_path: data/proccesed/tsfrash/spx500_30m_tsfresh_extractor.csv
   split:
     method: walk_forward
     train_size: 500

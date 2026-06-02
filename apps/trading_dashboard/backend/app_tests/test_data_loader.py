@@ -134,6 +134,54 @@ def test_discovers_flat_processed_dataset_from_filename(tmp_path: Path) -> None:
     assert candles[0]["close"] == 1.03485
 
 
+def test_timestamped_processed_snapshot_uses_sibling_metadata(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    snapshot_dir = tmp_path / "data" / "processed" / "processed" / "spx500_snapshot"
+    snapshot_dir.mkdir(parents=True)
+    (snapshot_dir / "metadata.json").write_text(
+        '{"assets": ["SPX500"], "context": {"interval": "30m"}}',
+        encoding="utf-8",
+    )
+    snapshot_path = snapshot_dir / "06_spx500_30m_snapshot_20260601_205706.csv"
+    snapshot_path.write_text(
+        "\n".join(
+            [
+                "timestamp,asset,open,high,low,close,volume",
+                "2025-01-01 22:00:00,SPX500,5900,5910,5890,5905,100",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    loader = DataLoader(paths)
+    dataset = next(item for item in loader.discover_datasets() if item.id.endswith(snapshot_path.name))
+
+    assert dataset.assets == ("SPX500",)
+    assert dataset.timeframe == "M30"
+    assert dataset.metadata_path == snapshot_dir / "metadata.json"
+    assert loader.load_ohlcv(dataset_id=dataset.id)[0]["close"] == 5905
+
+
+def test_filename_asset_inference_ignores_numeric_snapshot_prefix(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    snapshot_path = tmp_path / "data" / "processed" / "07_btcusd_1h_snapshot.csv"
+    snapshot_path.write_text(
+        "\n".join(
+            [
+                "timestamp,open,high,low,close,volume",
+                "2025-01-01 22:00:00,95000,96000,94000,95500,100",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    loader = DataLoader(paths)
+    dataset = next(item for item in loader.discover_datasets() if item.id.endswith(snapshot_path.name))
+
+    assert dataset.assets == ("BTCUSD",)
+    assert dataset.timeframe == "H1"
+
+
 def test_discovers_supported_files_anywhere_under_data_tree(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
     data_dir = tmp_path / "data" / "vendor" / "category" / "nested"

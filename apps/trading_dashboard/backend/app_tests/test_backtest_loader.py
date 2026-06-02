@@ -51,6 +51,7 @@ def test_loads_paired_trades_from_trade_events_when_trades_csv_is_absent(tmp_pat
             "pnl": None,
             "return": None,
             "size": 0.5,
+            "exit_reason": None,
         }
     ]
 
@@ -64,9 +65,9 @@ def test_loads_and_filters_canonical_trades_csv(tmp_path: Path) -> None:
     (report_assets / "trades.csv").write_text(
         "\n".join(
             [
-                "asset,entry_timestamp,exit_timestamp,side,entry_price,exit_price,net_return,position_size",
-                "XAUUSD,2024-01-01 09:00:00,2024-01-01 10:00:00,long,2050.0,2055.0,0.01,0.5",
-                "SPX500,2024-01-01 11:00:00,2024-01-01 12:00:00,short,5100.0,5090.0,0.02,0.25",
+                "asset,entry_timestamp,exit_timestamp,side,entry_price,exit_price,net_return,position_size,exit_reason",
+                "XAUUSD,2024-01-01 09:00:00,2024-01-01 10:00:00,long,2050.0,2055.0,0.01,0.5,take_profit",
+                "SPX500,2024-01-01 11:00:00,2024-01-01 12:00:00,short,5100.0,5090.0,0.02,0.25,stop_loss",
             ]
         ),
         encoding="utf-8",
@@ -79,3 +80,4 @@ def test_loads_and_filters_canonical_trades_csv(tmp_path: Path) -> None:
     assert trades[0]["side"] == "short"
     assert trades[0]["entry_price"] == 5100.0
     assert trades[0]["return"] == 0.02
+    assert trades[0]["exit_reason"] == "stop_loss"

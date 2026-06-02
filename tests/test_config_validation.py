@@ -680,6 +680,46 @@ def test_validate_features_block_accepts_selector_based_feature_transforms() -> 
     )
 
 
+def test_validate_features_block_accepts_tsfresh_rolling_transform() -> None:
+    validate_features_block(
+        [
+            {
+                "step": "feature_transforms",
+                "params": {
+                    "transforms": [
+                        {
+                            "source_col": "close_logret",
+                            "kind": "tsfresh_rolling",
+                            "window": 48,
+                            "calculators": ["mean", "standard_deviation", "absolute_maximum"],
+                        }
+                    ]
+                },
+            },
+        ]
+    )
+
+
+def test_validate_features_block_rejects_unknown_tsfresh_rolling_calculator() -> None:
+    with pytest.raises(ConfigValidationError, match="calculators\\[0\\]"):
+        validate_features_block(
+            [
+                {
+                    "step": "feature_transforms",
+                    "params": {
+                        "transforms": [
+                            {
+                                "source_col": "close_logret",
+                                "kind": "tsfresh_rolling",
+                                "calculators": ["not_a_tsfresh_calculator"],
+                            }
+                        ]
+                    },
+                },
+            ]
+        )
+
+
 def test_validate_features_block_rejects_ambiguous_feature_transform_selector() -> None:
     with pytest.raises(ConfigValidationError, match="source_col or source_selector"):
         validate_features_block(
@@ -906,6 +946,47 @@ def test_validate_backtest_block_rejects_negative_min_holding_bars() -> None:
         )
 
 
+def test_validate_backtest_block_accepts_manual_barrier_without_time_exit() -> None:
+    validate_backtest_block(
+        {
+            "engine": "manual_barrier",
+            "returns_col": "close_ret",
+            "signal_col": "signal",
+            "periods_per_year": 12096,
+            "returns_type": "simple",
+            "missing_return_policy": "raise_if_exposed",
+            "subset": "full",
+            "stop_mode": "volatility_stop",
+            "vol_col": "atr_over_price_14",
+            "take_profit_r": 3.0,
+            "stop_loss_r": 3.0,
+            "risk_per_trade": 0.006,
+            "max_holding_bars": None,
+        }
+    )
+
+
+def test_validate_backtest_block_rejects_non_positive_manual_barrier_time_exit() -> None:
+    with pytest.raises(ConfigValidationError, match="backtest.max_holding_bars"):
+        validate_backtest_block(
+            {
+                "engine": "manual_barrier",
+                "returns_col": "close_ret",
+                "signal_col": "signal",
+                "periods_per_year": 12096,
+                "returns_type": "simple",
+                "missing_return_policy": "raise_if_exposed",
+                "subset": "full",
+                "stop_mode": "volatility_stop",
+                "vol_col": "atr_over_price_14",
+                "take_profit_r": 3.0,
+                "stop_loss_r": 3.0,
+                "risk_per_trade": 0.006,
+                "max_holding_bars": 0,
+            }
+        )
+
+
 def test_validate_backtest_block_accepts_portfolio_barrier_engine() -> None:
     validate_backtest_block(
         {
@@ -1082,6 +1163,18 @@ def test_validate_logging_block_rejects_invalid_stage_tail_values() -> None:
         )
 
 
+def test_validate_logging_block_rejects_invalid_execution_source_audit_enabled() -> None:
+    with pytest.raises(ConfigValidationError, match="logging.execution_source_audit.enabled"):
+        validate_logging_block(
+            {
+                "enabled": True,
+                "run_name": "demo",
+                "output_dir": "logs/experiments",
+                "execution_source_audit": {"enabled": "yes"},
+            }
+        )
+
+
 def test_validate_signals_block_rejects_invalid_probability_vol_adjusted_dead_zone() -> None:
     from src.utils.config_validation import validate_signals_block
 
@@ -1148,6 +1241,16 @@ def test_validate_signals_block_rejects_invalid_probability_threshold_hysteresis
                         {"col": "adx_24", "op": "neq", "value": 20.0},
                     ],
                 },
+            }
+        )
+
+
+def test_validate_signals_block_rejects_non_numeric_vwap_rms_ema_cross_long_ppo_hist_min() -> None:
+    with pytest.raises(ConfigValidationError, match="ppo_hist_min"):
+        validate_signals_block(
+            {
+                "kind": "vwap_rms_ema_cross_long",
+                "params": {"ppo_hist_min": "0.01"},
             }
         )
 

@@ -4,6 +4,8 @@ from typing import Sequence
 
 import pandas as pd
 
+from src.features._dependency_fallbacks import ensure_close_based_returns
+
 
 def add_return_momentum_features(
     df: pd.DataFrame,
@@ -11,9 +13,8 @@ def add_return_momentum_features(
     windows: Sequence[int] = (5, 20, 60),
     inplace: bool = False,
 ) -> pd.DataFrame:
-    if returns_col not in df.columns:
-        raise KeyError(f"returns_col '{returns_col}' not found in DataFrame")
     out = df if inplace else df.copy()
+    out = ensure_close_based_returns(out, returns_col=returns_col)
     returns = out[returns_col].astype(float)
     for window in windows:
         out[f"{returns_col}_mom_{window}"] = compute_return_momentum(returns, window)

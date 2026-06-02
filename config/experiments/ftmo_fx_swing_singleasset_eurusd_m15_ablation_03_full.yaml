@@ -1,5 +1,6 @@
+# Ablation 03: add FTMO sizing and realistic transaction costs.
 strategy:
-  name: ftmo_fx_swing_singleasset_eurusd_m15_lightgbm_alpha_meta_barrier_v3
+  name: ftmo_fx_swing_singleasset_eurusd_m15_ablation_03_full
   timeframe: 15m
   assets:
     - EURUSD
@@ -25,7 +26,7 @@ data:
       inactive_policy: raise
   storage:
     mode: cached_only
-    dataset_id: ftmo_fx_swing_singleasset_eurusd_m15_lightgbm_alpha_meta_barrier_v3
+    dataset_id: ftmo_fx_swing_singleasset_eurusd_m15_ablation_03_full
     save_raw: false
     save_processed: true
     load_path: data/processed/eurusd_m15.csv
@@ -699,7 +700,7 @@ execution:
 
 logging:
   enabled: true
-  run_name: ftmo_fx_swing_singleasset_eurusd_m15_lightgbm_alpha_meta_barrier_v3
+  run_name: ftmo_fx_swing_singleasset_eurusd_m15_ablation_03_full
   output_dir: logs/experiments
   stage_tails:
     enabled: true

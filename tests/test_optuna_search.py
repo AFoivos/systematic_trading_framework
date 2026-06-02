@@ -136,6 +136,65 @@ def test_prepare_trial_config_updates_nested_paths_and_disables_logging() -> Non
     }
 
 
+def test_validate_search_space_feature_contract_allows_self_computed_feature_dependencies() -> None:
+    base_cfg = {
+        "features": [
+            {
+                "step": "trend_regime",
+                "params": {
+                    "base_sma_for_sign": 20,
+                    "short_sma": 10,
+                    "long_sma": 20,
+                },
+            },
+            {
+                "step": "vol_normalized_momentum",
+                "params": {
+                    "returns_col": "close_logret",
+                    "vol_col": "vol_rolling_24",
+                    "vol_window": 24,
+                    "windows": [6, 24],
+                },
+            },
+        ],
+        "signals": {"kind": "none", "params": {}},
+    }
+    search_space = [
+        SearchDimension(
+            name="base_sma",
+            path="features.0.params.base_sma_for_sign",
+            kind="categorical",
+            choices=[20, 30],
+        ),
+        SearchDimension(
+            name="short_sma",
+            path="features.0.params.short_sma",
+            kind="categorical",
+            choices=[10, 20],
+        ),
+        SearchDimension(
+            name="long_sma",
+            path="features.0.params.long_sma",
+            kind="categorical",
+            choices=[20, 30],
+        ),
+        SearchDimension(
+            name="vol_window",
+            path="features.1.params.vol_window",
+            kind="categorical",
+            choices=[24, 36],
+        ),
+        SearchDimension(
+            name="vol_col",
+            path="features.1.params.vol_col",
+            kind="categorical",
+            choices=["vol_rolling_24", "vol_rolling_36"],
+        ),
+    ]
+
+    validate_search_space_feature_contract(base_cfg, search_space)
+
+
 def test_prepare_trial_config_appends_trial_number_to_logged_run_name() -> None:
     base_config = {
         "model": {"params": {"learning_rate": 0.03}},

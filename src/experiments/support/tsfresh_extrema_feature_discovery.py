@@ -216,6 +216,7 @@ def _resolve_source_feature_columns(
     *,
     model_cfg: dict[str, Any],
     protected_cols: set[str],
+    include_raw_ohlcv: bool = False,
 ) -> list[str]:
     if not model_cfg.get("feature_cols") and not model_cfg.get("feature_selectors"):
         source_cols = _infer_broad_numeric_source_columns(
@@ -233,7 +234,15 @@ def _resolve_source_feature_columns(
     )
     if not source_cols:
         raise ValueError("No numeric source feature columns resolved for tsfresh extrema discovery.")
-    return list(source_cols)
+    resolved = [str(col) for col in source_cols]
+    if not include_raw_ohlcv:
+        return resolved
+
+    appended = list(resolved)
+    for raw_col in ("open", "high", "low", "close", "volume"):
+        if raw_col in df.columns and raw_col not in appended:
+            appended.append(raw_col)
+    return appended
 
 
 def _infer_broad_numeric_source_columns(
@@ -278,6 +287,83 @@ def _resolve_fc_parameters(
     return factory()
 
 
+def _normalize_fc_parameter_mapping(
+    raw_mapping: Any,
+    *,
+    field: str,
+) -> dict[str, Any]:
+    if raw_mapping is None:
+        return {}
+    if not isinstance(raw_mapping, dict):
+        raise ValueError(f"{field} must be a mapping of calculator names to parameter specs.")
+
+    normalized: dict[str, Any] = {}
+    for calculator_name, raw_spec in raw_mapping.items():
+        name = str(calculator_name).strip()
+        if not name:
+            raise ValueError(f"{field} contains an empty calculator name.")
+        if raw_spec is None:
+            normalized[name] = None
+            continue
+        if isinstance(raw_spec, dict):
+            normalized[name] = [{str(key): value for key, value in raw_spec.items()}]
+            continue
+        if not isinstance(raw_spec, list):
+            raise ValueError(
+                f"{field}.{name} must be null, a mapping, or a list of mappings."
+            )
+        params_list: list[dict[str, Any]] = []
+        for idx, item in enumerate(raw_spec):
+            if not isinstance(item, dict):
+                raise ValueError(f"{field}.{name}[{idx}] must be a mapping.")
+            params_list.append({str(key): value for key, value in item.items()})
+        normalized[name] = params_list
+    return normalized
+
+
+def _resolve_kind_to_fc_parameters(
+    params: dict[str, Any],
+) -> dict[str, Any]:
+    raw_mapping = params.get("kind_to_fc_parameters")
+    if raw_mapping in (None, {}):
+        return {}
+    if not isinstance(raw_mapping, dict):
+        raise ValueError("model.params.kind_to_fc_parameters must be a mapping.")
+
+    normalized: dict[str, Any] = {}
+    for raw_kind, raw_kind_mapping in raw_mapping.items():
+        kind = str(raw_kind).strip()
+        if not kind:
+            raise ValueError("model.params.kind_to_fc_parameters contains an empty kind name.")
+        normalized[kind] = _normalize_fc_parameter_mapping(
+            raw_kind_mapping,
+            field=f"model.params.kind_to_fc_parameters.{kind}",
+        )
+    return normalized
+
+
+def _split_tsfresh_feature_name(feature_name: str) -> tuple[str, str]:
+    feature = str(feature_name)
+    if "__" not in feature:
+        return feature, ""
+    kind, remainder = feature.split("__", 1)
+    return kind, remainder
+
+
+def _feature_detail_rows(feature_names: list[str]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for feature_name in sorted({str(name) for name in feature_names if str(name).strip()}):
+        source_kind, calculator = _split_tsfresh_feature_name(feature_name)
+        rows.append(
+            {
+                "feature": feature_name,
+                "source_kind": source_kind,
+                "calculator": calculator,
+            }
+        )
+    return rows
+
+
 def _project_feature_frame_to_full_index(
     feature_frame: pd.DataFrame,
     *,
@@ -313,7 +399,7 @@ def _prepare_fold_feature_matrices(
     *,
     train_idx: np.ndarray,
     test_idx: np.ndarray,
-) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, int]]:
+) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
     X_train = full_feature_frame.iloc[train_idx].copy()
     X_test = full_feature_frame.iloc[test_idx].copy()
 
@@ -324,6 +410,7 @@ def _prepare_fold_feature_matrices(
     non_empty_cols = [col for col in X_train.columns if bool(X_train[col].notna().any())]
     X_train = X_train.loc[:, non_empty_cols]
     X_test = X_test.loc[:, non_empty_cols]
+    dropped_all_nan_cols = [str(col) for col in full_feature_frame.columns if col not in non_empty_cols]
     dropped_all_nan_count = int(raw_feature_count - len(non_empty_cols))
 
     constant_cols = [
@@ -341,6 +428,9 @@ def _prepare_fold_feature_matrices(
             "raw_feature_count": raw_feature_count,
             "dropped_all_nan_count": dropped_all_nan_count,
             "dropped_constant_count": dropped_constant_count,
+            "dropped_all_nan_features": dropped_all_nan_cols,
+            "dropped_constant_features": constant_cols,
+            "dropped_still_nan_features": [],
         }
 
     train_medians = X_train.median(axis=0, skipna=True)
@@ -356,6 +446,9 @@ def _prepare_fold_feature_matrices(
         "raw_feature_count": raw_feature_count,
         "dropped_all_nan_count": dropped_all_nan_count,
         "dropped_constant_count": dropped_constant_count + int(len(still_nan_cols)),
+        "dropped_all_nan_features": dropped_all_nan_cols,
+        "dropped_constant_features": constant_cols,
+        "dropped_still_nan_features": [str(col) for col in still_nan_cols],
     }
 
 
@@ -481,6 +574,65 @@ def _aggregate_selected_feature_details(
     return rows
 
 
+def _aggregate_dropped_feature_details(
+    fold_feature_cleaning: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    drop_keys = (
+        ("dropped_all_nan_features", "all_nan_in_train"),
+        ("dropped_constant_features", "constant_in_train"),
+        ("dropped_still_nan_features", "still_nan_after_imputation"),
+    )
+    bucket: dict[tuple[str, str], dict[str, Any]] = {}
+    eligible_folds = max(len(fold_feature_cleaning), 1)
+
+    for row in fold_feature_cleaning:
+        fold = int(row.get("fold", 0))
+        for field, reason in drop_keys:
+            for feature_name in list(row.get(field, []) or []):
+                feature = str(feature_name)
+                key = (feature, reason)
+                source_kind, calculator = _split_tsfresh_feature_name(feature)
+                info = bucket.setdefault(
+                    key,
+                    {
+                        "feature": feature,
+                        "source_kind": source_kind,
+                        "calculator": calculator,
+                        "drop_reason": reason,
+                        "drop_count": 0,
+                        "folds": [],
+                    },
+                )
+                info["drop_count"] += 1
+                info["folds"].append(fold)
+
+    if not bucket:
+        return []
+
+    rows: list[dict[str, Any]] = []
+    for info in bucket.values():
+        folds = sorted({int(fold) for fold in list(info.get("folds", []) or [])})
+        rows.append(
+            {
+                "feature": str(info["feature"]),
+                "source_kind": str(info["source_kind"]),
+                "calculator": str(info["calculator"]),
+                "drop_reason": str(info["drop_reason"]),
+                "drop_count": int(info["drop_count"]),
+                "drop_rate": float(int(info["drop_count"]) / eligible_folds),
+                "folds": ",".join(str(fold) for fold in folds),
+            }
+        )
+    rows.sort(
+        key=lambda item: (
+            str(item["drop_reason"]),
+            -float(item["drop_rate"]),
+            str(item["feature"]),
+        )
+    )
+    return rows
+
+
 def train_tsfresh_extrema_feature_discovery(
     df: pd.DataFrame,
     model_cfg: dict[str, Any],
@@ -511,12 +663,15 @@ def train_tsfresh_extrema_feature_discovery(
     n_significant = _positive_int(params.get("n_significant", 1), field="model.params.n_significant")
     disable_progressbar = bool(params.get("disable_progressbar", True))
     show_warnings = bool(params.get("show_warnings", False))
+    include_raw_ohlcv = bool(params.get("include_raw_ohlcv", False))
+    kind_to_fc_parameters = _resolve_kind_to_fc_parameters(params)
 
     protected_cols = {high_col, low_col, "open", "close", "volume"}
     source_cols = _resolve_source_feature_columns(
         df,
         model_cfg=model_cfg,
         protected_cols=protected_cols,
+        include_raw_ohlcv=include_raw_ohlcv,
     )
     labels_named = _build_future_extrema_labels(
         df,
@@ -545,6 +700,7 @@ def train_tsfresh_extrema_feature_discovery(
         column_kind="kind",
         column_value="value",
         default_fc_parameters=fc_parameters,
+        kind_to_fc_parameters=kind_to_fc_parameters or None,
         n_jobs=n_jobs,
         chunksize=chunksize,
         show_warnings=show_warnings,
@@ -592,6 +748,7 @@ def train_tsfresh_extrema_feature_discovery(
     eval_label_distributions: list[dict[str, Any]] = []
     executed_folds: list[dict[str, Any]] = []
     skipped_folds: list[dict[str, Any]] = []
+    fold_feature_cleaning: list[dict[str, Any]] = []
 
     for split in splits:
         raw_train_idx = split.train_idx
@@ -632,6 +789,17 @@ def train_tsfresh_extrema_feature_discovery(
             full_feature_frame,
             train_idx=eligible_train_idx,
             test_idx=eligible_test_idx,
+        )
+        fold_feature_cleaning.append(
+            {
+                "fold": int(split.fold),
+                "raw_feature_count": int(cleaning_meta.get("raw_feature_count", 0) or 0),
+                "dropped_all_nan_count": int(cleaning_meta.get("dropped_all_nan_count", 0) or 0),
+                "dropped_constant_count": int(cleaning_meta.get("dropped_constant_count", 0) or 0),
+                "dropped_all_nan_features": list(cleaning_meta.get("dropped_all_nan_features", []) or []),
+                "dropped_constant_features": list(cleaning_meta.get("dropped_constant_features", []) or []),
+                "dropped_still_nan_features": list(cleaning_meta.get("dropped_still_nan_features", []) or []),
+            }
         )
         total_dropped_all_nan += int(cleaning_meta.get("dropped_all_nan_count", 0) or 0)
         total_dropped_constant += int(cleaning_meta.get("dropped_constant_count", 0) or 0)
@@ -748,7 +916,9 @@ def train_tsfresh_extrema_feature_discovery(
         )
 
     aggregated_selected_features = _aggregate_selected_feature_details(executed_folds)
+    dropped_feature_details = _aggregate_dropped_feature_details(fold_feature_cleaning)
     selected_feature_names = [str(row["feature"]) for row in aggregated_selected_features]
+    extracted_feature_names = [str(col) for col in full_feature_frame.columns]
     label_distribution = {
         "train": _merge_named_label_distributions(train_label_distributions),
         "oos_evaluation": _merge_named_label_distributions(eval_label_distributions),
@@ -762,13 +932,19 @@ def train_tsfresh_extrema_feature_discovery(
         "source_feature_count": int(len(source_cols)),
         "source_feature_cols": list(source_cols),
         "extracted_feature_count": int(full_feature_frame.shape[1]),
+        "extracted_feature_details": _feature_detail_rows(extracted_feature_names),
         "resolved_feature_count": int(full_feature_frame.shape[1]),
         "selected_feature_count": int(len(selected_feature_names)),
         "selected_features": list(selected_feature_names),
         "selected_feature_details": aggregated_selected_features,
+        "dropped_feature_details": dropped_feature_details,
+        "fold_feature_cleaning": fold_feature_cleaning,
         "window_size": int(window_size),
         "label_horizon": int(label_horizon),
         "feature_preset": feature_preset,
+        "include_raw_ohlcv": bool(include_raw_ohlcv),
+        "custom_kind_count": int(len(kind_to_fc_parameters)),
+        "configured_custom_kinds": sorted(str(kind) for kind in kind_to_fc_parameters),
         "auto_apply_selected_features": False,
     }
 
@@ -840,6 +1016,7 @@ def train_tsfresh_extrema_feature_discovery(
             "export_dataset_path": str(export_dataset_path) if isinstance(export_dataset_path, str) else None,
             "feature_count": int(full_feature_frame.shape[1]),
             "feature_name_prefixes": list(source_cols),
+            "extracted_feature_names": extracted_feature_names,
             "label_col": _TSFRESH_RESEARCH_LABEL_COL,
             "label_code_col": _TSFRESH_RESEARCH_LABEL_CODE_COL,
             "eligible_col": _TSFRESH_RESEARCH_ELIGIBLE_COL,

@@ -3,6 +3,7 @@ from __future__ import annotations
 from src.signals.buy_and_hold_signal import buy_and_hold_signal
 from src.signals.conviction_sizing_signal import conviction_sizing_signal
 from src.signals.dense_return_forecast_signal import dense_return_forecast_signal
+from src.signals.ema_rms_ppo_vwap_signal import ema_rms_ppo_vwap_signal
 from src.signals.ema_stoch_rsi_pullback_signal import ema_stoch_rsi_pullback_signal
 from src.signals.forecast_threshold_signal import forecast_threshold_signal
 from src.signals.forecast_vol_adjusted_signal import forecast_vol_adjusted_signal
@@ -22,6 +23,7 @@ from src.signals.trend_state_long_only_signal import trend_state_long_only_signa
 from src.signals.trend_state_signal import trend_state_signal
 from src.signals.vol_targeted_signal import vol_targeted_signal
 from src.signals.volatility_regime_strategy import volatility_regime_strategy
+from src.signals.vwap_rms_ema_cross_long_signal import vwap_rms_ema_cross_long_signal
 
 __all__ = [
     "buy_and_hold_signal",
@@ -35,6 +37,7 @@ __all__ = [
     "probabilistic_signal",
     "conviction_sizing_signal",
     "dense_return_forecast_signal",
+    "ema_rms_ppo_vwap_signal",
     "forecast_threshold_signal",
     "forecast_vol_adjusted_signal",
     "indicator_model_adaptive_pullback_signal",
@@ -46,4 +49,5 @@ __all__ = [
     "ppo_adx_stochrsi_trend_signal",
     "roc_long_only_conditions_signal",
     "vol_targeted_signal",
+    "vwap_rms_ema_cross_long_signal",
 ]

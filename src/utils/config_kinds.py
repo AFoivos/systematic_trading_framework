@@ -41,6 +41,7 @@ FEATURE_KINDS = frozenset(
 
 SIGNAL_KINDS = frozenset(
     {
+        "ema_rms_ppo_vwap",
         "ema_stoch_rsi_pullback",
         "dense_return_forecast",
         "forecast_threshold",
@@ -60,6 +61,7 @@ SIGNAL_KINDS = frozenset(
         "stochastic",
         "trend_state",
         "volatility_regime",
+        "vwap_rms_ema_cross_long",
     }
 )
 

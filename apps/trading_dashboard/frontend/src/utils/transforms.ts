@@ -26,7 +26,7 @@ export function flattenCatalog(catalog: Record<string, CatalogItem[]> | CatalogI
   return Object.values(catalog).flat();
 }
 
-function isFeatureSourceType(sourceType: string): boolean {
+export function isFeatureSourceType(sourceType: string): boolean {
   return sourceType === "feature" || sourceType === "computed_feature" || sourceType.endsWith("_feature");
 }
 

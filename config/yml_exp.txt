@@ -12,6 +12,8 @@ docker compose run --rm app python -m src.experiments.optuna_search config/optun
 
 docker compose run --rm app python -m src.experiments.optuna_search config/optuna/roc_long_only/optuna_spx500_roc_long_only_xgboost_r_multiple_filter.yaml
 
-docker compose run --rm app python -m src.experiments.runner config/experiments/dense_return_forecasting_v2.yaml
+docker compose run --rm app python -m src.experiments.runner config/experiments/btcusd_1h_shock_meta_xgboost_long_only.yaml
 
 docker compose run --rm app python -m src.experiments.optuna_search config/optuna/ema_stoch_pullback_meta_optuna.yaml
+
+docker compose run --rm app python -m src.experiments.runner config/experiments/tsfresh_extrema_discovery.yaml

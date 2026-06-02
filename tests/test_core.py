@@ -759,6 +759,38 @@ def test_manual_barrier_short_configs_default_to_long_only_behavior() -> None:
     assert result.trades.empty
 
 
+def test_manual_barrier_backtest_supports_disabled_time_exit() -> None:
+    idx = pd.date_range("2024-01-01", periods=5, freq="30min")
+    df = pd.DataFrame(
+        {
+            "signal": [1.0, 0.0, 0.0, 0.0, 0.0],
+            "open": [999.0, 100.0, 100.0, 100.0, 100.0],
+            "high": [999.0, 100.2, 100.2, 100.2, 100.2],
+            "low": [999.0, 99.8, 99.8, 99.8, 99.8],
+            "close": [999.0, 100.0, 100.0, 100.0, 100.1],
+        },
+        index=idx,
+    )
+
+    result = run_manual_barrier_backtest(
+        df,
+        signal_col="signal",
+        take_profit_r=3.0,
+        stop_loss_r=3.0,
+        risk_per_trade=0.01,
+        max_holding_bars=None,
+        cost_per_unit_turnover=0.0,
+        slippage_per_unit_turnover=0.0,
+        periods_per_year=48,
+    )
+
+    trade = result.trades.iloc[0]
+    assert trade["entry_timestamp"] == idx[1]
+    assert trade["exit_timestamp"] == idx[-1]
+    assert trade["exit_reason"] == "end_of_data_close"
+    assert trade["bars_held"] == 4
+
+
 def test_roc_long_only_configs_load_as_manual_barrier_experiments() -> None:
     config_paths = [
         "config/experiments/roc_long_only/xauusd_roc_long_only_manual_barrier.yaml",

@@ -14,8 +14,10 @@ from src.experiments.models import (
 )
 from src.experiments.registry import FEATURE_REGISTRY, MODEL_REGISTRY, SIGNAL_REGISTRY
 from src.features import (
+    TSFRESH_ROLLING_CALCULATORS,
     add_close_returns,
     add_feature_transforms,
+    add_return_momentum_features,
     add_shock_context_features,
     add_support_resistance_features,
     add_support_resistance_v2_features,
@@ -320,6 +322,31 @@ def test_feature_transforms_resolve_single_column_selectors() -> None:
     assert out["volume_over_atr_selected_z_2"].iloc[:2].isna().all()
 
 
+def test_tsfresh_rolling_transform_matches_export_calculator_family() -> None:
+    idx = pd.date_range("2024-01-01", periods=5, freq="h")
+    df = pd.DataFrame({"osc": [1.0, np.nan, -3.0, 2.0, 4.0]}, index=idx)
+
+    out = add_feature_transforms(
+        df,
+        transforms=[
+            {
+                "source_col": "osc",
+                "kind": "tsfresh_rolling",
+                "window": 4,
+            }
+        ],
+    )
+
+    assert {f"osc__{calculator}" for calculator in TSFRESH_ROLLING_CALCULATORS}.issubset(out.columns)
+    assert out.loc[idx[:3], "osc__sum_values"].isna().all()
+    assert out.loc[idx[3], "osc__sum_values"] == pytest.approx(0.0)
+    assert out.loc[idx[3], "osc__length"] == pytest.approx(3.0)
+    assert out.loc[idx[3], "osc__standard_deviation"] == pytest.approx(np.std([1.0, -3.0, 2.0]))
+    assert out.loc[idx[3], "osc__root_mean_square"] == pytest.approx(np.sqrt(np.mean([1.0, 9.0, 4.0])))
+    assert out.loc[idx[3], "osc__absolute_maximum"] == pytest.approx(3.0)
+    assert out.loc[idx[4], "osc__minimum"] == pytest.approx(-3.0)
+
+
 def test_vol_normalized_momentum_resolves_vol_window_when_col_is_null() -> None:
     idx = pd.date_range("2024-01-01", periods=4, freq="h")
     df = pd.DataFrame(
@@ -345,6 +372,95 @@ def test_vol_normalized_momentum_resolves_vol_window_when_col_is_null() -> None:
         expected,
         check_names=False,
     )
+
+
+def test_return_momentum_auto_computes_missing_close_returns() -> None:
+    idx = pd.date_range("2024-01-01", periods=5, freq="h")
+    df = pd.DataFrame({"close": [100.0, 101.0, 99.0, 100.0, 102.0]}, index=idx)
+
+    out = add_return_momentum_features(
+        df,
+        returns_col="close_logret",
+        windows=[2],
+    )
+
+    expected_returns = np.log(df["close"] / df["close"].shift(1))
+    expected = expected_returns.rolling(window=2).sum()
+    pd.testing.assert_series_equal(
+        out["close_logret_mom_2"],
+        expected,
+        check_names=False,
+    )
+
+
+def test_apply_feature_steps_volatility_auto_computes_missing_returns_dependency() -> None:
+    df = _synthetic_hourly_ohlcv(periods=48)
+
+    out = apply_feature_steps(
+        df,
+        [
+            {
+                "step": "volatility",
+                "params": {
+                    "returns_col": "close_logret",
+                    "rolling_windows": [5],
+                    "ewma_spans": [],
+                    "annualization_factor": None,
+                },
+            }
+        ],
+    )
+
+    assert "close_logret" in out.columns
+    assert "vol_rolling_5" in out.columns
+
+
+def test_vol_normalized_momentum_auto_computes_missing_return_and_volatility_inputs() -> None:
+    idx = pd.date_range("2024-01-01", periods=6, freq="h")
+    df = pd.DataFrame({"close": [100.0, 101.0, 99.0, 100.0, 102.0, 101.0]}, index=idx)
+
+    out = add_vol_normalized_momentum_features(
+        df,
+        returns_col="close_logret",
+        vol_col="vol_rolling_3",
+        vol_window=3,
+        windows=[2],
+        eps=0.0,
+    )
+
+    expected_returns = np.log(df["close"] / df["close"].shift(1))
+    expected_vol = expected_returns.rolling(window=3).std(ddof=1)
+    expected = expected_returns.rolling(window=2).sum() / expected_vol
+    pd.testing.assert_series_equal(
+        out["close_logret_norm_mom_2"],
+        expected,
+        check_names=False,
+    )
+
+
+def test_apply_feature_steps_trend_regime_auto_computes_trend_dependencies() -> None:
+    df = _synthetic_hourly_ohlcv(periods=80)
+
+    out = apply_feature_steps(
+        df,
+        [
+            {
+                "step": "trend_regime",
+                "params": {
+                    "price_col": "close",
+                    "base_sma_for_sign": 20,
+                    "short_sma": 10,
+                    "long_sma": 20,
+                },
+            }
+        ],
+    )
+
+    assert "close_sma_10" in out.columns
+    assert "close_sma_20" in out.columns
+    assert "close_over_sma_20" in out.columns
+    assert "close_trend_regime_sma_20" in out.columns
+    assert "close_trend_state_sma_10_20" in out.columns
 
 
 def test_rolling_zscore_transform_is_point_in_time_safe() -> None:

@@ -115,7 +115,11 @@ def _stage_from_data_path(path: Path, data_root: Path) -> str:
 def _metadata_path_for_dataset(path: Path) -> Path:
     if path.name in {"dataset.csv", "dataset.parquet"}:
         return path.with_name("metadata.json")
-    return path.with_suffix(".metadata.json")
+    sidecar_path = path.with_suffix(".metadata.json")
+    if sidecar_path.exists():
+        return sidecar_path
+    snapshot_metadata_path = path.with_name("metadata.json")
+    return snapshot_metadata_path if snapshot_metadata_path.exists() else sidecar_path
 
 
 def _extract_timeframe_from_metadata(metadata: dict[str, Any], fallback_name: str) -> str | None:

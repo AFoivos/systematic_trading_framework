@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import tempfile
@@ -11,7 +12,9 @@ import pytest
 
 import src.experiments.runner as runner_mod
 from src.backtesting.engine import BacktestResult, run_backtest
+from src.experiments.orchestration import artifacts as artifacts_module
 from src.experiments.orchestration.stage_trace import build_stage_tail_snapshot, format_stage_tail_snapshot
+from src.experiments.support.execution_source_audit import build_execution_source_audit
 from src.features.technical.momentum import add_momentum_features
 from src.models.common.runtime import infer_feature_columns
 from src.portfolio.construction import PortfolioPerformance
@@ -24,6 +27,7 @@ from src.src_data.providers.alphavantage import AlphaVantageFXProvider, _build_r
 from src.src_data.providers.twelvedata import TwelveDataProvider
 from src.src_data.storage import save_dataset_snapshot
 from src.utils.config import ConfigError, load_experiment_config, load_experiment_config_typed
+from src.utils.config_defaults import resolve_logging_block
 from src.utils.paths import enforce_safe_absolute_path
 from src.utils.repro import apply_runtime_reproducibility
 from src.utils.run_metadata import build_run_metadata
@@ -175,13 +179,24 @@ def test_rsi_signal_requires_existing_column() -> None:
         compute_rsi_signal(df, rsi_col="missing_rsi", buy_level=30.0, sell_level=70.0)
 
 
-def test_momentum_features_validate_required_columns() -> None:
+def test_momentum_features_auto_compute_missing_close_returns() -> None:
     """
-    Momentum features should fail fast when required columns are absent.
+    Momentum features should resolve close-based return and volatility inputs when absent.
     """
-    df = pd.DataFrame({"close": [1.0, 2.0, 3.0]})
-    with pytest.raises(KeyError):
-        add_momentum_features(df, price_col="close", returns_col="close_logret")
+    df = pd.DataFrame({"close": np.linspace(100.0, 110.0, 32)})
+
+    out = add_momentum_features(
+        df,
+        price_col="close",
+        returns_col="close_logret",
+        windows=[2],
+    )
+
+    assert "close_logret" in out.columns
+    assert "vol_rolling_20" in out.columns
+    assert "close_mom_2" in out.columns
+    assert "close_logret_mom_2" in out.columns
+    assert "close_logret_norm_mom_2" in out.columns
 
 
 def test_covariance_rebalance_step_reduces_computation_points() -> None:
@@ -1644,6 +1659,80 @@ def test_save_artifacts_writes_experiment_report(tmp_path) -> None:
     assert "report_assets/trade_diagnostics_TEST.html" in report_html_text
 
 
+def test_execution_source_audit_includes_configured_runtime_modules_and_function_paths() -> None:
+    cfg = load_experiment_config(
+        "config/experiments/ema_rms_ppo_vwap/"
+        "spx500_30m_vwap_rms_cross_ema50_regime_3atr_no_time_exit.yaml"
+    )
+
+    content = build_execution_source_audit(cfg)
+
+    assert "# GENERATED EXECUTION SOURCE AUDIT - READ-ONLY SNAPSHOT" in content
+    assert "# Runtime stage: 05. Feature pipeline" in content
+    assert "# Relative path: src/features/returns.py" in content
+    assert "# Relative path: src/signals/vwap_rms_ema_cross_long_signal.py" in content
+    assert "# Relative path: src/targets/triple_barrier.py" in content
+    assert "# Relative path: src/backtesting/manual_barrier.py" in content
+    assert "# Relative path: src/backtesting/trade_path.py" in content
+    assert "# Relative path: src/experiments/orchestration/artifacts.py" in content
+    assert content.index("src/features/returns.py") < content.index("src/signals/vwap_rms_ema_cross_long_signal.py")
+    assert content.index("src/signals/vwap_rms_ema_cross_long_signal.py") < content.index("src/targets/triple_barrier.py")
+
+
+def test_execution_source_audit_default_is_disabled() -> None:
+    logging_cfg = resolve_logging_block({}, Path("config/demo.yaml"))
+
+    assert logging_cfg["execution_source_audit"]["enabled"] is False
+
+
+def test_save_artifacts_registers_enabled_execution_source_audit(tmp_path, monkeypatch) -> None:
+    def _write_stub(path: Path, *, cfg: dict) -> Path:
+        path.write_text("# generated source audit\n", encoding="utf-8")
+        return path
+
+    monkeypatch.setattr(artifacts_module, "write_execution_source_audit", _write_stub)
+    monkeypatch.setattr(artifacts_module, "_write_lab_feature_diagnostic_artifacts", lambda **_: {})
+    monkeypatch.setattr(artifacts_module, "_write_dense_forecast_diagnostic_artifacts", lambda **_: {})
+    monkeypatch.setattr(artifacts_module, "_write_tsfresh_feature_dataset_artifacts", lambda **_: {})
+    monkeypatch.setattr(artifacts_module, "write_experiment_report_from_run_dir", lambda _: {})
+
+    index = pd.date_range("2024-01-01", periods=2, freq="30min", tz="UTC")
+    performance = PortfolioPerformance(
+        equity_curve=pd.Series([1.0, 1.0], index=index),
+        net_returns=pd.Series([0.0, 0.0], index=index),
+        gross_returns=pd.Series([0.0, 0.0], index=index),
+        costs=pd.Series([0.0, 0.0], index=index),
+        turnover=pd.Series([0.0, 0.0], index=index),
+        summary={},
+    )
+    artifacts = artifacts_module.save_artifacts(
+        run_dir=tmp_path / "run",
+        cfg={
+            "logging": {"execution_source_audit": {"enabled": True}},
+            "diagnostics": {"trade_charts": {"enabled": False}},
+        },
+        data=pd.DataFrame({"close": [100.0, 101.0]}, index=index),
+        performance=performance,
+        model_meta={},
+        evaluation={},
+        monitoring={},
+        execution={},
+        execution_orders=None,
+        portfolio_weights=None,
+        portfolio_diagnostics=None,
+        portfolio_meta={},
+        storage_meta={},
+        run_metadata={},
+        config_hash_sha256="config-hash",
+        data_fingerprint={"sha256": "data-hash"},
+    )
+
+    source_audit_path = Path(artifacts["execution_source_audit"])
+    assert source_audit_path.read_text(encoding="utf-8") == "# generated source audit\n"
+    manifest = json.loads(Path(artifacts["manifest"]).read_text(encoding="utf-8"))
+    assert "execution_source_audit" in manifest["files"]
+
+
 def test_trade_event_frame_includes_signal_target_and_barriers() -> None:
     """
     Trade diagnostics should carry the fields needed to inspect bad entries/exits.
@@ -2364,3 +2453,39 @@ def test_requirements_lock_contains_pinned_versions() -> None:
     pins = [line for line in content if line.strip() and not line.strip().startswith("#")]
     assert pins
     assert all("==" in line for line in pins)
+
+
+def test_btcusd_shock_meta_long_only_config_loads_and_produces_declared_features() -> None:
+    """
+    The archived BTCUSD shock-meta BEST config should remain rerunnable after config evolution.
+    """
+    cfg = load_experiment_config("config/experiments/btcusd_1h_shock_meta_xgboost_long_only.yaml")
+
+    idx = pd.date_range("2024-01-01 00:00:00", periods=400, freq="h")
+    base = np.linspace(0.0, 0.04, len(idx))
+    cycle = 0.003 * np.sin(np.arange(len(idx)) / 9.0)
+    close = 42_000.0 * np.exp(base + cycle)
+
+    df = pd.DataFrame(index=idx)
+    df["close"] = close
+    df["open"] = df["close"].shift(1).fillna(df["close"].iloc[0] * 0.9995)
+    df["high"] = np.maximum(df["open"], df["close"]) * 1.001
+    df["low"] = np.minimum(df["open"], df["close"]) * 0.999
+    df["volume"] = 1000.0 + (np.arange(len(idx)) % 24) * 10.0
+    df = df[["open", "high", "low", "close", "volume"]]
+
+    features = runner_mod._apply_feature_steps(df, list(cfg["features"]))
+    model_cfg = dict(cfg["model"])
+    feature_cols = infer_feature_columns(
+        features,
+        explicit_cols=model_cfg.get("feature_cols"),
+        feature_selectors=model_cfg.get("feature_selectors"),
+    )
+
+    assert cfg["data"]["symbol"] == "BTCUSD"
+    assert cfg["backtest"]["periods_per_year"] == 8760
+    assert cfg["backtest"]["subset"] == "test"
+    assert cfg["signals"]["params"]["mode"] == "long_only"
+    assert cfg["model"]["target"]["candidate_col"] == "shock_down_candidate"
+    assert len(feature_cols) == 12
+    assert [column for column in feature_cols if column not in features.columns] == []

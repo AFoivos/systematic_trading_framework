@@ -193,6 +193,7 @@ def run_single_asset_backtest(
             raise ValueError("backtest.engine='manual_barrier' does not support risk.sizing; size via the signal.")
         if backtest_cfg.get("subset", "full") != "full":
             raise ValueError("backtest.engine='manual_barrier' currently supports backtest.subset='full' only.")
+        max_holding_bars = backtest_cfg.get("max_holding_bars", 16)
         result = run_manual_barrier_backtest(
             df,
             signal_col=signal_col,
@@ -203,7 +204,7 @@ def run_single_asset_backtest(
             take_profit_r=float(backtest_cfg.get("take_profit_r", 1.8)),
             stop_loss_r=float(backtest_cfg.get("stop_loss_r", 1.0)),
             risk_per_trade=float(backtest_cfg.get("risk_per_trade", 0.006)),
-            max_holding_bars=int(backtest_cfg.get("max_holding_bars", 16)),
+            max_holding_bars=int(max_holding_bars) if max_holding_bars is not None else None,
             cost_per_unit_turnover=float(risk_cfg.get("cost_per_turnover", 0.0)),
             slippage_per_unit_turnover=float(risk_cfg.get("slippage_per_turnover", 0.0)),
             max_leverage=float(risk_cfg.get("max_leverage", 1.0)),

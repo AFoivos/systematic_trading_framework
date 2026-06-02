@@ -359,6 +359,9 @@ def resolve_logging_block(logging_cfg: dict[str, Any], config_path: Path) -> dic
     stage_tails.setdefault("max_columns", 16)
     stage_tails.setdefault("max_assets", 3)
     logging_cfg["stage_tails"] = stage_tails
+    execution_source_audit = dict(logging_cfg.get("execution_source_audit", {}) or {})
+    execution_source_audit.setdefault("enabled", False)
+    logging_cfg["execution_source_audit"] = execution_source_audit
     return logging_cfg
 
 

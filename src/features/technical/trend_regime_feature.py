@@ -3,6 +3,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from .sma import compute_sma
+
 
 def add_trend_regime_features(
     df: pd.DataFrame,
@@ -12,14 +14,21 @@ def add_trend_regime_features(
     long_sma: int = 50,
     inplace: bool = False,
 ) -> pd.DataFrame:
-    out = df if inplace else df.copy()
-    over_col = f"{price_col}_over_sma_{base_sma_for_sign}"
-    if over_col not in out.columns:
-        raise KeyError(
-            f"Required column '{over_col}' not found. "
-            "Run add_trend_features() first with appropriate sma_windows."
-        )
+    if price_col not in df.columns:
+        raise KeyError(f"price_col '{price_col}' not found in DataFrame")
 
+    out = df if inplace else df.copy()
+    prices = out[price_col].astype(float)
+    required_windows = {int(base_sma_for_sign), int(short_sma), int(long_sma)}
+    for window in sorted(required_windows):
+        sma_col = f"{price_col}_sma_{window}"
+        if sma_col not in out.columns:
+            out[sma_col] = compute_sma(prices, window=window)
+        over_sma_col = f"{price_col}_over_sma_{window}"
+        if over_sma_col not in out.columns:
+            out[over_sma_col] = prices / out[sma_col].astype(float) - 1.0
+
+    over_col = f"{price_col}_over_sma_{base_sma_for_sign}"
     regime_col = f"{price_col}_trend_regime_sma_{base_sma_for_sign}"
     regime = np.sign(out[over_col].astype(float))
     regime = regime.where(~out[over_col].isna(), other=np.nan)
@@ -27,10 +36,6 @@ def add_trend_regime_features(
 
     short_col = f"{price_col}_sma_{short_sma}"
     long_col = f"{price_col}_sma_{long_sma}"
-    missing = [c for c in (short_col, long_col) if c not in out.columns]
-    if missing:
-        raise KeyError(f"Missing SMA columns {missing}. Run add_trend_features() with matching sma_windows.")
-
     state_col = f"{price_col}_trend_state_sma_{short_sma}_{long_sma}"
     state = pd.Series(index=out.index, dtype="float32")
     short = out[short_col].astype(float)

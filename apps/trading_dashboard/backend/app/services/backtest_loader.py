@@ -71,6 +71,7 @@ class BacktestLoader:
             "pnl": self._float_or_none(row.get("pnl", row.get("net_return", row.get("gross_return")))),
             "return": self._float_or_none(row.get("return", row.get("net_return", row.get("gross_return")))),
             "size": self._float_or_none(row.get("size", row.get("position_size", row.get("position_after")))),
+            "exit_reason": self._string_or_none(row.get("exit_reason")),
         }
 
     def _normalize_trade_events(self, frame: pd.DataFrame) -> list[dict[str, Any]]:
@@ -112,6 +113,7 @@ class BacktestLoader:
             "pnl": self._float_or_none(exit_row.get("pnl")) if exit_row is not None else None,
             "return": self._float_or_none(exit_row.get("return")) if exit_row is not None else None,
             "size": self._event_size(entry if entry is not None else exit_row),
+            "exit_reason": self._string_or_none(exit_row.get("exit_reason")) if exit_row is not None else None,
         }
 
     def _event_time(self, row: pd.Series | None) -> str | None:
@@ -145,3 +147,9 @@ class BacktestLoader:
         if value is None or pd.isna(value) or str(value).strip() == "":
             return None
         return float(value)
+
+    @staticmethod
+    def _string_or_none(value: Any) -> str | None:
+        if value is None or pd.isna(value) or str(value).strip() == "":
+            return None
+        return str(value).strip()

@@ -58,5 +58,5 @@ export interface TradeRecord {
   pnl: number | null;
   return: number | null;
   size: number | null;
+  exit_reason: string | null;
 }
-

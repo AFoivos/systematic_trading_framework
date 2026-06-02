@@ -5,6 +5,8 @@ from typing import Optional, Sequence
 import numpy as np
 import pandas as pd
 
+from ._dependency_fallbacks import ensure_close_based_returns
+
 
 def compute_rolling_vol(
     returns: pd.Series,
@@ -72,10 +74,8 @@ def add_volatility_features(
     - vol_rolling_{w}
     - vol_ewma_{span}
     """
-    if returns_col not in df.columns:
-        raise KeyError(f"returns_col '{returns_col}' not found in DataFrame")
-
     out = df if inplace else df.copy()
+    out = ensure_close_based_returns(out, returns_col=returns_col)
     ret_series = out[returns_col].astype(float)
 
     # Rolling vols

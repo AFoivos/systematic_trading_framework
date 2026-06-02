@@ -14,7 +14,13 @@ from .volatility import (
     add_volatility_features,
 )
 from .lags import add_lagged_features
-from .transforms import add_feature_transforms, compute_rolling_clip_transform
+from .transforms import (
+    TSFRESH_ROLLING_CALCULATORS,
+    add_feature_transforms,
+    add_tsfresh_rolling_transforms,
+    compute_rolling_clip_transform,
+    compute_tsfresh_rolling_transform,
+)
 from .technical.trend import (
     compute_sma,
     compute_ema,
@@ -59,7 +65,10 @@ __all__ = [
     "add_volatility_features",
     "add_lagged_features",
     "add_feature_transforms",
+    "add_tsfresh_rolling_transforms",
     "compute_rolling_clip_transform",
+    "compute_tsfresh_rolling_transform",
+    "TSFRESH_ROLLING_CALCULATORS",
     "compute_sma",
     "compute_ema",
     "add_trend_features",

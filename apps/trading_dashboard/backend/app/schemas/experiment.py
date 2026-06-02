@@ -42,3 +42,4 @@ class TradeRecord(BaseModel):
     pnl: float | None = None
     return_value: float | None = Field(default=None, alias="return")
     size: float | None = None
+    exit_reason: str | None = None

@@ -45,7 +45,7 @@ def run_manual_barrier_backtest(
     take_profit_r: float = 1.8,
     stop_loss_r: float = 1.0,
     risk_per_trade: float = 0.006,
-    max_holding_bars: int = 16,
+    max_holding_bars: int | None = 16,
     cost_per_unit_turnover: float = 0.0,
     slippage_per_unit_turnover: float = 0.0,
     max_leverage: float = 1.0,
@@ -59,8 +59,10 @@ def run_manual_barrier_backtest(
     Event-based backtest for manual rule signals.
 
     Signal is read at bar close `t`; entry is executed at the next bar open `t+1`. Exits are
-    evaluated from the entry bar onward using stop loss, take profit, or max holding. No
-    pyramiding, averaging down, martingale sizing, or risk escalation is applied.
+    evaluated from the entry bar onward using stop loss, take profit, or max holding. Set
+    ``max_holding_bars=None`` to disable the time exit; an open final trade is then marked to the
+    final dataset close. No pyramiding, averaging down, martingale sizing, or risk escalation is
+    applied.
 
     Dynamic exits are opt-in. With `dynamic_exits.enabled=false` or no dynamic exit config, the
     engine keeps the legacy stop/take-profit/max-holding behavior.
@@ -72,7 +74,7 @@ def run_manual_barrier_backtest(
     stop_mode = str(stop_mode)
     if stop_mode not in {"fixed_return", "volatility_stop"}:
         raise ValueError("stop_mode must be 'fixed_return' or 'volatility_stop'.")
-    if int(max_holding_bars) <= 0:
+    if max_holding_bars is not None and int(max_holding_bars) <= 0:
         raise ValueError("max_holding_bars must be positive.")
     if float(take_profit_r) <= 0.0 or float(stop_loss_r) <= 0.0:
         raise ValueError("take_profit_r and stop_loss_r must be positive.")
@@ -143,7 +145,11 @@ def run_manual_barrier_backtest(
             size = raw_size
             stop_distance_pct = max(float(risk_per_trade) * float(stop_loss_r), 1e-8)
             target_distance_pct = max(float(risk_per_trade) * float(take_profit_r), 1e-8)
-        max_exit_idx = min(n - 1, entry_idx + int(max_holding_bars) - 1)
+        max_exit_idx = (
+            n - 1
+            if max_holding_bars is None
+            else min(n - 1, entry_idx + int(max_holding_bars) - 1)
+        )
         is_short = raw_signal < 0.0
         if is_short:
             stop_price = entry_open * (1.0 + stop_distance_pct)
@@ -187,6 +193,8 @@ def run_manual_barrier_backtest(
         exit_idx = int(path["exit_idx"])
         raw_exit_price = _finite_price(path["raw_exit_price"], field=f"{close_col}[exit]")
         exit_reason = str(path["exit_reason"])
+        if max_holding_bars is None and exit_reason == "max_holding_close":
+            exit_reason = "end_of_data_close"
         bars_held = int(path["bars_held"])
 
         slip = float(slippage_per_unit_turnover)

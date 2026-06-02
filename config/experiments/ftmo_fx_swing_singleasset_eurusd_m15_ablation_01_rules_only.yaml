@@ -1,5 +1,6 @@
+# Ablation 01: trade the raw entry rules on the shared OOS timeline.
 strategy:
-  name: ftmo_fx_swing_singleasset_eurusd_m15_lightgbm_alpha_meta_barrier_v3
+  name: ftmo_fx_swing_singleasset_eurusd_m15_ablation_01_rules_only
   timeframe: 15m
   assets:
     - EURUSD
@@ -25,7 +26,7 @@ data:
       inactive_policy: raise
   storage:
     mode: cached_only
-    dataset_id: ftmo_fx_swing_singleasset_eurusd_m15_lightgbm_alpha_meta_barrier_v3
+    dataset_id: ftmo_fx_swing_singleasset_eurusd_m15_ablation_01_rules_only
     save_raw: false
     save_processed: true
     load_path: data/processed/eurusd_m15.csv
@@ -597,19 +598,9 @@ model_stages:
       n_jobs: 1
 
 signals:
-  kind: meta_probability_side
-  outputs:
-    signal_col: signal_meta_side
-  params:
-    prob_col: pred_prob
-    side_col: primary_side
-    candidate_col: label_candidate
-    threshold: 0.56
-    min_expected_value_r: 0.08
-    profit_barrier_r: 1.8
-    stop_barrier_r: 1.0
-    clip: 1.0
-    mode: long_short
+  # Models still run so that subset=test uses the exact same OOS bars as the
+  # other ablations, but they do not participate in the trading decision.
+  kind: none
 
 runtime:
   seed: 7
@@ -619,23 +610,11 @@ runtime:
   seed_torch: false
 
 risk:
-  cost_per_turnover: 0.00006
-  slippage_per_turnover: 0.00002
+  cost_per_turnover: 0.0
+  slippage_per_turnover: 0.0
   target_vol: null
   max_leverage: 1.0
-  sizing:
-    kind: ftmo_risk_per_trade
-    output_col: signal_ftmo_sized
-    vol_col: atr_pct
-    confidence_col: pred_prob
-    confidence_mode: meta_success
-    confidence_floor: 0.56
-    confidence_power: 1.0
-    risk_per_trade: 0.0025
-    stop_mult: 1.5
-    max_leverage: 0.35
-    min_leverage: 0.0
-    min_abs_signal: 0.5
+  sizing: {}
   dd_guard:
     enabled: false
     max_drawdown: 0.08
@@ -649,7 +628,7 @@ risk:
 
 backtest:
   engine: portfolio_barrier
-  signal_col: signal_meta_side
+  signal_col: primary_signal
   returns_col: close_ret
   returns_type: simple
   open_col: open
@@ -699,7 +678,7 @@ execution:
 
 logging:
   enabled: true
-  run_name: ftmo_fx_swing_singleasset_eurusd_m15_lightgbm_alpha_meta_barrier_v3
+  run_name: ftmo_fx_swing_singleasset_eurusd_m15_ablation_01_rules_only
   output_dir: logs/experiments
   stage_tails:
     enabled: true
