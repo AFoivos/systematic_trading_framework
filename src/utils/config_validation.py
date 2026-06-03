@@ -1047,11 +1047,36 @@ def validate_features_block(features: Any) -> None:
                     raise ConfigValidationError("features[].params.windows must be a non-empty list of integers.")
                 for idx, window in enumerate(windows):
                     _positive_int(window, field=f"features[].params.windows[{idx}]")
+            if step["step"] == "atr":
+                for key in ("atr_col", "over_price_col"):
+                    if key in params and params[key] is not None and (
+                        not isinstance(params[key], str) or not params[key].strip()
+                    ):
+                        raise ConfigValidationError(f"features[].params.{key} must be a non-empty string.")
+                if windows is not None and len(windows) != 1 and (
+                    params.get("atr_col") is not None or params.get("over_price_col") is not None
+                ):
+                    raise ConfigValidationError(
+                        "features[].params stable ATR output columns require exactly one window."
+                    )
+                if "method" in params and params["method"] not in {"wilder", "simple"}:
+                    raise ConfigValidationError("features[].params.method must be one of: wilder, simple.")
+                if "add_over_price" in params and not isinstance(params["add_over_price"], bool):
+                    raise ConfigValidationError("features[].params.add_over_price must be boolean.")
+                if params.get("over_price_col") is not None and params.get("add_over_price", True) is not True:
+                    raise ConfigValidationError("features[].params.over_price_col requires add_over_price=true.")
+                if params.get("atr_col") is not None and params.get("atr_col") == params.get("over_price_col"):
+                    raise ConfigValidationError("features[].params ATR output columns must be unique.")
         if step["step"] == "vwap":
             params = step.get("params") or {}
             for key in ("high_col", "low_col", "close_col", "volume_col"):
                 if key in params and params[key] is not None and not isinstance(params[key], str):
                     raise ConfigValidationError(f"features[].params.{key} must be a string when provided.")
+            for key in ("vwap_col", "distance_col"):
+                if key in params and params[key] is not None and (
+                    not isinstance(params[key], str) or not params[key].strip()
+                ):
+                    raise ConfigValidationError(f"features[].params.{key} must be a non-empty string.")
             if "window" in params and params["window"] is not None:
                 _positive_int(params["window"], field="features[].params.window")
             windows = params.get("windows")
@@ -1062,6 +1087,33 @@ def validate_features_block(features: Any) -> None:
                     _positive_int(window, field=f"features[].params.windows[{idx}]")
             if "add_distance" in params and not isinstance(params["add_distance"], bool):
                 raise ConfigValidationError("features[].params.add_distance must be boolean.")
+            if windows is not None and len(windows) != 1 and (
+                params.get("vwap_col") is not None or params.get("distance_col") is not None
+            ):
+                raise ConfigValidationError(
+                    "features[].params stable VWAP output columns require exactly one window."
+                )
+            if params.get("distance_col") is not None and params.get("add_distance", True) is not True:
+                raise ConfigValidationError("features[].params.distance_col requires add_distance=true.")
+            if params.get("vwap_col") is not None and params.get("vwap_col") == params.get("distance_col"):
+                raise ConfigValidationError("features[].params VWAP output columns must be unique.")
+        if step["step"] == "ppo":
+            params = step.get("params") or {}
+            for key in ("price_col", "ppo_col", "ppo_signal_col", "ppo_hist_col"):
+                if key in params and params[key] is not None and (
+                    not isinstance(params[key], str) or not params[key].strip()
+                ):
+                    raise ConfigValidationError(f"features[].params.{key} must be a non-empty string.")
+            for key in ("fast", "slow", "signal"):
+                if key in params:
+                    _positive_int(params[key], field=f"features[].params.{key}")
+            output_cols = [
+                params[key]
+                for key in ("ppo_col", "ppo_signal_col", "ppo_hist_col")
+                if params.get(key) is not None
+            ]
+            if len(output_cols) != len(set(output_cols)):
+                raise ConfigValidationError("features[].params PPO output columns must be unique.")
         if step["step"] == "regime_context":
             params = step.get("params") or {}
             for key in ("vol_short_window", "vol_long_window", "trend_fast_span", "trend_slow_span"):

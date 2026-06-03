@@ -72,20 +72,81 @@ pruning:
   interval_steps: 1
 
 search_space:
+  # Intentionally fixed: close_ret must stay simple for the backtest contract,
+  # and ema_20 is diagnostics-only so tuning it cannot change the objective.
   - name: signal_ppo_hist_min
     path: signals.params.ppo_hist_min
     kind: float
     low: 0.0
-    high: 0.0010
+    high: 0.0020
     step: 0.00005
 
-  - name: rms_window
-    path: features.5.params.transforms.0.window
-    paths:
-      - features.5.params.transforms.1.window
-      - features.5.params.transforms.2.window
+  - name: ema_mid_span
+    path: features.2.params.ema_spans.0
     kind: categorical
-    choices: [24, 36, 48, 72, 96]
+    choices: [24, 32, 40, 50, 60, 72]
+
+  - name: ema_slow_span
+    path: features.3.params.ema_spans.0
+    kind: categorical
+    choices: [80, 96, 100, 120, 144, 168, 200]
+
+  - name: vwap_window
+    path: features.4.params.window
+    paths:
+      - features.4.params.windows.0
+    kind: categorical
+    choices: [8, 12, 16, 20, 24, 32, 40, 48, 64]
+
+  - name: ppo_fast_span
+    path: features.5.params.fast
+    kind: categorical
+    choices: [6, 8, 10, 12, 14, 16]
+
+  - name: ppo_slow_span
+    path: features.5.params.slow
+    kind: categorical
+    choices: [20, 24, 26, 30, 36, 42]
+
+  - name: ppo_signal_span
+    path: features.5.params.signal
+    kind: categorical
+    choices: [5, 7, 9, 12, 15]
+
+  - name: atr_window
+    path: features.6.params.window
+    paths:
+      - features.6.params.windows.0
+    kind: categorical
+    choices: [7, 10, 14, 20, 28, 36, 48]
+
+  - name: atr_method
+    path: features.6.params.method
+    kind: categorical
+    choices: [wilder, simple]
+
+  - name: ema_mid_rms_window
+    path: features.7.params.transforms.0.window
+    kind: categorical
+    choices: [12, 18, 24, 36, 48, 72, 96, 144, 192]
+
+  - name: vwap_rms_window
+    path: features.7.params.transforms.1.window
+    kind: categorical
+    choices: [12, 18, 24, 36, 48, 72, 96, 144, 192]
+
+  - name: ema_slow_rms_window
+    path: features.7.params.transforms.2.window
+    kind: categorical
+    choices: [12, 18, 24, 36, 48, 72, 96, 144, 192]
+
+  - name: rms_shift
+    path: features.7.params.transforms.0.shift
+    paths:
+      - features.7.params.transforms.1.shift
+      - features.7.params.transforms.2.shift
+    kind: categorical
+    choices: [0, 1, 2]
 
   - name: backtest_take_profit_r
     path: backtest.take_profit_r

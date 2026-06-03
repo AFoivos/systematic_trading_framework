@@ -700,6 +700,64 @@ def test_validate_features_block_accepts_tsfresh_rolling_transform() -> None:
     )
 
 
+def test_validate_features_block_accepts_stable_indicator_output_columns() -> None:
+    validate_features_block(
+        [
+            {
+                "step": "vwap",
+                "params": {
+                    "windows": [20],
+                    "vwap_col": "selected_vwap",
+                    "distance_col": "selected_vwap_distance",
+                },
+            },
+            {
+                "step": "ppo",
+                "params": {
+                    "fast": 12,
+                    "slow": 26,
+                    "signal": 9,
+                    "ppo_col": "selected_ppo",
+                    "ppo_signal_col": "selected_ppo_signal",
+                    "ppo_hist_col": "selected_ppo_hist",
+                },
+            },
+            {
+                "step": "atr",
+                "params": {
+                    "windows": [14],
+                    "atr_col": "selected_atr",
+                    "over_price_col": "selected_atr_over_price",
+                },
+            },
+        ]
+    )
+
+
+def test_validate_features_block_rejects_stable_vwap_output_columns_for_multiple_windows() -> None:
+    with pytest.raises(ConfigValidationError, match="stable VWAP output columns require exactly one window"):
+        validate_features_block(
+            [
+                {
+                    "step": "vwap",
+                    "params": {"windows": [20, 48], "vwap_col": "selected_vwap"},
+                },
+            ]
+        )
+
+
+def test_validate_features_block_rejects_stable_atr_output_columns_for_multiple_windows() -> None:
+    with pytest.raises(ConfigValidationError, match="stable ATR output columns require exactly one window"):
+        validate_features_block(
+            [
+                {
+                    "step": "atr",
+                    "params": {"windows": [14, 28], "atr_col": "selected_atr"},
+                },
+            ]
+        )
+
+
 def test_validate_features_block_rejects_unknown_tsfresh_rolling_calculator() -> None:
     with pytest.raises(ConfigValidationError, match="calculators\\[0\\]"):
         validate_features_block(

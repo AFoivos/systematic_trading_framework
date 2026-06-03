@@ -6,6 +6,7 @@ from src.features.returns import compute_returns
 from src.features.regime_context import add_regime_context_features
 from src.features.technical.adx import add_adx_features
 from src.features.technical.atr import add_atr_features
+from src.features.technical.ppo import add_ppo_features
 from src.features.technical.trend import add_trend_features
 from src.features.technical.vwap import add_vwap_features, compute_vwap
 from src.src_data.validation import validate_ohlcv
@@ -119,6 +120,48 @@ def test_vwap_feature_is_point_in_time_safe_when_future_changes() -> None:
         baseline["close_over_vwap_3"].iloc[:4],
         changed["close_over_vwap_3"].iloc[:4],
     )
+
+
+def test_vwap_feature_supports_stable_output_columns_for_single_window() -> None:
+    out = add_vwap_features(
+        _vwap_ohlcv_frame(),
+        windows=[3],
+        vwap_col="selected_vwap",
+        distance_col="selected_vwap_distance",
+    )
+
+    assert {"selected_vwap", "selected_vwap_distance"}.issubset(out.columns)
+    assert "vwap_3" not in out.columns
+    assert "close_over_vwap_3" not in out.columns
+
+
+def test_vwap_feature_rejects_stable_output_columns_for_multiple_windows() -> None:
+    with pytest.raises(ValueError, match="require exactly one resolved window"):
+        add_vwap_features(_vwap_ohlcv_frame(), windows=[2, 3], vwap_col="selected_vwap")
+
+
+def test_ppo_feature_supports_stable_output_columns() -> None:
+    out = add_ppo_features(
+        _vwap_ohlcv_frame(),
+        fast=2,
+        slow=3,
+        signal=2,
+        ppo_col="selected_ppo",
+        ppo_signal_col="selected_ppo_signal",
+        ppo_hist_col="selected_ppo_hist",
+    )
+
+    assert {"selected_ppo", "selected_ppo_signal", "selected_ppo_hist"}.issubset(out.columns)
+    assert "ppo_2_3" not in out.columns
+
+
+def test_ppo_feature_rejects_duplicate_output_columns() -> None:
+    with pytest.raises(ValueError, match="must be unique"):
+        add_ppo_features(
+            _vwap_ohlcv_frame(),
+            ppo_col="selected_ppo",
+            ppo_signal_col="selected_ppo",
+        )
 
 
 def test_vwap_config_validation_rejects_invalid_window() -> None:
@@ -395,6 +438,40 @@ def test_range_features_support_superset_windows() -> None:
 
     assert {"atr_2", "atr_over_price_2", "atr_3", "atr_over_price_3"}.issubset(out.columns)
     assert {"adx_2", "plus_di_2", "minus_di_2", "adx_3", "plus_di_3", "minus_di_3"}.issubset(out.columns)
+
+
+def test_atr_feature_supports_stable_output_columns_for_single_window() -> None:
+    df = pd.DataFrame(
+        {
+            "high": [2.0, 2.2, 2.4, 2.8],
+            "low": [1.0, 1.1, 1.3, 1.7],
+            "close": [1.5, 1.8, 2.0, 2.4],
+        }
+    )
+
+    out = add_atr_features(
+        df,
+        windows=[2],
+        atr_col="selected_atr",
+        over_price_col="selected_atr_over_price",
+    )
+
+    assert {"selected_atr", "selected_atr_over_price"}.issubset(out.columns)
+    assert "atr_2" not in out.columns
+    assert "atr_over_price_2" not in out.columns
+
+
+def test_atr_feature_rejects_stable_output_columns_for_multiple_windows() -> None:
+    df = pd.DataFrame(
+        {
+            "high": [2.0, 2.2, 2.4, 2.8],
+            "low": [1.0, 1.1, 1.3, 1.7],
+            "close": [1.5, 1.8, 2.0, 2.4],
+        }
+    )
+
+    with pytest.raises(ValueError, match="require exactly one resolved window"):
+        add_atr_features(df, windows=[2, 3], atr_col="selected_atr")
 
 
 def test_regime_context_supports_superset_vol_window_pairs() -> None:

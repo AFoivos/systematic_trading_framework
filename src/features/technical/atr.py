@@ -16,6 +16,8 @@ def add_atr_features(
     windows: Sequence[int] | None = None,
     method: str = "wilder",
     add_over_price: bool = True,
+    atr_col: str | None = None,
+    over_price_col: str | None = None,
     inplace: bool = False,
 ) -> pd.DataFrame:
     missing = [c for c in (high_col, low_col, close_col) if c not in df.columns]
@@ -25,12 +27,37 @@ def add_atr_features(
     high = out[high_col].astype(float)
     low = out[low_col].astype(float)
     close = out[close_col].astype(float)
-    for resolved_window in _resolve_windows(window=window, windows=windows):
+    resolved_windows = _resolve_windows(window=window, windows=windows)
+    _validate_stable_output_cols(
+        resolved_windows=resolved_windows,
+        add_over_price=add_over_price,
+        atr_col=atr_col,
+        over_price_col=over_price_col,
+    )
+    for resolved_window in resolved_windows:
         atr = compute_atr(high, low, close, window=resolved_window, method=method)
-        out[f"atr_{resolved_window}"] = atr
+        out[atr_col or f"atr_{resolved_window}"] = atr
         if add_over_price:
-            out[f"atr_over_price_{resolved_window}"] = atr / close
+            out[over_price_col or f"atr_over_price_{resolved_window}"] = atr / close
     return out
+
+
+def _validate_stable_output_cols(
+    *,
+    resolved_windows: Sequence[int],
+    add_over_price: bool,
+    atr_col: str | None,
+    over_price_col: str | None,
+) -> None:
+    for field_name, value in (("atr_col", atr_col), ("over_price_col", over_price_col)):
+        if value is not None and (not isinstance(value, str) or not value.strip()):
+            raise ValueError(f"{field_name} must be a non-empty string when provided.")
+    if atr_col is not None and atr_col == over_price_col:
+        raise ValueError("ATR output columns must be unique.")
+    if len(resolved_windows) != 1 and (atr_col is not None or over_price_col is not None):
+        raise ValueError("Stable ATR output columns require exactly one resolved window.")
+    if over_price_col is not None and not add_over_price:
+        raise ValueError("over_price_col requires add_over_price=True.")
 
 
 def _resolve_windows(*, window: int, windows: Sequence[int] | None) -> list[int]:

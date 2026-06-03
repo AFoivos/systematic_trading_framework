@@ -15,6 +15,8 @@ def add_vwap_features(
     window: int = 20,
     windows: Sequence[int] | None = None,
     add_distance: bool = True,
+    vwap_col: str | None = None,
+    distance_col: str | None = None,
     inplace: bool = False,
 ) -> pd.DataFrame:
     missing = [c for c in (high_col, low_col, close_col, volume_col) if c not in df.columns]
@@ -29,12 +31,37 @@ def add_vwap_features(
     typical_price = (high + low + close) / 3.0
     typical_price.name = "typical_price"
 
-    for resolved_window in _resolve_windows(window=window, windows=windows):
+    resolved_windows = _resolve_windows(window=window, windows=windows)
+    _validate_stable_output_cols(
+        resolved_windows=resolved_windows,
+        add_distance=add_distance,
+        vwap_col=vwap_col,
+        distance_col=distance_col,
+    )
+    for resolved_window in resolved_windows:
         vwap = compute_vwap(typical_price, volume, window=resolved_window)
-        out[f"vwap_{resolved_window}"] = vwap
+        out[vwap_col or f"vwap_{resolved_window}"] = vwap
         if add_distance:
-            out[f"{close_col}_over_vwap_{resolved_window}"] = close / vwap - 1.0
+            out[distance_col or f"{close_col}_over_vwap_{resolved_window}"] = close / vwap - 1.0
     return out
+
+
+def _validate_stable_output_cols(
+    *,
+    resolved_windows: Sequence[int],
+    add_distance: bool,
+    vwap_col: str | None,
+    distance_col: str | None,
+) -> None:
+    for field_name, value in (("vwap_col", vwap_col), ("distance_col", distance_col)):
+        if value is not None and (not isinstance(value, str) or not value.strip()):
+            raise ValueError(f"{field_name} must be a non-empty string when provided.")
+    if vwap_col is not None and vwap_col == distance_col:
+        raise ValueError("VWAP output columns must be unique.")
+    if len(resolved_windows) != 1 and (vwap_col is not None or distance_col is not None):
+        raise ValueError("Stable VWAP output columns require exactly one resolved window.")
+    if distance_col is not None and not add_distance:
+        raise ValueError("distance_col requires add_distance=True.")
 
 
 def _resolve_windows(*, window: int, windows: Sequence[int] | None) -> list[int]:
