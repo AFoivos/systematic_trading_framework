@@ -1,7 +1,0 @@
-No source or reference deck was supplied.
-
-Create-mode quality bar:
-- 8-slide technical strategy narrative
-- each slide carries one claim
-- diagrams and tables serve as proof objects
-- no decorative finance imagery or unsupported performance promises
