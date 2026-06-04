@@ -136,6 +136,61 @@ def test_prepare_trial_config_updates_nested_paths_and_disables_logging() -> Non
     }
 
 
+def test_prepare_trial_config_applies_value_templates_after_sampling() -> None:
+    base_config = {
+        "features": [
+            {
+                "step": "vwap",
+                "params": {
+                    "window": 20,
+                    "windows": [20],
+                    "vwap_col": "vwap_20",
+                    "distance_col": "close_over_vwap_20",
+                },
+            }
+        ],
+        "signals": {
+            "params": {
+                "vwap_rms_col": "vwap_20__root_mean_square",
+            }
+        },
+        "logging": {"enabled": True},
+    }
+    search_space = [
+        SearchDimension(
+            name="vwap_window",
+            path="features.0.params.window",
+            paths=["features.0.params.windows.0"],
+            kind="categorical",
+            choices=[20, 32],
+            value_templates=[
+                {"path": "features.0.params.vwap_col", "template": "vwap_{vwap_window}"},
+                {
+                    "path": "features.0.params.distance_col",
+                    "template": "close_over_vwap_{vwap_window}",
+                },
+                {
+                    "path": "signals.params.vwap_rms_col",
+                    "template": "vwap_{vwap_window}__root_mean_square",
+                },
+            ],
+        )
+    ]
+
+    trial_cfg = prepare_trial_config(
+        base_config,
+        trial_params={"vwap_window": 32},
+        search_space=search_space,
+        logging_enabled=False,
+    )
+
+    assert trial_cfg["features"][0]["params"]["window"] == 32
+    assert trial_cfg["features"][0]["params"]["windows"] == [32]
+    assert trial_cfg["features"][0]["params"]["vwap_col"] == "vwap_32"
+    assert trial_cfg["features"][0]["params"]["distance_col"] == "close_over_vwap_32"
+    assert trial_cfg["signals"]["params"]["vwap_rms_col"] == "vwap_32__root_mean_square"
+
+
 def test_validate_search_space_feature_contract_allows_self_computed_feature_dependencies() -> None:
     base_cfg = {
         "features": [

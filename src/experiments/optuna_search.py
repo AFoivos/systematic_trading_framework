@@ -59,6 +59,7 @@ class SearchDimension:
     log: bool = False
     choices: Sequence[Any] | None = None
     paths: Sequence[str | Sequence[str | int]] | None = None
+    value_templates: Sequence[Mapping[str, Any]] | None = None
 
 
 @dataclass(frozen=True)
@@ -172,6 +173,28 @@ def _normalize_search_dimension(raw_dimension: SearchDimension | Mapping[str, An
                 raise ValueError(
                     f"search_space[{dimension.name}].paths[{idx}] is not a valid config path."
                 ) from exc
+    if dimension.value_templates is not None:
+        if isinstance(dimension.value_templates, (str, bytes)) or not isinstance(
+            dimension.value_templates, Sequence
+        ):
+            raise ValueError(f"search_space[{dimension.name}].value_templates must be a list of mappings.")
+        for idx, raw_template in enumerate(dimension.value_templates):
+            if not isinstance(raw_template, Mapping):
+                raise ValueError(f"search_space[{dimension.name}].value_templates[{idx}] must be a mapping.")
+            raw_path = raw_template.get("path")
+            raw_value_template = raw_template.get("template")
+            if raw_path is None:
+                raise ValueError(f"search_space[{dimension.name}].value_templates[{idx}].path is required.")
+            try:
+                normalize_config_path(raw_path)
+            except Exception as exc:
+                raise ValueError(
+                    f"search_space[{dimension.name}].value_templates[{idx}].path is not a valid config path."
+                ) from exc
+            if not isinstance(raw_value_template, str) or not raw_value_template.strip():
+                raise ValueError(
+                    f"search_space[{dimension.name}].value_templates[{idx}].template must be a non-empty string."
+                )
 
     if dimension.kind in {"int", "float"}:
         if dimension.low is None or dimension.high is None:
@@ -210,6 +233,15 @@ def _dimension_paths(dimension: SearchDimension) -> tuple[tuple[str | int, ...],
         if normalized not in paths:
             paths.append(normalized)
     return tuple(paths)
+
+
+def _dimension_value_templates(dimension: SearchDimension) -> tuple[tuple[tuple[str | int, ...], str], ...]:
+    templates: list[tuple[tuple[str | int, ...], str]] = []
+    for raw_template in list(dimension.value_templates or []):
+        path = normalize_config_path(raw_template["path"])
+        template = str(raw_template["template"])
+        templates.append((path, template))
+    return tuple(templates)
 
 
 def normalize_search_space(
@@ -1001,6 +1033,26 @@ def prepare_trial_config(
             raise KeyError(f"Trial parameter {name!r} does not exist in the configured search space.")
         for path in _dimension_paths(by_name[name]):
             set_nested_value(cfg, path, value)
+
+    template_context: dict[str, Any] = {}
+    for dimension in dimensions:
+        try:
+            template_context[dimension.name] = get_nested_value(cfg, dimension.path)
+        except Exception:
+            if dimension.name in trial_params:
+                template_context[dimension.name] = trial_params[dimension.name]
+    template_context.update(dict(trial_params))
+    for dimension in dimensions:
+        for path, template in _dimension_value_templates(dimension):
+            try:
+                rendered_value = template.format(**template_context)
+            except KeyError as exc:
+                missing_name = str(exc).strip("'")
+                raise KeyError(
+                    f"search_space[{dimension.name}].value_templates references unknown trial parameter "
+                    f"{missing_name!r}."
+                ) from exc
+            set_nested_value(cfg, path, rendered_value)
 
     logging_cfg = dict(cfg.get("logging", {}) or {})
     stage_tails = dict(logging_cfg.get("stage_tails", {}) or {})

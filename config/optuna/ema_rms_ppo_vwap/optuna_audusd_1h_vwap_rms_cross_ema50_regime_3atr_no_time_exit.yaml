@@ -1,6 +1,6 @@
-base_config: config/experiments/ema_rms_ppo_vwap/spx500_30m_vwap_rms_cross_ema50_regime_3atr_no_time_exit.yaml
+base_config: config/experiments/ema_rms_ppo_vwap/audusd_1h_vwap_rms_cross_ema50_regime_3atr_no_time_exit.yaml
 study:
-  study_name: optuna_spx500_30m_vwap_rms_cross_ema50_regime_3atr_no_time_exit
+  study_name: optuna_audusd_1h_vwap_rms_cross_ema50_regime_3atr_no_time_exit
   storage: null
   load_if_exists: false
   sampler: tpe
@@ -13,7 +13,7 @@ study:
 report:
   enabled: true
   output_dir: logs/experiments
-  run_name: optuna_spx500_30m_vwap_rms_cross_ema50_regime_3atr_no_time_exit
+  run_name: optuna_audusd_1h_vwap_rms_cross_ema50_regime_3atr_no_time_exit
 objective:
   metric_path: evaluation.primary_summary.sharpe
   direction: maximize

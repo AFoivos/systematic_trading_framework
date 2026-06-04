@@ -1,10 +1,10 @@
 data:
   source: dukascopy_csv
-  interval: 30m
+  interval: 1h
   start: null
   end: null
   alignment: inner
-  symbol: SPX500
+  symbol: AUDUSD
   pit:
     timestamp_alignment:
       source_timezone: UTC
@@ -18,10 +18,10 @@ data:
       inactive_policy: raise
   storage:
     mode: cached_only
-    dataset_id: spx500_30m_vwap_rms_cross_ema50_regime_3atr_no_time_exit
+    dataset_id: audusd_1h_vwap_rms_cross_ema50_regime_3atr_no_time_exit
     save_raw: false
     save_processed: true
-    load_path: data/raw/dukascopy_30m_clean/spx500_30m.csv
+    load_path: data/raw/dukas_copy_bank/audusd_h1.csv
     raw_dir: data/raw
     processed_dir: data/processed
 features:
@@ -217,7 +217,7 @@ backtest:
   returns_col: close_ret
   returns_type: simple
   subset: full
-  periods_per_year: 12096
+  periods_per_year: 6048
   missing_return_policy: raise_if_exposed
   allow_short: false
   stop_mode: volatility_stop
@@ -248,7 +248,7 @@ execution:
   price_col: close
 logging:
   enabled: true
-  run_name: spx500_30m_vwap_rms_cross_ema50_regime_3atr_no_time_exit_BEST
+  run_name: audusd_1h_vwap_rms_cross_ema50_regime_3atr_no_time_exit_BEST
   output_dir: logs/experiments
   stage_tails:
     enabled: false
