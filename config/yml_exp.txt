@@ -1,3 +1,3 @@
-docker compose run --rm app python -m src.experiments.runner config/experiments/ema_rms_ppo_vwap/spx500_30m_vwap_rms_cross_ema50_regime_3atr_no_time_exit_BEST.yaml
+docker compose run --rm app python -m src.experiments.runner config/experiments/ema_rms_ppo_vwap/xauusd_30m_vwap_rms_cross_ema50_regime_3atr_no_time_exit.yaml
 
-docker compose run --rm app python -m src.experiments.optuna_search config/optuna/ema_rms_ppo_vwap/optuna_spx500_30m_vwap_rms_cross_ema50_regime_3atr_no_time_exit.yaml
+docker compose run --rm app python -m src.experiments.optuna_search config/optuna/ema_rms_ppo_vwap/optuna_xauusd_30m_vwap_rms_cross_ema50_regime_3atr_no_time_exit.yaml
