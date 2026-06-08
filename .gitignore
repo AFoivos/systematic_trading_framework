@@ -137,4 +137,8 @@ docs/*
 !docs/execution_source_audit.md
 notebooks/
 tests/
+!tests/
+tests/*
+!tests/features/
+!tests/features/*.py
 data/

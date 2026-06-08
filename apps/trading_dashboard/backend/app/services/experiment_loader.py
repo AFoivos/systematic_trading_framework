@@ -15,19 +15,42 @@ class ExperimentLoader:
     def __init__(self, paths: DashboardPaths | None = None) -> None:
         self.paths = paths or get_paths()
 
+    def _experiment_roots(self) -> list[tuple[str, Path]]:
+        roots = [
+            ("", self.paths.experiments_root),
+            ("bot", self.paths.project_root / "logs" / "bot"),
+        ]
+        unique_roots: list[tuple[str, Path]] = []
+        seen: set[Path] = set()
+        for source, root in roots:
+            resolved = root.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            unique_roots.append((source, resolved))
+        return unique_roots
+
     def _run_dirs(self) -> list[Path]:
-        root = self.paths.experiments_root
-        if not root.exists():
-            return []
         markers = {"run_metadata.json", "summary.json", "artifact_manifest.json", "study_summary.json"}
         run_dirs: list[Path] = []
-        for path in root.rglob("*"):
-            if path.is_file() and path.name in markers:
-                run_dirs.append(path.parent)
+        for _, root in self._experiment_roots():
+            if not root.exists():
+                continue
+            for path in root.rglob("*"):
+                if path.is_file() and path.name in markers:
+                    run_dirs.append(path.parent)
         return sorted(set(run_dirs))
 
     def run_id_for_path(self, path: Path) -> str:
-        rel = path.relative_to(self.paths.experiments_root)
+        resolved = path.resolve()
+        for source, root in self._experiment_roots():
+            try:
+                rel = resolved.relative_to(root)
+            except ValueError:
+                continue
+            parts = (source, *rel.parts) if source else rel.parts
+            return "__".join(parts)
+        rel = resolved.relative_to(self.paths.experiments_root)
         return "__".join(rel.parts)
 
     def resolve_run_dir(self, run_id: str) -> Path:

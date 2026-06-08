@@ -46,6 +46,25 @@ from .technical import (
     add_volume_features,
     add_vwap_features,
 )
+from .adx_rms import add_adx_rms
+from .fractal_dimension import add_fractal_dimension
+from .garman_klass_volatility import add_garman_klass_volatility
+from .hilbert_transform import add_hilbert_transform
+from .hmm_regime import add_hmm_regime
+from .hurst_exponent import add_hurst_exponent
+from .order_flow_imbalance import add_order_flow_imbalance
+from .parkinson_volatility import add_parkinson_volatility
+from .permutation_entropy import add_permutation_entropy
+from .ppo_rms import add_ppo_rms
+from .rate_of_change import add_rate_of_change
+from .roofing_filter import add_roofing_filter
+from .shannon_entropy import add_shannon_entropy
+from .supersmoother import add_supersmoother
+from .trend_regime import add_trend_regime
+from .volatility_regime import add_volatility_regime
+from .vpin import add_vpin
+from .yang_zhang_volatility import add_yang_zhang_volatility
+from .zscore_momentum import add_zscore_momentum
 from .technical.momentum import add_momentum_features
 from .technical.oscillators import add_oscillator_features
 __all__ = [
@@ -90,6 +109,25 @@ __all__ = [
     "add_vol_normalized_momentum_features",
     "add_indicator_features",
     "add_indicator_pullback_features",
+    "add_adx_rms",
+    "add_fractal_dimension",
+    "add_garman_klass_volatility",
+    "add_hilbert_transform",
+    "add_hmm_regime",
+    "add_hurst_exponent",
+    "add_order_flow_imbalance",
+    "add_parkinson_volatility",
+    "add_permutation_entropy",
+    "add_ppo_rms",
+    "add_rate_of_change",
+    "add_roofing_filter",
+    "add_shannon_entropy",
+    "add_supersmoother",
+    "add_trend_regime",
+    "add_volatility_regime",
+    "add_vpin",
+    "add_yang_zhang_volatility",
+    "add_zscore_momentum",
     "add_momentum_features",
     "add_oscillator_features",
 ]

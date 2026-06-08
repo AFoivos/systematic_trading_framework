@@ -5,7 +5,7 @@ Local-first FastAPI + React dashboard for inspecting market data, engineered fea
 ## What It Reads
 
 - CSV/parquet datasets anywhere under `data/**`, grouped in the UI by folder path
-- Experiment runs under `logs/experiments`
+- Experiment runs under `logs/experiments` and bot run artifacts under `logs/bot`
 - Trade overlays from `report_assets/trades.csv` or `trade_events.csv`
 - Equity curves from `equity_curve.csv`
 - Saved dashboard layouts under `apps/trading_dashboard/layouts`
