@@ -402,6 +402,7 @@ class BacktestConfig:
     tie_break: str | None = None
     risk_per_trade: float | None = None
     max_holding_bars: int | None = None
+    asset_params: dict[str, Any] = field(default_factory=dict)
     dynamic_exits: dict[str, Any] = field(default_factory=dict)
     allow_short: bool = False
     extra: dict[str, Any] = field(default_factory=dict)
@@ -433,6 +434,7 @@ class BacktestConfig:
             "tie_break",
             "risk_per_trade",
             "max_holding_bars",
+            "asset_params",
             "dynamic_exits",
             "allow_short",
         }
@@ -479,6 +481,7 @@ class BacktestConfig:
                 float(data["risk_per_trade"]) if data.get("risk_per_trade") is not None else None
             ),
             max_holding_bars=int(max_holding_bars) if max_holding_bars is not None else None,
+            asset_params=dict(data.get("asset_params", {}) or {}),
             dynamic_exits=dict(data.get("dynamic_exits", {}) or {}),
             allow_short=bool(data.get("allow_short", False)),
             extra=_extras(data, known),
@@ -510,6 +513,7 @@ class BacktestConfig:
             "tie_break": self.tie_break,
             "risk_per_trade": self.risk_per_trade,
             "max_holding_bars": self.max_holding_bars,
+            "asset_params": dict(self.asset_params),
             "dynamic_exits": dict(self.dynamic_exits),
             "allow_short": self.allow_short,
         }

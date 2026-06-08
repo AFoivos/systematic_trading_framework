@@ -303,6 +303,14 @@ def default_diagnostics_block(diagnostics: dict[str, Any]) -> dict[str, Any]:
     forecast.setdefault("autocorrelation_lags", [1, 2, 4, 8, 16])
     forecast.setdefault("volatility_col", "atr_pct_rank_100")
     diagnostics["forecast"] = forecast
+    robustness = dict(diagnostics.get("robustness", {}) or {})
+    robustness.setdefault("enabled", False)
+    robustness.setdefault("cost_multipliers", [1.0, 2.0, 3.0, 5.0])
+    robustness.setdefault("entry_delay_bars", [1, 2])
+    robustness.setdefault("walk_forward_frequency", "YE")
+    robustness.setdefault("gap_loss_per_exposure", 0.0)
+    robustness.setdefault("max_gap_multiple", 3.0)
+    diagnostics["robustness"] = robustness
     return diagnostics
 
 

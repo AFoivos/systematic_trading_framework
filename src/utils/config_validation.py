@@ -801,6 +801,14 @@ def validate_features_block(features: Any) -> None:
             raise ConfigValidationError(f"Unknown feature step: {step['step']}")
         if "params" in step and step["params"] is not None and not isinstance(step["params"], dict):
             raise ConfigValidationError("features[].params must be a mapping when provided.")
+        params_by_asset = step.get("params_by_asset", {})
+        if not isinstance(params_by_asset, dict):
+            raise ConfigValidationError("features[].params_by_asset must be a mapping when provided.")
+        for asset, asset_params in dict(params_by_asset or {}).items():
+            if not isinstance(asset, str) or not asset.strip():
+                raise ConfigValidationError("features[].params_by_asset keys must be non-empty strings.")
+            if not isinstance(asset_params, dict):
+                raise ConfigValidationError("features[].params_by_asset values must be mappings.")
         _validate_string_mapping(step.get("outputs"), field="features[].outputs")
         if step["step"] == "roc_long_only_conditions":
             _validate_roc_long_only_conditions_params(step.get("params") or {}, field_prefix="features[].params")
@@ -2019,6 +2027,14 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
     params = signals.get("params", {}) or {}
     if not isinstance(params, dict):
         raise ConfigValidationError("signals.params must be a mapping when provided.")
+    params_by_asset = signals.get("params_by_asset", {})
+    if not isinstance(params_by_asset, dict):
+        raise ConfigValidationError("signals.params_by_asset must be a mapping when provided.")
+    for asset, asset_params in dict(params_by_asset or {}).items():
+        if not isinstance(asset, str) or not asset.strip():
+            raise ConfigValidationError("signals.params_by_asset keys must be non-empty strings.")
+        if not isinstance(asset_params, dict):
+            raise ConfigValidationError("signals.params_by_asset values must be mappings.")
     _validate_string_mapping(
         signals.get("outputs"),
         field="signals.outputs",
@@ -2334,6 +2350,22 @@ def validate_risk_block(risk: dict[str, Any]) -> None:
     weekly_anchor = portfolio_guard.get("weekly_anchor", "W-FRI")
     if not isinstance(weekly_anchor, str) or not weekly_anchor.strip():
         raise ConfigValidationError("risk.portfolio_guard.weekly_anchor must be a non-empty string.")
+    if "max_open_trades" in portfolio_guard and portfolio_guard.get("max_open_trades") is not None:
+        _positive_int(portfolio_guard["max_open_trades"], field="risk.portfolio_guard.max_open_trades")
+    group_max_open = portfolio_guard.get("group_max_open_trades", {})
+    if not isinstance(group_max_open, dict):
+        raise ConfigValidationError("risk.portfolio_guard.group_max_open_trades must be a mapping.")
+    for group, value in dict(group_max_open or {}).items():
+        if not isinstance(group, str) or not group.strip():
+            raise ConfigValidationError("risk.portfolio_guard.group_max_open_trades keys must be non-empty strings.")
+        _positive_int(value, field=f"risk.portfolio_guard.group_max_open_trades.{group}")
+    for key in ("kill_switch_max_drawdown", "max_drawdown"):
+        value = portfolio_guard.get(key)
+        if value is None:
+            continue
+        numeric = _finite_number(value, field=f"risk.portfolio_guard.{key}")
+        if numeric <= 0:
+            raise ConfigValidationError(f"risk.portfolio_guard.{key} must be > 0 when provided.")
 
     sizing = risk.get("sizing", {}) or {}
     if sizing:
@@ -2475,7 +2507,30 @@ def validate_backtest_block(backtest: dict[str, Any]) -> None:
             value = _finite_number(backtest.get(key), field=f"backtest.{key}")
             if value <= 0.0:
                 raise ConfigValidationError(f"backtest.{key} must be > 0.")
-        _positive_int(backtest.get("vertical_barrier_bars"), field="backtest.vertical_barrier_bars")
+        if backtest.get("vertical_barrier_bars") is not None:
+            _positive_int(backtest.get("vertical_barrier_bars"), field="backtest.vertical_barrier_bars")
+        asset_params = backtest.get("asset_params", {})
+        if not isinstance(asset_params, dict):
+            raise ConfigValidationError("backtest.asset_params must be a mapping when provided.")
+        for asset, params in dict(asset_params or {}).items():
+            if not isinstance(asset, str) or not asset.strip():
+                raise ConfigValidationError("backtest.asset_params keys must be non-empty strings.")
+            if not isinstance(params, dict):
+                raise ConfigValidationError("backtest.asset_params values must be mappings.")
+            for key in ("volatility_col", "vol_col"):
+                if key in params and params[key] is not None and not isinstance(params[key], str):
+                    raise ConfigValidationError(f"backtest.asset_params.{asset}.{key} must be a string or null.")
+            for key in ("profit_barrier_r", "stop_barrier_r", "take_profit_r", "stop_loss_r", "risk_per_trade"):
+                if key not in params or params[key] is None:
+                    continue
+                value = _finite_number(params[key], field=f"backtest.asset_params.{asset}.{key}")
+                if value <= 0.0:
+                    raise ConfigValidationError(f"backtest.asset_params.{asset}.{key} must be > 0.")
+            if params.get("vertical_barrier_bars") is not None:
+                _positive_int(
+                    params.get("vertical_barrier_bars"),
+                    field=f"backtest.asset_params.{asset}.vertical_barrier_bars",
+                )
         if int(backtest.get("min_holding_bars", 0) or 0) != 0:
             raise ConfigValidationError(
                 "backtest.engine='portfolio_barrier' uses vertical_barrier_bars and requires min_holding_bars=0."
@@ -2694,6 +2749,35 @@ def validate_diagnostics_block(diagnostics: dict[str, Any]) -> None:
     volatility_col = forecast.get("volatility_col", "atr_pct_rank_100")
     if volatility_col is not None and (not isinstance(volatility_col, str) or not volatility_col.strip()):
         raise ConfigValidationError("diagnostics.forecast.volatility_col must be null or a non-empty string.")
+    robustness = diagnostics.get("robustness", {})
+    if not isinstance(robustness, dict):
+        raise ConfigValidationError("diagnostics.robustness must be a mapping.")
+    if not isinstance(robustness.get("enabled", False), bool):
+        raise ConfigValidationError("diagnostics.robustness.enabled must be boolean.")
+    for key in ("cost_multipliers", "entry_delay_bars"):
+        value = robustness.get(key, [])
+        if value is None:
+            continue
+        if not isinstance(value, list):
+            raise ConfigValidationError(f"diagnostics.robustness.{key} must be a list.")
+        for idx, item in enumerate(value):
+            if key == "entry_delay_bars":
+                _positive_int(item, field=f"diagnostics.robustness.{key}[{idx}]")
+            elif _finite_number(item, field=f"diagnostics.robustness.{key}[{idx}]") < 0:
+                raise ConfigValidationError(f"diagnostics.robustness.{key}[{idx}] must be >= 0.")
+    frequency = robustness.get("walk_forward_frequency", "YE")
+    if frequency is not None and (not isinstance(frequency, str) or not frequency.strip()):
+        raise ConfigValidationError("diagnostics.robustness.walk_forward_frequency must be a non-empty string.")
+    if _finite_number(
+        robustness.get("gap_loss_per_exposure", 0.0),
+        field="diagnostics.robustness.gap_loss_per_exposure",
+    ) < 0:
+        raise ConfigValidationError("diagnostics.robustness.gap_loss_per_exposure must be >= 0.")
+    if _finite_number(
+        robustness.get("max_gap_multiple", 3.0),
+        field="diagnostics.robustness.max_gap_multiple",
+    ) <= 1.0:
+        raise ConfigValidationError("diagnostics.robustness.max_gap_multiple must be > 1.")
 
 
 def validate_execution_block(execution: dict[str, Any]) -> None:

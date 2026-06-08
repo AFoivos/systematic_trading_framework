@@ -2041,6 +2041,17 @@ def _compute_ftmo_objective(
     }
 
 
+def _mark_to_market_primary_fields(performance: Any) -> dict[str, float]:
+    summary = dict(getattr(performance, "mark_to_market_summary", {}) or {})
+    if not summary:
+        return {}
+    fields: dict[str, float] = {}
+    for key in ("cumulative_return", "annualized_return", "sharpe", "max_drawdown", "profit_factor"):
+        if key in summary:
+            fields[f"mtm_{key}"] = summary[key]
+    return fields
+
+
 def build_single_asset_evaluation(
     asset: str,
     df: pd.DataFrame,
@@ -2055,11 +2066,15 @@ def build_single_asset_evaluation(
     for key in ("trade_count", "average_r", "median_r"):
         if key in trade_diagnostics:
             primary_summary[key] = trade_diagnostics[key]
+    primary_summary.update(_mark_to_market_primary_fields(performance))
     evaluation = EvaluationPayload(
         scope="timeline",
         primary_summary=primary_summary,
         timeline_summary=dict(performance.summary),
-        extra={"trade_diagnostics": trade_diagnostics} if trade_diagnostics else {},
+        extra={
+            "trade_diagnostics": trade_diagnostics,
+            "mark_to_market_summary": dict(getattr(performance, "mark_to_market_summary", {}) or {}),
+        },
     ).to_dict()
 
     pred_is_oos_col = str(model_meta.get("pred_is_oos_col") or "pred_is_oos")
@@ -2111,6 +2126,7 @@ def build_single_asset_evaluation(
     for key in ("trade_count", "average_r", "median_r"):
         if key in trade_diagnostics:
             primary_summary[key] = trade_diagnostics[key]
+    primary_summary.update(_mark_to_market_primary_fields(performance))
     for key in ("flat_rate", "long_rate", "short_rate"):
         if policy_summary.get(key) is not None:
             primary_summary[key] = policy_summary[key]
@@ -2130,6 +2146,7 @@ def build_single_asset_evaluation(
             "model_oos_policy_summary": policy_summary,
             "orb_diagnostics": orb_diagnostics,
             "trade_diagnostics": trade_diagnostics,
+            "mark_to_market_summary": dict(getattr(performance, "mark_to_market_summary", {}) or {}),
             "asset": asset,
         },
     ).to_dict()
@@ -2150,11 +2167,16 @@ def build_portfolio_evaluation(
     for key in ("trade_count", "average_r", "median_r"):
         if key in trade_diagnostics:
             primary_summary[key] = trade_diagnostics[key]
+    primary_summary.update(_mark_to_market_primary_fields(performance))
     evaluation = EvaluationPayload(
         scope="timeline",
         primary_summary=primary_summary,
         timeline_summary=dict(performance.summary),
-        extra={"trade_diagnostics": trade_diagnostics} if trade_diagnostics else {},
+        extra={
+            "trade_diagnostics": trade_diagnostics,
+            "mark_to_market_summary": dict(getattr(performance, "mark_to_market_summary", {}) or {}),
+            "risk_guard_summary": dict(performance.risk_guard_summary or {}),
+        },
     ).to_dict()
 
     if not model_meta:
@@ -2200,6 +2222,7 @@ def build_portfolio_evaluation(
     for key in ("trade_count", "average_r", "median_r"):
         if key in trade_diagnostics:
             primary_summary[key] = trade_diagnostics[key]
+    primary_summary.update(_mark_to_market_primary_fields(performance))
     portfolio_guard_cfg = dict(dict(risk_cfg or {}).get("portfolio_guard", {}) or {})
     ftmo_metrics = compute_ftmo_style_metrics(
         net_returns=performance.net_returns.loc[oos_mask],

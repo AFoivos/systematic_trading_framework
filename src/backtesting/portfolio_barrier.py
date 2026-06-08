@@ -30,6 +30,12 @@ def _positive_int(value: Any, *, field: str) -> int:
     return out
 
 
+def _positive_int_or_none(value: Any, *, field: str) -> int | None:
+    if value is None:
+        return None
+    return _positive_int(value, field=field)
+
+
 def _require_columns(frame: pd.DataFrame, *, asset: str, columns: list[str]) -> None:
     missing = [column for column in columns if column not in frame.columns]
     if missing:
@@ -109,6 +115,7 @@ def _trade_weight(
     constraints: PortfolioConstraints,
     gross_target: float,
     current_gross: float,
+    remaining_group_gross: float | None = None,
 ) -> float:
     side = float(np.sign(signal_value))
     if side == 0.0:
@@ -116,6 +123,8 @@ def _trade_weight(
 
     gross_cap = min(float(gross_target), float(constraints.max_gross_leverage))
     remaining_gross = max(gross_cap - float(current_gross), 0.0)
+    if remaining_group_gross is not None:
+        remaining_gross = min(remaining_gross, max(float(remaining_group_gross), 0.0))
     if remaining_gross <= 1e-12:
         return 0.0
 
@@ -139,11 +148,11 @@ def _simulate_barrier_event(
     entry_price_mode: str,
     profit_barrier_r: float,
     stop_barrier_r: float,
-    vertical_barrier_bars: int,
+    vertical_barrier_bars: int | None,
     tie_break: str,
     asset: str,
 ) -> dict[str, Any] | None:
-    if signal_idx >= len(frame) - int(vertical_barrier_bars):
+    if vertical_barrier_bars is not None and signal_idx >= len(frame) - int(vertical_barrier_bars):
         return None
 
     entry_idx = signal_idx if entry_price_mode == "current_close" else signal_idx + 1
@@ -175,7 +184,11 @@ def _simulate_barrier_event(
     chosen_type: str | None = None
     chosen_idx: int | None = None
     exit_price: float | None = None
-    horizon_end = min(len(frame), signal_idx + int(vertical_barrier_bars) + 1)
+    horizon_end = (
+        len(frame)
+        if vertical_barrier_bars is None
+        else min(len(frame), signal_idx + int(vertical_barrier_bars) + 1)
+    )
 
     for step_idx in range(signal_idx + 1, horizon_end):
         if side > 0.0:
@@ -205,7 +218,7 @@ def _simulate_barrier_event(
     if chosen_type is None:
         chosen_idx = horizon_end - 1
         exit_price = float(closes[chosen_idx])
-        chosen_type = "neutral"
+        chosen_type = "end_of_data" if vertical_barrier_bars is None else "neutral"
 
     assert chosen_idx is not None
     assert exit_price is not None
@@ -228,10 +241,45 @@ def _simulate_barrier_event(
             if chosen_type == "profit"
             else "stop_loss"
             if chosen_type == "stop"
+            else "end_of_data_close"
+            if chosen_type == "end_of_data"
             else "vertical"
         ),
         "bars_held": int(chosen_idx - signal_idx),
     }
+
+
+def _apply_mark_to_market_trade_path(
+    mark_to_market_returns: pd.Series,
+    *,
+    frame: pd.DataFrame,
+    aligned_index: pd.Index,
+    close_col: str,
+    entry_time: Any,
+    exit_time: Any,
+    entry_price: float,
+    exit_price: float,
+    weight: float,
+    side: float,
+    total_cost: float,
+) -> None:
+    active_index = aligned_index[(aligned_index >= entry_time) & (aligned_index <= exit_time)]
+    if len(active_index) == 0:
+        return
+    closes = pd.to_numeric(frame[close_col], errors="coerce").reindex(active_index).ffill()
+    previous_price = float(entry_price)
+    for ts in active_index:
+        mark_price = float(exit_price) if ts == exit_time else float(closes.loc[ts])
+        if not np.isfinite(mark_price) or mark_price <= 0.0 or previous_price <= 0.0:
+            previous_price = mark_price
+            continue
+        if side > 0.0:
+            gross_return = abs(float(weight)) * (mark_price / previous_price - 1.0)
+        else:
+            gross_return = abs(float(weight)) * (1.0 - mark_price / previous_price)
+        cost = float(total_cost) if ts == exit_time else 0.0
+        mark_to_market_returns.loc[ts] += gross_return - cost
+        previous_price = mark_price
 
 
 def _realized_trade_pnl(
@@ -285,7 +333,7 @@ def run_portfolio_barrier_backtest(
     entry_price_mode: str = "next_open",
     profit_barrier_r: float = 1.4,
     stop_barrier_r: float = 1.0,
-    vertical_barrier_bars: int = 4,
+    vertical_barrier_bars: int | None = 4,
     tie_break: str = "closest_to_open",
     subset: str = "full",
     pred_is_oos_col: str = "pred_is_oos",
@@ -295,6 +343,9 @@ def run_portfolio_barrier_backtest(
     cost_per_turnover: float = 0.0,
     slippage_per_turnover: float = 0.0,
     periods_per_year: int = 252,
+    asset_params: Mapping[str, Mapping[str, Any]] | None = None,
+    asset_to_group: Mapping[str, str] | None = None,
+    portfolio_guard: Mapping[str, Any] | None = None,
 ) -> tuple[PortfolioPerformance, pd.DataFrame, pd.DataFrame, dict[str, Any]]:
     """
     Event-based multi-asset portfolio backtest using directional triple-barrier exits.
@@ -322,14 +373,31 @@ def run_portfolio_barrier_backtest(
 
     profit_barrier_r = _positive_float(profit_barrier_r, field="profit_barrier_r")
     stop_barrier_r = _positive_float(stop_barrier_r, field="stop_barrier_r")
-    vertical_barrier_bars = _positive_int(vertical_barrier_bars, field="vertical_barrier_bars")
+    vertical_barrier_bars = _positive_int_or_none(vertical_barrier_bars, field="vertical_barrier_bars")
     cost_per_turnover = float(cost_per_turnover)
     slippage_per_turnover = float(slippage_per_turnover)
     if cost_per_turnover < 0.0 or slippage_per_turnover < 0.0:
         raise ValueError("portfolio_barrier costs and slippage must be >= 0.")
 
-    required_columns = [signal_col, open_col, high_col, low_col, close_col, volatility_col]
+    asset_params_by_asset = {str(k): dict(v or {}) for k, v in dict(asset_params or {}).items()}
+    asset_groups = {str(k): str(v) for k, v in dict(asset_to_group or {}).items()}
+    guard_cfg = dict(portfolio_guard or {})
+    guard_enabled = bool(guard_cfg.get("enabled", False))
+    max_open_trades = guard_cfg.get("max_open_trades")
+    if max_open_trades is not None:
+        max_open_trades = _positive_int(max_open_trades, field="portfolio_guard.max_open_trades")
+    raw_group_max_open = dict(guard_cfg.get("group_max_open_trades", {}) or {})
+    group_max_open_trades = {str(group): _positive_int(value, field=f"portfolio_guard.group_max_open_trades.{group}") for group, value in raw_group_max_open.items()}
+    kill_switch_drawdown = guard_cfg.get("kill_switch_max_drawdown", guard_cfg.get("max_drawdown"))
+    if kill_switch_drawdown is not None:
+        kill_switch_drawdown = _positive_float(kill_switch_drawdown, field="portfolio_guard.kill_switch_max_drawdown")
+
+    required_columns = [signal_col, open_col, high_col, low_col, close_col]
     frames = _prepare_asset_frames(asset_frames, required_columns=required_columns)
+    for asset, frame in frames.items():
+        params = dict(asset_params_by_asset.get(asset, {}) or {})
+        asset_volatility_col = str(params.get("volatility_col", params.get("vol_col", volatility_col)))
+        _require_columns(frame, asset=asset, columns=[asset_volatility_col])
     signals = _align_signal_index(frames, signal_col=signal_col, alignment=alignment)
     if signals.empty:
         raise ValueError("portfolio_barrier aligned signal frame is empty.")
@@ -347,6 +415,7 @@ def run_portfolio_barrier_backtest(
     net_returns = pd.Series(0.0, index=signals.index, name="net_returns", dtype=float)
     costs = pd.Series(0.0, index=signals.index, name="costs", dtype=float)
     turnover = pd.Series(0.0, index=signals.index, name="turnover", dtype=float)
+    mark_to_market_returns = pd.Series(0.0, index=signals.index, name="mark_to_market_returns", dtype=float)
 
     active_by_asset: dict[str, dict[str, Any]] = {}
     trades: list[dict[str, Any]] = []
@@ -356,13 +425,38 @@ def run_portfolio_barrier_backtest(
     remapped_entry_timestamps = 0
     remapped_exit_timestamps = 0
     ignored_open_signals = 0
+    skipped_max_open_trades = 0
+    skipped_group_max_open_trades = 0
+    skipped_group_cap = 0
+    skipped_guard = 0
+    risk_sized_trade_count = 0
+    guard_equity = 1.0
+    guard_peak_equity = 1.0
+    guard_permanent_flat = False
+    guard_trigger_count = 0
 
     for timestamp, signal_row in signals.iterrows():
+        if timestamp in net_returns.index:
+            guard_equity *= 1.0 + float(net_returns.loc[timestamp])
+            guard_peak_equity = max(guard_peak_equity, guard_equity)
+            guard_drawdown = float(guard_equity / guard_peak_equity - 1.0) if guard_peak_equity > 0.0 else 0.0
+            if (
+                guard_enabled
+                and kill_switch_drawdown is not None
+                and not guard_permanent_flat
+                and guard_drawdown <= -float(kill_switch_drawdown)
+            ):
+                guard_permanent_flat = True
+                guard_trigger_count += 1
+
         for asset, active in list(active_by_asset.items()):
             if active["exit_time"] <= timestamp:
                 active_by_asset.pop(asset, None)
 
         if oos_mask is not None and not bool(oos_mask.loc[timestamp]):
+            continue
+        if guard_permanent_flat:
+            skipped_guard += int(signal_row.fillna(0.0).astype(float).ne(0.0).sum())
             continue
 
         current_gross = float(sum(abs(float(active["weight"])) for active in active_by_asset.values()))
@@ -373,21 +467,54 @@ def run_portfolio_barrier_backtest(
             if asset in active_by_asset:
                 ignored_open_signals += 1
                 continue
+            if max_open_trades is not None and len(active_by_asset) >= int(max_open_trades):
+                skipped_max_open_trades += 1
+                continue
+            group = asset_groups.get(asset)
+            if group is not None and group_max_open_trades.get(group) is not None:
+                current_group_open = sum(
+                    1
+                    for active_asset in active_by_asset
+                    if asset_groups.get(active_asset) == group
+                )
+                if current_group_open >= int(group_max_open_trades[group]):
+                    skipped_group_max_open_trades += 1
+                    continue
             frame = frames[asset]
             if timestamp not in frame.index:
                 continue
             side = float(np.sign(signal_value))
+            remaining_group_gross = None
+            if group is not None and constraints.group_max_exposure and group in constraints.group_max_exposure:
+                current_group_gross = sum(
+                    abs(float(active["weight"]))
+                    for active_asset, active in active_by_asset.items()
+                    if asset_groups.get(active_asset) == group
+                )
+                remaining_group_gross = float(constraints.group_max_exposure[group]) - float(current_group_gross)
             weight = _trade_weight(
                 float(signal_value),
                 constraints=constraints,
                 gross_target=gross_target,
                 current_gross=current_gross,
+                remaining_group_gross=remaining_group_gross,
             )
             if weight == 0.0:
-                skipped_no_capacity += 1
+                if remaining_group_gross is not None and remaining_group_gross <= 1e-12:
+                    skipped_group_cap += 1
+                else:
+                    skipped_no_capacity += 1
                 continue
 
             signal_idx = int(frame.index.get_loc(timestamp))
+            params = dict(asset_params_by_asset.get(asset, {}) or {})
+            asset_profit_barrier_r = float(params.get("profit_barrier_r", params.get("take_profit_r", profit_barrier_r)))
+            asset_stop_barrier_r = float(params.get("stop_barrier_r", params.get("stop_loss_r", stop_barrier_r)))
+            asset_vertical_barrier_bars = _positive_int_or_none(
+                params.get("vertical_barrier_bars", vertical_barrier_bars),
+                field=f"asset_params.{asset}.vertical_barrier_bars",
+            )
+            asset_volatility_col = str(params.get("volatility_col", params.get("vol_col", volatility_col)))
             event = _simulate_barrier_event(
                 frame,
                 signal_idx=signal_idx,
@@ -396,11 +523,11 @@ def run_portfolio_barrier_backtest(
                 high_col=high_col,
                 low_col=low_col,
                 close_col=close_col,
-                volatility_col=volatility_col,
+                volatility_col=asset_volatility_col,
                 entry_price_mode=entry_price_mode,
-                profit_barrier_r=profit_barrier_r,
-                stop_barrier_r=stop_barrier_r,
-                vertical_barrier_bars=vertical_barrier_bars,
+                profit_barrier_r=asset_profit_barrier_r,
+                stop_barrier_r=asset_stop_barrier_r,
+                vertical_barrier_bars=asset_vertical_barrier_bars,
                 tie_break=tie_break,
                 asset=asset,
             )
@@ -417,6 +544,18 @@ def run_portfolio_barrier_backtest(
             remapped_entry_timestamps += int(entry_remapped)
             remapped_exit_timestamps += int(exit_remapped)
 
+            risk_per_trade = params.get("risk_per_trade")
+            if risk_per_trade is not None:
+                risk_fraction = max(float(event["risk_distance"]) / float(event["entry_price"]), 1e-12)
+                risk_sized_cap = float(risk_per_trade) / risk_fraction
+                sized_abs_weight = min(abs(float(weight)), risk_sized_cap)
+                if sized_abs_weight <= 1e-12:
+                    skipped_no_capacity += 1
+                    continue
+                if sized_abs_weight < abs(float(weight)) - 1e-12:
+                    risk_sized_trade_count += 1
+                weight = float(np.sign(weight)) * sized_abs_weight
+
             pnl = _realized_trade_pnl(
                 side=side,
                 weight=weight,
@@ -431,6 +570,19 @@ def run_portfolio_barrier_backtest(
             costs.loc[exit_time] += pnl["cost"]
             turnover.loc[entry_time] += abs(weight)
             turnover.loc[exit_time] += abs(weight)
+            _apply_mark_to_market_trade_path(
+                mark_to_market_returns,
+                frame=frame,
+                aligned_index=weights.index,
+                close_col=close_col,
+                entry_time=entry_time,
+                exit_time=exit_time,
+                entry_price=float(event["entry_price"]),
+                exit_price=float(event["exit_price"]),
+                weight=weight,
+                side=side,
+                total_cost=float(pnl["cost"]),
+            )
 
             active_index = weights.index[(weights.index >= entry_time) & (weights.index <= exit_time)]
             if len(active_index) > 0:
@@ -463,6 +615,11 @@ def run_portfolio_barrier_backtest(
                 "raw_exit_price": float(event["exit_price"]),
                 "atr_at_entry": float(event["atr"]),
                 "atr_at_signal": float(event["atr"]),
+                "volatility_col": asset_volatility_col,
+                "profit_barrier_r": asset_profit_barrier_r,
+                "stop_barrier_r": asset_stop_barrier_r,
+                "vertical_barrier_bars": asset_vertical_barrier_bars,
+                "risk_per_trade": risk_per_trade,
                 "take_profit_price": float(event["take_profit_price"]),
                 "target_price": float(event["take_profit_price"]),
                 "stop_loss_price": float(event["stop_loss_price"]),
@@ -483,12 +640,18 @@ def run_portfolio_barrier_backtest(
 
     equity_curve = (1.0 + net_returns).cumprod()
     equity_curve.name = "equity"
+    mark_to_market_equity = (1.0 + mark_to_market_returns).cumprod()
+    mark_to_market_equity.name = "mark_to_market_equity"
     summary = compute_backtest_metrics(
         net_returns=net_returns,
         periods_per_year=int(periods_per_year),
         turnover=turnover,
         costs=costs,
         gross_returns=gross_returns,
+    )
+    mark_to_market_summary = compute_backtest_metrics(
+        net_returns=mark_to_market_returns,
+        periods_per_year=int(periods_per_year),
     )
 
     trades_df = pd.DataFrame(trades)
@@ -545,22 +708,42 @@ def run_portfolio_barrier_backtest(
         turnover=turnover,
         summary=summary,
         applied_weights=weights,
-        risk_guard_summary={"enabled": False},
+        risk_guard_summary={
+            "enabled": bool(guard_enabled),
+            "kill_switch_max_drawdown": kill_switch_drawdown,
+            "kill_switch_trigger_count": int(guard_trigger_count),
+            "permanent_flattened": bool(guard_permanent_flat),
+            "skipped_guard": int(skipped_guard),
+            "max_open_trades": max_open_trades,
+            "skipped_max_open_trades": int(skipped_max_open_trades),
+            "group_max_open_trades": dict(group_max_open_trades),
+            "skipped_group_max_open_trades": int(skipped_group_max_open_trades),
+            "skipped_group_cap": int(skipped_group_cap),
+        },
         risk_guard_timeline=pd.DataFrame(index=weights.index),
         trades=trades_df,
+        mark_to_market_returns=mark_to_market_returns,
+        mark_to_market_equity_curve=mark_to_market_equity,
+        mark_to_market_summary=mark_to_market_summary,
     )
     meta = {
         "engine": "portfolio_barrier",
         "entry_price_mode": entry_price_mode,
         "profit_barrier_r": float(profit_barrier_r),
         "stop_barrier_r": float(stop_barrier_r),
-        "vertical_barrier_bars": int(vertical_barrier_bars),
+        "vertical_barrier_bars": None if vertical_barrier_bars is None else int(vertical_barrier_bars),
         "volatility_col": volatility_col,
         "tie_break": tie_break,
+        "asset_params": dict(asset_params_by_asset),
+        "asset_groups": dict(asset_groups),
         "trade_count": int(len(trades_df)),
         "skipped_no_capacity": int(skipped_no_capacity),
         "skipped_tail": int(skipped_tail),
         "skipped_unalignable_timestamp": int(skipped_unalignable_timestamp),
+        "skipped_max_open_trades": int(skipped_max_open_trades),
+        "skipped_group_max_open_trades": int(skipped_group_max_open_trades),
+        "skipped_group_cap": int(skipped_group_cap),
+        "risk_sized_trade_count": int(risk_sized_trade_count),
         "remapped_entry_timestamps": int(remapped_entry_timestamps),
         "remapped_exit_timestamps": int(remapped_exit_timestamps),
         "ignored_open_signals": int(ignored_open_signals),

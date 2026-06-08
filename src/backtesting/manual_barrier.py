@@ -34,6 +34,40 @@ def _finite_positive(value: Any, *, field: str) -> float:
     return out
 
 
+def _apply_mark_to_market_trade_path(
+    mark_to_market_returns: pd.Series,
+    *,
+    closes: np.ndarray,
+    entry_idx: int,
+    exit_idx: int,
+    entry_price: float,
+    exit_price: float,
+    size: float,
+    is_short: bool,
+    total_cost: float,
+) -> None:
+    """
+    Add a close-to-close floating PnL path for one completed event trade.
+
+    The legacy manual-barrier contract books the whole trade at the exit bar. This diagnostic
+    path keeps that contract intact while exposing the open-trade drawdown that a live account
+    would have experienced between entry and exit.
+    """
+    previous_price = float(entry_price)
+    for bar_idx in range(int(entry_idx), int(exit_idx) + 1):
+        mark_price = float(exit_price) if bar_idx == int(exit_idx) else float(closes[bar_idx])
+        if not np.isfinite(mark_price) or mark_price <= 0.0 or previous_price <= 0.0:
+            previous_price = mark_price
+            continue
+        if is_short:
+            gross_return = float(size) * (1.0 - mark_price / previous_price)
+        else:
+            gross_return = float(size) * (mark_price / previous_price - 1.0)
+        cost = float(total_cost) if bar_idx == int(exit_idx) else 0.0
+        mark_to_market_returns.iloc[bar_idx] += gross_return - cost
+        previous_price = mark_price
+
+
 def run_manual_barrier_backtest(
     df: pd.DataFrame,
     *,
@@ -115,6 +149,7 @@ def run_manual_barrier_backtest(
     gross_returns = pd.Series(0.0, index=index, name="gross_returns", dtype=float)
     costs = pd.Series(0.0, index=index, name="costs", dtype=float)
     positions = pd.Series(0.0, index=index, name="positions", dtype=float)
+    mark_to_market_returns = pd.Series(0.0, index=index, name="mark_to_market_returns", dtype=float)
     trades: list[dict[str, Any]] = []
 
     i = 0
@@ -218,6 +253,17 @@ def run_manual_barrier_backtest(
         gross_returns.iloc[exit_idx] += gross_before_cost
         costs.iloc[exit_idx] += total_cost
         net_returns.iloc[exit_idx] += net_return
+        _apply_mark_to_market_trade_path(
+            mark_to_market_returns,
+            closes=closes,
+            entry_idx=entry_idx,
+            exit_idx=exit_idx,
+            entry_price=entry_open,
+            exit_price=raw_exit_price,
+            size=size,
+            is_short=is_short,
+            total_cost=total_cost,
+        )
         if exit_idx > entry_idx:
             positions.iloc[entry_idx:exit_idx] = -size if is_short else size
 
@@ -263,6 +309,12 @@ def run_manual_barrier_backtest(
         costs=costs,
         gross_returns=gross_returns,
     )
+    mark_to_market_equity = (1.0 + mark_to_market_returns).cumprod()
+    mark_to_market_equity.name = "mark_to_market_equity"
+    mark_to_market_summary = compute_backtest_metrics(
+        net_returns=mark_to_market_returns,
+        periods_per_year=int(periods_per_year),
+    )
     return BacktestResult(
         equity_curve=equity_curve,
         returns=net_returns,
@@ -272,6 +324,9 @@ def run_manual_barrier_backtest(
         turnover=turnover,
         summary=summary,
         trades=pd.DataFrame(trades),
+        mark_to_market_returns=mark_to_market_returns,
+        mark_to_market_equity_curve=mark_to_market_equity,
+        mark_to_market_summary=mark_to_market_summary,
     )
 
 

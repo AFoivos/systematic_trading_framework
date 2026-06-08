@@ -241,6 +241,19 @@ monitoring:
   n_bins: 10
 diagnostics:
   enabled: true
+  robustness:
+    enabled: true
+    cost_multipliers:
+    - 1.0
+    - 2.0
+    - 3.0
+    - 5.0
+    entry_delay_bars:
+    - 1
+    - 2
+    walk_forward_frequency: YE
+    gap_loss_per_exposure: 0.001
+    max_gap_multiple: 3.0
 execution:
   enabled: false
   mode: paper
@@ -249,7 +262,7 @@ execution:
 logging:
   enabled: true
   run_name: eurusd_30m_vwap_rms_cross_ema50_regime_3atr_no_time_exit
-  output_dir: logs/experiments
+  output_dir: logs/bot
   stage_tails:
     enabled: false
   execution_source_audit:

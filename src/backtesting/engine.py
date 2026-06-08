@@ -28,6 +28,9 @@ class BacktestResult:
     turnover: pd.Series
     summary: dict
     trades: pd.DataFrame | None = None
+    mark_to_market_returns: pd.Series | None = None
+    mark_to_market_equity_curve: pd.Series | None = None
+    mark_to_market_summary: dict | None = None
 
 
 def _apply_missing_return_policy(

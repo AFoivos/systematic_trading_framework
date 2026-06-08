@@ -1,8 +1,8 @@
 base_config: config/experiments/ema_rms_ppo_vwap/eurusd_30m_vwap_rms_cross_ema50_regime_3atr_no_time_exit.yaml
 study:
   study_name: optuna_eurusd_30m_vwap_rms_cross_ema50_regime_3atr_no_time_exit
-  storage: null
-  load_if_exists: false
+  storage: sqlite:///logs/bot/optuna_eurusd_30m_vwap_rms_cross_ema50_regime_3atr_no_time_exit.sqlite3
+  load_if_exists: true
   sampler: tpe
   seed: 7
   n_trials: 100
@@ -12,7 +12,7 @@ study:
   catch_exceptions: true
 report:
   enabled: true
-  output_dir: logs/experiments
+  output_dir: logs/bot
   run_name: optuna_eurusd_30m_vwap_rms_cross_ema50_regime_3atr_no_time_exit
 objective:
   metric_path: evaluation.primary_summary.sharpe
@@ -51,6 +51,31 @@ objective:
     op: gt
     threshold: 180.0
     penalty: 1.0
+    missing_penalty: 1.0
+  - metric_path: evaluation.primary_summary.mtm_max_drawdown
+    op: lt
+    threshold: -0.1
+    penalty: 1000000000000.0
+    missing_penalty: 1000000000000.0
+  - metric_path: evaluation.primary_summary.robustness_walk_forward_positive_fold_ratio
+    op: lt
+    threshold: 0.55
+    penalty: 2.0
+    missing_penalty: 1.0
+  - metric_path: evaluation.primary_summary.robustness_cost_x3_cumulative_return
+    op: le
+    threshold: 0.0
+    penalty: 5.0
+    missing_penalty: 1.0
+  - metric_path: evaluation.primary_summary.robustness_delay_1_bars_cumulative_return
+    op: le
+    threshold: 0.0
+    penalty: 4.0
+    missing_penalty: 1.0
+  - metric_path: evaluation.primary_summary.robustness_gap_cumulative_return
+    op: le
+    threshold: 0.0
+    penalty: 3.0
     missing_penalty: 1.0
 pruning:
   enabled: false

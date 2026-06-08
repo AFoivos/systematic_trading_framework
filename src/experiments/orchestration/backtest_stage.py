@@ -10,6 +10,12 @@ from src.backtesting.manual_barrier import run_manual_barrier_backtest
 from src.backtesting.portfolio_barrier import run_portfolio_barrier_backtest
 from src.backtesting.holding import apply_min_holding_bars_to_weights
 from src.evaluation.metrics import compute_backtest_metrics
+from src.evaluation.robustness import (
+    calendar_walk_forward_diagnostics,
+    cost_multiplier_stress,
+    gap_penalty_stress,
+    summarize_returns,
+)
 from src.experiments.orchestration.common import align_asset_column
 from src.portfolio import (
     PortfolioConstraints,
@@ -310,6 +316,8 @@ def run_portfolio_backtest(
                 barrier_asset_frames[asset] = sized_frame
                 barrier_signal_col = sized_signal_col
         constraints = build_portfolio_constraints(portfolio_cfg)
+        asset_groups = {str(k): str(v) for k, v in dict(portfolio_cfg.get("asset_groups", {}) or {}).items()}
+        vertical_barrier_bars = backtest_cfg.get("vertical_barrier_bars", 4)
         performance, weights, diagnostics, barrier_meta = run_portfolio_barrier_backtest(
             barrier_asset_frames,
             signal_col=barrier_signal_col,
@@ -321,7 +329,9 @@ def run_portfolio_backtest(
             entry_price_mode=str(backtest_cfg.get("entry_price_mode", "next_open")),
             profit_barrier_r=float(backtest_cfg.get("profit_barrier_r", 1.4)),
             stop_barrier_r=float(backtest_cfg.get("stop_barrier_r", 1.0)),
-            vertical_barrier_bars=int(backtest_cfg.get("vertical_barrier_bars", 4)),
+            vertical_barrier_bars=(
+                int(vertical_barrier_bars) if vertical_barrier_bars is not None else None
+            ),
             tie_break=str(backtest_cfg.get("tie_break", "closest_to_open")),
             subset=bt_subset,
             pred_is_oos_col=str(cfg.get("model", {}).get("pred_is_oos_col") or "pred_is_oos"),
@@ -331,6 +341,9 @@ def run_portfolio_backtest(
             cost_per_turnover=float(risk_cfg.get("cost_per_turnover", 0.0)),
             slippage_per_turnover=float(risk_cfg.get("slippage_per_turnover", 0.0)),
             periods_per_year=int(backtest_cfg.get("periods_per_year", 252)),
+            asset_params=dict(backtest_cfg.get("asset_params", {}) or {}),
+            asset_to_group=asset_groups or None,
+            portfolio_guard=dict(risk_cfg.get("portfolio_guard", {}) or {}),
         )
         portfolio_meta = PortfolioMetaPayload(
             construction="portfolio_barrier",
@@ -479,8 +492,176 @@ def run_portfolio_backtest(
     return performance, weights, diagnostics, portfolio_meta.to_dict()
 
 
+def _position_path(performance: BacktestResult | PortfolioPerformance) -> pd.Series | pd.DataFrame | None:
+    if isinstance(performance, BacktestResult):
+        return performance.positions
+    return performance.applied_weights
+
+
+def _primary_robustness_fields(payload: dict[str, Any]) -> dict[str, float]:
+    fields: dict[str, float] = {}
+    walk_forward = dict(payload.get("walk_forward", {}) or {})
+    for key in (
+        "positive_fold_ratio",
+        "min_fold_cumulative_return",
+        "worst_fold_max_drawdown",
+        "mean_fold_sharpe",
+        "std_fold_sharpe",
+    ):
+        if key in walk_forward:
+            fields[f"robustness_walk_forward_{key}"] = float(walk_forward[key])
+    cost_stress = dict(payload.get("cost_stress", {}) or {})
+    for scenario, metrics in sorted(cost_stress.items()):
+        if isinstance(metrics, dict):
+            safe_name = str(scenario).replace(".", "_")
+            for key in ("cumulative_return", "sharpe", "max_drawdown", "profit_factor"):
+                if key in metrics:
+                    fields[f"robustness_{safe_name}_{key}"] = float(metrics[key])
+    entry_delay = dict(payload.get("entry_delay", {}) or {})
+    for scenario, metrics in sorted(entry_delay.items()):
+        if isinstance(metrics, dict):
+            safe_name = str(scenario).replace(".", "_")
+            for key in ("cumulative_return", "sharpe", "max_drawdown", "profit_factor"):
+                if key in metrics:
+                    fields[f"robustness_{safe_name}_{key}"] = float(metrics[key])
+    gap_stress = dict(payload.get("gap_stress", {}) or {})
+    gap_metrics = dict(gap_stress.get("metrics", {}) or {})
+    for key in ("cumulative_return", "sharpe", "max_drawdown", "profit_factor"):
+        if key in gap_metrics:
+            fields[f"robustness_gap_{key}"] = float(gap_metrics[key])
+    return fields
+
+
+def _run_single_asset_delay_stress(
+    asset: str,
+    df: pd.DataFrame,
+    *,
+    cfg: dict[str, Any],
+    delay_bars: int,
+) -> dict[str, float]:
+    backtest_cfg = cfg["backtest"]
+    signal_col = str(backtest_cfg["signal_col"])
+    delayed = df.copy()
+    delayed[signal_col] = delayed[signal_col].shift(int(delay_bars)).fillna(0.0)
+    result = run_single_asset_backtest(
+        asset,
+        delayed,
+        cfg=cfg,
+        model_meta={},
+    )
+    returns = result.mark_to_market_returns if result.mark_to_market_returns is not None else result.returns
+    return summarize_returns(
+        returns,
+        periods_per_year=int(backtest_cfg.get("periods_per_year", 252)),
+    )
+
+
+def _run_portfolio_delay_stress(
+    asset_frames: dict[str, pd.DataFrame],
+    *,
+    cfg: dict[str, Any],
+    delay_bars: int,
+) -> dict[str, float]:
+    signal_col = str(cfg["backtest"]["signal_col"])
+    delayed_frames: dict[str, pd.DataFrame] = {}
+    for asset, frame in sorted(asset_frames.items()):
+        delayed = frame.copy()
+        delayed[signal_col] = delayed[signal_col].shift(int(delay_bars)).fillna(0.0)
+        delayed_frames[asset] = delayed
+    performance, _, _, _ = run_portfolio_backtest(delayed_frames, cfg=cfg)
+    returns = (
+        performance.mark_to_market_returns
+        if performance.mark_to_market_returns is not None
+        else performance.net_returns
+    )
+    return summarize_returns(
+        returns,
+        periods_per_year=int(cfg["backtest"].get("periods_per_year", 252)),
+    )
+
+
+def build_robustness_diagnostics(
+    asset_frames: dict[str, pd.DataFrame],
+    *,
+    cfg: dict[str, Any],
+    performance: BacktestResult | PortfolioPerformance,
+    is_portfolio: bool,
+) -> dict[str, Any]:
+    diagnostics_cfg = dict(cfg.get("diagnostics", {}) or {})
+    robustness_cfg = dict(diagnostics_cfg.get("robustness", {}) or {})
+    if not bool(robustness_cfg.get("enabled", False)):
+        return {}
+
+    periods_per_year = int(cfg["backtest"].get("periods_per_year", 252))
+    if isinstance(performance, BacktestResult):
+        net_returns = performance.returns
+        gross_returns = performance.gross_returns
+        costs = performance.costs
+    else:
+        net_returns = performance.net_returns
+        gross_returns = performance.gross_returns
+        costs = performance.costs
+    mark_to_market_returns = getattr(performance, "mark_to_market_returns", None)
+    position_path = _position_path(performance)
+
+    cost_multipliers = list(robustness_cfg.get("cost_multipliers", [1.0, 2.0, 3.0, 5.0]) or [])
+    entry_delay_bars = [
+        int(value)
+        for value in list(robustness_cfg.get("entry_delay_bars", [1, 2]) or [])
+        if int(value) > 0
+    ]
+    payload: dict[str, Any] = {
+        "cost_stress": cost_multiplier_stress(
+            gross_returns=gross_returns,
+            costs=costs,
+            periods_per_year=periods_per_year,
+            multipliers=cost_multipliers,
+        ),
+        "walk_forward": calendar_walk_forward_diagnostics(
+            mark_to_market_returns if mark_to_market_returns is not None else net_returns,
+            periods_per_year=periods_per_year,
+            frequency=str(robustness_cfg.get("walk_forward_frequency", "YE") or "YE"),
+        ),
+        "mark_to_market": dict(getattr(performance, "mark_to_market_summary", {}) or {}),
+        "entry_delay": {},
+    }
+
+    if position_path is not None:
+        payload["gap_stress"] = gap_penalty_stress(
+            returns=mark_to_market_returns if mark_to_market_returns is not None else net_returns,
+            positions=position_path,
+            periods_per_year=periods_per_year,
+            gap_loss_per_exposure=float(robustness_cfg.get("gap_loss_per_exposure", 0.0) or 0.0),
+            max_gap_multiple=float(robustness_cfg.get("max_gap_multiple", 3.0) or 3.0),
+        )
+
+    for delay in entry_delay_bars:
+        key = f"delay_{delay}_bars"
+        try:
+            if is_portfolio:
+                payload["entry_delay"][key] = _run_portfolio_delay_stress(
+                    asset_frames,
+                    cfg=cfg,
+                    delay_bars=delay,
+                )
+            else:
+                asset = next(iter(sorted(asset_frames)))
+                payload["entry_delay"][key] = _run_single_asset_delay_stress(
+                    asset,
+                    asset_frames[asset],
+                    cfg=cfg,
+                    delay_bars=delay,
+                )
+        except Exception as exc:
+            payload["entry_delay"][key] = {"error": f"{type(exc).__name__}: {exc}"}
+
+    payload["primary_summary_fields"] = _primary_robustness_fields(payload)
+    return payload
+
+
 __all__ = [
     "build_portfolio_constraints",
+    "build_robustness_diagnostics",
     "resolve_vol_col",
     "run_portfolio_backtest",
     "run_single_asset_backtest",

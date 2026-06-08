@@ -9,6 +9,7 @@ from src.experiments.optuna_search import load_optuna_spec_yaml
 from src.utils.config_validation import (
     ConfigValidationError,
     validate_backtest_block,
+    validate_diagnostics_block,
     validate_execution_block,
     validate_data_block,
     validate_features_block,
@@ -203,6 +204,77 @@ def test_validate_portfolio_block_rejects_invalid_nested_constraints() -> None:
             "constraints": {"target_net_exposure": 0.0, "enforce_target_net_exposure": False},
         }
     )
+
+
+def test_validate_portfolio_barrier_bot_controls() -> None:
+    validate_backtest_block(
+        {
+            "engine": "portfolio_barrier",
+            "returns_col": "close_ret",
+            "signal_col": "signal",
+            "periods_per_year": 12096,
+            "returns_type": "simple",
+            "missing_return_policy": "raise_if_exposed",
+            "min_holding_bars": 0,
+            "open_col": "open",
+            "high_col": "high",
+            "low_col": "low",
+            "close_col": "close",
+            "volatility_col": "atr_14",
+            "profit_barrier_r": 3.0,
+            "stop_barrier_r": 2.0,
+            "vertical_barrier_bars": None,
+            "asset_params": {
+                "AAA": {
+                    "volatility_col": "atr_20",
+                    "profit_barrier_r": 4.0,
+                    "stop_barrier_r": 2.5,
+                    "risk_per_trade": 0.006,
+                    "vertical_barrier_bars": None,
+                }
+            },
+        }
+    )
+    validate_risk_block(
+        {
+            "target_vol": None,
+            "portfolio_guard": {
+                "enabled": True,
+                "max_open_trades": 3,
+                "group_max_open_trades": {"equity_indices": 2},
+                "kill_switch_max_drawdown": 0.08,
+            },
+        }
+    )
+    validate_diagnostics_block(
+        {
+            "enabled": True,
+            "robustness": {
+                "enabled": True,
+                "cost_multipliers": [1.0, 2.0, 3.0],
+                "entry_delay_bars": [1, 2],
+                "walk_forward_frequency": "YE",
+                "gap_loss_per_exposure": 0.001,
+                "max_gap_multiple": 3.0,
+            },
+        }
+    )
+
+    with pytest.raises(ConfigValidationError, match="risk_per_trade"):
+        validate_backtest_block(
+            {
+                "engine": "portfolio_barrier",
+                "returns_col": "close_ret",
+                "signal_col": "signal",
+                "periods_per_year": 12096,
+                "returns_type": "simple",
+                "missing_return_policy": "raise_if_exposed",
+                "volatility_col": "atr_14",
+                "profit_barrier_r": 3.0,
+                "stop_barrier_r": 2.0,
+                "asset_params": {"AAA": {"risk_per_trade": 0.0}},
+            }
+        )
 
 
 def test_validate_execution_block_rejects_invalid_current_weight_and_price_values() -> None:

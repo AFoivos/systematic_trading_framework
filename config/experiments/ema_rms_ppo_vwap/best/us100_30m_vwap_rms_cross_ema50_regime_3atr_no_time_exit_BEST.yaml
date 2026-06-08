@@ -249,7 +249,7 @@ execution:
 logging:
   enabled: true
   run_name: us100_30m_vwap_rms_cross_ema50_regime_3atr_no_time_exit_BEST
-  output_dir: logs/experiments
+  output_dir: logs/bot
   stage_tails:
     enabled: false
   execution_source_audit:

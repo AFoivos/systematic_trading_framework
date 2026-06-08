@@ -9,7 +9,11 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 from src.experiments.orchestration.artifacts import save_artifacts
-from src.experiments.orchestration.backtest_stage import run_portfolio_backtest, run_single_asset_backtest
+from src.experiments.orchestration.backtest_stage import (
+    build_robustness_diagnostics,
+    run_portfolio_backtest,
+    run_single_asset_backtest,
+)
 from src.experiments.orchestration.common import build_storage_context, resolve_symbols
 from src.experiments.orchestration.execution_stage import build_execution_output
 from src.experiments.orchestration.feature_stage import apply_signals_to_assets, apply_steps_to_assets
@@ -248,6 +252,19 @@ def run_experiment_pipeline(
                 periods_per_year=cfg["backtest"].get("periods_per_year", 252),
                 backtest_cfg=dict(cfg.get("backtest", {}) or {}),
             )
+
+        robustness = build_robustness_diagnostics(
+            asset_frames,
+            cfg=cfg,
+            performance=performance,
+            is_portfolio=is_portfolio,
+        )
+        if robustness:
+            evaluation = dict(evaluation)
+            primary_summary = dict(evaluation.get("primary_summary", {}) or {})
+            primary_summary.update(dict(robustness.get("primary_summary_fields", {}) or {}))
+            evaluation["primary_summary"] = primary_summary
+            evaluation["robustness"] = robustness
 
         monitoring = compute_monitoring_report(
             asset_frames,

@@ -1216,6 +1216,10 @@ def build_study_objective(
             dict(getattr(result, "evaluation", {}).get("orb_diagnostics", {}) or {}),
         )
         trial.set_user_attr(
+            "robustness",
+            dict(getattr(result, "evaluation", {}).get("robustness", {}) or {}),
+        )
+        trial.set_user_attr(
             "fold_backtest_summaries",
             list(getattr(result, "evaluation", {}).get("fold_backtest_summaries", []) or []),
         )
@@ -1272,6 +1276,24 @@ def _build_pruner(pruning: PruningSpec | Mapping[str, Any] | None) -> Any:
     raise ValueError("pruning.pruner must be one of: median, percentile, none")
 
 
+def _prepare_storage_uri(storage: str | None) -> str | None:
+    if storage is None:
+        return None
+    storage_text = str(storage)
+    sqlite_prefix = "sqlite:///"
+    if not storage_text.startswith(sqlite_prefix):
+        return storage_text
+    db_path_text = storage_text[len(sqlite_prefix) :]
+    if not db_path_text:
+        return storage_text
+    db_path = Path(db_path_text)
+    if not db_path.is_absolute():
+        db_path = PROJECT_ROOT / db_path
+    db_path = enforce_safe_absolute_path(db_path.resolve())
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    return f"sqlite:///{db_path}"
+
+
 def _jsonable(value: Any) -> Any:
     if is_dataclass(value) and not isinstance(value, type):
         return _jsonable(asdict(value))
@@ -1317,6 +1339,8 @@ def _flat_trial_row(trial: Any) -> dict[str, Any]:
     ftmo_objective = dict(user_attrs.get("ftmo_objective", {}) or {})
     derived_metrics = dict(user_attrs.get("derived_metrics", {}) or {})
     orb_diagnostics = dict(user_attrs.get("orb_diagnostics", {}) or {})
+    robustness = dict(user_attrs.get("robustness", {}) or {})
+    robustness_primary = dict(robustness.get("primary_summary_fields", {}) or {})
 
     row: dict[str, Any] = {
         "number": getattr(trial, "number", None),
@@ -1338,6 +1362,8 @@ def _flat_trial_row(trial: Any) -> dict[str, Any]:
         row[f"ftmo_objective_{key}"] = value
     for key, value in sorted(derived_metrics.items()):
         row[f"derived_{key}"] = value
+    for key, value in sorted(robustness_primary.items()):
+        row[key] = value
     for key, value in sorted(orb_diagnostics.items()):
         if key == "primary_summary_fields":
             continue
@@ -1413,6 +1439,7 @@ def _study_best_trial_payload(study: Any, *, direction: ObjectiveDirection) -> d
         "ftmo_metrics": dict(user_attrs.get("ftmo_metrics", {}) or {}),
         "ftmo_objective": dict(user_attrs.get("ftmo_objective", {}) or {}),
         "orb_diagnostics": dict(user_attrs.get("orb_diagnostics", {}) or {}),
+        "robustness": dict(user_attrs.get("robustness", {}) or {}),
         "derived_metrics": dict(user_attrs.get("derived_metrics", {}) or {}),
         "experiment_run_name": user_attrs.get("experiment_run_name"),
         "experiment_run_dir": user_attrs.get("experiment_run_dir"),
@@ -1420,6 +1447,117 @@ def _study_best_trial_payload(study: Any, *, direction: ObjectiveDirection) -> d
         "experiment_report_html": user_attrs.get("experiment_report_html"),
         "trial_failed": user_attrs.get("trial_failed"),
         "exception": user_attrs.get("exception"),
+    }
+
+
+def _clean_complete_trials(study: Any) -> list[Any]:
+    return [
+        trial
+        for trial in list(getattr(study, "trials", []) or [])
+        if _trial_state_name(trial) == "COMPLETE"
+        and getattr(trial, "value", None) is not None
+        and not bool(dict(getattr(trial, "user_attrs", {}) or {}).get("trial_failed"))
+    ]
+
+
+def _study_selection_risk_diagnostics(
+    study: Any,
+    *,
+    direction: ObjectiveDirection,
+) -> dict[str, Any]:
+    trials = _clean_complete_trials(study)
+    values = [float(getattr(trial, "value")) for trial in trials if math.isfinite(float(getattr(trial, "value")))]
+    if not values:
+        return {"clean_complete_count": 0}
+    arr = pd.Series(values, dtype=float)
+    best = float(arr.max() if direction == "maximize" else arr.min())
+    median = float(arr.median())
+    std = float(arr.std(ddof=1)) if len(arr) > 1 else 0.0
+    expected_selection_gap = float(std * math.sqrt(2.0 * math.log(max(len(arr), 2)))) if std > 0.0 else 0.0
+    deflated = (
+        best - expected_selection_gap
+        if direction == "maximize"
+        else best + expected_selection_gap
+    )
+    if std > 0.0:
+        best_zscore = float((best - median) / std) if direction == "maximize" else float((median - best) / std)
+    else:
+        best_zscore = 0.0
+    return {
+        "clean_complete_count": int(len(values)),
+        "best_value": best,
+        "median_value": median,
+        "mean_value": float(arr.mean()),
+        "std_value": std,
+        "p90_value": float(arr.quantile(0.90)),
+        "p10_value": float(arr.quantile(0.10)),
+        "best_vs_median": float(best - median if direction == "maximize" else median - best),
+        "best_zscore_vs_trials": best_zscore,
+        # Conservative selection-bias proxy, not a formal deflated Sharpe test.
+        "expected_selection_gap_proxy": expected_selection_gap,
+        "deflated_objective_proxy": float(deflated),
+        "proxy_method": "best_value adjusted by std(value) * sqrt(2*log(n_complete_trials))",
+    }
+
+
+def _parameter_stability_diagnostics(
+    study: Any,
+    *,
+    direction: ObjectiveDirection,
+    top_fraction: float = 0.20,
+) -> dict[str, Any]:
+    trials = sorted(_clean_complete_trials(study), key=lambda trial: _trial_sort_key(trial, direction=direction))
+    if not trials:
+        return {"top_trial_count": 0, "parameters": {}}
+    top_n = max(1, int(math.ceil(len(trials) * float(top_fraction))))
+    top_trials = trials[:top_n]
+    all_param_names = sorted({str(key) for trial in trials for key in dict(getattr(trial, "params", {}) or {})})
+    diagnostics: dict[str, Any] = {}
+    for name in all_param_names:
+        all_values = [dict(getattr(trial, "params", {}) or {}).get(name) for trial in trials]
+        top_values = [dict(getattr(trial, "params", {}) or {}).get(name) for trial in top_trials]
+        numeric_top: list[float] = []
+        numeric_all: list[float] = []
+        numeric = True
+        for value in all_values:
+            if isinstance(value, bool) or value is None:
+                numeric = False
+                break
+            try:
+                numeric_all.append(float(value))
+            except (TypeError, ValueError):
+                numeric = False
+                break
+        if numeric:
+            for value in top_values:
+                numeric_top.append(float(value))
+            diagnostics[name] = {
+                "kind": "numeric",
+                "best_value": dict(getattr(trials[0], "params", {}) or {}).get(name),
+                "all_mean": float(pd.Series(numeric_all, dtype=float).mean()),
+                "all_std": float(pd.Series(numeric_all, dtype=float).std(ddof=1)) if len(numeric_all) > 1 else 0.0,
+                "top_mean": float(pd.Series(numeric_top, dtype=float).mean()),
+                "top_std": float(pd.Series(numeric_top, dtype=float).std(ddof=1)) if len(numeric_top) > 1 else 0.0,
+                "top_min": float(min(numeric_top)),
+                "top_max": float(max(numeric_top)),
+            }
+            continue
+        top_series = pd.Series([str(value) for value in top_values], dtype="string")
+        mode_values = top_series.mode(dropna=False)
+        mode_value = str(mode_values.iloc[0]) if not mode_values.empty else None
+        mode_frequency = float((top_series == mode_value).mean()) if mode_value is not None else 0.0
+        diagnostics[name] = {
+            "kind": "categorical",
+            "best_value": dict(getattr(trials[0], "params", {}) or {}).get(name),
+            "unique_all_count": int(pd.Series([str(value) for value in all_values], dtype="string").nunique(dropna=False)),
+            "unique_top_count": int(top_series.nunique(dropna=False)),
+            "top_mode": mode_value,
+            "top_mode_frequency": mode_frequency,
+        }
+    return {
+        "top_fraction": float(top_fraction),
+        "top_trial_count": int(top_n),
+        "parameters": diagnostics,
     }
 
 
@@ -1443,13 +1581,7 @@ def build_study_report_payload(
         state_name = _trial_state_name(trial)
         state_counts[state_name] = state_counts.get(state_name, 0) + 1
 
-    clean_complete_trials = [
-        trial
-        for trial in trials
-        if _trial_state_name(trial) == "COMPLETE"
-        and getattr(trial, "value", None) is not None
-        and not bool(dict(getattr(trial, "user_attrs", {}) or {}).get("trial_failed"))
-    ]
+    clean_complete_trials = _clean_complete_trials(study)
     top_trials = sorted(clean_complete_trials, key=lambda trial: _trial_sort_key(trial, direction=objective_spec.direction))[:10]
 
     return _jsonable(
@@ -1462,6 +1594,8 @@ def build_study_report_payload(
             "state_counts": state_counts,
             "trial_count": len(trials),
             "clean_complete_count": len(clean_complete_trials),
+            "selection_risk": _study_selection_risk_diagnostics(study, direction=objective_spec.direction),
+            "parameter_stability": _parameter_stability_diagnostics(study, direction=objective_spec.direction),
             "best_trial": _study_best_trial_payload(study, direction=objective_spec.direction),
             "top_trials": [
                 {
@@ -1472,6 +1606,7 @@ def build_study_report_payload(
                     "ftmo_metrics": dict(dict(getattr(trial, "user_attrs", {}) or {}).get("ftmo_metrics", {}) or {}),
                     "ftmo_objective": dict(dict(getattr(trial, "user_attrs", {}) or {}).get("ftmo_objective", {}) or {}),
                     "orb_diagnostics": dict(dict(getattr(trial, "user_attrs", {}) or {}).get("orb_diagnostics", {}) or {}),
+                    "robustness": dict(dict(getattr(trial, "user_attrs", {}) or {}).get("robustness", {}) or {}),
                     "derived_metrics": dict(dict(getattr(trial, "user_attrs", {}) or {}).get("derived_metrics", {}) or {}),
                     "experiment_run_name": dict(getattr(trial, "user_attrs", {}) or {}).get("experiment_run_name"),
                     "experiment_run_dir": dict(getattr(trial, "user_attrs", {}) or {}).get("experiment_run_dir"),
@@ -1572,6 +1707,42 @@ def _build_study_report_markdown(payload: Mapping[str, Any]) -> str:
                 f"{summary.get('total_turnover', '')} |"
             )
     lines.append("")
+    selection_risk = dict(payload.get("selection_risk", {}) or {})
+    parameter_stability = dict(payload.get("parameter_stability", {}) or {})
+    if selection_risk:
+        lines.extend(
+            [
+                "## Selection Risk Proxy",
+                "",
+                f"- Best vs median objective: `{selection_risk.get('best_vs_median', 'n/a')}`",
+                f"- Trial objective std: `{selection_risk.get('std_value', 'n/a')}`",
+                f"- Expected selection gap proxy: `{selection_risk.get('expected_selection_gap_proxy', 'n/a')}`",
+                f"- Deflated objective proxy: `{selection_risk.get('deflated_objective_proxy', 'n/a')}`",
+                f"- Method: `{selection_risk.get('proxy_method', 'n/a')}`",
+                "",
+            ]
+        )
+    params = dict(parameter_stability.get("parameters", {}) or {})
+    if params:
+        lines.extend(
+            [
+                "## Parameter Stability",
+                "",
+                f"- Top trial count: `{parameter_stability.get('top_trial_count', 'n/a')}`",
+                "",
+                "| parameter | best | stability | top dispersion |",
+                "| --- | --- | --- | --- |",
+            ]
+        )
+        for name, info in sorted(params.items()):
+            if dict(info).get("kind") == "numeric":
+                stability = f"top_mean={dict(info).get('top_mean')}"
+                dispersion = f"top_std={dict(info).get('top_std')}, range=[{dict(info).get('top_min')}, {dict(info).get('top_max')}]"
+            else:
+                stability = f"top_mode={dict(info).get('top_mode')}"
+                dispersion = f"mode_freq={dict(info).get('top_mode_frequency')}, unique_top={dict(info).get('unique_top_count')}"
+            lines.append(f"| {name} | {dict(info).get('best_value')} | {stability} | {dispersion} |")
+        lines.append("")
     return "\n".join(lines)
 
 
@@ -1612,6 +1783,23 @@ def write_study_report(
         writer.writeheader()
         writer.writerows(trial_rows)
 
+    trial_params_path = run_dir / "trial_params.csv"
+    param_rows: list[dict[str, Any]] = []
+    for trial in list(getattr(study, "trials", []) or []):
+        row = {
+            "number": getattr(trial, "number", None),
+            "state": _trial_state_name(trial),
+            "value": getattr(trial, "value", None),
+        }
+        for key, value in sorted(dict(getattr(trial, "params", {}) or {}).items()):
+            row[str(key)] = value
+        param_rows.append(_jsonable(row))
+    param_fieldnames = sorted({key for row in param_rows for key in row})
+    with trial_params_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=param_fieldnames)
+        writer.writeheader()
+        writer.writerows(param_rows)
+
     report_path = run_dir / "report.md"
     report_html_path = run_dir / "report.html"
     report_markdown = _build_study_report_markdown(payload)
@@ -1625,6 +1813,7 @@ def write_study_report(
         "run_dir": str(run_dir),
         "study_summary": str(summary_path),
         "trials": str(trials_path),
+        "trial_params": str(trial_params_path),
         "report": str(report_path),
         "report_html": str(report_html_path),
     }
@@ -1668,7 +1857,7 @@ def optimize_experiment(
     pruning_spec = normalize_pruning_spec(pruning)
     study = optuna.create_study(
         study_name=study_name,
-        storage=storage,
+        storage=_prepare_storage_uri(storage),
         load_if_exists=bool(load_if_exists),
         direction=objective_spec.direction,
         sampler=_build_sampler(sampler=sampler, seed=seed),

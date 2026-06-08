@@ -75,14 +75,18 @@ def apply_feature_steps(
         if step.get("enabled", True) is False:
             continue
         name = step["step"]
-        params = step.get("params", {}) or {}
+        params = dict(step.get("params", {}) or {})
+        if asset is not None:
+            params_by_asset = dict(step.get("params_by_asset", {}) or {})
+            asset_params = dict(params_by_asset.get(str(asset), {}) or {})
+            params.update(asset_params)
         fn = get_feature_fn(name)
         out = _call_feature_fn(fn, out, params, asset=asset)
         out = _apply_output_mapping(out, step.get("outputs"), owner=f"features[{idx}]")
     return out
 
 
-def apply_signal_step(df: pd.DataFrame, signals_cfg: dict[str, Any]) -> pd.DataFrame:
+def apply_signal_step(df: pd.DataFrame, signals_cfg: dict[str, Any], *, asset: str | None = None) -> pd.DataFrame:
     kind = signals_cfg.get("kind", "none")
     if kind == "none":
         params = signals_cfg.get("params", {}) or {}
@@ -97,7 +101,11 @@ def apply_signal_step(df: pd.DataFrame, signals_cfg: dict[str, Any]) -> pd.DataF
                 ignore_missing_keys={"signal_col"},
             )
         return df
-    params = signals_cfg.get("params", {}) or {}
+    params = dict(signals_cfg.get("params", {}) or {})
+    if asset is not None:
+        params_by_asset = dict(signals_cfg.get("params_by_asset", {}) or {})
+        asset_params = dict(params_by_asset.get(str(asset), {}) or {})
+        params.update(asset_params)
     fn = get_signal_fn(kind)
     out = fn(df, **params)
     if isinstance(out, pd.DataFrame):
@@ -136,7 +144,7 @@ def apply_signals_to_assets(
     signals_cfg: dict[str, Any],
 ) -> dict[str, pd.DataFrame]:
     return {
-        asset: apply_signal_step(df, signals_cfg)
+        asset: apply_signal_step(df, signals_cfg, asset=asset)
         for asset, df in sorted(asset_frames.items())
     }
 

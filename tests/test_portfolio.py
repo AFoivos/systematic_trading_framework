@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from src.backtesting.portfolio_barrier import run_portfolio_barrier_backtest
 from src.evaluation.metrics import compute_ftmo_style_metrics
 from src.portfolio import (
     PortfolioConstraints,
@@ -18,6 +19,99 @@ from src.portfolio import (
     optimize_mean_variance,
     signal_to_raw_weights,
 )
+
+
+def _portfolio_barrier_frame(*, periods: int = 6) -> pd.DataFrame:
+    idx = pd.date_range("2024-01-01", periods=periods, freq="30min", tz="UTC")
+    frame = pd.DataFrame(
+        {
+            "open": [100.0] * periods,
+            "high": [100.3] * periods,
+            "low": [99.7] * periods,
+            "close": [100.0] * periods,
+            "atr_14": [1.0] * periods,
+            "signal": [0.0] * periods,
+            "close_ret": [0.0] * periods,
+        },
+        index=idx,
+    )
+    frame.iloc[0, frame.columns.get_loc("signal")] = 1.0
+    return frame
+
+
+def test_portfolio_barrier_no_time_exit_emits_mark_to_market_path() -> None:
+    frame = _portfolio_barrier_frame()
+    frame.loc[frame.index[-1], "close"] = 100.5
+
+    performance, weights, diagnostics, meta = run_portfolio_barrier_backtest(
+        {"AAA": frame},
+        signal_col="signal",
+        volatility_col="atr_14",
+        vertical_barrier_bars=None,
+        constraints=PortfolioConstraints(min_weight=0.0, enforce_target_net_exposure=False),
+        periods_per_year=12096,
+    )
+
+    trade = performance.trades.iloc[0]
+    assert trade["exit_reason"] == "end_of_data_close"
+    assert trade["exit_time"] == frame.index[-1]
+    assert weights["AAA"].iloc[-1] > 0.0
+    assert diagnostics["open_trade_count"].iloc[-1] == pytest.approx(1.0)
+    assert performance.mark_to_market_returns is not None
+    assert performance.mark_to_market_equity_curve is not None
+    assert performance.mark_to_market_summary["cumulative_return"] > 0.0
+    assert meta["trade_count"] == 1
+
+
+def test_portfolio_barrier_applies_asset_params_risk_sizing_and_open_trade_guard() -> None:
+    aaa = _portfolio_barrier_frame()
+    bbb = _portfolio_barrier_frame()
+    aaa.loc[aaa.index[1], "high"] = 101.5
+    bbb.loc[bbb.index[1], "high"] = 101.5
+    bbb["atr_7"] = 1.0
+
+    performance, weights, _, meta = run_portfolio_barrier_backtest(
+        {"AAA": aaa, "BBB": bbb},
+        signal_col="signal",
+        volatility_col="atr_14",
+        constraints=PortfolioConstraints(
+            min_weight=0.0,
+            max_weight=1.0,
+            max_gross_leverage=2.0,
+            enforce_target_net_exposure=False,
+        ),
+        gross_target=2.0,
+        periods_per_year=12096,
+        asset_params={
+            "AAA": {"volatility_col": "atr_14", "risk_per_trade": 0.01},
+            "BBB": {"volatility_col": "atr_7", "risk_per_trade": 0.0025},
+        },
+    )
+
+    trade_by_asset = performance.trades.set_index("asset")
+    assert trade_by_asset.loc["AAA", "position_weight"] == pytest.approx(1.0)
+    assert trade_by_asset.loc["BBB", "position_weight"] == pytest.approx(0.25)
+    assert trade_by_asset.loc["BBB", "volatility_col"] == "atr_7"
+    assert weights["BBB"].max() == pytest.approx(0.25)
+    assert meta["risk_sized_trade_count"] == 1
+
+    guarded, _, _, guarded_meta = run_portfolio_barrier_backtest(
+        {"AAA": aaa, "BBB": bbb},
+        signal_col="signal",
+        volatility_col="atr_14",
+        constraints=PortfolioConstraints(
+            min_weight=0.0,
+            max_weight=1.0,
+            max_gross_leverage=2.0,
+            enforce_target_net_exposure=False,
+        ),
+        gross_target=2.0,
+        periods_per_year=12096,
+        portfolio_guard={"enabled": True, "max_open_trades": 1},
+    )
+
+    assert len(guarded.trades) == 1
+    assert guarded_meta["skipped_max_open_trades"] == 1
 
 
 def test_apply_constraints_respects_bounds_group_gross_and_turnover() -> None:

@@ -1694,6 +1694,7 @@ def save_artifacts(
     payload = {
         "summary": evaluation.get("primary_summary", performance.summary),
         "timeline_summary": performance.summary,
+        "mark_to_market_summary": getattr(performance, "mark_to_market_summary", None) or {},
         "evaluation": evaluation,
         "monitoring": monitoring,
         "execution": execution,
@@ -1747,6 +1748,17 @@ def save_artifacts(
     turnover_path = run_dir / "turnover.csv"
     performance.turnover.to_csv(turnover_path, header=True)
 
+    mtm_returns_path = None
+    mtm_equity_path = None
+    mark_to_market_returns = getattr(performance, "mark_to_market_returns", None)
+    mark_to_market_equity = getattr(performance, "mark_to_market_equity_curve", None)
+    if mark_to_market_returns is not None:
+        mtm_returns_path = run_dir / "mark_to_market_returns.csv"
+        mark_to_market_returns.to_csv(mtm_returns_path, header=True)
+    if mark_to_market_equity is not None:
+        mtm_equity_path = run_dir / "mark_to_market_equity_curve.csv"
+        mark_to_market_equity.to_csv(mtm_equity_path, header=True)
+
     monitoring_path = None
     if monitoring:
         monitoring_path = run_dir / "monitoring_report.json"
@@ -1792,6 +1804,10 @@ def save_artifacts(
         artifacts["portfolio_weights"] = str(weights_path)
     if diagnostics_path is not None:
         artifacts["portfolio_diagnostics"] = str(diagnostics_path)
+    if mtm_returns_path is not None:
+        artifacts["mark_to_market_returns"] = str(mtm_returns_path)
+    if mtm_equity_path is not None:
+        artifacts["mark_to_market_equity_curve"] = str(mtm_equity_path)
 
     lab_chart_paths = _write_lab_feature_diagnostic_artifacts(
         run_dir=run_dir,
