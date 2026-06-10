@@ -14,6 +14,7 @@ from src.experiments.models import (
 )
 from src.experiments.registry import FEATURE_REGISTRY, MODEL_REGISTRY, SIGNAL_REGISTRY
 from src.features import (
+    ROLLING_STAT_MODES,
     TSFRESH_ROLLING_CALCULATORS,
     add_close_returns,
     add_feature_transforms,
@@ -279,6 +280,73 @@ def test_ratio_transform_emits_expected_values() -> None:
     pd.testing.assert_series_equal(
         out["lag_close_logret_1_over_vol_rolling_24"],
         expected,
+        check_names=False,
+    )
+
+
+def test_rolling_stat_transform_supports_rms_and_slope_modes() -> None:
+    idx = pd.date_range("2024-01-01", periods=5, freq="h")
+    df = pd.DataFrame({"osc": [1.0, -3.0, 2.0, 4.0, 7.0]}, index=idx)
+
+    out = add_feature_transforms(
+        df,
+        transforms=[
+            {
+                "source_col": "osc",
+                "kind": "rolling_stat",
+                "mode": "rms",
+                "window": 3,
+                "output_col": "osc_rms_3",
+            },
+            {
+                "source_col": "osc",
+                "kind": "rolling_stat",
+                "mode": "slope",
+                "window": 3,
+                "output_col": "osc_slope_3",
+            },
+        ],
+    )
+
+    assert "rms" in ROLLING_STAT_MODES
+    assert out.loc[idx[2], "osc_rms_3"] == pytest.approx(np.sqrt(np.mean([1.0, 9.0, 4.0])))
+    assert out.loc[idx[4], "osc_slope_3"] == pytest.approx(2.5)
+
+
+def test_rolling_stat_transform_uses_only_trailing_values() -> None:
+    idx = pd.date_range("2024-01-01", periods=6, freq="h")
+    df = pd.DataFrame({"osc": [1.0, 2.0, 3.0, 4.0, 100.0, 200.0]}, index=idx)
+
+    baseline = add_feature_transforms(
+        df,
+        transforms=[
+            {
+                "source_col": "osc",
+                "kind": "rolling_stat",
+                "mode": "root_mean_square",
+                "window": 3,
+                "output_col": "osc_rms_3",
+            }
+        ],
+    )
+    changed = df.copy(deep=True)
+    changed.loc[idx[4]:, "osc"] = [-1000.0, -2000.0]
+    changed_out = add_feature_transforms(
+        changed,
+        transforms=[
+            {
+                "source_col": "osc",
+                "kind": "rolling_stat",
+                "mode": "root_mean_square",
+                "window": 3,
+                "output_col": "osc_rms_3",
+            }
+        ],
+    )
+
+    pd.testing.assert_series_equal(
+        baseline["osc_rms_3"].iloc[:4],
+        changed_out["osc_rms_3"].iloc[:4],
         check_names=False,
     )
 

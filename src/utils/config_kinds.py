@@ -3,7 +3,6 @@ from __future__ import annotations
 FEATURE_KINDS = frozenset(
     {
         "adx",
-        "adx_rms",
         "atr",
         "bollinger",
         "ema_stoch_rsi_pullback",
@@ -25,7 +24,6 @@ FEATURE_KINDS = frozenset(
         "parkinson_volatility",
         "permutation_entropy",
         "ppo",
-        "ppo_rms",
         "price_momentum",
         "rate_of_change",
         "regime_context",

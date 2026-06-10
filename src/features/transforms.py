@@ -21,6 +21,41 @@ TSFRESH_ROLLING_CALCULATORS = (
     "minimum",
 )
 
+ROLLING_STAT_MODES = (
+    "sum",
+    "sum_values",
+    "median",
+    "mean",
+    "std",
+    "standard_deviation",
+    "var",
+    "variance",
+    "rms",
+    "root_mean_square",
+    "maximum",
+    "max",
+    "absolute_maximum",
+    "abs_max",
+    "minimum",
+    "min",
+    "mad",
+    "iqr",
+    "skew",
+    "kurtosis",
+    "slope",
+)
+
+
+_ROLLING_STAT_CANONICAL_MODES = {
+    "sum": "sum_values",
+    "std": "standard_deviation",
+    "var": "variance",
+    "rms": "root_mean_square",
+    "max": "maximum",
+    "abs_max": "absolute_maximum",
+    "min": "minimum",
+}
+
 
 def _validate_probability(value: float, *, field: str) -> float:
     out = float(value)
@@ -109,6 +144,109 @@ def compute_rolling_zscore_transform(
     roll_std = base.rolling(int(window), min_periods=int(window)).std(ddof=int(ddof)).shift(int(shift))
     out = (base - roll_mean) / roll_std.replace(0.0, np.nan)
     out.name = series.name
+    return out.astype("float32")
+
+
+def _canonical_rolling_stat_mode(mode: str) -> str:
+    normalized = str(mode).strip()
+    if normalized not in ROLLING_STAT_MODES:
+        allowed = ", ".join(ROLLING_STAT_MODES)
+        raise ValueError(f"Unsupported rolling stat mode: {mode!r}. Allowed: {allowed}.")
+    return _ROLLING_STAT_CANONICAL_MODES.get(normalized, normalized)
+
+
+def _mean_absolute_deviation(values: np.ndarray) -> float:
+    finite = values[np.isfinite(values)]
+    if finite.size == 0:
+        return float("nan")
+    return float(np.mean(np.abs(finite - np.mean(finite))))
+
+
+def _interquartile_range(values: np.ndarray, *, lower_q: float, upper_q: float) -> float:
+    finite = values[np.isfinite(values)]
+    if finite.size == 0:
+        return float("nan")
+    return float(np.quantile(finite, upper_q) - np.quantile(finite, lower_q))
+
+
+def _linear_slope(values: np.ndarray) -> float:
+    finite_mask = np.isfinite(values)
+    if not bool(finite_mask.all()):
+        return float("nan")
+    x = np.arange(values.size, dtype=float)
+    x = x - float(x.mean())
+    y = values.astype(float) - float(values.mean())
+    denom = float(np.dot(x, x))
+    if denom == 0.0:
+        return float("nan")
+    return float(np.dot(x, y) / denom)
+
+
+def compute_rolling_stat_transform(
+    series: pd.Series,
+    *,
+    mode: str = "root_mean_square",
+    window: int = 48,
+    shift: int = 0,
+    ddof: int = 0,
+    lower_q: float = 0.25,
+    upper_q: float = 0.75,
+) -> pd.Series:
+    """
+    Point-in-time safe trailing rolling statistic over a single feature column.
+    """
+    if not isinstance(series, pd.Series):
+        raise TypeError("series must be a pandas Series.")
+    if int(window) <= 0:
+        raise ValueError("window must be > 0.")
+    if int(shift) < 0:
+        raise ValueError("shift must be >= 0.")
+    if int(ddof) < 0:
+        raise ValueError("ddof must be >= 0.")
+    q_low = _validate_probability(lower_q, field="lower_q")
+    q_high = _validate_probability(upper_q, field="upper_q")
+    if not q_low < q_high:
+        raise ValueError("lower_q must be < upper_q.")
+
+    normalized_mode = _canonical_rolling_stat_mode(mode)
+    source = pd.to_numeric(series, errors="coerce").astype(float).replace([np.inf, -np.inf], np.nan)
+    rolling = source.rolling(int(window), min_periods=int(window))
+
+    if normalized_mode == "sum_values":
+        out = rolling.sum()
+    elif normalized_mode == "median":
+        out = rolling.median()
+    elif normalized_mode == "mean":
+        out = rolling.mean()
+    elif normalized_mode == "standard_deviation":
+        out = rolling.std(ddof=int(ddof))
+    elif normalized_mode == "variance":
+        out = rolling.var(ddof=int(ddof))
+    elif normalized_mode == "root_mean_square":
+        out = source.pow(2).rolling(int(window), min_periods=int(window)).mean().pow(0.5)
+    elif normalized_mode == "maximum":
+        out = rolling.max()
+    elif normalized_mode == "absolute_maximum":
+        out = source.abs().rolling(int(window), min_periods=int(window)).max()
+    elif normalized_mode == "minimum":
+        out = rolling.min()
+    elif normalized_mode == "mad":
+        out = rolling.apply(_mean_absolute_deviation, raw=True)
+    elif normalized_mode == "iqr":
+        out = rolling.apply(
+            lambda values: _interquartile_range(values, lower_q=q_low, upper_q=q_high),
+            raw=True,
+        )
+    elif normalized_mode == "skew":
+        out = rolling.skew()
+    elif normalized_mode == "kurtosis":
+        out = rolling.kurt()
+    else:
+        out = rolling.apply(_linear_slope, raw=True)
+
+    if int(shift):
+        out = out.shift(int(shift))
+    out.name = f"{series.name}__{normalized_mode}"
     return out.astype("float32")
 
 
@@ -245,6 +383,7 @@ def add_feature_transforms(
     Supported transform kinds:
     - rolling_clip
     - ratio
+    - rolling_stat
     - rolling_zscore
     - tsfresh_rolling
     """
@@ -257,7 +396,7 @@ def add_feature_transforms(
             raise TypeError(f"transforms[{idx}] must be a mapping.")
         kind = str(raw_transform.get("kind", ""))
         output_col = raw_transform.get("output_col")
-        if kind != "tsfresh_rolling" and (not isinstance(output_col, str) or not output_col):
+        if kind not in {"tsfresh_rolling", "rolling_stat"} and (not isinstance(output_col, str) or not output_col):
             raise ValueError(f"transforms[{idx}].output_col must be a non-empty string.")
 
         if kind == "tsfresh_rolling":
@@ -281,6 +420,26 @@ def add_feature_transforms(
             )
             for calculator in calculators:  # type: ignore[union-attr]
                 out[f"{output_prefix}__{calculator}"] = generated[f"{source_col}__{calculator}"]
+        elif kind == "rolling_stat":
+            source_col = _resolve_transform_column(
+                out,
+                raw_transform,
+                col_key="source_col",
+                selector_key="source_selector",
+                field_prefix=f"transforms[{idx}]",
+            )
+            if output_col is not None and (not isinstance(output_col, str) or not output_col):
+                raise ValueError(f"transforms[{idx}].output_col must be a non-empty string when provided.")
+            transformed = compute_rolling_stat_transform(
+                out[source_col],
+                mode=str(raw_transform.get("mode", "root_mean_square")),
+                window=int(raw_transform.get("window", 48)),
+                shift=int(raw_transform.get("shift", 0)),
+                ddof=int(raw_transform.get("ddof", 0)),
+                lower_q=float(raw_transform.get("lower_q", 0.25)),
+                upper_q=float(raw_transform.get("upper_q", 0.75)),
+            )
+            out[output_col or str(transformed.name)] = transformed
         elif kind == "rolling_clip":
             source_col = _resolve_transform_column(
                 out,
@@ -339,10 +498,12 @@ def add_feature_transforms(
 
 
 __all__ = [
+    "ROLLING_STAT_MODES",
     "TSFRESH_ROLLING_CALCULATORS",
     "add_feature_transforms",
     "add_tsfresh_rolling_transforms",
     "compute_rolling_clip_transform",
+    "compute_rolling_stat_transform",
     "compute_ratio_transform",
     "compute_rolling_zscore_transform",
     "compute_tsfresh_rolling_transform",

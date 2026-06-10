@@ -28,7 +28,7 @@ def add_hmm_regime(
 
     ``mode='expanding'`` fits on observations strictly before the row being
     scored. ``mode='static_train'`` fits once on the first ``train_size`` valid
-    observations and only scores later rows. The optional ``hmmlearn`` package is
+    observations and only scores later rows. The ``hmmlearn`` package is
     required at runtime.
     """
     _validate_positive_int(n_states, name="n_states")
@@ -141,7 +141,7 @@ def _load_gaussian_hmm() -> object:
     try:
         from hmmlearn.hmm import GaussianHMM
     except ImportError as exc:
-        raise ImportError("hmmlearn is required for add_hmm_regime; install it to use HMM regimes.") from exc
+        raise ImportError("hmmlearn is required for add_hmm_regime. Install project requirements to use HMM regimes.") from exc
     return GaussianHMM
 
 

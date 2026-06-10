@@ -9,6 +9,7 @@ numpy
 scipy
 statsmodels
 scikit-learn
+hmmlearn
 xgboost
 lightgbm
 shap

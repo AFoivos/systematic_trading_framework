@@ -26,7 +26,9 @@ from src.features.technical.ema import compute_ema
 from src.features.technical.ppo import add_ppo_features
 from src.features.technical.trend import add_trend_features, add_trend_regime_features
 from src.features.transforms import (
+    ROLLING_STAT_MODES,
     TSFRESH_ROLLING_CALCULATORS,
+    compute_rolling_stat_transform,
     compute_rolling_zscore_transform,
     compute_tsfresh_rolling_transform,
 )
@@ -59,6 +61,7 @@ _VWAP = re.compile(r"^vwap_(\d+)$")
 _TSFRESH_ROLLING = re.compile(
     rf"^(.+)__({'|'.join(re.escape(calculator) for calculator in TSFRESH_ROLLING_CALCULATORS)})$"
 )
+_ROLLING_STAT = re.compile(rf"^(.+)__({'|'.join(re.escape(mode) for mode in ROLLING_STAT_MODES)})$")
 
 _ROC_SIGNAL_OUTPUTS = {
     "manual_long_signal",
@@ -156,6 +159,7 @@ def _ensure_column(df: pd.DataFrame, column: str, *, active: set[str]) -> pd.Dat
         ppo_hist_match = _PPO_HIST.fullmatch(column)
         vwap_match = _VWAP.fullmatch(column)
         tsfresh_rolling_match = _TSFRESH_ROLLING.fullmatch(column)
+        rolling_stat_match = _ROLLING_STAT.fullmatch(column)
 
         if column in {"close_ret", "close_logret"}:
             out = add_close_returns(out, log=column.endswith("_logret"), col_name=column)
@@ -166,6 +170,15 @@ def _ensure_column(df: pd.DataFrame, column: str, *, active: set[str]) -> pd.Dat
             out[column] = compute_tsfresh_rolling_transform(
                 out[source_col],
                 calculator=calculator,
+                window=48,
+            )
+        elif rolling_stat_match:
+            source_col, mode = rolling_stat_match.groups()
+            out = _ensure_column(out, source_col, active=active)
+            out = out.copy()
+            out[column] = compute_rolling_stat_transform(
+                out[source_col],
+                mode=mode,
                 window=48,
             )
         elif lag_match:

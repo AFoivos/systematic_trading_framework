@@ -1,17 +1,12 @@
 from __future__ import annotations
 
-import importlib.util
-
 import pytest
 
 from src.features.hmm_regime import add_hmm_regime
 
 from ._helpers import assert_causal, assert_has_finite_values, assert_no_mutation, synthetic_ohlcv
 
-HMMLEARN_AVAILABLE = importlib.util.find_spec("hmmlearn") is not None
 
-
-@pytest.mark.skipif(not HMMLEARN_AVAILABLE, reason="hmmlearn is an optional dependency")
 def test_hmm_regime_contract_and_numeric_sanity_static_train() -> None:
     df = synthetic_ohlcv(90)
     out = add_hmm_regime(
@@ -48,15 +43,6 @@ def test_hmm_regime_invalid_params() -> None:
     with pytest.raises(ValueError, match="mode"):
         add_hmm_regime(synthetic_ohlcv(), feature_cols=["returns"], mode="bad")
 
-
-def test_hmm_regime_optional_dependency_error_is_clear() -> None:
-    if HMMLEARN_AVAILABLE:
-        pytest.skip("hmmlearn is installed")
-    with pytest.raises(ImportError, match="hmmlearn is required"):
-        add_hmm_regime(synthetic_ohlcv(), feature_cols=["returns"], mode="static_train", train_size=40)
-
-
-@pytest.mark.skipif(not HMMLEARN_AVAILABLE, reason="hmmlearn is an optional dependency")
 def test_hmm_regime_is_causal() -> None:
     assert_causal(
         add_hmm_regime,

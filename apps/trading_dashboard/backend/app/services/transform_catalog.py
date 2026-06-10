@@ -33,28 +33,45 @@ from src.features import (  # noqa: E402
     add_bollinger_features,
     add_close_returns,
     add_feature_transforms,
+    add_fractal_dimension,
+    add_garman_klass_volatility,
+    add_hilbert_transform,
+    add_hmm_regime,
+    add_hurst_exponent,
+    add_indicator_pullback_features,
     add_lagged_features,
     add_macd_features,
     add_macro_context_features,
     add_mfi_features,
     add_multi_timeframe_features,
     add_opening_range_breakout_features,
+    add_order_flow_imbalance,
+    add_parkinson_volatility,
+    add_permutation_entropy,
     add_ppo_features,
     add_price_momentum_features,
+    add_rate_of_change,
     add_regime_context_features,
     add_return_momentum_features,
+    add_roofing_filter,
     add_roc_features,
     add_rsi_features,
     add_session_context_features,
+    add_shannon_entropy,
     add_shock_context_features,
+    add_supersmoother,
     add_stochastic_features,
     add_stochastic_rsi_features,
     add_support_resistance_features,
     add_support_resistance_v2_features,
+    add_volatility_regime,
     add_vol_normalized_momentum_features,
     add_volatility_features,
     add_volume_features,
+    add_vpin,
     add_vwap_features,
+    add_yang_zhang_volatility,
+    add_zscore_momentum,
     swing_extrema_context,
 )
 from src.features.technical.trend import add_trend_features, add_trend_regime_features  # noqa: E402
@@ -64,6 +81,7 @@ from src.signals import (  # noqa: E402
     ema_stoch_rsi_pullback_signal,
     forecast_threshold_signal,
     forecast_vol_adjusted_signal,
+    indicator_model_adaptive_pullback_signal,
     manual_long_model_filter_signal,
     meta_probability_side_signal,
     momentum_strategy,
@@ -112,6 +130,7 @@ FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
     "session_context": add_session_context_features,
     "regime_context": add_regime_context_features,
     "shock_context": add_shock_context_features,
+    "hmm_regime": add_hmm_regime,
     "support_resistance": add_support_resistance_features,
     "support_resistance_v2": add_support_resistance_v2_features,
     "macro_context": add_macro_context_features,
@@ -121,6 +140,23 @@ FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
     "swing_extrema_context": swing_extrema_context,
     "roc_long_only_conditions": roc_long_only_conditions_signal,
     "ema_stoch_rsi_pullback": ema_stoch_rsi_pullback_signal,
+    "indicator_pullback": add_indicator_pullback_features,
+    "indicator_model_adaptive_pullback": indicator_model_adaptive_pullback_signal,
+    "parkinson_volatility": add_parkinson_volatility,
+    "garman_klass_volatility": add_garman_klass_volatility,
+    "yang_zhang_volatility": add_yang_zhang_volatility,
+    "hurst_exponent": add_hurst_exponent,
+    "fractal_dimension": add_fractal_dimension,
+    "rate_of_change": add_rate_of_change,
+    "zscore_momentum": add_zscore_momentum,
+    "volatility_regime": add_volatility_regime,
+    "hilbert_transform": add_hilbert_transform,
+    "roofing_filter": add_roofing_filter,
+    "supersmoother": add_supersmoother,
+    "shannon_entropy": add_shannon_entropy,
+    "permutation_entropy": add_permutation_entropy,
+    "vpin": add_vpin,
+    "order_flow_imbalance": add_order_flow_imbalance,
 }
 
 SIGNAL_REGISTRY: Mapping[str, SignalFn] = {
@@ -239,6 +275,38 @@ PARAM_OPTIONS: dict[str, list[Any]] = {
 }
 
 SKIPPED_RUNTIME_PARAMETERS = {"df"}
+FEATURE_PARAM_DEFAULTS: dict[str, dict[str, Any]] = {
+    "feature_transforms": {
+        "transforms": [
+            {
+                "kind": "rolling_stat",
+                "source_col": "close_logret",
+                "mode": "root_mean_square",
+                "window": 48,
+                "shift": 0,
+                "output_col": "close_logret__root_mean_square",
+            }
+        ]
+    },
+    "hmm_regime": {
+        "feature_cols": ["close_logret"],
+        "n_states": 2,
+        "mode": "expanding",
+        "min_train_size": 35,
+        "refit_interval": 25,
+        "covariance_type": "diag",
+        "n_iter": 50,
+        "random_state": 0,
+        "output_col": "hmm_regime",
+        "include_probabilities": False,
+    },
+}
+FEATURE_PARAM_OPTIONS: dict[str, dict[str, list[Any]]] = {
+    "hmm_regime": {
+        "mode": ["expanding", "static_train"],
+        "covariance_type": ["diag", "full", "tied", "spherical"],
+    }
+}
 SIGNAL_PARAM_DEFAULTS: dict[str, dict[str, Any]] = {
     "ema_rms_ppo_vwap": {
         "close_col": "close",
@@ -360,6 +428,7 @@ def _parameter_definitions(
     fn: BuilderFn,
     *,
     default_overrides: dict[str, Any] | None = None,
+    option_overrides: dict[str, list[Any]] | None = None,
 ) -> list[ParameterDefinition]:
     try:
         signature = inspect.signature(fn)
@@ -367,6 +436,7 @@ def _parameter_definitions(
         return []
     parameters: list[ParameterDefinition] = []
     overrides = dict(default_overrides or {})
+    options = dict(option_overrides or {})
     for name, param in signature.parameters.items():
         if name in SKIPPED_RUNTIME_PARAMETERS:
             continue
@@ -378,7 +448,7 @@ def _parameter_definitions(
                 required=param.default is inspect._empty and name not in overrides,
                 default_value=_safe_value(default),
                 annotation=_annotation_text(param.annotation),
-                options=PARAM_OPTIONS.get(name),
+                options=options.get(name, PARAM_OPTIONS.get(name)),
             )
         )
     return parameters
@@ -534,11 +604,23 @@ def _definitions_from_registry(
 
 
 def feature_builders() -> list[BuilderDefinition]:
-    return _definitions_from_registry(
-        registry=FEATURE_REGISTRY,
-        source_type="feature",
-        resolver=get_feature_fn,
-    )
+    definitions: list[BuilderDefinition] = []
+    for name in sorted(FEATURE_REGISTRY):
+        fn = get_feature_fn(name)
+        definitions.append(
+            BuilderDefinition(
+                name=name,
+                source_type="feature",
+                import_path=_callable_import_path(fn),
+                parameters=_parameter_definitions(
+                    fn,
+                    default_overrides=FEATURE_PARAM_DEFAULTS.get(name),
+                    option_overrides=FEATURE_PARAM_OPTIONS.get(name),
+                ),
+                docstring=_docstring(fn),
+            )
+        )
+    return definitions
 
 
 def signal_builders() -> list[BuilderDefinition]:
@@ -635,9 +717,12 @@ def _series_response_items(frame: pd.DataFrame, source_type: str, columns: list[
 
 
 def _step_dict(step: TransformStepConfig) -> dict[str, Any]:
+    params = dict(step.params)
+    if step.step != "feature_transforms":
+        params.pop("transforms", None)
     payload: dict[str, Any] = {
         "step": step.step,
-        "params": step.params,
+        "params": params,
         "enabled": step.enabled,
     }
     if step.outputs:
@@ -656,23 +741,146 @@ def _signal_step_dict(step: TransformStepConfig) -> dict[str, Any]:
     return payload
 
 
+def _post_feature_transforms(step: TransformStepConfig) -> list[dict[str, object]]:
+    if step.step == "feature_transforms":
+        return []
+    raw = step.params.get("transforms")
+    if raw in (None, ""):
+        return []
+    if not isinstance(raw, list):
+        raise TypeError(f"{step.step}.params.transforms must be a list of transform mappings.")
+
+    transforms: list[dict[str, object]] = []
+    for idx, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise TypeError(f"{step.step}.params.transforms[{idx}] must be a transform mapping.")
+        transforms.append(dict(item))
+    return transforms
+
+
+def _explicit_nested_source_fields(transform: dict[str, object]) -> set[str]:
+    return {
+        field
+        for field in ("source_col", "numerator_col", "denominator_col")
+        if transform.get(field) is not None
+    }
+
+
+def _bulk_transform_output_col(kind: str, source_col: str, transform: dict[str, object]) -> str | None:
+    if kind == "rolling_zscore":
+        return f"{source_col}__zscore"
+    if kind == "rolling_clip":
+        return f"{source_col}__rolling_clip"
+    if kind == "rolling_stat":
+        return None
+    return None
+
+
+def _bulk_transform_for_source(
+    transform: dict[str, object],
+    *,
+    source_col: str,
+    owner: str,
+) -> dict[str, object]:
+    kind = str(transform.get("kind", ""))
+    if kind == "ratio":
+        raise ValueError(f"{owner} cannot be applied to all parent feature outputs; ratio requires explicit sources.")
+    if kind not in {"rolling_stat", "rolling_zscore", "rolling_clip", "tsfresh_rolling"}:
+        raise ValueError(f"Unsupported nested feature transform kind: {kind!r}.")
+
+    expanded = dict(transform)
+    expanded.pop("output_col", None)
+    expanded.pop("output_prefix", None)
+    expanded["source_col"] = source_col
+    output_col = _bulk_transform_output_col(kind, source_col, expanded)
+    if output_col is not None:
+        expanded["output_col"] = output_col
+    if kind == "tsfresh_rolling":
+        expanded["output_prefix"] = source_col
+    return expanded
+
+
+def _require_nested_source(
+    transform: dict[str, object],
+    *,
+    field: str,
+    allowed_columns: set[str],
+    owner: str,
+) -> None:
+    value = transform.get(field)
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{owner}.{field} must select one output column emitted by the parent feature step.")
+    if value not in allowed_columns:
+        raise ValueError(
+            f"{owner}.{field}='{value}' is not an output column emitted by the parent feature step. "
+            f"Allowed columns: {sorted(allowed_columns)}."
+        )
+
+
+def _expand_post_feature_transforms(
+    transforms: list[dict[str, object]],
+    *,
+    feature_step: str,
+    allowed_columns: list[str],
+) -> list[dict[str, object]]:
+    allowed = set(allowed_columns)
+    if not allowed:
+        raise ValueError(f"{feature_step}.params.transforms requires the parent feature step to emit selectable columns.")
+
+    expanded: list[dict[str, object]] = []
+    for idx, transform in enumerate(transforms):
+        kind = str(transform.get("kind", ""))
+        owner = f"{feature_step}.params.transforms[{idx}]"
+        explicit_fields = _explicit_nested_source_fields(transform)
+        if not explicit_fields:
+            expanded.extend(
+                _bulk_transform_for_source(transform, source_col=source_col, owner=owner)
+                for source_col in allowed_columns
+            )
+        elif kind == "ratio":
+            _require_nested_source(transform, field="numerator_col", allowed_columns=allowed, owner=owner)
+            _require_nested_source(transform, field="denominator_col", allowed_columns=allowed, owner=owner)
+            expanded.append(transform)
+        else:
+            _require_nested_source(transform, field="source_col", allowed_columns=allowed, owner=owner)
+            expanded.append(transform)
+    return expanded
+
+
 def _apply_feature_step(
     frame: pd.DataFrame,
     step: TransformStepConfig,
     *,
     asset: str | None,
 ) -> tuple[pd.DataFrame, list[str], list[str]]:
+    post_transforms = _post_feature_transforms(step)
     before = list(frame.columns)
     out, prerequisites = call_with_materialized_dependencies(
         frame,
         lambda materialized: apply_feature_steps(materialized, [_step_dict(step)], asset=asset),
     )
-    columns = _configured_output_columns(
+    feature_columns = _configured_output_columns(
         before=before,
         after=out.columns,
         outputs=step.outputs,
         exclude=prerequisites,
     )
+    columns = list(feature_columns)
+    if post_transforms:
+        expanded_transforms = _expand_post_feature_transforms(
+            post_transforms,
+            feature_step=step.step,
+            allowed_columns=feature_columns,
+        )
+        before_transforms = list(out.columns)
+        out = add_feature_transforms(out, transforms=expanded_transforms)
+        columns.extend(
+            _configured_output_columns(
+                before=before_transforms,
+                after=out.columns,
+                outputs=None,
+            )
+        )
     return out, _numeric_columns(out, columns), prerequisites
 
 

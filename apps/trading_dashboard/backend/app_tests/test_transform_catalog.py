@@ -13,6 +13,7 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from app.schemas.transforms import TransformSeriesRequest, TransformStepConfig
 from app.services import transform_catalog
+from src.utils.config_kinds import FEATURE_KINDS
 
 
 def _ohlcv_frame(periods: int = 80) -> pd.DataFrame:
@@ -45,6 +46,7 @@ def test_builder_catalog_exposes_registered_feature_signal_and_target_defaults()
 
     assert "rsi" in feature_by_name
     assert "vwap" in feature_by_name
+    assert set(FEATURE_KINDS).issubset(feature_by_name)
     assert "ema_rms_ppo_vwap" in signal_by_name
     assert "vwap_rms_ema_cross_long" in signal_by_name
     assert "trend_state" in signal_by_name
@@ -53,6 +55,25 @@ def test_builder_catalog_exposes_registered_feature_signal_and_target_defaults()
     rsi_params = {param.name: param for param in feature_by_name["rsi"].parameters}
     assert rsi_params["windows"].kind == "list"
     assert rsi_params["windows"].default_value == [14]
+
+    transform_params = {param.name: param for param in feature_by_name["feature_transforms"].parameters}
+    assert transform_params["transforms"].kind == "list"
+    assert transform_params["transforms"].default_value == [
+        {
+            "kind": "rolling_stat",
+            "source_col": "close_logret",
+            "mode": "root_mean_square",
+            "window": 48,
+            "shift": 0,
+            "output_col": "close_logret__root_mean_square",
+        }
+    ]
+
+    hmm_params = {param.name: param for param in feature_by_name["hmm_regime"].parameters}
+    assert hmm_params["feature_cols"].default_value == ["close_logret"]
+    assert hmm_params["mode"].default_value == "expanding"
+    assert hmm_params["mode"].options == ["expanding", "static_train"]
+    assert hmm_params["refit_interval"].default_value == 25
 
     atr_params = {param.name: param for param in feature_by_name["atr"].parameters}
     assert atr_params["windows"].kind == "list"
@@ -156,6 +177,133 @@ def test_transform_series_materializes_tsfresh_transform_source_from_ohlcv(monke
         "close_logret__length",
     }
     assert response.steps[0].metadata["materialized_prerequisites"] == ["close_logret"]
+
+
+def test_transform_series_runs_default_rolling_stat_feature_transform(monkeypatch) -> None:
+    _install_fake_loader(monkeypatch, _ohlcv_frame())
+
+    response = transform_catalog.run_transform_series(
+        TransformSeriesRequest(
+            asset="XAUUSD",
+            features=[
+                TransformStepConfig(
+                    step="feature_transforms",
+                    params={
+                        "transforms": [
+                            {
+                                "source_col": "close_logret",
+                                "kind": "rolling_stat",
+                                "mode": "root_mean_square",
+                                "window": 4,
+                                "output_col": "close_logret_rms_4",
+                            }
+                        ]
+                    },
+                ),
+            ],
+        )
+    )
+
+    assert {series.series_id for series in response.series} == {"close_logret_rms_4"}
+    assert response.steps[0].metadata["materialized_prerequisites"] == ["close_logret"]
+
+
+def test_transform_series_runs_nested_transform_on_all_parent_feature_outputs(monkeypatch) -> None:
+    _install_fake_loader(monkeypatch, _ohlcv_frame())
+
+    response = transform_catalog.run_transform_series(
+        TransformSeriesRequest(
+            asset="XAUUSD",
+            features=[
+                TransformStepConfig(
+                    step="trend",
+                    params={
+                        "sma_windows": [4],
+                        "ema_spans": [],
+                        "transforms": [
+                            {
+                                "kind": "rolling_stat",
+                                "mode": "root_mean_square",
+                                "window": 4,
+                            }
+                        ],
+                    },
+                ),
+            ],
+        )
+    )
+
+    assert {
+        "close_sma_4",
+        "close_over_sma_4",
+        "close_sma_4__root_mean_square",
+        "close_over_sma_4__root_mean_square",
+    }.issubset(
+        {series.series_id for series in response.series}
+    )
+    assert response.steps[0].metadata["materialized_prerequisites"] == []
+
+
+def test_transform_series_expands_nested_adx_rms_to_all_adx_outputs(monkeypatch) -> None:
+    _install_fake_loader(monkeypatch, _ohlcv_frame())
+
+    response = transform_catalog.run_transform_series(
+        TransformSeriesRequest(
+            asset="XAUUSD",
+            features=[
+                TransformStepConfig(
+                    step="adx",
+                    params={
+                        "windows": [4],
+                        "transforms": [
+                            {
+                                "kind": "rolling_stat",
+                                "mode": "root_mean_square",
+                                "window": 4,
+                            }
+                        ],
+                    },
+                ),
+            ],
+        )
+    )
+
+    assert {
+        "plus_di_4",
+        "minus_di_4",
+        "adx_4",
+        "plus_di_4__root_mean_square",
+        "minus_di_4__root_mean_square",
+        "adx_4__root_mean_square",
+    }.issubset({series.series_id for series in response.series})
+
+
+def test_transform_series_rejects_nested_transform_source_outside_parent_outputs(monkeypatch) -> None:
+    _install_fake_loader(monkeypatch, _ohlcv_frame())
+
+    with pytest.raises(ValueError, match="is not an output column emitted by the parent feature step"):
+        transform_catalog.run_transform_series(
+            TransformSeriesRequest(
+                asset="XAUUSD",
+                features=[
+                    TransformStepConfig(
+                        step="trend",
+                        params={
+                            "sma_windows": [4],
+                            "ema_spans": [],
+                            "transforms": [
+                                {
+                                    "source_col": "close_logret",
+                                    "kind": "rolling_stat",
+                                    "mode": "root_mean_square",
+                                    "window": 4,
+                                }
+                            ],
+                        },
+                    ),
+                ],
+            )
+        )
 
 
 def test_transform_series_materializes_default_rsi_signal_dependencies_from_ohlcv(monkeypatch) -> None:

@@ -772,6 +772,27 @@ def test_validate_features_block_accepts_tsfresh_rolling_transform() -> None:
     )
 
 
+def test_validate_features_block_accepts_rolling_stat_transform() -> None:
+    validate_features_block(
+        [
+            {
+                "step": "feature_transforms",
+                "params": {
+                    "transforms": [
+                        {
+                            "source_col": "close_logret",
+                            "kind": "rolling_stat",
+                            "mode": "root_mean_square",
+                            "window": 48,
+                            "shift": 0,
+                        }
+                    ]
+                },
+            },
+        ]
+    )
+
+
 def test_validate_features_block_accepts_stable_indicator_output_columns() -> None:
     validate_features_block(
         [
@@ -850,6 +871,26 @@ def test_validate_features_block_rejects_unknown_tsfresh_rolling_calculator() ->
         )
 
 
+def test_validate_features_block_rejects_unknown_rolling_stat_mode() -> None:
+    with pytest.raises(ConfigValidationError, match="mode"):
+        validate_features_block(
+            [
+                {
+                    "step": "feature_transforms",
+                    "params": {
+                        "transforms": [
+                            {
+                                "source_col": "close_logret",
+                                "kind": "rolling_stat",
+                                "mode": "future_peek",
+                            }
+                        ]
+                    },
+                },
+            ]
+        )
+
+
 def test_validate_features_block_rejects_ambiguous_feature_transform_selector() -> None:
     with pytest.raises(ConfigValidationError, match="source_col or source_selector"):
         validate_features_block(
@@ -890,7 +931,7 @@ def test_validate_features_block_rejects_non_boolean_enabled_flag() -> None:
 
 
 def test_validate_features_block_rejects_invalid_feature_transform_kind() -> None:
-    with pytest.raises(ConfigValidationError, match="rolling_clip, ratio, rolling_zscore"):
+    with pytest.raises(ConfigValidationError, match="rolling_clip, ratio, rolling_stat, rolling_zscore"):
         validate_features_block(
             [
                 {

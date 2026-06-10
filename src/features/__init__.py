@@ -15,10 +15,12 @@ from .volatility import (
 )
 from .lags import add_lagged_features
 from .transforms import (
+    ROLLING_STAT_MODES,
     TSFRESH_ROLLING_CALCULATORS,
     add_feature_transforms,
     add_tsfresh_rolling_transforms,
     compute_rolling_clip_transform,
+    compute_rolling_stat_transform,
     compute_tsfresh_rolling_transform,
 )
 from .technical.trend import (
@@ -46,7 +48,6 @@ from .technical import (
     add_volume_features,
     add_vwap_features,
 )
-from .adx_rms import add_adx_rms
 from .fractal_dimension import add_fractal_dimension
 from .garman_klass_volatility import add_garman_klass_volatility
 from .hilbert_transform import add_hilbert_transform
@@ -55,7 +56,6 @@ from .hurst_exponent import add_hurst_exponent
 from .order_flow_imbalance import add_order_flow_imbalance
 from .parkinson_volatility import add_parkinson_volatility
 from .permutation_entropy import add_permutation_entropy
-from .ppo_rms import add_ppo_rms
 from .rate_of_change import add_rate_of_change
 from .roofing_filter import add_roofing_filter
 from .shannon_entropy import add_shannon_entropy
@@ -86,7 +86,9 @@ __all__ = [
     "add_feature_transforms",
     "add_tsfresh_rolling_transforms",
     "compute_rolling_clip_transform",
+    "compute_rolling_stat_transform",
     "compute_tsfresh_rolling_transform",
+    "ROLLING_STAT_MODES",
     "TSFRESH_ROLLING_CALCULATORS",
     "compute_sma",
     "compute_ema",
@@ -109,7 +111,6 @@ __all__ = [
     "add_vol_normalized_momentum_features",
     "add_indicator_features",
     "add_indicator_pullback_features",
-    "add_adx_rms",
     "add_fractal_dimension",
     "add_garman_klass_volatility",
     "add_hilbert_transform",
@@ -118,7 +119,6 @@ __all__ = [
     "add_order_flow_imbalance",
     "add_parkinson_volatility",
     "add_permutation_entropy",
-    "add_ppo_rms",
     "add_rate_of_change",
     "add_roofing_filter",
     "add_shannon_entropy",

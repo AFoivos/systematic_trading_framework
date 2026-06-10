@@ -6,7 +6,6 @@ import pandas as pd
 
 from src.features import (
     add_adx_features,
-    add_adx_rms,
     add_atr_features,
     add_bollinger_features,
     add_close_returns,
@@ -27,7 +26,6 @@ from src.features import (
     add_parkinson_volatility,
     add_permutation_entropy,
     add_ppo_features,
-    add_ppo_rms,
     add_price_momentum_features,
     add_rate_of_change,
     add_regime_context_features,
@@ -144,10 +142,8 @@ FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
     "yang_zhang_volatility": add_yang_zhang_volatility,
     "hurst_exponent": add_hurst_exponent,
     "fractal_dimension": add_fractal_dimension,
-    "adx_rms": add_adx_rms,
     "rate_of_change": add_rate_of_change,
     "zscore_momentum": add_zscore_momentum,
-    "ppo_rms": add_ppo_rms,
     "volatility_regime": add_volatility_regime,
     "hmm_regime": add_hmm_regime,
     "hilbert_transform": add_hilbert_transform,

@@ -77,6 +77,29 @@ _TSFRESH_ROLLING_CALCULATORS = {
     "absolute_maximum",
     "minimum",
 }
+_ROLLING_STAT_MODES = {
+    "sum",
+    "sum_values",
+    "median",
+    "mean",
+    "std",
+    "standard_deviation",
+    "var",
+    "variance",
+    "rms",
+    "root_mean_square",
+    "maximum",
+    "max",
+    "absolute_maximum",
+    "abs_max",
+    "minimum",
+    "min",
+    "mad",
+    "iqr",
+    "skew",
+    "kurtosis",
+    "slope",
+}
 _TARGET_OUTPUT_KEYS = {
     "label_col",
     "fwd_col",
@@ -824,13 +847,21 @@ def validate_features_block(features: Any) -> None:
                 if not isinstance(transform, dict):
                     raise ConfigValidationError(f"{field_prefix} must be a mapping.")
                 kind = transform.get("kind")
-                if kind not in {"rolling_clip", "ratio", "rolling_zscore", "tsfresh_rolling"}:
+                allowed_transform_kinds = {"rolling_clip", "ratio", "rolling_stat", "rolling_zscore", "tsfresh_rolling"}
+                if kind not in allowed_transform_kinds:
                     raise ConfigValidationError(
-                        f"{field_prefix}.kind must be one of: rolling_clip, ratio, rolling_zscore, tsfresh_rolling."
+                        f"{field_prefix}.kind must be one of: rolling_clip, ratio, rolling_stat, rolling_zscore, tsfresh_rolling."
                     )
                 output_col = transform.get("output_col")
-                if kind != "tsfresh_rolling" and (not isinstance(output_col, str) or not output_col.strip()):
+                if (
+                    kind not in {"tsfresh_rolling", "rolling_stat"}
+                    and (not isinstance(output_col, str) or not output_col.strip())
+                ):
                     raise ConfigValidationError(f"{field_prefix}.output_col must be a non-empty string.")
+                if kind == "rolling_stat" and output_col is not None and (
+                    not isinstance(output_col, str) or not output_col.strip()
+                ):
+                    raise ConfigValidationError(f"{field_prefix}.output_col must be a non-empty string when provided.")
                 if kind == "tsfresh_rolling":
                     _validate_column_ref_or_selector(
                         transform,
@@ -857,6 +888,32 @@ def validate_features_block(features: Any) -> None:
                                 raise ConfigValidationError(
                                     f"{field_prefix}.calculators[{calculator_idx}] must be one of: {allowed}."
                                 )
+                elif kind == "rolling_stat":
+                    _validate_column_ref_or_selector(
+                        transform,
+                        col_key="source_col",
+                        selector_key="source_selector",
+                        field=field_prefix,
+                    )
+                    mode = transform.get("mode", "root_mean_square")
+                    if not isinstance(mode, str) or not mode.strip():
+                        raise ConfigValidationError(f"{field_prefix}.mode must be a non-empty string.")
+                    if mode not in _ROLLING_STAT_MODES:
+                        allowed = ", ".join(sorted(_ROLLING_STAT_MODES))
+                        raise ConfigValidationError(f"{field_prefix}.mode must be one of: {allowed}.")
+                    _positive_int(transform.get("window", 48), field=f"{field_prefix}.window")
+                    _non_negative_int(transform.get("shift", 0), field=f"{field_prefix}.shift")
+                    _non_negative_int(transform.get("ddof", 0), field=f"{field_prefix}.ddof")
+                    lower_q = _finite_number(transform.get("lower_q", 0.25), field=f"{field_prefix}.lower_q")
+                    upper_q = _finite_number(transform.get("upper_q", 0.75), field=f"{field_prefix}.upper_q")
+                    if not 0.0 <= lower_q <= 1.0:
+                        raise ConfigValidationError(f"{field_prefix}.lower_q must be in [0, 1].")
+                    if not 0.0 <= upper_q <= 1.0:
+                        raise ConfigValidationError(f"{field_prefix}.upper_q must be in [0, 1].")
+                    if not lower_q < upper_q:
+                        raise ConfigValidationError(
+                            f"{field_prefix}.lower_q must be strictly less than {field_prefix}.upper_q."
+                        )
                 elif kind == "rolling_clip":
                     _validate_column_ref_or_selector(
                         transform,
