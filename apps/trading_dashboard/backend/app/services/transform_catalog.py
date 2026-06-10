@@ -28,6 +28,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.features import (  # noqa: E402
+    TSFRESH_ROLLING_CALCULATORS,
     add_adx_features,
     add_atr_features,
     add_bollinger_features,
@@ -758,22 +759,30 @@ def _post_feature_transforms(step: TransformStepConfig) -> list[dict[str, object
     return transforms
 
 
-def _explicit_nested_source_fields(transform: dict[str, object]) -> set[str]:
-    return {
-        field
-        for field in ("source_col", "numerator_col", "denominator_col")
-        if transform.get(field) is not None
-    }
-
-
 def _bulk_transform_output_col(kind: str, source_col: str, transform: dict[str, object]) -> str | None:
     if kind == "rolling_zscore":
         return f"{source_col}__zscore"
     if kind == "rolling_clip":
         return f"{source_col}__rolling_clip"
     if kind == "rolling_stat":
-        return None
+        return f"{source_col}__{_canonical_nested_rolling_stat_mode(transform.get('mode', 'root_mean_square'))}"
     return None
+
+
+_NESTED_ROLLING_STAT_MODE_ALIASES = {
+    "sum": "sum_values",
+    "std": "standard_deviation",
+    "var": "variance",
+    "rms": "root_mean_square",
+    "max": "maximum",
+    "abs_max": "absolute_maximum",
+    "min": "minimum",
+}
+
+
+def _canonical_nested_rolling_stat_mode(mode: object) -> str:
+    normalized = str(mode).strip()
+    return _NESTED_ROLLING_STAT_MODE_ALIASES.get(normalized, normalized)
 
 
 def _bulk_transform_for_source(
@@ -789,8 +798,18 @@ def _bulk_transform_for_source(
         raise ValueError(f"Unsupported nested feature transform kind: {kind!r}.")
 
     expanded = dict(transform)
-    expanded.pop("output_col", None)
-    expanded.pop("output_prefix", None)
+    for key in (
+        "source_col",
+        "source_selector",
+        "numerator_col",
+        "numerator_selector",
+        "denominator_col",
+        "denominator_selector",
+        "output_col",
+        "output_prefix",
+        "eps",
+    ):
+        expanded.pop(key, None)
     expanded["source_col"] = source_col
     output_col = _bulk_transform_output_col(kind, source_col, expanded)
     if output_col is not None:
@@ -831,20 +850,42 @@ def _expand_post_feature_transforms(
     for idx, transform in enumerate(transforms):
         kind = str(transform.get("kind", ""))
         owner = f"{feature_step}.params.transforms[{idx}]"
-        explicit_fields = _explicit_nested_source_fields(transform)
-        if not explicit_fields:
-            expanded.extend(
-                _bulk_transform_for_source(transform, source_col=source_col, owner=owner)
-                for source_col in allowed_columns
-            )
-        elif kind == "ratio":
+        if kind == "ratio":
             _require_nested_source(transform, field="numerator_col", allowed_columns=allowed, owner=owner)
             _require_nested_source(transform, field="denominator_col", allowed_columns=allowed, owner=owner)
             expanded.append(transform)
         else:
-            _require_nested_source(transform, field="source_col", allowed_columns=allowed, owner=owner)
-            expanded.append(transform)
+            expanded.extend(
+                _bulk_transform_for_source(transform, source_col=source_col, owner=owner)
+                for source_col in allowed_columns
+            )
     return expanded
+
+
+def _tsfresh_calculators(value: object) -> list[str]:
+    if value is None:
+        return [str(calculator) for calculator in TSFRESH_ROLLING_CALCULATORS]
+    if isinstance(value, (str, bytes)):
+        return [str(value)]
+    if isinstance(value, Iterable):
+        return [str(calculator) for calculator in value]
+    return [str(value)]
+
+
+def _expected_transform_output_columns(transforms: Iterable[dict[str, object]]) -> list[str]:
+    columns: list[str] = []
+    for transform in transforms:
+        kind = str(transform.get("kind", ""))
+        if kind in {"ratio", "rolling_clip", "rolling_stat", "rolling_zscore"}:
+            output_col = transform.get("output_col")
+            if isinstance(output_col, str) and output_col:
+                columns.append(output_col)
+        elif kind == "tsfresh_rolling":
+            source_col = transform.get("source_col")
+            output_prefix = transform.get("output_prefix", source_col)
+            if isinstance(output_prefix, str) and output_prefix:
+                columns.extend(f"{output_prefix}__{calculator}" for calculator in _tsfresh_calculators(transform.get("calculators")))
+    return columns
 
 
 def _apply_feature_step(
@@ -872,6 +913,7 @@ def _apply_feature_step(
             feature_step=step.step,
             allowed_columns=feature_columns,
         )
+        expected_transform_columns = _expected_transform_output_columns(expanded_transforms)
         before_transforms = list(out.columns)
         out = add_feature_transforms(out, transforms=expanded_transforms)
         columns.extend(
@@ -879,6 +921,7 @@ def _apply_feature_step(
                 before=before_transforms,
                 after=out.columns,
                 outputs=None,
+                preferred=expected_transform_columns,
             )
         )
     return out, _numeric_columns(out, columns), prerequisites

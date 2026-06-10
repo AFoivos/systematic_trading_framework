@@ -278,32 +278,80 @@ def test_transform_series_expands_nested_adx_rms_to_all_adx_outputs(monkeypatch)
     }.issubset({series.series_id for series in response.series})
 
 
-def test_transform_series_rejects_nested_transform_source_outside_parent_outputs(monkeypatch) -> None:
+def test_transform_series_returns_nested_outputs_when_names_already_exist(monkeypatch) -> None:
+    frame = _ohlcv_frame()
+    frame["plus_di_4__root_mean_square"] = 0.0
+    frame["minus_di_4__root_mean_square"] = 0.0
+    frame["adx_4__root_mean_square"] = 0.0
+    _install_fake_loader(monkeypatch, frame)
+
+    response = transform_catalog.run_transform_series(
+        TransformSeriesRequest(
+            asset="XAUUSD",
+            features=[
+                TransformStepConfig(
+                    step="adx",
+                    params={
+                        "windows": [4],
+                        "transforms": [
+                            {
+                                "kind": "rolling_stat",
+                                "mode": "root_mean_square",
+                                "window": 4,
+                            }
+                        ],
+                    },
+                ),
+            ],
+        )
+    )
+
+    series_ids = {series.series_id for series in response.series}
+    assert {
+        "plus_di_4__root_mean_square",
+        "minus_di_4__root_mean_square",
+        "adx_4__root_mean_square",
+    }.issubset(series_ids)
+    assert {
+        "plus_di_4__root_mean_square",
+        "minus_di_4__root_mean_square",
+        "adx_4__root_mean_square",
+    }.issubset(set(response.steps[0].output_columns))
+
+
+def test_transform_series_ignores_legacy_nested_transform_source_for_bulk(monkeypatch) -> None:
     _install_fake_loader(monkeypatch, _ohlcv_frame())
 
-    with pytest.raises(ValueError, match="is not an output column emitted by the parent feature step"):
-        transform_catalog.run_transform_series(
-            TransformSeriesRequest(
-                asset="XAUUSD",
-                features=[
-                    TransformStepConfig(
-                        step="trend",
-                        params={
-                            "sma_windows": [4],
-                            "ema_spans": [],
-                            "transforms": [
-                                {
-                                    "source_col": "close_logret",
-                                    "kind": "rolling_stat",
-                                    "mode": "root_mean_square",
-                                    "window": 4,
-                                }
-                            ],
-                        },
-                    ),
-                ],
-            )
+    response = transform_catalog.run_transform_series(
+        TransformSeriesRequest(
+            asset="XAUUSD",
+            features=[
+                TransformStepConfig(
+                    step="adx",
+                    params={
+                        "windows": [4],
+                        "transforms": [
+                            {
+                                "source_col": "plus_di_4",
+                                "kind": "rolling_stat",
+                                "mode": "root_mean_square",
+                                "window": 4,
+                                "output_col": "plus_di_4_rms_legacy_ui",
+                            }
+                        ],
+                    },
+                ),
+            ],
         )
+    )
+
+    series_ids = {series.series_id for series in response.series}
+    assert "plus_di_4_rms_legacy_ui" not in series_ids
+    assert {
+        "plus_di_4__root_mean_square",
+        "minus_di_4__root_mean_square",
+        "adx_4__root_mean_square",
+    }.issubset(series_ids)
 
 
 def test_transform_series_materializes_default_rsi_signal_dependencies_from_ohlcv(monkeypatch) -> None:
