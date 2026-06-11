@@ -1,0 +1,337 @@
+data:
+  source: dukascopy_csv
+  interval: 30m
+  start: null
+  end: null
+  alignment: inner
+  symbol: US100
+  pit:
+    timestamp_alignment:
+      source_timezone: UTC
+      output_timezone: UTC
+      normalize_daily: false
+      duplicate_policy: last
+    corporate_actions:
+      policy: none
+      adj_close_col: adj_close
+    universe_snapshot:
+      inactive_policy: raise
+  storage:
+    mode: cached_only
+    dataset_id: us100_30m_vwap_rms_hmm_regime_gate
+    save_raw: false
+    save_processed: true
+    load_path: data/raw/dukascopy_30m_clean/us100_30m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed
+features:
+- step: returns
+  params:
+    log: false
+    col_name: close_ret
+  outputs: {}
+  enabled: true
+- step: trend
+  params:
+    price_col: close
+    sma_windows: []
+    ema_spans:
+    - 20
+    ema_col_template: ema_20
+  outputs: {}
+  enabled: true
+- step: trend
+  params:
+    price_col: close
+    sma_windows: []
+    ema_spans:
+    - 50
+    ema_col_template: ema_50
+  outputs: {}
+  enabled: true
+- step: trend
+  params:
+    price_col: close
+    sma_windows: []
+    ema_spans:
+    - 96
+    ema_col_template: ema_96
+  outputs: {}
+  enabled: true
+- step: vwap
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    volume_col: volume
+    window: 40
+    windows:
+    - 40
+    add_distance: true
+    vwap_col: vwap_40
+    distance_col: close_over_vwap_40
+  outputs: {}
+  enabled: true
+- step: ppo
+  params:
+    price_col: close
+    fast: 12
+    slow: 36
+    signal: 9
+    ppo_col: ppo_12_36
+    ppo_signal_col: ppo_signal_9
+    ppo_hist_col: ppo_hist_12_36_9_raw
+  outputs: {}
+  enabled: true
+- step: atr
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    window: 20
+    windows:
+    - 20
+    method: simple
+    add_over_price: true
+    atr_col: atr_20
+    over_price_col: atr_over_price_20
+  outputs: {}
+  enabled: true
+- step: feature_transforms
+  params:
+    transforms:
+    - kind: tsfresh_rolling
+      source_col: ema_50
+      output_prefix: ema_50
+      calculators:
+      - root_mean_square
+      window: 72
+      shift: 0
+    - kind: tsfresh_rolling
+      source_col: vwap_40
+      output_prefix: vwap_40
+      calculators:
+      - root_mean_square
+      window: 18
+      shift: 0
+    - kind: tsfresh_rolling
+      source_col: ema_96
+      output_prefix: ema_96
+      calculators:
+      - root_mean_square
+      window: 12
+      shift: 0
+  outputs: {}
+  enabled: true
+- step: hurst_exponent
+  params:
+    price_col: close
+    window: 128
+    output_col: hurst_128
+  outputs: {}
+  enabled: true
+- step: fractal_dimension
+  params:
+    price_col: close
+    window: 128
+    output_col: fractal_dimension_128
+  outputs: {}
+  enabled: true
+- step: permutation_entropy
+  params:
+    source_col: close_ret
+    window: 128
+    order: 3
+    delay: 1
+    output_col: perm_entropy_128
+  outputs: {}
+  enabled: true
+- step: yang_zhang_volatility
+  params:
+    open_col: open
+    high_col: high
+    low_col: low
+    close_col: close
+    window: 28
+    regime_window: 96
+    high_vol_mult: 1.05
+    output_col: yz_vol_28
+    rolling_mean_col: yz_vol_28_mean_96
+    ratio_col: yz_vol_28_ratio_96
+    rising_col: yz_vol_28_rising
+    high_vol_regime_col: yz_vol_28_high_regime
+  outputs: {}
+  enabled: true
+- step: hmm_regime
+  params:
+    feature_cols:
+    - close_ret
+    - atr_over_price_20
+    - ppo_hist_12_36_9_raw
+    - hurst_128
+    - fractal_dimension_128
+    - perm_entropy_128
+    - yz_vol_28_ratio_96
+    n_states: 3
+    mode: static_train
+    train_size: 3000
+    min_train_size: 1000
+    refit_interval: 96
+    covariance_type: diag
+    n_iter: 100
+    random_state: 7
+    output_col: hmm_regime
+    include_probabilities: true
+    probability_prefix: hmm_regime_prob
+    standardize: true
+  outputs: {}
+  enabled: true
+model:
+  kind: none
+signals:
+  kind: vwap_rms_ema_cross_long_hmm_gate
+  params:
+    ema_mid_col: ema_50
+    ema_slow_col: ema_96
+    ema_mid_rms_col: ema_50__root_mean_square
+    vwap_rms_col: vwap_40__root_mean_square
+    ppo_col: ppo_12_36
+    ppo_signal_col: ppo_signal_9
+    ppo_hist_min: 0.0002
+    hmm_regime_col: hmm_regime
+    hmm_min_regime: 1
+    hmm_prob_col: hmm_regime_prob_2
+    hmm_prob_min: 0.35
+    regime_col: ema_50_above_ema_96
+    cross_up_col: vwap_40_rms_cross_above_ema_50_rms
+    ppo_hist_col: ppo_hist_12_36_9
+    ppo_hist_positive_col: ppo_hist_12_36_9_positive
+    ppo_above_signal_col: ppo_12_36_above_ppo_signal_9
+    hmm_ok_col: hmm_regime_ok
+    long_setup_col: vwap_40_rms_ema_50_cross_long_hmm_setup
+    signal_col: signal_side
+    candidate_col: signal_candidate
+  outputs: {}
+target:
+  kind: triple_barrier
+  outputs:
+    label_col: label
+    event_ret_col: tb_event_ret
+    fwd_col: tb_event_ret
+    candidate_out_col: label_candidate
+    r_col: tb_event_r
+    oriented_r_col: tb_oriented_r
+  price_col: close
+  open_col: open
+  high_col: high
+  low_col: low
+  volatility_col: atr_over_price_20
+  label_mode: meta
+  side_col: signal_side
+  candidate_col: signal_candidate
+  candidate_mode: all_nonzero
+  entry_price_mode: next_open
+  max_holding: 16
+  upper_mult: 3.0
+  lower_mult: 3.0
+  vol_window: 24
+  min_vol: 0.0001
+  neutral_label: lower
+  tie_break: closest_to_open
+  add_r_multiple: true
+  r_clip:
+  - -3
+  - 3
+  diagnostic_feature_cols:
+  - ema_20
+  - ema_50
+  - ema_96
+  - ema_50__root_mean_square
+  - vwap_40
+  - vwap_40__root_mean_square
+  - ema_50_above_ema_96
+  - vwap_40_rms_cross_above_ema_50_rms
+  - ppo_12_36
+  - ppo_signal_9
+  - ppo_hist_12_36_9
+  - ppo_hist_12_36_9_positive
+  - ppo_12_36_above_ppo_signal_9
+  - hurst_128
+  - fractal_dimension_128
+  - perm_entropy_128
+  - yz_vol_28
+  - yz_vol_28_mean_96
+  - yz_vol_28_ratio_96
+  - yz_vol_28_rising
+  - yz_vol_28_high_regime
+  - hmm_regime
+  - hmm_regime_prob_0
+  - hmm_regime_prob_1
+  - hmm_regime_prob_2
+  - hmm_regime_ok
+  - vwap_40_rms_ema_50_cross_long_hmm_setup
+  - signal_side
+  - signal_candidate
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+risk:
+  cost_per_turnover: 0.00015
+  slippage_per_turnover: 0.0001
+  target_vol: null
+  max_leverage: 1.0
+  sizing: {}
+  dd_guard:
+    enabled: false
+    max_drawdown: 0.08
+    rearm_drawdown: 0.04
+    cooloff_bars: 48
+  portfolio_guard: {}
+  drawdown_sizing: {}
+  vol_col: null
+backtest:
+  engine: manual_barrier
+  signal_col: signal_side
+  returns_col: close_ret
+  returns_type: simple
+  subset: full
+  periods_per_year: 12096
+  missing_return_policy: raise_if_exposed
+  allow_short: false
+  stop_mode: volatility_stop
+  vol_col: atr_over_price_20
+  open_col: open
+  high_col: high
+  low_col: low
+  close_col: close
+  take_profit_r: 4.5
+  stop_loss_r: 3.0
+  risk_per_trade: 0.006
+  max_holding_bars: null
+  dynamic_exits: {}
+portfolio:
+  enabled: false
+  construction: signal_weights
+  long_short: false
+monitoring:
+  enabled: true
+  psi_threshold: 0.2
+  n_bins: 10
+diagnostics:
+  enabled: true
+execution:
+  enabled: false
+  mode: paper
+  capital: 100000.0
+  price_col: close
+logging:
+  enabled: true
+  run_name: us100_30m_vwap_rms_hmm_regime_gate
+  output_dir: logs/bot
+  stage_tails:
+    enabled: false
+  execution_source_audit:
+    enabled: true

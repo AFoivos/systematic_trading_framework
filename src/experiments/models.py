@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from src.models.classification import (
+    train_elastic_net_classifier,
     train_event_transformer_encoder,
     train_lightgbm_classifier,
     train_logistic_regression_classifier,
@@ -30,6 +31,7 @@ __all__ = [
     "train_dqn_portfolio_agent",
     "infer_feature_columns",
     "resolve_feature_selectors",
+    "train_elastic_net_classifier",
     "train_event_transformer_encoder",
     "train_garch_forecaster",
     "train_lightgbm_classifier",

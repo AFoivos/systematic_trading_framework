@@ -73,11 +73,14 @@ from src.signals import (
     stochastic_strategy,
     trend_state_signal,
     volatility_regime_strategy,
+    vwap_rms_ema_cross_long_fractal_filter_signal,
+    vwap_rms_ema_cross_long_hmm_gate_signal,
     vwap_rms_ema_cross_long_signal,
 )
 from src.experiments.models import (
     train_dqn_agent,
     train_dqn_portfolio_agent,
+    train_elastic_net_classifier,
     train_event_transformer_encoder,
     train_garch_forecaster,
     train_lightgbm_classifier,
@@ -116,6 +119,7 @@ FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
     "adx": add_adx_features,
     "volume_features": add_volume_features,
     "vwap": add_vwap_features,
+    "vwap_rms_ema_cross_long": vwap_rms_ema_cross_long_signal,
     "mfi": add_mfi_features,
     "rsi": add_rsi_features,
     "stochastic": add_stochastic_features,
@@ -175,10 +179,13 @@ SIGNAL_REGISTRY: Mapping[str, SignalFn] = {
     "momentum": momentum_strategy,
     "stochastic": stochastic_strategy,
     "volatility_regime": volatility_regime_strategy,
+    "vwap_rms_ema_cross_long_fractal_filter": vwap_rms_ema_cross_long_fractal_filter_signal,
+    "vwap_rms_ema_cross_long_hmm_gate": vwap_rms_ema_cross_long_hmm_gate_signal,
     "vwap_rms_ema_cross_long": vwap_rms_ema_cross_long_signal,
 }
 
 SINGLE_ASSET_MODEL_REGISTRY: Mapping[str, SingleAssetModelFn] = {
+    "elastic_net_clf": train_elastic_net_classifier,
     "lightgbm_clf": train_lightgbm_classifier,
     "lightgbm_regressor": train_lightgbm_regressor,
     "logistic_regression_clf": train_logistic_regression_classifier,

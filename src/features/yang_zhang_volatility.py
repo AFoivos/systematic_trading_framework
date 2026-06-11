@@ -13,7 +13,13 @@ def add_yang_zhang_volatility(
     low_col: str = "low",
     close_col: str = "close",
     window: int = 20,
+    regime_window: int | None = None,
+    high_vol_mult: float = 1.0,
     output_col: str | None = None,
+    rolling_mean_col: str | None = None,
+    ratio_col: str | None = None,
+    rising_col: str | None = None,
+    high_vol_regime_col: str | None = None,
 ) -> pd.DataFrame:
     """Add causal rolling Yang-Zhang volatility from OHLC prices.
 
@@ -22,7 +28,17 @@ def add_yang_zhang_volatility(
     """
     _validate_columns(df, [open_col, high_col, low_col, close_col])
     _validate_window(window)
+    if regime_window is not None:
+        _validate_window(regime_window)
+    _validate_positive_float(high_vol_mult, name="high_vol_mult")
     col = _resolve_output_col(output_col, f"yang_zhang_vol_{window}")
+    optional_cols = [rolling_mean_col, ratio_col, rising_col, high_vol_regime_col]
+    for optional_col in optional_cols:
+        if optional_col is not None:
+            _resolve_output_col(optional_col, "unused")
+    output_cols = [col, *[optional_col for optional_col in optional_cols if optional_col is not None]]
+    if len(output_cols) != len(set(output_cols)):
+        raise ValueError("Yang-Zhang output columns must be unique.")
 
     out = df.copy()
     open_ = out[open_col].astype(float)
@@ -52,6 +68,23 @@ def add_yang_zhang_volatility(
     rs_var = rogers_satchell.rolling(window=window, min_periods=window).mean()
     variance = overnight_var + k * open_close_var + (1.0 - k) * rs_var
     out[col] = np.sqrt(variance.clip(lower=0.0))
+
+    needs_regime_window = any(optional_col is not None for optional_col in optional_cols)
+    if needs_regime_window and regime_window is None:
+        raise ValueError("regime_window is required when Yang-Zhang regime output columns are requested.")
+    if regime_window is None:
+        return out
+
+    baseline = out[col].rolling(window=regime_window, min_periods=regime_window).mean()
+    ratio = out[col] / baseline.replace(0.0, np.nan)
+    if rolling_mean_col is not None:
+        out[rolling_mean_col] = baseline
+    if ratio_col is not None:
+        out[ratio_col] = ratio
+    if rising_col is not None:
+        out[rising_col] = out[col].gt(out[col].shift(1)).fillna(False).astype("int8")
+    if high_vol_regime_col is not None:
+        out[high_vol_regime_col] = ratio.ge(float(high_vol_mult)).fillna(False).astype("int8")
     return out
 
 
@@ -64,6 +97,13 @@ def _validate_columns(df: pd.DataFrame, columns: list[str]) -> None:
 def _validate_window(window: int) -> None:
     if isinstance(window, bool) or not isinstance(window, Integral) or window <= 1:
         raise ValueError("window must be an integer greater than 1.")
+
+
+def _validate_positive_float(value: float, *, name: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not np.isfinite(float(value)):
+        raise ValueError(f"{name} must be a finite positive number.")
+    if float(value) <= 0.0:
+        raise ValueError(f"{name} must be a finite positive number.")
 
 
 def _resolve_output_col(output_col: str | None, default: str) -> str:

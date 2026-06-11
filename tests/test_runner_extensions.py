@@ -12,7 +12,7 @@ import pytest
 import src.experiments.runner as runner_mod
 import src.src_data.storage as storage_mod
 from src.execution.paper import build_rebalance_orders
-from src.experiments.models import train_logistic_regression_classifier
+from src.experiments.models import train_elastic_net_classifier, train_logistic_regression_classifier
 from src.experiments.orchestration.data_stage import save_processed_snapshot_if_enabled
 from src.experiments.orchestration.reporting import _portfolio_feature_diagnostics
 from src.portfolio import (
@@ -940,6 +940,41 @@ def test_logistic_regression_model_registry_outputs_oos_metrics() -> None:
     assert int(out["pred_is_oos"].sum()) > 0
     assert meta["oos_classification_summary"]["evaluation_rows"] > 0
     assert meta["folds"][0]["classification_metrics"]["evaluation_rows"] >= 0
+
+
+def test_elastic_net_model_registry_outputs_oos_metrics() -> None:
+    df = _synthetic_ohlcv(periods=240, seed=17)
+    df["close_ret"] = df["close"].pct_change()
+    df["lag_close_ret_1"] = df["close_ret"].shift(1)
+    df["lag_close_ret_2"] = df["close_ret"].shift(2)
+
+    out, _, meta = train_elastic_net_classifier(
+        df,
+        {
+            "params": {
+                "C": 0.5,
+                "l1_ratio": 0.5,
+                "max_iter": 500,
+                "penalty": "elasticnet",
+                "solver": "saga",
+            },
+            "feature_cols": ["lag_close_ret_1", "lag_close_ret_2"],
+            "target": {"kind": "forward_return", "price_col": "close", "horizon": 1},
+            "runtime": {"seed": 7, "deterministic": True, "threads": 1, "repro_mode": "strict"},
+            "split": {
+                "method": "walk_forward",
+                "train_size": 140,
+                "test_size": 20,
+                "step_size": 20,
+                "expanding": True,
+            },
+        },
+    )
+
+    assert meta["model_kind"] == "elastic_net_clf"
+    assert int(out["pred_is_oos"].sum()) > 0
+    assert meta["oos_classification_summary"]["evaluation_rows"] > 0
+    assert meta["preprocessing"]["scaler"] == "standard"
 
 
 def test_run_experiment_supports_multi_asset_portfolio_storage_monitoring_and_execution(

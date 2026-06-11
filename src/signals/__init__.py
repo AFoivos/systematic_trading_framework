@@ -43,6 +43,14 @@ from .trend_state_signal import trend_state_signal
 from .vol_targeted_signal import vol_targeted_signal
 from .volatility_regime_strategy import volatility_regime_strategy
 from .volatility_signal import compute_volatility_regime_signal
+from .vwap_rms_ema_cross_long_fractal_filter import (
+    build_vwap_rms_ema_cross_long_fractal_filter_signal,
+    vwap_rms_ema_cross_long_fractal_filter_signal,
+)
+from .vwap_rms_ema_cross_long_hmm_gate import (
+    build_vwap_rms_ema_cross_long_hmm_gate_signal,
+    vwap_rms_ema_cross_long_hmm_gate_signal,
+)
 from .vwap_rms_ema_cross_long_signal import (
     build_vwap_rms_ema_cross_long_signal,
     vwap_rms_ema_cross_long_signal,
@@ -67,6 +75,8 @@ __all__ = [
     "forecast_threshold_signal",
     "forecast_vol_adjusted_signal",
     "build_indicator_model_adaptive_pullback_signal",
+    "build_vwap_rms_ema_cross_long_fractal_filter_signal",
+    "build_vwap_rms_ema_cross_long_hmm_gate_signal",
     "build_vwap_rms_ema_cross_long_signal",
     "indicator_model_adaptive_pullback_signal",
     "manual_long_model_filter_signal",
@@ -85,5 +95,7 @@ __all__ = [
     "trend_state_signal",
     "volatility_regime_strategy",
     "vol_targeted_signal",
+    "vwap_rms_ema_cross_long_fractal_filter_signal",
+    "vwap_rms_ema_cross_long_hmm_gate_signal",
     "vwap_rms_ema_cross_long_signal",
 ]

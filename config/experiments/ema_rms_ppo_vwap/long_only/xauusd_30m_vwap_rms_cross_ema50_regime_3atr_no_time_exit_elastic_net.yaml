@@ -1,0 +1,391 @@
+data:
+  source: dukascopy_csv
+  interval: 30m
+  start: null
+  end: null
+  alignment: inner
+  symbol: XAUUSD
+  pit:
+    timestamp_alignment:
+      source_timezone: UTC
+      output_timezone: UTC
+      normalize_daily: false
+      duplicate_policy: last
+    corporate_actions:
+      policy: none
+      adj_close_col: adj_close
+    universe_snapshot:
+      inactive_policy: raise
+  storage:
+    mode: cached_only
+    dataset_id: xauusd_30m_vwap_rms_cross_ema50_regime_3atr_no_time_exit_elastic_net
+    save_raw: false
+    save_processed: true
+    load_path: data/raw/dukascopy_30m_clean/xauusd_30m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed
+
+features:
+  - step: returns
+    params:
+      log: false
+      col_name: close_ret
+    outputs: {}
+    enabled: true
+  - step: lags
+    params:
+      cols: [close_ret]
+      lags: [1, 2, 4, 8, 12]
+      prefix: lag
+    outputs: {}
+    enabled: true
+  - step: return_momentum
+    params:
+      returns_col: close_ret
+      windows: [4, 8, 16, 32]
+    outputs: {}
+    enabled: true
+  - step: volatility
+    params:
+      returns_col: close_ret
+      rolling_windows: [10, 20, 48]
+      ewma_spans: [10, 20]
+      annualization_factor: null
+    outputs: {}
+    enabled: true
+  - step: session_context
+    params:
+      timezone: UTC
+      add_cyclical_time: true
+      include_weekend_flag: true
+    outputs: {}
+    enabled: true
+  - step: trend
+    params:
+      price_col: close
+      sma_windows: []
+      ema_spans: [20]
+      ema_col_template: ema_20
+    outputs: {}
+    enabled: true
+  - step: trend
+    params:
+      price_col: close
+      sma_windows: []
+      ema_spans: [50]
+      ema_col_template: ema_50
+    outputs: {}
+    enabled: true
+  - step: trend
+    params:
+      price_col: close
+      sma_windows: []
+      ema_spans: [100]
+      ema_col_template: ema_100
+    outputs: {}
+    enabled: true
+  - step: vwap
+    params:
+      high_col: high
+      low_col: low
+      close_col: close
+      volume_col: volume
+      window: 20
+      windows: [20]
+      add_distance: true
+      vwap_col: vwap_20
+      distance_col: close_over_vwap_20
+    outputs: {}
+    enabled: true
+  - step: ppo
+    params:
+      price_col: close
+      fast: 12
+      slow: 26
+      signal: 9
+      ppo_col: ppo_12_26
+      ppo_signal_col: ppo_signal_9
+      ppo_hist_col: ppo_hist_12_26_9_raw
+    outputs: {}
+    enabled: true
+  - step: atr
+    params:
+      high_col: high
+      low_col: low
+      close_col: close
+      window: 14
+      windows: [14]
+      method: wilder
+      add_over_price: true
+      atr_col: atr_14
+      over_price_col: atr_over_price_14
+    outputs: {}
+    enabled: true
+  - step: feature_transforms
+    params:
+      transforms:
+        - kind: tsfresh_rolling
+          source_col: ema_50
+          output_prefix: ema_50
+          calculators: [root_mean_square]
+          window: 48
+          shift: 0
+        - kind: tsfresh_rolling
+          source_col: vwap_20
+          output_prefix: vwap_20
+          calculators: [root_mean_square]
+          window: 48
+          shift: 0
+        - kind: tsfresh_rolling
+          source_col: ema_100
+          output_prefix: ema_100
+          calculators: [root_mean_square]
+          window: 48
+          shift: 0
+    outputs: {}
+    enabled: true
+  - step: vwap_rms_ema_cross_long
+    params:
+      ema_mid_col: ema_50
+      ema_slow_col: ema_100
+      ema_mid_rms_col: ema_50__root_mean_square
+      vwap_rms_col: vwap_20__root_mean_square
+      ppo_col: ppo_12_26
+      ppo_signal_col: ppo_signal_9
+      ppo_hist_min: 0.0003
+      regime_col: ema_50_above_ema_100
+      cross_up_col: vwap_20_rms_cross_above_ema_50_rms
+      ppo_hist_col: ppo_hist_12_26_9
+      ppo_hist_positive_col: ppo_hist_12_26_9_positive
+      ppo_above_signal_col: ppo_12_26_above_ppo_signal_9
+      long_setup_col: vwap_20_rms_ema_50_cross_long_setup
+      signal_col: signal_side
+      candidate_col: signal_candidate
+    outputs: {}
+    enabled: true
+
+model:
+  kind: elastic_net_clf
+  outputs:
+    pred_prob_col: pred_prob
+    pred_is_oos_col: pred_is_oos
+  target:
+    kind: r_multiple
+    outputs:
+      label_col: label
+      event_ret_col: r_target_event_ret
+      fwd_col: r_target_event_ret
+      candidate_out_col: r_target_candidate
+      r_col: r_target_trade_r
+      oriented_r_col: r_target_oriented_r
+      entry_price_col: r_target_entry_price
+      exit_price_col: r_target_exit_price
+      stop_price_col: r_target_stop_price
+      take_profit_price_col: r_target_take_profit_price
+      exit_reason_col: r_target_exit_reason
+      bars_held_col: r_target_bars_held
+      hit_type_col: r_target_hit_type
+      hit_step_col: r_target_hit_step
+    candidate_col: signal_candidate
+    side: long_only
+    price_col: close
+    open_col: open
+    high_col: high
+    low_col: low
+    volatility_col: atr_over_price_14
+    entry_price_mode: next_open
+    stop_mode: volatility_stop
+    take_profit_r: 3.0
+    stop_loss_r: 2.0
+    target_r_min: 0.0
+    max_holding_bars: 96
+    allow_partial_horizon: false
+    tie_break: conservative
+    diagnostic_feature_cols:
+      - close_over_ema_20
+      - close_over_ema_50
+      - close_over_ema_100
+      - close_over_vwap_20
+      - atr_over_price_14
+      - ppo_hist_12_26_9
+      - ema_50_above_ema_100
+      - vwap_20_rms_cross_above_ema_50_rms
+      - signal_candidate
+  split:
+    method: purged
+    train_frac: 0.65
+    test_size: 8000
+    step_size: 8000
+    expanding: true
+    max_folds: 4
+    purge_bars: 96
+    embargo_bars: 16
+  preprocessing:
+    scaler: standard
+  feature_selectors:
+    include:
+      - exact:
+          - close_over_ema_20
+          - close_over_ema_50
+          - close_over_ema_100
+          - close_over_vwap_20
+          - atr_over_price_14
+          - ppo_12_26
+          - ppo_signal_9
+          - ppo_hist_12_26_9
+          - ppo_hist_12_26_9_positive
+          - ppo_12_26_above_ppo_signal_9
+          - ema_50_above_ema_100
+          - vwap_20_rms_cross_above_ema_50_rms
+          - hour_sin_24
+          - hour_cos_24
+          - day_of_week_sin_7
+          - day_of_week_cos_7
+          - is_weekend
+      - startswith:
+          - lag_close_ret_
+          - close_ret_mom_
+          - vol_rolling_
+          - vol_ewma_
+          - session_
+    exclude:
+      - exact:
+          - label
+          - r_target_event_ret
+          - r_target_trade_r
+          - r_target_oriented_r
+          - r_target_candidate
+          - r_target_entry_price
+          - r_target_exit_price
+          - r_target_stop_price
+          - r_target_take_profit_price
+          - r_target_exit_reason
+          - r_target_bars_held
+          - r_target_hit_type
+          - r_target_hit_step
+          - signal_side
+          - signal_candidate
+          - vwap_20_rms_ema_50_cross_long_setup
+          - pred_prob
+          - pred_is_oos
+    strict:
+      min_count: 20
+  params:
+    penalty: elasticnet
+    solver: saga
+    l1_ratio: 0.5
+    C: 0.5
+    max_iter: 5000
+    tol: 0.0001
+    random_state: 7
+    n_jobs: 1
+
+signals:
+  kind: meta_probability_side
+  outputs:
+    signal_col: signal_meta_side
+  params:
+    prob_col: pred_prob
+    side_col: signal_side
+    candidate_col: signal_candidate
+    threshold: 0.1
+    min_expected_value_r: 0.0
+    profit_barrier_r: 3.0
+    stop_barrier_r: 2.0
+    clip: 1.0
+    mode: long_only
+
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+
+risk:
+  cost_per_turnover: 0.00015
+  slippage_per_turnover: 0.0001
+  target_vol: null
+  max_leverage: 1.0
+  sizing: {}
+  dd_guard:
+    enabled: false
+    max_drawdown: 0.08
+    rearm_drawdown: 0.04
+    cooloff_bars: 48
+  portfolio_guard: {}
+  drawdown_sizing: {}
+  vol_col: null
+
+backtest:
+  engine: manual_barrier
+  signal_col: signal_meta_side
+  returns_col: close_ret
+  returns_type: simple
+  subset: full
+  periods_per_year: 12096
+  missing_return_policy: raise_if_exposed
+  min_holding_bars: 0
+  allow_short: false
+  stop_mode: volatility_stop
+  vol_col: atr_over_price_14
+  open_col: open
+  high_col: high
+  low_col: low
+  close_col: close
+  take_profit_r: 3.0
+  stop_loss_r: 2.0
+  risk_per_trade: 0.006
+  max_holding_bars: null
+  dynamic_exits: {}
+
+portfolio:
+  enabled: false
+  construction: signal_weights
+  long_short: false
+  gross_target: 1.0
+  expected_return_col: null
+  covariance_window: 60
+  covariance_rebalance_step: 1
+  risk_aversion: 5.0
+  trade_aversion: 0.0
+  selection:
+    enabled: false
+  constraints:
+    max_gross_leverage: 1.0
+    max_weight: 1.0
+    min_weight: 0.0
+    target_net_exposure: 0.0
+    enforce_target_net_exposure: false
+  asset_groups: {}
+
+monitoring:
+  enabled: true
+  psi_threshold: 0.2
+  n_bins: 10
+
+diagnostics:
+  enabled: true
+
+execution:
+  enabled: false
+  mode: paper
+  capital: 100000.0
+  price_col: close
+  min_trade_notional: 0.0
+  current_weights: {}
+  current_prices: {}
+
+logging:
+  enabled: true
+  run_name: xauusd_30m_vwap_rms_cross_ema50_regime_3atr_no_time_exit_elastic_net
+  output_dir: logs/experiments
+  stage_tails:
+    enabled: false
+    stdout: true
+    report: true
+    limit: 10
+    max_columns: 30
+    max_assets: 1
+  execution_source_audit:
+    enabled: true

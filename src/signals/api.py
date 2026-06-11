@@ -23,6 +23,12 @@ from src.signals.trend_state_long_only_signal import trend_state_long_only_signa
 from src.signals.trend_state_signal import trend_state_signal
 from src.signals.vol_targeted_signal import vol_targeted_signal
 from src.signals.volatility_regime_strategy import volatility_regime_strategy
+from src.signals.vwap_rms_ema_cross_long_fractal_filter import (
+    vwap_rms_ema_cross_long_fractal_filter_signal,
+)
+from src.signals.vwap_rms_ema_cross_long_hmm_gate import (
+    vwap_rms_ema_cross_long_hmm_gate_signal,
+)
 from src.signals.vwap_rms_ema_cross_long_signal import vwap_rms_ema_cross_long_signal
 
 __all__ = [
@@ -49,5 +55,7 @@ __all__ = [
     "ppo_adx_stochrsi_trend_signal",
     "roc_long_only_conditions_signal",
     "vol_targeted_signal",
+    "vwap_rms_ema_cross_long_fractal_filter_signal",
+    "vwap_rms_ema_cross_long_hmm_gate_signal",
     "vwap_rms_ema_cross_long_signal",
 ]

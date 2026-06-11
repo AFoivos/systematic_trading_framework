@@ -17,7 +17,12 @@ from src.utils.repro import RuntimeConfigError, validate_runtime_config
 _RL_SINGLE_ASSET_DQN_KINDS = {"dqn_agent"}
 _RL_PORTFOLIO_DQN_KINDS = {"dqn_portfolio_agent"}
 _RL_EXTRACTOR_KINDS = {"flatten", "cnn1d", "lstm", "transformer"}
-_CLASSIFIER_MODEL_KINDS = {"lightgbm_clf", "logistic_regression_clf", "xgboost_clf"}
+_CLASSIFIER_MODEL_KINDS = {
+    "elastic_net_clf",
+    "lightgbm_clf",
+    "logistic_regression_clf",
+    "xgboost_clf",
+}
 _EMBEDDING_MODEL_KINDS = {"event_transformer_encoder"}
 _DEEP_FORECASTER_MODEL_KINDS = {"lstm_forecaster", "patchtst_forecaster", "tft_forecaster"}
 _EXPERIMENTAL_DISCOVERY_MODEL_KINDS = {"tsfresh_extrema_feature_discovery"}
@@ -28,6 +33,7 @@ _FORECASTER_MODEL_KINDS = {
     *_DEEP_FORECASTER_MODEL_KINDS,
 }
 _GARCH_OVERLAY_COMPATIBLE_MODEL_KINDS = {
+    "elastic_net_clf",
     "lightgbm_clf",
     "logistic_regression_clf",
     "xgboost_clf",
@@ -810,6 +816,42 @@ def _validate_vwap_rms_ema_cross_long_params(params: dict[str, Any], *, field_pr
         _finite_number(params["ppo_hist_min"], field=f"{field_prefix}.ppo_hist_min")
 
 
+def _validate_vwap_rms_ema_cross_long_fractal_filter_params(
+    params: dict[str, Any],
+    *,
+    field_prefix: str,
+) -> None:
+    _validate_vwap_rms_ema_cross_long_params(params, field_prefix=field_prefix)
+    for key in ("fractal_col", "fractal_ok_col"):
+        if key in params and (not isinstance(params[key], str) or not params[key].strip()):
+            raise ConfigValidationError(f"{field_prefix}.{key} must be a non-empty string.")
+    if "fractal_max" in params:
+        _finite_number(params["fractal_max"], field=f"{field_prefix}.fractal_max")
+
+
+def _validate_vwap_rms_ema_cross_long_hmm_gate_params(
+    params: dict[str, Any],
+    *,
+    field_prefix: str,
+) -> None:
+    _validate_vwap_rms_ema_cross_long_params(params, field_prefix=field_prefix)
+    for key in ("hmm_regime_col", "hmm_ok_col"):
+        if key in params and (not isinstance(params[key], str) or not params[key].strip()):
+            raise ConfigValidationError(f"{field_prefix}.{key} must be a non-empty string.")
+    if "hmm_min_regime" in params:
+        _finite_number(params["hmm_min_regime"], field=f"{field_prefix}.hmm_min_regime")
+    hmm_prob_col = params.get("hmm_prob_col")
+    hmm_prob_min = params.get("hmm_prob_min")
+    if hmm_prob_col is not None and (not isinstance(hmm_prob_col, str) or not hmm_prob_col.strip()):
+        raise ConfigValidationError(f"{field_prefix}.hmm_prob_col must be a non-empty string or null.")
+    if hmm_prob_min is not None:
+        _finite_number(hmm_prob_min, field=f"{field_prefix}.hmm_prob_min")
+    if (hmm_prob_col is None) != (hmm_prob_min is None):
+        raise ConfigValidationError(
+            f"{field_prefix}.hmm_prob_col and {field_prefix}.hmm_prob_min must be set together."
+        )
+
+
 def validate_features_block(features: Any) -> None:
     if not isinstance(features, list):
         raise ConfigValidationError("features must be a list of steps.")
@@ -1179,6 +1221,36 @@ def validate_features_block(features: Any) -> None:
             ]
             if len(output_cols) != len(set(output_cols)):
                 raise ConfigValidationError("features[].params PPO output columns must be unique.")
+        if step["step"] == "hmm_regime":
+            params = step.get("params") or {}
+            feature_cols = params.get("feature_cols")
+            if feature_cols is not None:
+                if not isinstance(feature_cols, (list, tuple)) or not feature_cols:
+                    raise ConfigValidationError("features[].params.feature_cols must be a non-empty list[str].")
+                for idx, column in enumerate(feature_cols):
+                    if not isinstance(column, str) or not column.strip():
+                        raise ConfigValidationError(f"features[].params.feature_cols[{idx}] must be a non-empty string.")
+            for key in ("price_col", "returns_col", "output_col", "probability_prefix"):
+                if key in params and params[key] is not None and (
+                    not isinstance(params[key], str) or not params[key].strip()
+                ):
+                    raise ConfigValidationError(f"features[].params.{key} must be a non-empty string.")
+            for key in ("n_states", "train_size", "min_train_size", "refit_interval", "n_iter"):
+                if key in params and params[key] is not None:
+                    _positive_int(params[key], field=f"features[].params.{key}")
+            if "random_state" in params and params["random_state"] is not None:
+                _non_negative_int(params["random_state"], field="features[].params.random_state")
+            if "mode" in params and params["mode"] not in {"expanding", "static_train"}:
+                raise ConfigValidationError("features[].params.mode must be one of: expanding, static_train.")
+            if "covariance_type" in params and not isinstance(params["covariance_type"], str):
+                raise ConfigValidationError("features[].params.covariance_type must be a string.")
+            for key in ("include_probabilities", "standardize"):
+                if key in params and not isinstance(params[key], bool):
+                    raise ConfigValidationError(f"features[].params.{key} must be boolean.")
+            if "standardize_eps" in params:
+                value = _finite_number(params["standardize_eps"], field="features[].params.standardize_eps")
+                if value <= 0.0:
+                    raise ConfigValidationError("features[].params.standardize_eps must be > 0.")
         if step["step"] == "regime_context":
             params = step.get("params") or {}
             for key in ("vol_short_window", "vol_long_window", "trend_fast_span", "trend_slow_span"):
@@ -1654,9 +1726,9 @@ def validate_model_block(model: dict[str, Any]) -> None:
                 raise ConfigValidationError("model.overlay must be a mapping when provided.")
             if model["kind"] not in _GARCH_OVERLAY_COMPATIBLE_MODEL_KINDS:
                 raise ConfigValidationError(
-                    "model.overlay is currently supported only for lightgbm_clf, logistic_regression_clf, "
-                    "xgboost_clf, sarimax_forecaster, lstm_forecaster, patchtst_forecaster, and "
-                    "tft_forecaster."
+                    "model.overlay is currently supported only for elastic_net_clf, lightgbm_clf, "
+                    "logistic_regression_clf, xgboost_clf, sarimax_forecaster, lstm_forecaster, "
+                    "patchtst_forecaster, and tft_forecaster."
                 )
             overlay_kind = overlay.get("kind")
             if overlay_kind != "garch":
@@ -1727,6 +1799,23 @@ def validate_model_block(model: dict[str, Any]) -> None:
             raise ConfigValidationError("model.params must be a mapping.")
         if model["kind"] in _EXPERIMENTAL_DISCOVERY_MODEL_KINDS:
             _validate_tsfresh_extrema_discovery_params(params)
+        if model["kind"] == "elastic_net_clf":
+            penalty = str(params.get("penalty", "elasticnet"))
+            if penalty != "elasticnet":
+                raise ConfigValidationError("elastic_net_clf requires model.params.penalty='elasticnet'.")
+            solver = str(params.get("solver", "saga"))
+            if solver != "saga":
+                raise ConfigValidationError("elastic_net_clf requires model.params.solver='saga'.")
+            if "l1_ratio" in params:
+                l1_ratio = _finite_number(params["l1_ratio"], field="model.params.l1_ratio")
+                if not 0.0 <= l1_ratio <= 1.0:
+                    raise ConfigValidationError("model.params.l1_ratio must be in [0,1].")
+            if "C" in params:
+                regularization_c = _finite_number(params["C"], field="model.params.C")
+                if regularization_c <= 0.0:
+                    raise ConfigValidationError("model.params.C must be > 0.")
+            if "max_iter" in params:
+                _positive_int(params["max_iter"], field="model.params.max_iter")
         if model["kind"] == "xgboost_clf":
             invalid_keys = [
                 key
@@ -2331,6 +2420,10 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
         _validate_ema_rms_ppo_vwap_params(params, field_prefix="signals.params")
     if signals["kind"] == "vwap_rms_ema_cross_long":
         _validate_vwap_rms_ema_cross_long_params(params, field_prefix="signals.params")
+    if signals["kind"] == "vwap_rms_ema_cross_long_fractal_filter":
+        _validate_vwap_rms_ema_cross_long_fractal_filter_params(params, field_prefix="signals.params")
+    if signals["kind"] == "vwap_rms_ema_cross_long_hmm_gate":
+        _validate_vwap_rms_ema_cross_long_hmm_gate_params(params, field_prefix="signals.params")
 
 
 def validate_risk_block(risk: dict[str, Any]) -> None:

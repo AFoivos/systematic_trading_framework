@@ -71,6 +71,8 @@ def test_registry_contains_phase12_extensions() -> None:
     assert "price_momentum" in FEATURE_REGISTRY
     assert "return_momentum" in FEATURE_REGISTRY
     assert "vol_normalized_momentum" in FEATURE_REGISTRY
+    assert "vwap_rms_ema_cross_long" in FEATURE_REGISTRY
+    assert "elastic_net_clf" in MODEL_REGISTRY
     assert "xgboost_clf" in MODEL_REGISTRY
     assert "event_transformer_encoder" in MODEL_REGISTRY
     assert "probability_vol_adjusted" in SIGNAL_REGISTRY

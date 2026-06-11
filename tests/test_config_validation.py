@@ -162,6 +162,37 @@ def test_validate_model_outputs_reject_unknown_keys_and_signals_allow_column_map
         )
 
 
+def test_validate_elastic_net_model_block() -> None:
+    validate_model_block(
+        {
+            "kind": "elastic_net_clf",
+            "params": {
+                "penalty": "elasticnet",
+                "solver": "saga",
+                "l1_ratio": 0.5,
+                "C": 0.5,
+                "max_iter": 500,
+            },
+            "target": {"kind": "forward_return", "price_col": "close", "horizon": 1},
+            "split": {"method": "walk_forward", "train_size": 100, "test_size": 20},
+        }
+    )
+
+    with pytest.raises(ConfigValidationError, match="l1_ratio"):
+        validate_model_block(
+            {
+                "kind": "elastic_net_clf",
+                "params": {
+                    "penalty": "elasticnet",
+                    "solver": "saga",
+                    "l1_ratio": 1.5,
+                },
+                "target": {"kind": "forward_return", "price_col": "close", "horizon": 1},
+                "split": {"method": "walk_forward", "train_size": 100, "test_size": 20},
+            }
+        )
+
+
 def test_validate_portfolio_block_rejects_invalid_nested_constraints() -> None:
     """
     Portfolio validation should fail early on malformed or infeasible nested constraint values.

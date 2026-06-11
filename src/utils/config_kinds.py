@@ -49,6 +49,7 @@ FEATURE_KINDS = frozenset(
         "volatility_regime",
         "volume_features",
         "vpin",
+        "vwap_rms_ema_cross_long",
         "vwap",
         "yang_zhang_volatility",
         "zscore_momentum",
@@ -77,6 +78,8 @@ SIGNAL_KINDS = frozenset(
         "stochastic",
         "trend_state",
         "volatility_regime",
+        "vwap_rms_ema_cross_long_fractal_filter",
+        "vwap_rms_ema_cross_long_hmm_gate",
         "vwap_rms_ema_cross_long",
     }
 )
@@ -86,6 +89,7 @@ SINGLE_ASSET_MODEL_KINDS = frozenset(
         "dqn_agent",
         "event_transformer_encoder",
         "garch_forecaster",
+        "elastic_net_clf",
         "lightgbm_clf",
         "lightgbm_regressor",
         "logistic_regression_clf",

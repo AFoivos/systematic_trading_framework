@@ -24,6 +24,10 @@ _EXPORTS = {
         "src.models.classification.event_transformer",
         "train_event_transformer_encoder",
     ),
+    "train_elastic_net_classifier": (
+        "src.models.classification.elastic_net",
+        "train_elastic_net_classifier",
+    ),
     "train_forward_forecaster": ("src.models.forecasting", "train_forward_forecaster"),
     "train_garch_forecaster": ("src.models.forecasting", "train_garch_forecaster"),
     "train_lightgbm_classifier": ("src.models.classification.lightgbm", "train_lightgbm_classifier"),

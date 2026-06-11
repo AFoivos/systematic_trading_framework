@@ -26,6 +26,14 @@ import pytest
         ("trend_state_signal", "trend_state_signal"),
         ("vol_targeted_signal", "vol_targeted_signal"),
         ("volatility_regime_strategy", "volatility_regime_strategy"),
+        (
+            "vwap_rms_ema_cross_long_fractal_filter",
+            "vwap_rms_ema_cross_long_fractal_filter_signal",
+        ),
+        (
+            "vwap_rms_ema_cross_long_hmm_gate",
+            "vwap_rms_ema_cross_long_hmm_gate_signal",
+        ),
         ("vwap_rms_ema_cross_long_signal", "vwap_rms_ema_cross_long_signal"),
     ],
 )
