@@ -1,0 +1,304 @@
+base_config: config/experiments/ema_rms_ppo_vwap/long_only/ethusd_30m_vwap_rms_cross_ema50_regime_3atr_no_time_exit.yaml
+study:
+  study_name: optuna_ethusd_30m_vwap_rms_cross_ema50_regime_3atr_no_time_exit
+  storage: null
+  load_if_exists: false
+  sampler: tpe
+  seed: 7
+  n_trials: 100
+  timeout: null
+  n_jobs: 1
+  logging_enabled: true
+  catch_exceptions: true
+report:
+  enabled: true
+  output_dir: logs/experiments
+  run_name: optuna_ethusd_30m_vwap_rms_cross_ema50_regime_3atr_no_time_exit
+objective:
+  metric_path: evaluation.primary_summary.sharpe
+  direction: maximize
+  failure_score: -1000000000000.0
+  base_metric_weight: 1.0
+  stability_weight: 0.0
+  fold_summary_path: evaluation.fold_backtest_summaries
+  constraints:
+  - metric_path: evaluation.primary_summary.cumulative_return
+    op: le
+    threshold: 0.0
+    penalty: 1000000000000.0
+    missing_penalty: 1000000000000.0
+  - metric_path: evaluation.primary_summary.max_drawdown
+    op: lt
+    threshold: -0.08
+    penalty: 1000000000000.0
+    missing_penalty: 1000000000000.0
+  - metric_path: evaluation.primary_summary.profit_factor
+    op: lt
+    threshold: 1.0
+    penalty: 5.0
+    missing_penalty: 1.0
+  - metric_path: evaluation.primary_summary.cost_to_gross_pnl
+    op: gt
+    threshold: 0.55
+    penalty: 2.0
+    missing_penalty: 1.0
+  - metric_path: derived.entry_count
+    op: lt
+    threshold: 30.0
+    penalty: 3.0
+    missing_penalty: 3.0
+  - metric_path: derived.entry_count
+    op: gt
+    threshold: 180.0
+    penalty: 1.0
+    missing_penalty: 1.0
+pruning:
+  enabled: false
+  metric_path: evaluation.primary_summary.sharpe
+  direction: maximize
+  stage_filter: []
+  pruner: none
+  n_startup_trials: 5
+  n_warmup_steps: 1
+  interval_steps: 1
+search_space:
+- name: signal_ppo_hist_min
+  path: signals.params.ppo_hist_min
+  kind: float
+  low: 0.0
+  high: 0.002
+  step: 5.0e-05
+- name: ema_mid_span
+  path: features.2.params.ema_spans.0
+  kind: categorical
+  choices:
+  - 24
+  - 32
+  - 40
+  - 50
+  - 60
+  - 72
+  value_templates:
+  - path: features.2.params.ema_col_template
+    template: ema_{ema_mid_span}
+  - path: features.7.params.transforms.0.source_col
+    template: ema_{ema_mid_span}
+  - path: features.7.params.transforms.0.output_prefix
+    template: ema_{ema_mid_span}
+  - path: signals.params.ema_mid_col
+    template: ema_{ema_mid_span}
+  - path: signals.params.ema_mid_rms_col
+    template: ema_{ema_mid_span}__root_mean_square
+  - path: signals.params.regime_col
+    template: ema_{ema_mid_span}_above_ema_{ema_slow_span}
+  - path: target.diagnostic_feature_cols.1
+    template: ema_{ema_mid_span}
+  - path: target.diagnostic_feature_cols.3
+    template: ema_{ema_mid_span}__root_mean_square
+  - path: target.diagnostic_feature_cols.6
+    template: ema_{ema_mid_span}_above_ema_{ema_slow_span}
+- name: ema_slow_span
+  path: features.3.params.ema_spans.0
+  kind: categorical
+  choices:
+  - 80
+  - 96
+  - 100
+  - 120
+  - 144
+  - 168
+  - 200
+  value_templates:
+  - path: features.3.params.ema_col_template
+    template: ema_{ema_slow_span}
+  - path: features.7.params.transforms.2.source_col
+    template: ema_{ema_slow_span}
+  - path: features.7.params.transforms.2.output_prefix
+    template: ema_{ema_slow_span}
+  - path: signals.params.ema_slow_col
+    template: ema_{ema_slow_span}
+  - path: target.diagnostic_feature_cols.2
+    template: ema_{ema_slow_span}
+- name: vwap_window
+  path: features.4.params.window
+  paths:
+  - features.4.params.windows.0
+  kind: categorical
+  choices:
+  - 8
+  - 12
+  - 16
+  - 20
+  - 24
+  - 32
+  - 40
+  - 48
+  - 64
+  value_templates:
+  - path: features.4.params.vwap_col
+    template: vwap_{vwap_window}
+  - path: features.4.params.distance_col
+    template: close_over_vwap_{vwap_window}
+  - path: features.7.params.transforms.1.source_col
+    template: vwap_{vwap_window}
+  - path: features.7.params.transforms.1.output_prefix
+    template: vwap_{vwap_window}
+  - path: signals.params.vwap_rms_col
+    template: vwap_{vwap_window}__root_mean_square
+  - path: signals.params.cross_up_col
+    template: vwap_{vwap_window}_rms_cross_above_ema_{ema_mid_span}_rms
+  - path: signals.params.long_setup_col
+    template: vwap_{vwap_window}_rms_ema_{ema_mid_span}_cross_long_setup
+  - path: target.diagnostic_feature_cols.4
+    template: vwap_{vwap_window}
+  - path: target.diagnostic_feature_cols.5
+    template: vwap_{vwap_window}__root_mean_square
+  - path: target.diagnostic_feature_cols.7
+    template: vwap_{vwap_window}_rms_cross_above_ema_{ema_mid_span}_rms
+  - path: target.diagnostic_feature_cols.13
+    template: vwap_{vwap_window}_rms_ema_{ema_mid_span}_cross_long_setup
+- name: ppo_fast_span
+  path: features.5.params.fast
+  kind: categorical
+  choices:
+  - 6
+  - 8
+  - 10
+  - 12
+  - 14
+  - 16
+- name: ppo_slow_span
+  path: features.5.params.slow
+  kind: categorical
+  choices:
+  - 20
+  - 24
+  - 26
+  - 30
+  - 36
+  - 42
+- name: ppo_signal_span
+  path: features.5.params.signal
+  kind: categorical
+  choices:
+  - 5
+  - 7
+  - 9
+  - 12
+  - 15
+  value_templates:
+  - path: features.5.params.ppo_col
+    template: ppo_{ppo_fast_span}_{ppo_slow_span}
+  - path: features.5.params.ppo_signal_col
+    template: ppo_signal_{ppo_signal_span}
+  - path: features.5.params.ppo_hist_col
+    template: ppo_hist_{ppo_fast_span}_{ppo_slow_span}_{ppo_signal_span}_raw
+  - path: signals.params.ppo_col
+    template: ppo_{ppo_fast_span}_{ppo_slow_span}
+  - path: signals.params.ppo_signal_col
+    template: ppo_signal_{ppo_signal_span}
+  - path: signals.params.ppo_hist_col
+    template: ppo_hist_{ppo_fast_span}_{ppo_slow_span}_{ppo_signal_span}
+  - path: signals.params.ppo_hist_positive_col
+    template: ppo_hist_{ppo_fast_span}_{ppo_slow_span}_{ppo_signal_span}_positive
+  - path: signals.params.ppo_above_signal_col
+    template: ppo_{ppo_fast_span}_{ppo_slow_span}_above_ppo_signal_{ppo_signal_span}
+  - path: target.diagnostic_feature_cols.8
+    template: ppo_{ppo_fast_span}_{ppo_slow_span}
+  - path: target.diagnostic_feature_cols.9
+    template: ppo_signal_{ppo_signal_span}
+  - path: target.diagnostic_feature_cols.10
+    template: ppo_hist_{ppo_fast_span}_{ppo_slow_span}_{ppo_signal_span}
+  - path: target.diagnostic_feature_cols.11
+    template: ppo_hist_{ppo_fast_span}_{ppo_slow_span}_{ppo_signal_span}_positive
+  - path: target.diagnostic_feature_cols.12
+    template: ppo_{ppo_fast_span}_{ppo_slow_span}_above_ppo_signal_{ppo_signal_span}
+- name: atr_window
+  path: features.6.params.window
+  paths:
+  - features.6.params.windows.0
+  kind: categorical
+  choices:
+  - 7
+  - 10
+  - 14
+  - 20
+  - 28
+  - 36
+  - 48
+  value_templates:
+  - path: features.6.params.atr_col
+    template: atr_{atr_window}
+  - path: features.6.params.over_price_col
+    template: atr_over_price_{atr_window}
+  - path: target.volatility_col
+    template: atr_over_price_{atr_window}
+  - path: backtest.vol_col
+    template: atr_over_price_{atr_window}
+- name: atr_method
+  path: features.6.params.method
+  kind: categorical
+  choices:
+  - wilder
+  - simple
+- name: ema_mid_rms_window
+  path: features.7.params.transforms.0.window
+  kind: categorical
+  choices:
+  - 12
+  - 18
+  - 24
+  - 36
+  - 48
+  - 72
+  - 96
+  - 144
+  - 192
+- name: vwap_rms_window
+  path: features.7.params.transforms.1.window
+  kind: categorical
+  choices:
+  - 12
+  - 18
+  - 24
+  - 36
+  - 48
+  - 72
+  - 96
+  - 144
+  - 192
+- name: ema_slow_rms_window
+  path: features.7.params.transforms.2.window
+  kind: categorical
+  choices:
+  - 12
+  - 18
+  - 24
+  - 36
+  - 48
+  - 72
+  - 96
+  - 144
+  - 192
+- name: rms_shift
+  path: features.7.params.transforms.0.shift
+  paths:
+  - features.7.params.transforms.1.shift
+  - features.7.params.transforms.2.shift
+  kind: categorical
+  choices:
+  - 0
+  - 1
+  - 2
+- name: backtest_take_profit_r
+  path: backtest.take_profit_r
+  kind: float
+  low: 2.0
+  high: 4.5
+  step: 0.25
+- name: backtest_stop_loss_r
+  path: backtest.stop_loss_r
+  kind: float
+  low: 1.0
+  high: 3.0
+  step: 0.25

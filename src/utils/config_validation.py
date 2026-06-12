@@ -801,17 +801,28 @@ def _validate_vwap_rms_ema_cross_long_params(params: dict[str, Any], *, field_pr
         "ppo_col",
         "ppo_signal_col",
         "regime_col",
+        "short_regime_col",
         "cross_up_col",
+        "cross_down_col",
         "ppo_hist_col",
         "ppo_hist_positive_col",
+        "ppo_hist_negative_col",
         "ppo_above_signal_col",
+        "ppo_below_signal_col",
         "long_setup_col",
+        "short_setup_col",
         "signal_col",
         "candidate_col",
     }
     for key in string_keys:
         if key in params and (not isinstance(params[key], str) or not params[key].strip()):
             raise ConfigValidationError(f"{field_prefix}.{key} must be a non-empty string.")
+    if "mode" in params:
+        mode = str(params["mode"])
+        if mode not in {"long_only", "short_only", "long_short"}:
+            raise ConfigValidationError(
+                f"{field_prefix}.mode must be one of: long_only, short_only, long_short."
+            )
     if "ppo_hist_min" in params:
         _finite_number(params["ppo_hist_min"], field=f"{field_prefix}.ppo_hist_min")
 

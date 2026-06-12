@@ -58,9 +58,12 @@ from .parkinson_volatility import add_parkinson_volatility
 from .permutation_entropy import add_permutation_entropy
 from .rate_of_change import add_rate_of_change
 from .roofing_filter import add_roofing_filter
+from .rolling_r2_trend_quality import add_rolling_r2_trend_quality
 from .shannon_entropy import add_shannon_entropy
 from .supersmoother import add_supersmoother
 from .trend_regime import add_trend_regime
+from .trend_slope_volatility import add_trend_slope_volatility
+from .volatility_of_volatility import add_volatility_of_volatility
 from .volatility_regime import add_volatility_regime
 from .vpin import add_vpin
 from .yang_zhang_volatility import add_yang_zhang_volatility
@@ -121,9 +124,12 @@ __all__ = [
     "add_permutation_entropy",
     "add_rate_of_change",
     "add_roofing_filter",
+    "add_rolling_r2_trend_quality",
     "add_shannon_entropy",
     "add_supersmoother",
     "add_trend_regime",
+    "add_trend_slope_volatility",
+    "add_volatility_of_volatility",
     "add_volatility_regime",
     "add_vpin",
     "add_yang_zhang_volatility",

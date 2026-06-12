@@ -143,4 +143,6 @@ tests/*
 !tests/features/*.py
 !tests/signals/
 !tests/signals/*.py
+!tests/execution/
+!tests/execution/*.py
 data/

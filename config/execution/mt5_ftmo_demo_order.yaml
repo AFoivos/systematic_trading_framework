@@ -1,0 +1,60 @@
+execution:
+  mode: demo_mt5
+  mt5:
+    login_env: MT5_LOGIN
+    password_env: MT5_PASSWORD
+    server_env: MT5_SERVER
+    terminal_path: null
+  timeframe: M30
+  lookback_bars: 1000
+  poll_seconds: 30
+  deviation_points: 20
+  magic_number: 260607
+  comment: vwap_rms_alpha_ftmo_demo
+
+strategy:
+  config_path: config/experiments/ema_rms_ppo_vwap/best_long_only/vwap_rms_cross_ema50_regime_3atr_no_time_exit_BEST_all5.yaml
+
+symbols:
+  SPX500:
+    mt5_symbol: US500.cash
+    enabled: true
+  US100:
+    mt5_symbol: US100.cash
+    enabled: true
+  US30:
+    mt5_symbol: US30.cash
+    enabled: true
+  GER40:
+    mt5_symbol: GER40.cash
+    enabled: true
+  XAUUSD:
+    mt5_symbol: XAUUSD
+    enabled: true
+  BTCUSD:
+    mt5_symbol: BTCUSD
+    enabled: false
+
+risk:
+  risk_per_trade: 0.0025
+  stop_loss_r: 3.0
+  take_profit_r: 4.0
+  volatility_col: null
+  max_daily_loss_pct: 0.02
+  max_total_drawdown_pct: 0.05
+  max_positions: 3
+  max_positions_per_symbol: 1
+  max_symbol_exposure: null
+  max_spread_points: 50
+  trading_hours_utc: null
+  disable_weekend_trading: true
+  allow_short: false
+  demo_only: true
+
+safety:
+  dry_run_default: false
+  require_demo_account: true
+  kill_switch_path: STOP_TRADING
+
+logging:
+  output_dir: logs/mt5_demo

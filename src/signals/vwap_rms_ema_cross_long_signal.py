@@ -6,6 +6,8 @@ from typing import Any, Mapping
 import pandas as pd
 
 
+_ALLOWED_MODES = frozenset({"long_only", "short_only", "long_short"})
+
 _DEFAULT_CFG: dict[str, Any] = {
     "ema_mid_col": "ema_50",
     "ema_slow_col": "ema_100",
@@ -14,12 +16,18 @@ _DEFAULT_CFG: dict[str, Any] = {
     "ppo_col": "ppo",
     "ppo_signal_col": "ppo_signal",
     "ppo_hist_min": 0.0,
+    "mode": "long_only",
     "regime_col": "ema_50_above_ema_100",
+    "short_regime_col": "ema_50_below_ema_100",
     "cross_up_col": "vwap_rms_cross_above_ema_50_rms",
+    "cross_down_col": "vwap_rms_cross_below_ema_50_rms",
     "ppo_hist_col": "ppo_hist",
     "ppo_hist_positive_col": "ppo_hist_positive",
+    "ppo_hist_negative_col": "ppo_hist_negative",
     "ppo_above_signal_col": "ppo_above_signal",
+    "ppo_below_signal_col": "ppo_below_signal",
     "long_setup_col": "vwap_rms_ema_cross_long_setup",
+    "short_setup_col": "vwap_rms_ema_cross_short_setup",
     "signal_col": "signal_side",
     "candidate_col": "signal_candidate",
 }
@@ -46,8 +54,12 @@ def _validate_cfg(cfg: dict[str, Any]) -> dict[str, Any]:
     normalized["ppo_hist_min"] = float(ppo_hist_min)
     if not math.isfinite(normalized["ppo_hist_min"]):
         raise ValueError("ppo_hist_min must be a finite number.")
+    mode = str(normalized.get("mode", "long_only"))
+    if mode not in _ALLOWED_MODES:
+        raise ValueError(f"mode must be one of: {sorted(_ALLOWED_MODES)}.")
+    normalized["mode"] = mode
     for key, value in normalized.items():
-        if key == "ppo_hist_min":
+        if key in {"ppo_hist_min", "mode"}:
             continue
         if not isinstance(value, str) or not value.strip():
             raise ValueError(f"{key} must be a non-empty string.")
@@ -65,7 +77,7 @@ def build_vwap_rms_ema_cross_long_signal(
     **overrides: Any,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """
-    Build causal long-only VWAP-RMS crossover events within a simple-EMA uptrend.
+    Build causal VWAP-RMS crossover events within a simple-EMA trend regime.
 
     Indicators are observed at the current bar close. The backtest remains responsible for
     executing accepted events at the next bar open.
@@ -96,10 +108,15 @@ def build_vwap_rms_ema_cross_long_signal(
 
     ppo_hist = ppo - ppo_signal
     long_regime = ema_mid.gt(ema_slow)
+    short_regime = ema_mid.lt(ema_slow)
     cross_up = vwap_rms.shift(1).le(ema_mid_rms.shift(1)) & vwap_rms.gt(ema_mid_rms)
+    cross_down = vwap_rms.shift(1).ge(ema_mid_rms.shift(1)) & vwap_rms.lt(ema_mid_rms)
     ppo_hist_positive = ppo_hist.gt(0.0)
+    ppo_hist_negative = ppo_hist.lt(0.0)
     ppo_hist_above_min = ppo_hist.gt(float(cfg["ppo_hist_min"]))
+    ppo_hist_below_min = ppo_hist.lt(-float(cfg["ppo_hist_min"]))
     ppo_above_signal = ppo.gt(ppo_signal)
+    ppo_below_signal = ppo.lt(ppo_signal)
     valid = (
         ema_mid.notna()
         & ema_slow.notna()
@@ -111,22 +128,36 @@ def build_vwap_rms_ema_cross_long_signal(
         & ppo_signal.notna()
     )
     long_setup = valid & long_regime & cross_up & ppo_hist_above_min
+    short_setup = valid & short_regime & cross_down & ppo_hist_below_min
+
+    if str(cfg["mode"]) == "long_only":
+        short_setup = pd.Series(False, index=out.index)
+    elif str(cfg["mode"]) == "short_only":
+        long_setup = pd.Series(False, index=out.index)
 
     signal_side = pd.Series(0, index=out.index, dtype="int8")
     signal_side.loc[long_setup] = 1
+    signal_side.loc[short_setup] = -1
 
     out[str(cfg["regime_col"])] = long_regime.fillna(False).astype("int8")
+    out[str(cfg["short_regime_col"])] = short_regime.fillna(False).astype("int8")
     out[str(cfg["cross_up_col"])] = cross_up.fillna(False).astype("int8")
+    out[str(cfg["cross_down_col"])] = cross_down.fillna(False).astype("int8")
     out[str(cfg["ppo_hist_col"])] = ppo_hist
     out[str(cfg["ppo_hist_positive_col"])] = ppo_hist_positive.fillna(False).astype("int8")
+    out[str(cfg["ppo_hist_negative_col"])] = ppo_hist_negative.fillna(False).astype("int8")
     out[str(cfg["ppo_above_signal_col"])] = ppo_above_signal.fillna(False).astype("int8")
+    out[str(cfg["ppo_below_signal_col"])] = ppo_below_signal.fillna(False).astype("int8")
     out[str(cfg["long_setup_col"])] = long_setup.fillna(False).astype("int8")
+    out[str(cfg["short_setup_col"])] = short_setup.fillna(False).astype("int8")
     out[str(cfg["signal_col"])] = signal_side
     out[str(cfg["candidate_col"])] = signal_side.ne(0).astype("int8")
 
     return out, {
         "kind": "vwap_rms_ema_cross_long",
+        "mode": str(cfg["mode"]),
         "long_candidates": int(long_setup.sum()),
+        "short_candidates": int(short_setup.sum()),
         "ppo_hist_min": float(cfg["ppo_hist_min"]),
         "signal_col": str(cfg["signal_col"]),
         "candidate_col": str(cfg["candidate_col"]),

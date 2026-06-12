@@ -181,6 +181,74 @@ Architecture boundary:
 * Tracked experiment YAMLs are fully self-contained; config inheritance via `extends` is no longer supported.
 * `src/intraday/` centralizes intraday-safe defaults such as `normalize_daily=false` guards and annualization inference.
 
+## MT5 Demo Execution Bot
+
+The repository includes a terminal MT5 demo execution runner under `src/execution/`.
+It reuses the configured experiment feature and signal pipeline, then applies hard demo
+and risk guards before any order can be submitted.
+
+Default behavior is dry-run only:
+
+```bash
+python scripts/run_mt5_demo_bot.py --config config/execution/mt5_demo.yaml --once
+```
+
+For continuous polling:
+
+```bash
+python scripts/run_mt5_demo_bot.py --config config/execution/mt5_demo.yaml --loop --sleep-seconds 30
+```
+
+To allow real MT5 `order_send` on a verified FTMO demo account, use the explicit demo-order
+config and do not pass `--dry-run`:
+
+```bash
+python scripts/run_mt5_demo_bot.py --config config/execution/mt5_ftmo_demo_order.yaml --once
+```
+
+For the continuous FTMO demo challenge runner:
+
+```bash
+python scripts/run_mt5_demo_bot.py --config config/execution/mt5_ftmo_demo_order.yaml --loop --sleep-seconds 30
+```
+
+This still only sends a buy order when the latest closed M30 candle has `signal_side == 1`
+and every position/risk/spread/demo guard passes.
+
+MT5 credentials are read only from environment variables and passwords are never logged:
+
+```bash
+export MT5_LOGIN=12345678
+export MT5_PASSWORD='...'
+export MT5_SERVER='FTMO-Demo'
+```
+
+Install the optional MT5 package in the Python environment that can access the local
+MetaTrader terminal:
+
+```bash
+pip install MetaTrader5
+```
+
+The current Docker image is Linux-based. It can run research, tests and dry-run code paths,
+but it cannot perform actual MT5 `order_send` unless you run an environment that can load the
+Windows MT5 Python wheel and access a locally installed MetaTrader 5 terminal. Use the host
+Windows Python environment, a Windows VM, or a Windows container/runner for live FTMO demo
+execution.
+
+Safety gates:
+
+* checked-in config uses `execution.mode: dry_run` and `safety.dry_run_default: true`
+* FTMO demo-order config uses `execution.mode: demo_mt5` and `safety.dry_run_default: false`
+* `order_send` is only reachable when `execution.mode: demo_mt5` and `safety.dry_run_default: false`
+* the account must be verifiably demo when `safety.require_demo_account: true`
+* the bot refuses duplicate positions for its magic number
+* risk guards cover daily loss, total drawdown, max positions, per-symbol positions, spread, optional hours, weekends, and `STOP_TRADING`
+* logs are written to `logs/mt5_demo/` as JSONL streams for signals, orders, fills, rejected orders, account equity, spread and slippage fields
+
+The default symbol mapping lives in `config/execution/mt5_demo.yaml`. Adjust broker symbol
+suffixes there, for example `SPX500 -> US500.cash`, without changing strategy configs.
+
 ---
 
 ## 📐 Modeling Approach

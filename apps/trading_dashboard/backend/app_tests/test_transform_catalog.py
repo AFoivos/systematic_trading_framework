@@ -39,6 +39,11 @@ def _install_fake_loader(monkeypatch, frame: pd.DataFrame) -> None:
     monkeypatch.setattr(transform_catalog, "DataLoader", lambda: FakeLoader())
 
 
+def _builder_default_params(name: str) -> dict[str, object]:
+    builders = {builder.name: builder for builder in transform_catalog.feature_builders()}
+    return {param.name: param.default_value for param in builders[name].parameters}
+
+
 def test_builder_catalog_exposes_registered_feature_signal_and_target_defaults() -> None:
     feature_by_name = {builder.name: builder for builder in transform_catalog.feature_builders()}
     signal_by_name = {builder.name: builder for builder in transform_catalog.signal_builders()}
@@ -46,6 +51,9 @@ def test_builder_catalog_exposes_registered_feature_signal_and_target_defaults()
 
     assert "rsi" in feature_by_name
     assert "vwap" in feature_by_name
+    assert "rolling_r2_trend_quality" in feature_by_name
+    assert "trend_slope_volatility" in feature_by_name
+    assert "volatility_of_volatility" in feature_by_name
     assert set(FEATURE_KINDS).issubset(feature_by_name)
     assert "ema_rms_ppo_vwap" in signal_by_name
     assert "vwap_rms_ema_cross_long" in signal_by_name
@@ -77,6 +85,14 @@ def test_builder_catalog_exposes_registered_feature_signal_and_target_defaults()
 
     atr_params = {param.name: param for param in feature_by_name["atr"].parameters}
     assert atr_params["windows"].kind == "list"
+
+    trend_slope_params = {param.name: param for param in feature_by_name["trend_slope_volatility"].parameters}
+    assert trend_slope_params["volatility_col"].default_value == "atr_over_price_20"
+    assert trend_slope_params["slope_vol_ratio_col"].default_value == "trend_slope_vol_ratio_96"
+
+    vov_params = {param.name: param for param in feature_by_name["volatility_of_volatility"].parameters}
+    assert vov_params["volatility_col"].default_value == "atr_over_price_20"
+    assert vov_params["output_col"].default_value == "vov_atr_96"
 
     trend_state_params = {param.name: param for param in signal_by_name["trend_state"].parameters}
     assert trend_state_params["state_col"].required is False
@@ -242,6 +258,45 @@ def test_transform_series_runs_nested_transform_on_all_parent_feature_outputs(mo
         {series.series_id for series in response.series}
     )
     assert response.steps[0].metadata["materialized_prerequisites"] == []
+
+
+def test_transform_series_runs_quant_trend_volatility_builders_from_ui_defaults(monkeypatch) -> None:
+    _install_fake_loader(monkeypatch, _ohlcv_frame(periods=340))
+
+    response = transform_catalog.run_transform_series(
+        TransformSeriesRequest(
+            asset="XAUUSD",
+            features=[
+                TransformStepConfig(
+                    step="rolling_r2_trend_quality",
+                    params=_builder_default_params("rolling_r2_trend_quality"),
+                ),
+                TransformStepConfig(
+                    step="trend_slope_volatility",
+                    params=_builder_default_params("trend_slope_volatility"),
+                ),
+                TransformStepConfig(
+                    step="volatility_of_volatility",
+                    params=_builder_default_params("volatility_of_volatility"),
+                ),
+            ],
+        )
+    )
+
+    series_ids = {series.series_id for series in response.series}
+    assert {
+        "rolling_r2_96",
+        "rolling_r2_slope_96",
+        "rolling_r2_96_ok",
+        "trend_slope_96",
+        "trend_vol_used_96",
+        "trend_slope_vol_ratio_96",
+        "vov_atr_96",
+        "vov_atr_96_mean_192",
+        "vov_atr_96_ratio_192",
+        "vov_atr_96_high",
+    }.issubset(series_ids)
+    assert "atr_over_price_20" in response.steps[1].metadata["materialized_prerequisites"]
 
 
 def test_transform_series_expands_nested_adx_rms_to_all_adx_outputs(monkeypatch) -> None:

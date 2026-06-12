@@ -297,6 +297,17 @@ function asInteger(value: unknown, fallback: number): number {
   return fallback;
 }
 
+function optionalInteger(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
 function asNumber(value: unknown, fallback: number): number {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -462,6 +473,46 @@ function deriveFeatureOutputColumns(stepName: string, params: Record<string, unk
       return [outputOrParam(params, "output_col", `roc_${asInteger(params.window, 10)}`)];
     case "zscore_momentum":
       return [outputOrParam(params, "output_col", `zscore_momentum_${window}`)];
+    case "rolling_r2_trend_quality": {
+      const r2Window = asInteger(params.window, 96);
+      const r2Base = `rolling_r2_trend_quality_${r2Window}`;
+      return [
+        outputOrParam(params, "output_col", r2Base),
+        outputOrParam(params, "slope_col", `rolling_r2_slope_${r2Window}`),
+        outputOrParam(params, "intercept_col", `rolling_r2_intercept_${r2Window}`),
+        outputOrParam(params, "rising_col", `${r2Base}_rising`),
+        outputOrParam(params, "trend_quality_col", `${r2Base}_ok`)
+      ];
+    }
+    case "trend_slope_volatility": {
+      const slopeWindow = asInteger(params.window, 96);
+      const ratioBase = `trend_slope_vol_ratio_${slopeWindow}`;
+      return [
+        outputOrParam(params, "slope_col", `trend_slope_${slopeWindow}`),
+        outputOrParam(params, "volatility_used_col", `trend_slope_volatility_used_${slopeWindow}`),
+        outputOrParam(params, "slope_vol_ratio_col", ratioBase),
+        outputOrParam(params, "positive_col", `${ratioBase}_positive`),
+        outputOrParam(params, "rising_col", `${ratioBase}_rising`),
+        outputOrParam(params, "strong_trend_col", `${ratioBase}_strong`)
+      ];
+    }
+    case "volatility_of_volatility": {
+      const volatilityCol = asString(params.volatility_col, "atr_over_price_20");
+      const vovWindow = asInteger(params.window, 96);
+      const meanWindow = optionalInteger(params.mean_window);
+      const vovBase = `volatility_of_volatility_${volatilityCol}_${vovWindow}`;
+      return [
+        outputOrParam(params, "output_col", vovBase),
+        ...(meanWindow !== null && meanWindow >= 2
+          ? [
+              outputOrParam(params, "mean_col", `${vovBase}_mean_${meanWindow}`),
+              outputOrParam(params, "ratio_col", `${vovBase}_ratio_${meanWindow}`)
+            ]
+          : []),
+        outputOrParam(params, "rising_col", `${vovBase}_rising`),
+        outputOrParam(params, "high_vov_col", `${vovBase}_high`)
+      ];
+    }
     case "volatility_regime":
       return [outputOrParam(params, "output_col", "volatility_regime")];
     case "hilbert_transform": {

@@ -27,6 +27,9 @@ optuna==3.6.1
 yfinance==1.1.0
 requests==2.32.3
 
+# Optional MT5 execution dependency. The PyPI wheel is Windows-only; Linux Docker builds skip it.
+metatrader5==5.0.5735; platform_system == "Windows"
+
 jupyterlab==4.2.5
 notebook==7.2.2
 ipykernel==6.28.0

@@ -17,7 +17,7 @@ data:
       inactive_policy: raise
   storage:
     mode: cached_only
-    dataset_id: vwap_rms_cross_ema50_regime_3atr_no_time_exit_BEST_all9
+    dataset_id: vwap_rms_cross_ema50_regime_3atr_no_time_exit_BEST_all5_short_only
     save_raw: false
     save_processed: true
     raw_dir: data/raw
@@ -28,20 +28,12 @@ data:
       US100: data/raw/dukascopy_30m_clean/us100_30m.csv
       GER40: data/raw/dukascopy_30m_clean/ger40_30m.csv
       US30: data/raw/dukascopy_30m_clean/us30_30m.csv
-      BRENT: data/raw/dukascopy_30m_clean/brent_30m.csv
-      ETHUSD: data/raw/dukascopy_30m_clean/ethusd_30m.csv
-      NIKKEI225: data/raw/dukascopy_30m_clean/nikkei225_30m.csv
-      USOIL: data/raw/dukascopy_30m_clean/usoil_30m.csv
   symbols:
   - XAUUSD
   - SPX500
   - US100
   - GER40
   - US30
-  - BRENT
-  - ETHUSD
-  - NIKKEI225
-  - USOIL
 features:
 - step: returns
   params:
@@ -86,30 +78,6 @@ features:
       ema_spans:
       - 72
       ema_col_template: ema_72
-    BRENT:
-      price_col: close
-      sma_windows: []
-      ema_spans:
-      - 60
-      ema_col_template: ema_60
-    ETHUSD:
-      price_col: close
-      sma_windows: []
-      ema_spans:
-      - 50
-      ema_col_template: ema_50
-    NIKKEI225:
-      price_col: close
-      sma_windows: []
-      ema_spans:
-      - 32
-      ema_col_template: ema_32
-    USOIL:
-      price_col: close
-      sma_windows: []
-      ema_spans:
-      - 32
-      ema_col_template: ema_32
   outputs: {}
   enabled: true
 - step: trend
@@ -140,30 +108,6 @@ features:
       ema_spans:
       - 200
       ema_col_template: ema_200
-    BRENT:
-      price_col: close
-      sma_windows: []
-      ema_spans:
-      - 96
-      ema_col_template: ema_96
-    ETHUSD:
-      price_col: close
-      sma_windows: []
-      ema_spans:
-      - 100
-      ema_col_template: ema_100
-    NIKKEI225:
-      price_col: close
-      sma_windows: []
-      ema_spans:
-      - 100
-      ema_col_template: ema_100
-    USOIL:
-      price_col: close
-      sma_windows: []
-      ema_spans:
-      - 96
-      ema_col_template: ema_96
   outputs: {}
   enabled: true
 - step: vwap
@@ -209,50 +153,6 @@ features:
       - 40
       vwap_col: vwap_40
       distance_col: close_over_vwap_40
-    BRENT:
-      high_col: high
-      low_col: low
-      close_col: close
-      volume_col: volume
-      window: 8
-      windows:
-      - 8
-      add_distance: true
-      vwap_col: vwap_8
-      distance_col: close_over_vwap_8
-    ETHUSD:
-      high_col: high
-      low_col: low
-      close_col: close
-      volume_col: volume
-      window: 20
-      windows:
-      - 20
-      add_distance: true
-      vwap_col: vwap_20
-      distance_col: close_over_vwap_20
-    NIKKEI225:
-      high_col: high
-      low_col: low
-      close_col: close
-      volume_col: volume
-      window: 24
-      windows:
-      - 24
-      add_distance: true
-      vwap_col: vwap_24
-      distance_col: close_over_vwap_24
-    USOIL:
-      high_col: high
-      low_col: low
-      close_col: close
-      volume_col: volume
-      window: 16
-      windows:
-      - 16
-      add_distance: true
-      vwap_col: vwap_16
-      distance_col: close_over_vwap_16
   outputs: {}
   enabled: true
 - step: ppo
@@ -300,38 +200,6 @@ features:
       ppo_col: ppo_14_42
       ppo_signal_col: ppo_signal_15
       ppo_hist_col: ppo_hist_14_42_15_raw
-    BRENT:
-      price_col: close
-      fast: 16
-      slow: 26
-      signal: 12
-      ppo_col: ppo_16_26
-      ppo_signal_col: ppo_signal_12
-      ppo_hist_col: ppo_hist_16_26_12_raw
-    ETHUSD:
-      price_col: close
-      fast: 10
-      slow: 26
-      signal: 12
-      ppo_col: ppo_10_26
-      ppo_signal_col: ppo_signal_12
-      ppo_hist_col: ppo_hist_10_26_12_raw
-    NIKKEI225:
-      price_col: close
-      fast: 10
-      slow: 30
-      signal: 9
-      ppo_col: ppo_10_30
-      ppo_signal_col: ppo_signal_9
-      ppo_hist_col: ppo_hist_10_30_9_raw
-    USOIL:
-      price_col: close
-      fast: 6
-      slow: 42
-      signal: 7
-      ppo_col: ppo_6_42
-      ppo_signal_col: ppo_signal_7
-      ppo_hist_col: ppo_hist_6_42_7_raw
   outputs: {}
   enabled: true
 - step: atr
@@ -382,50 +250,6 @@ features:
       method: wilder
       atr_col: atr_20
       over_price_col: atr_over_price_20
-    BRENT:
-      high_col: high
-      low_col: low
-      close_col: close
-      window: 48
-      windows:
-      - 48
-      method: wilder
-      add_over_price: true
-      atr_col: atr_48
-      over_price_col: atr_over_price_48
-    ETHUSD:
-      high_col: high
-      low_col: low
-      close_col: close
-      window: 10
-      windows:
-      - 10
-      method: simple
-      add_over_price: true
-      atr_col: atr_10
-      over_price_col: atr_over_price_10
-    NIKKEI225:
-      high_col: high
-      low_col: low
-      close_col: close
-      window: 10
-      windows:
-      - 10
-      method: simple
-      add_over_price: true
-      atr_col: atr_10
-      over_price_col: atr_over_price_10
-    USOIL:
-      high_col: high
-      low_col: low
-      close_col: close
-      window: 7
-      windows:
-      - 7
-      method: wilder
-      add_over_price: true
-      atr_col: atr_7
-      over_price_col: atr_over_price_7
   outputs: {}
   enabled: true
 - step: feature_transforms
@@ -437,18 +261,21 @@ features:
       - root_mean_square
       window: 192
       shift: 0
+      output_prefix: ema_50
     - kind: tsfresh_rolling
       source_col: vwap_20
       calculators:
       - root_mean_square
       window: 12
       shift: 0
+      output_prefix: vwap_20
     - kind: tsfresh_rolling
       source_col: ema_100
       calculators:
       - root_mean_square
       window: 192
       shift: 0
+      output_prefix: ema_100
   params_by_asset:
     XAUUSD:
       transforms:
@@ -481,18 +308,21 @@ features:
         - root_mean_square
         window: 192
         shift: 0
+        output_prefix: ema_50
       - kind: tsfresh_rolling
         source_col: vwap_20
         calculators:
         - root_mean_square
         window: 12
         shift: 0
+        output_prefix: vwap_20
       - kind: tsfresh_rolling
         source_col: ema_100
         calculators:
         - root_mean_square
         window: 192
         shift: 0
+        output_prefix: ema_100
     US100:
       transforms:
       - kind: tsfresh_rolling
@@ -562,98 +392,6 @@ features:
         - root_mean_square
         window: 48
         shift: 1
-    BRENT:
-      transforms:
-      - kind: tsfresh_rolling
-        source_col: ema_60
-        output_prefix: ema_60
-        calculators:
-        - root_mean_square
-        window: 144
-        shift: 1
-      - kind: tsfresh_rolling
-        source_col: vwap_8
-        output_prefix: vwap_8
-        calculators:
-        - root_mean_square
-        window: 96
-        shift: 1
-      - kind: tsfresh_rolling
-        source_col: ema_96
-        output_prefix: ema_96
-        calculators:
-        - root_mean_square
-        window: 48
-        shift: 1
-    ETHUSD:
-      transforms:
-      - kind: tsfresh_rolling
-        source_col: ema_50
-        output_prefix: ema_50
-        calculators:
-        - root_mean_square
-        window: 36
-        shift: 2
-      - kind: tsfresh_rolling
-        source_col: vwap_20
-        output_prefix: vwap_20
-        calculators:
-        - root_mean_square
-        window: 24
-        shift: 2
-      - kind: tsfresh_rolling
-        source_col: ema_100
-        output_prefix: ema_100
-        calculators:
-        - root_mean_square
-        window: 36
-        shift: 2
-    NIKKEI225:
-      transforms:
-      - kind: tsfresh_rolling
-        source_col: ema_32
-        output_prefix: ema_32
-        calculators:
-        - root_mean_square
-        window: 144
-        shift: 0
-      - kind: tsfresh_rolling
-        source_col: vwap_24
-        output_prefix: vwap_24
-        calculators:
-        - root_mean_square
-        window: 24
-        shift: 0
-      - kind: tsfresh_rolling
-        source_col: ema_100
-        output_prefix: ema_100
-        calculators:
-        - root_mean_square
-        window: 96
-        shift: 0
-    USOIL:
-      transforms:
-      - kind: tsfresh_rolling
-        source_col: ema_32
-        output_prefix: ema_32
-        calculators:
-        - root_mean_square
-        window: 36
-        shift: 1
-      - kind: tsfresh_rolling
-        source_col: vwap_16
-        output_prefix: vwap_16
-        calculators:
-        - root_mean_square
-        window: 24
-        shift: 1
-      - kind: tsfresh_rolling
-        source_col: ema_96
-        output_prefix: ema_96
-        calculators:
-        - root_mean_square
-        window: 72
-        shift: 1
   outputs: {}
   enabled: true
 model:
@@ -676,6 +414,12 @@ signals:
     long_setup_col: vwap_rms_ema_cross_long_setup
     signal_col: signal_side
     candidate_col: signal_candidate
+    mode: short_only
+    short_regime_col: ema_50_below_ema_100
+    cross_down_col: vwap_rms_cross_below_ema_50_rms
+    ppo_hist_negative_col: ppo_hist_negative
+    ppo_below_signal_col: ppo_below_signal
+    short_setup_col: vwap_rms_ema_cross_short_setup
   params_by_asset:
     XAUUSD:
       ema_mid_col: ema_50
@@ -693,6 +437,12 @@ signals:
       long_setup_col: vwap_20_rms_ema_50_cross_long_setup
       signal_col: signal_side
       candidate_col: signal_candidate
+      mode: short_only
+      short_regime_col: ema_50_below_ema_100
+      cross_down_col: vwap_20_rms_cross_below_ema_50_rms
+      ppo_hist_negative_col: ppo_hist_8_36_9_negative
+      ppo_below_signal_col: ppo_8_36_below_ppo_signal_9
+      short_setup_col: vwap_20_rms_ema_50_cross_short_setup
     SPX500:
       ema_mid_col: ema_50
       ema_slow_col: ema_100
@@ -709,6 +459,12 @@ signals:
       long_setup_col: vwap_rms_ema_cross_long_setup
       signal_col: signal_side
       candidate_col: signal_candidate
+      mode: short_only
+      short_regime_col: ema_50_below_ema_100
+      cross_down_col: vwap_rms_cross_below_ema_50_rms
+      ppo_hist_negative_col: ppo_hist_negative
+      ppo_below_signal_col: ppo_below_signal
+      short_setup_col: vwap_rms_ema_cross_short_setup
     US100:
       ema_mid_col: ema_50
       ema_slow_col: ema_96
@@ -725,6 +481,12 @@ signals:
       long_setup_col: vwap_40_rms_ema_50_cross_long_setup
       signal_col: signal_side
       candidate_col: signal_candidate
+      mode: short_only
+      short_regime_col: ema_50_below_ema_96
+      cross_down_col: vwap_40_rms_cross_below_ema_50_rms
+      ppo_hist_negative_col: ppo_hist_12_36_9_negative
+      ppo_below_signal_col: ppo_12_36_below_ppo_signal_9
+      short_setup_col: vwap_40_rms_ema_50_cross_short_setup
     GER40:
       ema_mid_col: ema_60
       ema_slow_col: ema_200
@@ -741,6 +503,12 @@ signals:
       long_setup_col: vwap_32_rms_ema_60_cross_long_setup
       signal_col: signal_side
       candidate_col: signal_candidate
+      mode: short_only
+      short_regime_col: ema_60_below_ema_200
+      cross_down_col: vwap_32_rms_cross_below_ema_60_rms
+      ppo_hist_negative_col: ppo_hist_10_30_12_negative
+      ppo_below_signal_col: ppo_10_30_below_ppo_signal_12
+      short_setup_col: vwap_32_rms_ema_60_cross_short_setup
     US30:
       ema_mid_col: ema_72
       ema_slow_col: ema_200
@@ -757,70 +525,12 @@ signals:
       long_setup_col: vwap_40_rms_ema_72_cross_long_setup
       signal_col: signal_side
       candidate_col: signal_candidate
-    BRENT:
-      ema_mid_col: ema_60
-      ema_slow_col: ema_96
-      ema_mid_rms_col: ema_60__root_mean_square
-      vwap_rms_col: vwap_8__root_mean_square
-      ppo_col: ppo_16_26
-      ppo_signal_col: ppo_signal_12
-      ppo_hist_min: 0.0004
-      regime_col: ema_60_above_ema_96
-      cross_up_col: vwap_8_rms_cross_above_ema_60_rms
-      ppo_hist_col: ppo_hist_16_26_12
-      ppo_hist_positive_col: ppo_hist_16_26_12_positive
-      ppo_above_signal_col: ppo_16_26_above_ppo_signal_12
-      long_setup_col: vwap_8_rms_ema_60_cross_long_setup
-      signal_col: signal_side
-      candidate_col: signal_candidate
-    ETHUSD:
-      ema_mid_col: ema_50
-      ema_slow_col: ema_100
-      ema_mid_rms_col: ema_50__root_mean_square
-      vwap_rms_col: vwap_20__root_mean_square
-      ppo_col: ppo_10_26
-      ppo_signal_col: ppo_signal_12
-      ppo_hist_min: 0.00175
-      regime_col: ema_50_above_ema_100
-      cross_up_col: vwap_20_rms_cross_above_ema_50_rms
-      ppo_hist_col: ppo_hist_10_26_12
-      ppo_hist_positive_col: ppo_hist_10_26_12_positive
-      ppo_above_signal_col: ppo_10_26_above_ppo_signal_12
-      long_setup_col: vwap_20_rms_ema_50_cross_long_setup
-      signal_col: signal_side
-      candidate_col: signal_candidate
-    NIKKEI225:
-      ema_mid_col: ema_32
-      ema_slow_col: ema_100
-      ema_mid_rms_col: ema_32__root_mean_square
-      vwap_rms_col: vwap_24__root_mean_square
-      ppo_col: ppo_10_30
-      ppo_signal_col: ppo_signal_9
-      ppo_hist_min: 0.00035
-      regime_col: ema_32_above_ema_100
-      cross_up_col: vwap_24_rms_cross_above_ema_32_rms
-      ppo_hist_col: ppo_hist_10_30_9
-      ppo_hist_positive_col: ppo_hist_10_30_9_positive
-      ppo_above_signal_col: ppo_10_30_above_ppo_signal_9
-      long_setup_col: vwap_24_rms_ema_32_cross_long_setup
-      signal_col: signal_side
-      candidate_col: signal_candidate
-    USOIL:
-      ema_mid_col: ema_32
-      ema_slow_col: ema_96
-      ema_mid_rms_col: ema_32__root_mean_square
-      vwap_rms_col: vwap_16__root_mean_square
-      ppo_col: ppo_6_42
-      ppo_signal_col: ppo_signal_7
-      ppo_hist_min: 0.00125
-      regime_col: ema_32_above_ema_96
-      cross_up_col: vwap_16_rms_cross_above_ema_32_rms
-      ppo_hist_col: ppo_hist_6_42_7
-      ppo_hist_positive_col: ppo_hist_6_42_7_positive
-      ppo_above_signal_col: ppo_6_42_above_ppo_signal_7
-      long_setup_col: vwap_16_rms_ema_32_cross_long_setup
-      signal_col: signal_side
-      candidate_col: signal_candidate
+      mode: short_only
+      short_regime_col: ema_72_below_ema_200
+      cross_down_col: vwap_40_rms_cross_below_ema_72_rms
+      ppo_hist_negative_col: ppo_hist_14_42_15_negative
+      ppo_below_signal_col: ppo_14_42_below_ppo_signal_15
+      short_setup_col: vwap_40_rms_ema_72_cross_short_setup
   outputs: {}
 target: {}
 runtime:
@@ -846,8 +556,6 @@ risk:
     group_max_open_trades:
       equity_indices: 2
       metals: 1
-      energy: 1
-      crypto: 1
     kill_switch_max_drawdown: 0.08
   drawdown_sizing: {}
   vol_col: null
@@ -875,55 +583,31 @@ backtest:
       volatility_col: atr_36
       profit_barrier_r: 3.5
       stop_barrier_r: 3.0
-      risk_per_trade: 0.0025
+      risk_per_trade: 0.006
       vertical_barrier_bars: null
     SPX500:
       volatility_col: atr_14
       profit_barrier_r: 4.25
       stop_barrier_r: 3.0
-      risk_per_trade: 0.0025
+      risk_per_trade: 0.006
       vertical_barrier_bars: null
     US100:
       volatility_col: atr_20
       profit_barrier_r: 4.5
       stop_barrier_r: 3.0
-      risk_per_trade: 0.0025
+      risk_per_trade: 0.006
       vertical_barrier_bars: null
     GER40:
       volatility_col: atr_10
       profit_barrier_r: 4.5
       stop_barrier_r: 2.75
-      risk_per_trade: 0.0025
+      risk_per_trade: 0.006
       vertical_barrier_bars: null
     US30:
       volatility_col: atr_20
       profit_barrier_r: 4.0
       stop_barrier_r: 2.0
-      risk_per_trade: 0.0025
-      vertical_barrier_bars: null
-    BRENT:
-      volatility_col: atr_48
-      profit_barrier_r: 2.75
-      stop_barrier_r: 2.75
-      risk_per_trade: 0.0025
-      vertical_barrier_bars: null
-    ETHUSD:
-      volatility_col: atr_10
-      profit_barrier_r: 2.0
-      stop_barrier_r: 2.0
-      risk_per_trade: 0.0025
-      vertical_barrier_bars: null
-    NIKKEI225:
-      volatility_col: atr_10
-      profit_barrier_r: 2.75
-      stop_barrier_r: 1.75
-      risk_per_trade: 0.0025
-      vertical_barrier_bars: null
-    USOIL:
-      volatility_col: atr_7
-      profit_barrier_r: 3.75
-      stop_barrier_r: 1.5
-      risk_per_trade: 0.0025
+      risk_per_trade: 0.006
       vertical_barrier_bars: null
 portfolio:
   enabled: true
@@ -932,15 +616,13 @@ portfolio:
   gross_target: 2.0
   constraints:
     max_gross_leverage: 2.0
-    max_weight: 1.0
-    min_weight: 0.0
-    target_net_exposure: 0.0
+    max_weight: 0.0
+    min_weight: -1.0
+    target_net_exposure: -2.0
     enforce_target_net_exposure: false
     group_max_exposure:
       equity_indices: 1.25
       metals: 1.0
-      energy: 1.0
-      crypto: 1.0
   selection:
     enabled: false
   asset_groups:
@@ -949,10 +631,6 @@ portfolio:
     US100: equity_indices
     GER40: equity_indices
     US30: equity_indices
-    BRENT: energy
-    ETHUSD: crypto
-    NIKKEI225: equity_indices
-    USOIL: energy
 monitoring:
   enabled: true
   psi_threshold: 0.2
@@ -979,7 +657,7 @@ execution:
   price_col: close
 logging:
   enabled: true
-  run_name: vwap_rms_cross_ema50_regime_3atr_no_time_exit_BEST_all9
+  run_name: vwap_rms_cross_ema50_regime_3atr_no_time_exit_BEST_all5_short_only
   output_dir: logs/bot
   stage_tails:
     enabled: false
