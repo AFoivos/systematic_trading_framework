@@ -249,6 +249,7 @@ def default_backtest_block(
         backtest.setdefault("vertical_barrier_bars", 4)
         backtest.setdefault("tie_break", "closest_to_open")
         backtest.setdefault("event_time_remap_policy", "next_aligned")
+        backtest.setdefault("max_cost_r", None)
     return backtest
 
 
@@ -314,6 +315,7 @@ def default_diagnostics_block(diagnostics: dict[str, Any]) -> dict[str, Any]:
     robustness.setdefault("strict_no_remap", False)
     robustness.setdefault("combined_cost_multipliers", [])
     robustness.setdefault("gross_cap_values", [])
+    robustness.setdefault("cost_filter_max_cost_r_values", [])
     diagnostics["robustness"] = robustness
     return diagnostics
 

@@ -346,6 +346,7 @@ def run_portfolio_backtest(
             asset_to_group=asset_groups or None,
             portfolio_guard=dict(risk_cfg.get("portfolio_guard", {}) or {}),
             event_time_remap_policy=str(backtest_cfg.get("event_time_remap_policy", "next_aligned")),
+            max_cost_r=backtest_cfg.get("max_cost_r"),
         )
         portfolio_meta = PortfolioMetaPayload(
             construction="portfolio_barrier",
@@ -620,6 +621,56 @@ def _asset_net_contribution_summary(trades: pd.DataFrame | None, *, expected_ass
     }
 
 
+def _trade_attribution_summary(trades: pd.DataFrame | None) -> dict[str, Any]:
+    if trades is None or trades.empty:
+        return {}
+    frame = trades.copy()
+    for col in ("net_return", "realized_r", "estimated_cost_r", "bars_held"):
+        if col in frame.columns:
+            frame[col] = pd.to_numeric(frame[col], errors="coerce")
+
+    out: dict[str, Any] = {"trade_count": int(len(frame))}
+    if "estimated_cost_r" in frame.columns:
+        cost_r = frame["estimated_cost_r"].dropna().astype(float)
+        if not cost_r.empty:
+            out["estimated_cost_r_quantiles"] = {
+                f"q{int(q * 100):02d}": float(cost_r.quantile(q))
+                for q in (0.1, 0.25, 0.5, 0.75, 0.9)
+            } | {"max": float(cost_r.max())}
+            bins = [0.0, 0.10, 0.15, 0.20, 0.30, float("inf")]
+            labels = ["<=0.10", "0.10-0.15", "0.15-0.20", "0.20-0.30", ">0.30"]
+            bucket = pd.cut(cost_r, bins=bins, labels=labels, right=True, include_lowest=True)
+            bucket_frame = frame.loc[cost_r.index].assign(cost_r_bucket=bucket.astype(str))
+            out["estimated_cost_r_buckets"] = _group_trade_summary(bucket_frame, "cost_r_bucket")
+    if "exit_reason" in frame.columns:
+        out["exit_reason"] = _group_trade_summary(frame, "exit_reason")
+    return out
+
+
+def _group_trade_summary(frame: pd.DataFrame, group_col: str) -> dict[str, dict[str, float]]:
+    out: dict[str, dict[str, float]] = {}
+    if group_col not in frame.columns:
+        return out
+    for key, group in frame.groupby(frame[group_col].astype(str), sort=True):
+        net = (
+            pd.to_numeric(group["net_return"], errors="coerce").fillna(0.0)
+            if "net_return" in group.columns
+            else pd.Series(0.0, index=group.index)
+        )
+        realized_r = (
+            pd.to_numeric(group["realized_r"], errors="coerce").dropna()
+            if "realized_r" in group.columns
+            else pd.Series(dtype=float)
+        )
+        out[str(key)] = {
+            "trade_count": int(len(group)),
+            "net_return": float(net.sum()),
+            "avg_r": float(realized_r.mean()) if not realized_r.empty else float("nan"),
+            "win_rate": float((realized_r > 0.0).mean()) if not realized_r.empty else float("nan"),
+        }
+    return out
+
+
 def _run_portfolio_combined_stress(
     asset_frames: dict[str, pd.DataFrame],
     *,
@@ -627,10 +678,15 @@ def _run_portfolio_combined_stress(
     event_time_remap_policy: str,
     gross_cap: float,
     cost_multiplier: float,
+    max_cost_r: float | None = None,
 ) -> dict[str, Any]:
     variant_cfg = deepcopy(cfg)
     variant_cfg["backtest"] = dict(variant_cfg.get("backtest", {}) or {})
     variant_cfg["backtest"]["event_time_remap_policy"] = str(event_time_remap_policy)
+    if max_cost_r is None:
+        variant_cfg["backtest"].pop("max_cost_r", None)
+    else:
+        variant_cfg["backtest"]["max_cost_r"] = float(max_cost_r)
 
     variant_cfg["risk"] = dict(variant_cfg.get("risk", {}) or {})
     variant_cfg["risk"]["cost_per_turnover"] = (
@@ -663,6 +719,7 @@ def _run_portfolio_combined_stress(
             "event_time_remap_policy": str(event_time_remap_policy),
             "gross_cap": float(gross_cap),
             "cost_multiplier": float(cost_multiplier),
+            "max_cost_r": None if max_cost_r is None else float(max_cost_r),
             "trade_count": trade_count,
             "avg_gross_exposure": float(diagnostics["gross_exposure"].mean()) if not diagnostics.empty else 0.0,
             "max_gross_exposure": float(diagnostics["gross_exposure"].max()) if not diagnostics.empty else 0.0,
@@ -675,9 +732,11 @@ def _run_portfolio_combined_stress(
         "skipped_remapped_entry_timestamps",
         "skipped_remapped_exit_timestamps",
         "skipped_unalignable_timestamp",
+        "skipped_cost_filter",
     ):
         if key in barrier_meta:
             metrics[key] = int(barrier_meta[key])
+    metrics["trade_attribution"] = _trade_attribution_summary(trades)
     metrics.update(
         _asset_net_contribution_summary(
             getattr(performance, "trades", None),
@@ -725,6 +784,10 @@ def build_robustness_diagnostics(
         float(value)
         for value in list(robustness_cfg.get("gross_cap_values", []) or [])
     ]
+    cost_filter_max_cost_r_values = [
+        float(value)
+        for value in list(robustness_cfg.get("cost_filter_max_cost_r_values", []) or [])
+    ]
     payload: dict[str, Any] = {
         "cost_stress": cost_multiplier_stress(
             gross_returns=gross_returns,
@@ -759,20 +822,25 @@ def build_robustness_diagnostics(
             combined_cost_multipliers = [1.0]
         if not gross_cap_values:
             gross_cap_values = [base_gross_cap]
+        max_cost_r_values: list[float | None] = [None]
+        max_cost_r_values.extend(cost_filter_max_cost_r_values)
         payload["combined_stress"] = {}
         for gross_cap in gross_cap_values:
             for cost_multiplier in combined_cost_multipliers:
-                key = f"strict_{remap_policy}_gross_{gross_cap:g}_cost_x{cost_multiplier:g}"
-                try:
-                    payload["combined_stress"][key] = _run_portfolio_combined_stress(
-                        asset_frames,
-                        cfg=cfg,
-                        event_time_remap_policy=remap_policy,
-                        gross_cap=float(gross_cap),
-                        cost_multiplier=float(cost_multiplier),
-                    )
-                except Exception as exc:
-                    payload["combined_stress"][key] = {"error": f"{type(exc).__name__}: {exc}"}
+                for max_cost_r in max_cost_r_values:
+                    suffix = "" if max_cost_r is None else f"_maxcostr_{max_cost_r:g}"
+                    key = f"strict_{remap_policy}_gross_{gross_cap:g}_cost_x{cost_multiplier:g}{suffix}"
+                    try:
+                        payload["combined_stress"][key] = _run_portfolio_combined_stress(
+                            asset_frames,
+                            cfg=cfg,
+                            event_time_remap_policy=remap_policy,
+                            gross_cap=float(gross_cap),
+                            cost_multiplier=float(cost_multiplier),
+                            max_cost_r=max_cost_r,
+                        )
+                    except Exception as exc:
+                        payload["combined_stress"][key] = {"error": f"{type(exc).__name__}: {exc}"}
 
     if position_path is not None:
         payload["gap_stress"] = gap_penalty_stress(

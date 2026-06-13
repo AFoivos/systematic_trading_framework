@@ -2669,6 +2669,10 @@ def validate_backtest_block(backtest: dict[str, Any]) -> None:
             raise ConfigValidationError(
                 "backtest.event_time_remap_policy must be 'next_aligned' or 'skip'."
             )
+        if backtest.get("max_cost_r") is not None:
+            max_cost_r = _finite_number(backtest.get("max_cost_r"), field="backtest.max_cost_r")
+            if max_cost_r <= 0.0:
+                raise ConfigValidationError("backtest.max_cost_r must be > 0.")
         for key in ("profit_barrier_r", "stop_barrier_r"):
             value = _finite_number(backtest.get(key), field=f"backtest.{key}")
             if value <= 0.0:
@@ -2692,6 +2696,10 @@ def validate_backtest_block(backtest: dict[str, Any]) -> None:
                 value = _finite_number(params[key], field=f"backtest.asset_params.{asset}.{key}")
                 if value <= 0.0:
                     raise ConfigValidationError(f"backtest.asset_params.{asset}.{key} must be > 0.")
+            if params.get("max_cost_r") is not None:
+                value = _finite_number(params["max_cost_r"], field=f"backtest.asset_params.{asset}.max_cost_r")
+                if value <= 0.0:
+                    raise ConfigValidationError(f"backtest.asset_params.{asset}.max_cost_r must be > 0.")
             if params.get("vertical_barrier_bars") is not None:
                 _positive_int(
                     params.get("vertical_barrier_bars"),
@@ -2922,7 +2930,13 @@ def validate_diagnostics_block(diagnostics: dict[str, Any]) -> None:
         raise ConfigValidationError("diagnostics.robustness.enabled must be boolean.")
     if not isinstance(robustness.get("strict_no_remap", False), bool):
         raise ConfigValidationError("diagnostics.robustness.strict_no_remap must be boolean.")
-    for key in ("cost_multipliers", "entry_delay_bars", "combined_cost_multipliers", "gross_cap_values"):
+    for key in (
+        "cost_multipliers",
+        "entry_delay_bars",
+        "combined_cost_multipliers",
+        "gross_cap_values",
+        "cost_filter_max_cost_r_values",
+    ):
         value = robustness.get(key, [])
         if value is None:
             continue
@@ -2933,7 +2947,7 @@ def validate_diagnostics_block(diagnostics: dict[str, Any]) -> None:
                 _positive_int(item, field=f"diagnostics.robustness.{key}[{idx}]")
             else:
                 numeric = _finite_number(item, field=f"diagnostics.robustness.{key}[{idx}]")
-                if key == "gross_cap_values":
+                if key in {"gross_cap_values", "cost_filter_max_cost_r_values"}:
                     if numeric <= 0.0:
                         raise ConfigValidationError(f"diagnostics.robustness.{key}[{idx}] must be > 0.")
                 elif numeric < 0.0:

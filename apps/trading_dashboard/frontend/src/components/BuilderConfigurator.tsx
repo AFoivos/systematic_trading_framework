@@ -839,10 +839,7 @@ function FeatureTransformsEditor({
 export function BuilderConfigurator({ title, sourceType, builders, steps, onChange }: BuilderConfiguratorProps) {
   const [selectedBuilder, setSelectedBuilder] = useState("");
   const builderByName = useMemo(() => new Map(builders.map((builder) => [builder.name, builder])), [builders]);
-  const selectableBuilders = useMemo(
-    () => (sourceType === "feature" ? builders.filter((builder) => builder.name !== "feature_transforms") : builders),
-    [builders, sourceType]
-  );
+  const selectableBuilders = useMemo(() => builders, [builders]);
   const selectableBuilder = selectedBuilder || selectableBuilders[0]?.name || "";
 
   const addStep = () => {

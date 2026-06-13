@@ -155,6 +155,39 @@ def test_portfolio_barrier_rejects_invalid_remap_policy() -> None:
         )
 
 
+def test_portfolio_barrier_max_cost_r_skips_expensive_trades() -> None:
+    frame = _portfolio_barrier_frame()
+    frame.loc[frame.index[1], "high"] = 101.5
+
+    accepted, _, _, accepted_meta = run_portfolio_barrier_backtest(
+        {"AAA": frame},
+        signal_col="signal",
+        volatility_col="atr_14",
+        cost_per_turnover=0.001,
+        slippage_per_turnover=0.001,
+        max_cost_r=1.0,
+        periods_per_year=12096,
+    )
+    trade = accepted.trades.iloc[0]
+    assert accepted_meta["skipped_cost_filter"] == 0
+    assert trade["estimated_cost_r"] == pytest.approx(0.4)
+
+    skipped, weights, diagnostics, skipped_meta = run_portfolio_barrier_backtest(
+        {"AAA": frame},
+        signal_col="signal",
+        volatility_col="atr_14",
+        cost_per_turnover=0.001,
+        slippage_per_turnover=0.001,
+        max_cost_r=0.1,
+        periods_per_year=12096,
+    )
+
+    assert skipped.trades.empty
+    assert weights.abs().sum().sum() == pytest.approx(0.0)
+    assert diagnostics["open_trade_count"].sum() == pytest.approx(0.0)
+    assert skipped_meta["skipped_cost_filter"] == 1
+
+
 def test_apply_constraints_respects_bounds_group_gross_and_turnover() -> None:
     """
     Verify that constraints respects bounds group gross and turnover behaves as expected under a

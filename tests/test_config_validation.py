@@ -256,12 +256,14 @@ def test_validate_portfolio_barrier_bot_controls() -> None:
             "stop_barrier_r": 2.0,
             "vertical_barrier_bars": None,
             "event_time_remap_policy": "skip",
+            "max_cost_r": 0.25,
             "asset_params": {
                 "AAA": {
                     "volatility_col": "atr_20",
                     "profit_barrier_r": 4.0,
                     "stop_barrier_r": 2.5,
                     "risk_per_trade": 0.006,
+                    "max_cost_r": 0.2,
                     "vertical_barrier_bars": None,
                 }
             },
@@ -291,6 +293,7 @@ def test_validate_portfolio_barrier_bot_controls() -> None:
                 "strict_no_remap": True,
                 "combined_cost_multipliers": [2.0, 3.0],
                 "gross_cap_values": [1.0, 1.25, 1.5],
+                "cost_filter_max_cost_r_values": [0.15, 0.2, 0.25],
             },
         }
     )
@@ -327,6 +330,22 @@ def test_validate_portfolio_barrier_bot_controls() -> None:
             }
         )
 
+    with pytest.raises(ConfigValidationError, match="max_cost_r"):
+        validate_backtest_block(
+            {
+                "engine": "portfolio_barrier",
+                "returns_col": "close_ret",
+                "signal_col": "signal",
+                "periods_per_year": 12096,
+                "returns_type": "simple",
+                "missing_return_policy": "raise_if_exposed",
+                "volatility_col": "atr_14",
+                "profit_barrier_r": 3.0,
+                "stop_barrier_r": 2.0,
+                "max_cost_r": 0.0,
+            }
+        )
+
     with pytest.raises(ConfigValidationError, match="strict_no_remap"):
         validate_diagnostics_block(
             {
@@ -334,6 +353,17 @@ def test_validate_portfolio_barrier_bot_controls() -> None:
                 "robustness": {
                     "enabled": True,
                     "strict_no_remap": "yes",
+                },
+            }
+        )
+
+    with pytest.raises(ConfigValidationError, match="cost_filter_max_cost_r_values"):
+        validate_diagnostics_block(
+            {
+                "enabled": True,
+                "robustness": {
+                    "enabled": True,
+                    "cost_filter_max_cost_r_values": [0.0],
                 },
             }
         )

@@ -322,6 +322,27 @@ def _realized_trade_pnl(
     }
 
 
+def _estimated_roundtrip_cost_filter_stats(
+    *,
+    weight: float,
+    entry_price: float,
+    risk_distance: float,
+    cost_per_turnover: float,
+    slippage_per_turnover: float,
+) -> dict[str, float]:
+    size = abs(float(weight))
+    risk_fraction = float(risk_distance) / float(entry_price)
+    fixed_cost = size * 2.0 * float(cost_per_turnover)
+    estimated_slippage = size * 2.0 * float(slippage_per_turnover)
+    estimated_total_cost = fixed_cost + estimated_slippage
+    risk_capital = size * max(risk_fraction, 1e-12)
+    return {
+        "risk_fraction": float(risk_fraction),
+        "estimated_cost": float(estimated_total_cost),
+        "estimated_cost_r": float(estimated_total_cost / max(risk_capital, 1e-12)),
+    }
+
+
 def run_portfolio_barrier_backtest(
     asset_frames: Mapping[str, pd.DataFrame],
     *,
@@ -348,6 +369,7 @@ def run_portfolio_barrier_backtest(
     asset_to_group: Mapping[str, str] | None = None,
     portfolio_guard: Mapping[str, Any] | None = None,
     event_time_remap_policy: str = "next_aligned",
+    max_cost_r: float | None = None,
 ) -> tuple[PortfolioPerformance, pd.DataFrame, pd.DataFrame, dict[str, Any]]:
     """
     Event-based multi-asset portfolio backtest using directional triple-barrier exits.
@@ -383,6 +405,8 @@ def run_portfolio_barrier_backtest(
     slippage_per_turnover = float(slippage_per_turnover)
     if cost_per_turnover < 0.0 or slippage_per_turnover < 0.0:
         raise ValueError("portfolio_barrier costs and slippage must be >= 0.")
+    if max_cost_r is not None:
+        max_cost_r = _positive_float(max_cost_r, field="max_cost_r")
 
     asset_params_by_asset = {str(k): dict(v or {}) for k, v in dict(asset_params or {}).items()}
     asset_groups = {str(k): str(v) for k, v in dict(asset_to_group or {}).items()}
@@ -427,6 +451,7 @@ def run_portfolio_barrier_backtest(
     skipped_no_capacity = 0
     skipped_tail = 0
     skipped_unalignable_timestamp = 0
+    skipped_cost_filter = 0
     skipped_remapped_event_timestamps = 0
     skipped_remapped_entry_timestamps = 0
     skipped_remapped_exit_timestamps = 0
@@ -569,6 +594,23 @@ def run_portfolio_barrier_backtest(
                     risk_sized_trade_count += 1
                 weight = float(np.sign(weight)) * sized_abs_weight
 
+            asset_max_cost_r_raw = params.get("max_cost_r", max_cost_r)
+            asset_max_cost_r = (
+                None
+                if asset_max_cost_r_raw is None
+                else _positive_float(asset_max_cost_r_raw, field=f"asset_params.{asset}.max_cost_r")
+            )
+            cost_filter_stats = _estimated_roundtrip_cost_filter_stats(
+                weight=weight,
+                entry_price=float(event["entry_price"]),
+                risk_distance=float(event["risk_distance"]),
+                cost_per_turnover=cost_per_turnover,
+                slippage_per_turnover=slippage_per_turnover,
+            )
+            if asset_max_cost_r is not None and cost_filter_stats["estimated_cost_r"] > float(asset_max_cost_r):
+                skipped_cost_filter += 1
+                continue
+
             pnl = _realized_trade_pnl(
                 side=side,
                 weight=weight,
@@ -644,6 +686,10 @@ def run_portfolio_barrier_backtest(
                 "net_return": pnl["net_return"],
                 "realized_r": pnl["realized_r"],
                 "trade_r": pnl["realized_r"],
+                "risk_fraction": cost_filter_stats["risk_fraction"],
+                "estimated_cost": cost_filter_stats["estimated_cost"],
+                "estimated_cost_r": cost_filter_stats["estimated_cost_r"],
+                "max_cost_r": asset_max_cost_r,
                 "cost": pnl["cost"],
                 "fixed_cost": pnl["fixed_cost"],
                 "slippage": pnl["slippage"],
@@ -690,6 +736,10 @@ def run_portfolio_barrier_backtest(
                 "gross_return",
                 "net_return",
                 "realized_r",
+                "risk_fraction",
+                "estimated_cost",
+                "estimated_cost_r",
+                "max_cost_r",
                 "cost",
                 "slippage",
                 "was_oos",
@@ -748,12 +798,14 @@ def run_portfolio_barrier_backtest(
         "volatility_col": volatility_col,
         "tie_break": tie_break,
         "event_time_remap_policy": event_time_remap_policy,
+        "max_cost_r": max_cost_r,
         "asset_params": dict(asset_params_by_asset),
         "asset_groups": dict(asset_groups),
         "trade_count": int(len(trades_df)),
         "skipped_no_capacity": int(skipped_no_capacity),
         "skipped_tail": int(skipped_tail),
         "skipped_unalignable_timestamp": int(skipped_unalignable_timestamp),
+        "skipped_cost_filter": int(skipped_cost_filter),
         "skipped_remapped_event_timestamps": int(skipped_remapped_event_timestamps),
         "skipped_remapped_entry_timestamps": int(skipped_remapped_entry_timestamps),
         "skipped_remapped_exit_timestamps": int(skipped_remapped_exit_timestamps),
