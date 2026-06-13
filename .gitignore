@@ -145,4 +145,4 @@ tests/*
 !tests/signals/*.py
 !tests/execution/
 !tests/execution/*.py
-data/
+
