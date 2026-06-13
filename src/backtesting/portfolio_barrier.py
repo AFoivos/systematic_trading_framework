@@ -12,6 +12,7 @@ from src.targets.directional_triple_barrier import resolve_directional_barrier_d
 
 _ALLOWED_ENTRY_PRICE_MODES = frozenset({"current_close", "next_open"})
 _ALLOWED_TIE_BREAKS = frozenset({"closest_to_open", "profit", "stop"})
+_ALLOWED_EVENT_TIME_REMAP_POLICIES = frozenset({"next_aligned", "skip"})
 
 
 def _positive_float(value: Any, *, field: str) -> float:
@@ -346,6 +347,7 @@ def run_portfolio_barrier_backtest(
     asset_params: Mapping[str, Mapping[str, Any]] | None = None,
     asset_to_group: Mapping[str, str] | None = None,
     portfolio_guard: Mapping[str, Any] | None = None,
+    event_time_remap_policy: str = "next_aligned",
 ) -> tuple[PortfolioPerformance, pd.DataFrame, pd.DataFrame, dict[str, Any]]:
     """
     Event-based multi-asset portfolio backtest using directional triple-barrier exits.
@@ -364,12 +366,15 @@ def run_portfolio_barrier_backtest(
     entry_price_mode = str(entry_price_mode)
     tie_break = str(tie_break)
     subset = str(subset)
+    event_time_remap_policy = str(event_time_remap_policy)
     if entry_price_mode not in _ALLOWED_ENTRY_PRICE_MODES:
         raise ValueError("portfolio_barrier entry_price_mode must be one of: current_close, next_open.")
     if tie_break not in _ALLOWED_TIE_BREAKS:
         raise ValueError("portfolio_barrier tie_break must be one of: closest_to_open, profit, stop.")
     if subset not in {"full", "test"}:
         raise ValueError("portfolio_barrier subset must be 'full' or 'test'.")
+    if event_time_remap_policy not in _ALLOWED_EVENT_TIME_REMAP_POLICIES:
+        raise ValueError("portfolio_barrier event_time_remap_policy must be 'next_aligned' or 'skip'.")
 
     profit_barrier_r = _positive_float(profit_barrier_r, field="profit_barrier_r")
     stop_barrier_r = _positive_float(stop_barrier_r, field="stop_barrier_r")
@@ -422,6 +427,9 @@ def run_portfolio_barrier_backtest(
     skipped_no_capacity = 0
     skipped_tail = 0
     skipped_unalignable_timestamp = 0
+    skipped_remapped_event_timestamps = 0
+    skipped_remapped_entry_timestamps = 0
+    skipped_remapped_exit_timestamps = 0
     remapped_entry_timestamps = 0
     remapped_exit_timestamps = 0
     ignored_open_signals = 0
@@ -540,6 +548,11 @@ def run_portfolio_barrier_backtest(
             exit_time, exit_remapped = _remap_to_next_aligned_timestamp(weights.index, raw_exit_time)
             if entry_time is None or exit_time is None:
                 skipped_unalignable_timestamp += 1
+                continue
+            if event_time_remap_policy == "skip" and (entry_remapped or exit_remapped):
+                skipped_remapped_event_timestamps += 1
+                skipped_remapped_entry_timestamps += int(entry_remapped)
+                skipped_remapped_exit_timestamps += int(exit_remapped)
                 continue
             remapped_entry_timestamps += int(entry_remapped)
             remapped_exit_timestamps += int(exit_remapped)
@@ -734,12 +747,16 @@ def run_portfolio_barrier_backtest(
         "vertical_barrier_bars": None if vertical_barrier_bars is None else int(vertical_barrier_bars),
         "volatility_col": volatility_col,
         "tie_break": tie_break,
+        "event_time_remap_policy": event_time_remap_policy,
         "asset_params": dict(asset_params_by_asset),
         "asset_groups": dict(asset_groups),
         "trade_count": int(len(trades_df)),
         "skipped_no_capacity": int(skipped_no_capacity),
         "skipped_tail": int(skipped_tail),
         "skipped_unalignable_timestamp": int(skipped_unalignable_timestamp),
+        "skipped_remapped_event_timestamps": int(skipped_remapped_event_timestamps),
+        "skipped_remapped_entry_timestamps": int(skipped_remapped_entry_timestamps),
+        "skipped_remapped_exit_timestamps": int(skipped_remapped_exit_timestamps),
         "skipped_max_open_trades": int(skipped_max_open_trades),
         "skipped_group_max_open_trades": int(skipped_group_max_open_trades),
         "skipped_group_cap": int(skipped_group_cap),

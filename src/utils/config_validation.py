@@ -2664,6 +2664,11 @@ def validate_backtest_block(backtest: dict[str, Any]) -> None:
         tie_break = str(backtest.get("tie_break", "closest_to_open"))
         if tie_break not in {"closest_to_open", "profit", "stop"}:
             raise ConfigValidationError("backtest.tie_break must be 'closest_to_open', 'profit', or 'stop'.")
+        event_time_remap_policy = str(backtest.get("event_time_remap_policy", "next_aligned"))
+        if event_time_remap_policy not in {"next_aligned", "skip"}:
+            raise ConfigValidationError(
+                "backtest.event_time_remap_policy must be 'next_aligned' or 'skip'."
+            )
         for key in ("profit_barrier_r", "stop_barrier_r"):
             value = _finite_number(backtest.get(key), field=f"backtest.{key}")
             if value <= 0.0:
@@ -2915,7 +2920,9 @@ def validate_diagnostics_block(diagnostics: dict[str, Any]) -> None:
         raise ConfigValidationError("diagnostics.robustness must be a mapping.")
     if not isinstance(robustness.get("enabled", False), bool):
         raise ConfigValidationError("diagnostics.robustness.enabled must be boolean.")
-    for key in ("cost_multipliers", "entry_delay_bars"):
+    if not isinstance(robustness.get("strict_no_remap", False), bool):
+        raise ConfigValidationError("diagnostics.robustness.strict_no_remap must be boolean.")
+    for key in ("cost_multipliers", "entry_delay_bars", "combined_cost_multipliers", "gross_cap_values"):
         value = robustness.get(key, [])
         if value is None:
             continue
@@ -2924,8 +2931,13 @@ def validate_diagnostics_block(diagnostics: dict[str, Any]) -> None:
         for idx, item in enumerate(value):
             if key == "entry_delay_bars":
                 _positive_int(item, field=f"diagnostics.robustness.{key}[{idx}]")
-            elif _finite_number(item, field=f"diagnostics.robustness.{key}[{idx}]") < 0:
-                raise ConfigValidationError(f"diagnostics.robustness.{key}[{idx}] must be >= 0.")
+            else:
+                numeric = _finite_number(item, field=f"diagnostics.robustness.{key}[{idx}]")
+                if key == "gross_cap_values":
+                    if numeric <= 0.0:
+                        raise ConfigValidationError(f"diagnostics.robustness.{key}[{idx}] must be > 0.")
+                elif numeric < 0.0:
+                    raise ConfigValidationError(f"diagnostics.robustness.{key}[{idx}] must be >= 0.")
     frequency = robustness.get("walk_forward_frequency", "YE")
     if frequency is not None and (not isinstance(frequency, str) or not frequency.strip()):
         raise ConfigValidationError("diagnostics.robustness.walk_forward_frequency must be a non-empty string.")

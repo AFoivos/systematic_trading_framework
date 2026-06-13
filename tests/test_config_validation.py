@@ -255,6 +255,7 @@ def test_validate_portfolio_barrier_bot_controls() -> None:
             "profit_barrier_r": 3.0,
             "stop_barrier_r": 2.0,
             "vertical_barrier_bars": None,
+            "event_time_remap_policy": "skip",
             "asset_params": {
                 "AAA": {
                     "volatility_col": "atr_20",
@@ -287,6 +288,9 @@ def test_validate_portfolio_barrier_bot_controls() -> None:
                 "walk_forward_frequency": "YE",
                 "gap_loss_per_exposure": 0.001,
                 "max_gap_multiple": 3.0,
+                "strict_no_remap": True,
+                "combined_cost_multipliers": [2.0, 3.0],
+                "gross_cap_values": [1.0, 1.25, 1.5],
             },
         }
     )
@@ -304,6 +308,44 @@ def test_validate_portfolio_barrier_bot_controls() -> None:
                 "profit_barrier_r": 3.0,
                 "stop_barrier_r": 2.0,
                 "asset_params": {"AAA": {"risk_per_trade": 0.0}},
+            }
+        )
+
+    with pytest.raises(ConfigValidationError, match="event_time_remap_policy"):
+        validate_backtest_block(
+            {
+                "engine": "portfolio_barrier",
+                "returns_col": "close_ret",
+                "signal_col": "signal",
+                "periods_per_year": 12096,
+                "returns_type": "simple",
+                "missing_return_policy": "raise_if_exposed",
+                "volatility_col": "atr_14",
+                "profit_barrier_r": 3.0,
+                "stop_barrier_r": 2.0,
+                "event_time_remap_policy": "bad",
+            }
+        )
+
+    with pytest.raises(ConfigValidationError, match="strict_no_remap"):
+        validate_diagnostics_block(
+            {
+                "enabled": True,
+                "robustness": {
+                    "enabled": True,
+                    "strict_no_remap": "yes",
+                },
+            }
+        )
+
+    with pytest.raises(ConfigValidationError, match="gross_cap_values"):
+        validate_diagnostics_block(
+            {
+                "enabled": True,
+                "robustness": {
+                    "enabled": True,
+                    "gross_cap_values": [0.0],
+                },
             }
         )
 

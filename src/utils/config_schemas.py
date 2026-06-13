@@ -400,6 +400,7 @@ class BacktestConfig:
     stop_barrier_r: float | None = None
     vertical_barrier_bars: int | None = None
     tie_break: str | None = None
+    event_time_remap_policy: str | None = None
     risk_per_trade: float | None = None
     max_holding_bars: int | None = None
     asset_params: dict[str, Any] = field(default_factory=dict)
@@ -432,6 +433,7 @@ class BacktestConfig:
             "stop_barrier_r",
             "vertical_barrier_bars",
             "tie_break",
+            "event_time_remap_policy",
             "risk_per_trade",
             "max_holding_bars",
             "asset_params",
@@ -477,6 +479,11 @@ class BacktestConfig:
                 int(vertical_barrier_bars) if vertical_barrier_bars is not None else None
             ),
             tie_break=(str(data["tie_break"]) if data.get("tie_break") is not None else None),
+            event_time_remap_policy=(
+                str(data["event_time_remap_policy"])
+                if data.get("event_time_remap_policy") is not None
+                else None
+            ),
             risk_per_trade=(
                 float(data["risk_per_trade"]) if data.get("risk_per_trade") is not None else None
             ),
@@ -511,6 +518,7 @@ class BacktestConfig:
             "stop_barrier_r": self.stop_barrier_r,
             "vertical_barrier_bars": self.vertical_barrier_bars,
             "tie_break": self.tie_break,
+            "event_time_remap_policy": self.event_time_remap_policy,
             "risk_per_trade": self.risk_per_trade,
             "max_holding_bars": self.max_holding_bars,
             "asset_params": dict(self.asset_params),

@@ -248,6 +248,7 @@ def default_backtest_block(
         backtest.setdefault("stop_barrier_r", 1.0)
         backtest.setdefault("vertical_barrier_bars", 4)
         backtest.setdefault("tie_break", "closest_to_open")
+        backtest.setdefault("event_time_remap_policy", "next_aligned")
     return backtest
 
 
@@ -310,6 +311,9 @@ def default_diagnostics_block(diagnostics: dict[str, Any]) -> dict[str, Any]:
     robustness.setdefault("walk_forward_frequency", "YE")
     robustness.setdefault("gap_loss_per_exposure", 0.0)
     robustness.setdefault("max_gap_multiple", 3.0)
+    robustness.setdefault("strict_no_remap", False)
+    robustness.setdefault("combined_cost_multipliers", [])
+    robustness.setdefault("gross_cap_values", [])
     diagnostics["robustness"] = robustness
     return diagnostics
 

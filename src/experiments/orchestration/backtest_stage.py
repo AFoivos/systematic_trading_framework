@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
 import numpy as np
@@ -344,6 +345,7 @@ def run_portfolio_backtest(
             asset_params=dict(backtest_cfg.get("asset_params", {}) or {}),
             asset_to_group=asset_groups or None,
             portfolio_guard=dict(risk_cfg.get("portfolio_guard", {}) or {}),
+            event_time_remap_policy=str(backtest_cfg.get("event_time_remap_policy", "next_aligned")),
         )
         portfolio_meta = PortfolioMetaPayload(
             construction="portfolio_barrier",
@@ -529,6 +531,20 @@ def _primary_robustness_fields(payload: dict[str, Any]) -> dict[str, float]:
     for key in ("cumulative_return", "sharpe", "max_drawdown", "profit_factor"):
         if key in gap_metrics:
             fields[f"robustness_gap_{key}"] = float(gap_metrics[key])
+    combined_stress = dict(payload.get("combined_stress", {}) or {})
+    for scenario, metrics in sorted(combined_stress.items()):
+        if isinstance(metrics, dict):
+            safe_name = str(scenario).replace(".", "_").replace("-", "_")
+            for key in (
+                "cumulative_return",
+                "sharpe",
+                "max_drawdown",
+                "profit_factor",
+                "positive_asset_count",
+                "positive_asset_ratio",
+            ):
+                if key in metrics:
+                    fields[f"robustness_{safe_name}_{key}"] = float(metrics[key])
     return fields
 
 
@@ -580,6 +596,97 @@ def _run_portfolio_delay_stress(
     )
 
 
+def _asset_net_contribution_summary(trades: pd.DataFrame | None, *, expected_assets: int) -> dict[str, Any]:
+    if trades is None or trades.empty or "asset" not in trades.columns or "net_return" not in trades.columns:
+        return {
+            "positive_asset_count": 0,
+            "asset_count": int(expected_assets),
+            "positive_asset_ratio": 0.0,
+            "asset_net_returns": {},
+        }
+    by_asset = (
+        trades.assign(net_return=pd.to_numeric(trades["net_return"], errors="coerce").fillna(0.0))
+        .groupby(trades["asset"].astype(str))["net_return"]
+        .sum()
+        .sort_index()
+    )
+    positive_count = int((by_asset > 0.0).sum())
+    asset_count = int(max(expected_assets, len(by_asset)))
+    return {
+        "positive_asset_count": positive_count,
+        "asset_count": asset_count,
+        "positive_asset_ratio": float(positive_count / max(asset_count, 1)),
+        "asset_net_returns": {str(asset): float(value) for asset, value in by_asset.items()},
+    }
+
+
+def _run_portfolio_combined_stress(
+    asset_frames: dict[str, pd.DataFrame],
+    *,
+    cfg: dict[str, Any],
+    event_time_remap_policy: str,
+    gross_cap: float,
+    cost_multiplier: float,
+) -> dict[str, Any]:
+    variant_cfg = deepcopy(cfg)
+    variant_cfg["backtest"] = dict(variant_cfg.get("backtest", {}) or {})
+    variant_cfg["backtest"]["event_time_remap_policy"] = str(event_time_remap_policy)
+
+    variant_cfg["risk"] = dict(variant_cfg.get("risk", {}) or {})
+    variant_cfg["risk"]["cost_per_turnover"] = (
+        float(cfg.get("risk", {}).get("cost_per_turnover", 0.0)) * float(cost_multiplier)
+    )
+    variant_cfg["risk"]["slippage_per_turnover"] = (
+        float(cfg.get("risk", {}).get("slippage_per_turnover", 0.0)) * float(cost_multiplier)
+    )
+
+    variant_cfg["portfolio"] = dict(variant_cfg.get("portfolio", {}) or {})
+    constraints = dict(variant_cfg["portfolio"].get("constraints", {}) or {})
+    constraints["max_gross_leverage"] = float(gross_cap)
+    variant_cfg["portfolio"]["constraints"] = constraints
+
+    performance, _, diagnostics, meta = run_portfolio_backtest(asset_frames, cfg=variant_cfg)
+    returns = (
+        performance.mark_to_market_returns
+        if performance.mark_to_market_returns is not None
+        else performance.net_returns
+    )
+    metrics = summarize_returns(
+        returns,
+        periods_per_year=int(variant_cfg["backtest"].get("periods_per_year", 252)),
+    )
+    barrier_meta = dict(meta.get("barrier", {}) or {})
+    trades = getattr(performance, "trades", None)
+    trade_count = int(barrier_meta.get("trade_count", len(trades) if trades is not None else 0))
+    metrics.update(
+        {
+            "event_time_remap_policy": str(event_time_remap_policy),
+            "gross_cap": float(gross_cap),
+            "cost_multiplier": float(cost_multiplier),
+            "trade_count": trade_count,
+            "avg_gross_exposure": float(diagnostics["gross_exposure"].mean()) if not diagnostics.empty else 0.0,
+            "max_gross_exposure": float(diagnostics["gross_exposure"].max()) if not diagnostics.empty else 0.0,
+        }
+    )
+    for key in (
+        "remapped_entry_timestamps",
+        "remapped_exit_timestamps",
+        "skipped_remapped_event_timestamps",
+        "skipped_remapped_entry_timestamps",
+        "skipped_remapped_exit_timestamps",
+        "skipped_unalignable_timestamp",
+    ):
+        if key in barrier_meta:
+            metrics[key] = int(barrier_meta[key])
+    metrics.update(
+        _asset_net_contribution_summary(
+            getattr(performance, "trades", None),
+            expected_assets=len(asset_frames),
+        )
+    )
+    return metrics
+
+
 def build_robustness_diagnostics(
     asset_frames: dict[str, pd.DataFrame],
     *,
@@ -610,6 +717,14 @@ def build_robustness_diagnostics(
         for value in list(robustness_cfg.get("entry_delay_bars", [1, 2]) or [])
         if int(value) > 0
     ]
+    combined_cost_multipliers = [
+        float(value)
+        for value in list(robustness_cfg.get("combined_cost_multipliers", []) or [])
+    ]
+    gross_cap_values = [
+        float(value)
+        for value in list(robustness_cfg.get("gross_cap_values", []) or [])
+    ]
     payload: dict[str, Any] = {
         "cost_stress": cost_multiplier_stress(
             gross_returns=gross_returns,
@@ -625,6 +740,39 @@ def build_robustness_diagnostics(
         "mark_to_market": dict(getattr(performance, "mark_to_market_summary", {}) or {}),
         "entry_delay": {},
     }
+    if is_portfolio and (
+        bool(robustness_cfg.get("strict_no_remap", False))
+        or bool(combined_cost_multipliers)
+        or bool(gross_cap_values)
+    ):
+        base_gross_cap = float(
+            dict(cfg.get("portfolio", {}).get("constraints", {}) or {}).get(
+                "max_gross_leverage",
+                cfg.get("portfolio", {}).get("gross_target", 1.0),
+            )
+        )
+        remap_policy = (
+            "skip" if bool(robustness_cfg.get("strict_no_remap", False))
+            else str(cfg["backtest"].get("event_time_remap_policy", "next_aligned"))
+        )
+        if not combined_cost_multipliers:
+            combined_cost_multipliers = [1.0]
+        if not gross_cap_values:
+            gross_cap_values = [base_gross_cap]
+        payload["combined_stress"] = {}
+        for gross_cap in gross_cap_values:
+            for cost_multiplier in combined_cost_multipliers:
+                key = f"strict_{remap_policy}_gross_{gross_cap:g}_cost_x{cost_multiplier:g}"
+                try:
+                    payload["combined_stress"][key] = _run_portfolio_combined_stress(
+                        asset_frames,
+                        cfg=cfg,
+                        event_time_remap_policy=remap_policy,
+                        gross_cap=float(gross_cap),
+                        cost_multiplier=float(cost_multiplier),
+                    )
+                except Exception as exc:
+                    payload["combined_stress"][key] = {"error": f"{type(exc).__name__}: {exc}"}
 
     if position_path is not None:
         payload["gap_stress"] = gap_penalty_stress(

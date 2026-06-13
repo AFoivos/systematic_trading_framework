@@ -114,6 +114,47 @@ def test_portfolio_barrier_applies_asset_params_risk_sizing_and_open_trade_guard
     assert guarded_meta["skipped_max_open_trades"] == 1
 
 
+def test_portfolio_barrier_strict_remap_policy_skips_unaligned_event_times() -> None:
+    aaa = _portfolio_barrier_frame()
+    aaa.loc[aaa.index[1], "high"] = 101.5
+    bbb = _portfolio_barrier_frame()
+    bbb["signal"] = 0.0
+    bbb = bbb.drop(index=bbb.index[1])
+
+    performance, weights, diagnostics, meta = run_portfolio_barrier_backtest(
+        {"AAA": aaa, "BBB": bbb},
+        signal_col="signal",
+        volatility_col="atr_14",
+        alignment="inner",
+        constraints=PortfolioConstraints(min_weight=0.0, enforce_target_net_exposure=False),
+        periods_per_year=12096,
+        event_time_remap_policy="skip",
+    )
+
+    assert performance.trades.empty
+    assert weights.abs().sum().sum() == pytest.approx(0.0)
+    assert diagnostics["open_trade_count"].sum() == pytest.approx(0.0)
+    assert meta["event_time_remap_policy"] == "skip"
+    assert meta["trade_count"] == 0
+    assert meta["remapped_entry_timestamps"] == 0
+    assert meta["remapped_exit_timestamps"] == 0
+    assert meta["skipped_remapped_event_timestamps"] == 1
+    assert meta["skipped_remapped_entry_timestamps"] == 1
+    assert meta["skipped_remapped_exit_timestamps"] == 1
+
+
+def test_portfolio_barrier_rejects_invalid_remap_policy() -> None:
+    frame = _portfolio_barrier_frame()
+
+    with pytest.raises(ValueError, match="event_time_remap_policy"):
+        run_portfolio_barrier_backtest(
+            {"AAA": frame},
+            signal_col="signal",
+            volatility_col="atr_14",
+            event_time_remap_policy="bad",
+        )
+
+
 def test_apply_constraints_respects_bounds_group_gross_and_turnover() -> None:
     """
     Verify that constraints respects bounds group gross and turnover behaves as expected under a

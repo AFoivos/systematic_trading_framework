@@ -972,6 +972,14 @@ diagnostics:
     walk_forward_frequency: YE
     gap_loss_per_exposure: 0.001
     max_gap_multiple: 3.0
+    strict_no_remap: true
+    combined_cost_multipliers:
+    - 2.0
+    - 3.0
+    gross_cap_values:
+    - 1.0
+    - 1.25
+    - 1.5
 execution:
   enabled: false
   mode: paper
