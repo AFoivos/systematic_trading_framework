@@ -232,6 +232,28 @@ def test_missing_mt5_credentials_fail_safely(monkeypatch: pytest.MonkeyPatch) ->
         )
 
 
+def test_direct_mt5_credentials_from_config_mapping() -> None:
+    fake_mt5 = FakeMT5Module()
+    connector = MT5Connector(mt5_module=fake_mt5)
+
+    connector.login_from_mapping(
+        {
+            "login": "1513691391",
+            "password": "secret",
+            "server": "FTMO-Demo",
+        }
+    )
+
+    assert fake_mt5.login_calls == [(1513691391, "secret", "FTMO-Demo")]
+
+
+def test_direct_mt5_credentials_require_all_fields() -> None:
+    connector = MT5Connector(mt5_module=FakeMT5Module())
+
+    with pytest.raises(MT5CredentialsError, match="password"):
+        connector.credentials_from_mapping({"login": 1513691391, "server": "FTMO-Demo"})
+
+
 def test_single_instance_lock_rejects_second_active_holder(tmp_path) -> None:
     lock_path = tmp_path / "mt5_demo_bot.lock"
 

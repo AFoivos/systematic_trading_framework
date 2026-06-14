@@ -132,6 +132,27 @@ class MT5Connector:
         )
         self.login(login=login, password=password, server=server)
 
+    def login_from_mapping(self, config: dict[str, Any]) -> None:
+        login, password, server = self.credentials_from_mapping(config)
+        self.login(login=login, password=password, server=server)
+
+    def credentials_from_mapping(self, config: dict[str, Any]) -> tuple[int, str, str]:
+        values = {
+            "login": config.get("login"),
+            "password": config.get("password"),
+            "server": config.get("server"),
+        }
+        missing = [field for field, value in values.items() if value in (None, "")]
+        if missing:
+            raise MT5CredentialsError(
+                "Missing MT5 credential config fields: " + ", ".join(missing)
+            )
+        try:
+            login = int(str(values["login"]))
+        except ValueError as exc:
+            raise MT5CredentialsError("mt5.login must be an integer login id.") from exc
+        return login, str(values["password"]), str(values["server"])
+
     def login(self, *, login: int, password: str, server: str) -> None:
         ok = self.mt5.login(login=int(login), password=password, server=server)
         if not ok:

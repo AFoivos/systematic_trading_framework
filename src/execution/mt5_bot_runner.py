@@ -171,11 +171,14 @@ class MT5DemoBot:
     def connect(self) -> None:
         mt5_cfg = dict(self.execution_cfg.get("mt5", {}) or {})
         self.connector.initialize()
-        self.connector.login_from_env(
-            login_env=str(mt5_cfg.get("login_env", "MT5_LOGIN")),
-            password_env=str(mt5_cfg.get("password_env", "MT5_PASSWORD")),
-            server_env=str(mt5_cfg.get("server_env", "MT5_SERVER")),
-        )
+        if _has_direct_mt5_credentials(mt5_cfg):
+            self.connector.login_from_mapping(mt5_cfg)
+        else:
+            self.connector.login_from_env(
+                login_env=str(mt5_cfg.get("login_env", "MT5_LOGIN")),
+                password_env=str(mt5_cfg.get("password_env", "MT5_PASSWORD")),
+                server_env=str(mt5_cfg.get("server_env", "MT5_SERVER")),
+            )
         require_demo = bool(self.safety_cfg.get("require_demo_account", True)) or bool(
             self.risk_manager.config.demo_only
         )
@@ -439,6 +442,10 @@ def _pid_is_running(pid: int) -> bool:
     except OSError:
         return False
     return True
+
+
+def _has_direct_mt5_credentials(config: Mapping[str, Any]) -> bool:
+    return any(config.get(field) not in (None, "") for field in ("login", "password", "server"))
 
 
 def _windows_pid_is_running(pid: int) -> bool:
