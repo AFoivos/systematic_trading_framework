@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from src.execution.mt5_connector import MT5Connector, MT5CredentialsError
+from src.execution.mt5_bot_runner import SingleInstanceLock, SingleInstanceLockError
 from src.execution.mt5_order_manager import MT5OrderManager, TradeParameters
 from src.execution.mt5_position_manager import MT5PositionManager
 from src.execution.mt5_risk_manager import MT5RiskManager, RiskConfig, calculate_position_size
@@ -229,6 +230,28 @@ def test_missing_mt5_credentials_fail_safely(monkeypatch: pytest.MonkeyPatch) ->
             password_env="MT5_PASSWORD",
             server_env="MT5_SERVER",
         )
+
+
+def test_single_instance_lock_rejects_second_active_holder(tmp_path) -> None:
+    lock_path = tmp_path / "mt5_demo_bot.lock"
+
+    with SingleInstanceLock(lock_path):
+        with pytest.raises(SingleInstanceLockError, match="already running"):
+            with SingleInstanceLock(lock_path):
+                pass
+
+    assert not lock_path.exists()
+
+
+def test_single_instance_lock_replaces_stale_lock(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    lock_path = tmp_path / "mt5_demo_bot.lock"
+    lock_path.write_text('{"pid": 999999}', encoding="utf-8")
+    monkeypatch.setattr("src.execution.mt5_bot_runner._pid_is_running", lambda _: False)
+
+    with SingleInstanceLock(lock_path):
+        assert lock_path.exists()
+
+    assert not lock_path.exists()
 
 
 def test_max_spread_blocks_order_send() -> None:

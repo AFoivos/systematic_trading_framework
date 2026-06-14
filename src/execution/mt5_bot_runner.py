@@ -4,6 +4,7 @@ import argparse
 from datetime import datetime, timezone
 import json
 import logging
+import os
 from pathlib import Path
 import sys
 import time
@@ -22,6 +23,66 @@ from src.utils.config import load_experiment_config
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+class SingleInstanceLockError(RuntimeError):
+    """Raised when another bot process already owns the execution lock."""
+
+
+class SingleInstanceLock:
+    """Atomic pid-file lock that prevents duplicate live bot loops."""
+
+    def __init__(self, path: Path, *, metadata: Mapping[str, Any] | None = None) -> None:
+        self.path = path
+        self.metadata = dict(metadata or {})
+        self._fd: int | None = None
+
+    def __enter__(self) -> SingleInstanceLock:
+        self.acquire()
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.release()
+
+    def acquire(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "pid": os.getpid(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            **self.metadata,
+        }
+        while True:
+            try:
+                self._fd = os.open(str(self.path), os.O_CREAT | os.O_EXCL | os.O_RDWR)
+            except FileExistsError as exc:
+                existing = _read_lock_payload(self.path)
+                pid = _lock_pid(existing)
+                if pid is not None and _pid_is_running(pid):
+                    raise SingleInstanceLockError(
+                        f"MT5 demo bot is already running with pid={pid}. "
+                        f"Stop that process before starting another one. lock_path={self.path}"
+                    ) from exc
+                try:
+                    self.path.unlink()
+                except FileNotFoundError:
+                    pass
+                continue
+            break
+
+        os.write(self._fd, json.dumps(_jsonable(payload), sort_keys=True).encode("utf-8"))
+        os.write(self._fd, b"\n")
+
+    def release(self) -> None:
+        if self._fd is None:
+            return
+        owned_by_self = _lock_pid(_read_lock_payload(self.path)) == os.getpid()
+        os.close(self._fd)
+        self._fd = None
+        if owned_by_self:
+            try:
+                self.path.unlink()
+            except FileNotFoundError:
+                pass
 
 
 def _attr(obj: Any, name: str, default: Any = None) -> Any:
@@ -65,6 +126,7 @@ class MT5DemoBot:
         )
 
         log_dir = _resolve_path(self.config.get("logging", {}).get("output_dir", "logs/mt5_demo"))
+        self.lock_path = log_dir / "mt5_demo_bot.lock"
         self.event_logger = JsonlEventLogger(log_dir)
         self.logger = _configure_logger(log_dir)
 
@@ -304,15 +366,23 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--once and --loop are mutually exclusive.")
     bot = MT5DemoBot(config_path=args.config, force_dry_run=args.dry_run)
     try:
-        bot.connect()
-        if args.loop:
-            bot.run_loop(sleep_seconds=args.sleep_seconds)
-        else:
-            bot.run_once()
+        with SingleInstanceLock(
+            bot.lock_path,
+            metadata={"config_path": str(bot.config_path), "execution_mode": bot.execution_mode},
+        ):
+            try:
+                bot.connect()
+                if args.loop:
+                    bot.run_loop(sleep_seconds=args.sleep_seconds)
+                else:
+                    bot.run_once()
+            finally:
+                bot.shutdown()
+    except SingleInstanceLockError as exc:
+        bot.logger.error("%s", exc)
+        return 2
     except KeyboardInterrupt:
         return 130
-    finally:
-        bot.shutdown()
     return 0
 
 
@@ -333,6 +403,62 @@ def _configure_logger(log_dir: Path) -> logging.Logger:
     logger.addHandler(file_handler)
     logger.addHandler(stream_handler)
     return logger
+
+
+def _read_lock_payload(path: Path) -> dict[str, Any]:
+    try:
+        raw = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return {}
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _lock_pid(payload: Mapping[str, Any]) -> int | None:
+    try:
+        pid = int(payload.get("pid"))
+    except (TypeError, ValueError):
+        return None
+    return pid if pid > 0 else None
+
+
+def _pid_is_running(pid: int) -> bool:
+    if os.name == "nt":
+        return _windows_pid_is_running(pid)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def _windows_pid_is_running(pid: int) -> bool:
+    import ctypes
+    from ctypes import wintypes
+
+    process_query_limited_information = 0x1000
+    synchronize = 0x00100000
+    still_active = 259
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    handle = kernel32.OpenProcess(process_query_limited_information | synchronize, False, int(pid))
+    if not handle:
+        return False
+    try:
+        exit_code = wintypes.DWORD()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+            return True
+        return int(exit_code.value) == still_active
+    finally:
+        kernel32.CloseHandle(handle)
 
 
 def _jsonable(value: Any) -> Any:
@@ -356,4 +482,11 @@ if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))
 
 
-__all__ = ["MT5DemoBot", "build_arg_parser", "load_execution_config", "main"]
+__all__ = [
+    "MT5DemoBot",
+    "SingleInstanceLock",
+    "SingleInstanceLockError",
+    "build_arg_parser",
+    "load_execution_config",
+    "main",
+]

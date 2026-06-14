@@ -228,7 +228,7 @@ backtest:
   close_col: close
   take_profit_r: 4.0
   stop_loss_r: 2.0
-  risk_per_trade: 0.006
+  risk_per_trade: 0.0025
   max_holding_bars: null
   dynamic_exits: {}
 portfolio:
