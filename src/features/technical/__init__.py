@@ -29,6 +29,8 @@ from .roc import compute_roc
 from .roc import add_roc_features
 from .rsi import compute_rsi
 from .rsi import add_rsi_features
+from .schaff_trend_cycle import compute_schaff_trend_cycle
+from .schaff_trend_cycle import add_schaff_trend_cycle_features
 from .sma import compute_sma
 from .stochastic_rsi import compute_stochastic_rsi
 from .stochastic_rsi import add_stochastic_rsi_features
@@ -62,6 +64,8 @@ __all__ = [
     "add_momentum_features",
     "compute_rsi",
     "add_rsi_features",
+    "compute_schaff_trend_cycle",
+    "add_schaff_trend_cycle_features",
     "compute_stoch_k",
     "compute_stoch_d",
     "add_stochastic_features",

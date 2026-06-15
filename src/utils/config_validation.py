@@ -809,6 +809,8 @@ def _validate_vwap_rms_ema_cross_long_params(params: dict[str, Any], *, field_pr
         "ppo_hist_negative_col",
         "ppo_above_signal_col",
         "ppo_below_signal_col",
+        "mfi_col",
+        "mfi_confirmation_col",
         "long_setup_col",
         "short_setup_col",
         "signal_col",
@@ -823,8 +825,28 @@ def _validate_vwap_rms_ema_cross_long_params(params: dict[str, Any], *, field_pr
             raise ConfigValidationError(
                 f"{field_prefix}.mode must be one of: long_only, short_only, long_short."
             )
+    for key in (
+        "use_ppo_confirmation",
+        "use_ema_regime",
+        "use_vwap_rms_cross",
+        "use_mfi_confirmation",
+    ):
+        if key in params and not isinstance(params[key], bool):
+            raise ConfigValidationError(f"{field_prefix}.{key} must be boolean.")
     if "ppo_hist_min" in params:
         _finite_number(params["ppo_hist_min"], field=f"{field_prefix}.ppo_hist_min")
+    mfi_values: dict[str, float] = {}
+    for key in ("mfi_lower", "mfi_upper"):
+        if key in params:
+            mfi_values[key] = _finite_number(params[key], field=f"{field_prefix}.{key}")
+    mfi_lower = mfi_values.get("mfi_lower", float(params.get("mfi_lower", 40.0)))
+    mfi_upper = mfi_values.get("mfi_upper", float(params.get("mfi_upper", 80.0)))
+    if mfi_lower > mfi_upper:
+        raise ConfigValidationError(f"{field_prefix}.mfi_lower must be <= {field_prefix}.mfi_upper.")
+    if "entry_delay_bars" in params:
+        entry_delay = params["entry_delay_bars"]
+        if isinstance(entry_delay, bool) or not isinstance(entry_delay, int) or int(entry_delay) < 0:
+            raise ConfigValidationError(f"{field_prefix}.entry_delay_bars must be a non-negative integer.")
 
 
 def _validate_vwap_rms_ema_cross_long_fractal_filter_params(
@@ -863,6 +885,84 @@ def _validate_vwap_rms_ema_cross_long_hmm_gate_params(
         )
 
 
+def _validate_stc_roofing_hilbert_params(params: dict[str, Any], *, field_prefix: str) -> None:
+    string_keys = {
+        "ema_fast_col",
+        "ema_slow_col",
+        "roofing_col",
+        "roofing_slope_col",
+        "stc_col",
+        "hilbert_cycle_ok_col",
+        "hilbert_amplitude_rising_col",
+        "zscore_momentum_col",
+        "adx_col",
+        "volatility_regime_col",
+        "long_candidate_col",
+        "short_candidate_col",
+        "signal_col",
+        "candidate_col",
+        "hilbert_long_candidate_col",
+        "hilbert_short_candidate_col",
+        "hilbert_signal_col",
+        "ema_bullish_col",
+        "ema_bearish_col",
+        "roofing_positive_col",
+        "roofing_negative_col",
+        "roofing_slope_positive_col",
+        "roofing_slope_negative_col",
+        "stc_cross_up_col",
+        "stc_cross_down_col",
+        "hilbert_pass_col",
+        "zscore_long_pass_col",
+        "zscore_short_pass_col",
+        "adx_pass_col",
+        "volatility_pass_col",
+    }
+    for key in string_keys:
+        if key in params and (not isinstance(params[key], str) or not params[key].strip()):
+            raise ConfigValidationError(f"{field_prefix}.{key} must be a non-empty string.")
+    if "mode" in params:
+        mode = str(params["mode"])
+        if mode not in {"long_only", "short_only", "long_short"}:
+            raise ConfigValidationError(
+                f"{field_prefix}.mode must be one of: long_only, short_only, long_short."
+            )
+    for key in (
+        "use_ema_regime",
+        "use_roofing_filter",
+        "use_roofing_slope",
+        "use_hilbert_filter",
+        "use_zscore_filter",
+        "use_adx_filter",
+        "use_atr_vol_filter",
+    ):
+        if key in params and not isinstance(params[key], bool):
+            raise ConfigValidationError(f"{field_prefix}.{key} must be boolean.")
+    for key in ("stc_long_cross_level", "stc_short_cross_level", "adx_min"):
+        if key in params:
+            value = _finite_number(params[key], field=f"{field_prefix}.{key}")
+            if key in {"stc_long_cross_level", "stc_short_cross_level"} and not 0.0 <= value <= 100.0:
+                raise ConfigValidationError(f"{field_prefix}.{key} must be in [0, 100].")
+            if key == "adx_min" and value < 0.0:
+                raise ConfigValidationError(f"{field_prefix}.{key} must be >= 0.")
+    long_level = float(params.get("stc_long_cross_level", 25.0))
+    short_level = float(params.get("stc_short_cross_level", 75.0))
+    if long_level >= short_level:
+        raise ConfigValidationError(
+            f"{field_prefix}.stc_long_cross_level must be less than {field_prefix}.stc_short_cross_level."
+        )
+    if "roofing_slope_bars" in params:
+        _positive_int(params["roofing_slope_bars"], field=f"{field_prefix}.roofing_slope_bars")
+    if "entry_delay_bars" in params:
+        _non_negative_int(params["entry_delay_bars"], field=f"{field_prefix}.entry_delay_bars")
+    regimes = params.get("allowed_volatility_regimes")
+    if regimes is not None:
+        if isinstance(regimes, (str, bytes)) or not isinstance(regimes, (list, tuple)) or not regimes:
+            raise ConfigValidationError(f"{field_prefix}.allowed_volatility_regimes must be a non-empty list.")
+        for idx, regime in enumerate(regimes):
+            _finite_number(regime, field=f"{field_prefix}.allowed_volatility_regimes[{idx}]")
+
+
 def validate_features_block(features: Any) -> None:
     if not isinstance(features, list):
         raise ConfigValidationError("features must be a list of steps.")
@@ -888,6 +988,99 @@ def validate_features_block(features: Any) -> None:
         _validate_string_mapping(step.get("outputs"), field="features[].outputs")
         if step["step"] == "roc_long_only_conditions":
             _validate_roc_long_only_conditions_params(step.get("params") or {}, field_prefix="features[].params")
+        if step["step"] == "roofing_filter":
+            params = step.get("params") or {}
+            for key in (
+                "price_col",
+                "output_col",
+                "slope_col",
+                "positive_col",
+                "negative_col",
+                "slope_positive_col",
+                "slope_negative_col",
+                "cross_up_zero_col",
+                "cross_down_zero_col",
+            ):
+                if key in params and params[key] is not None and (
+                    not isinstance(params[key], str) or not params[key].strip()
+                ):
+                    raise ConfigValidationError(f"features[].params.{key} must be a non-empty string.")
+            for key in ("high_pass_period", "low_pass_period", "slope_bars"):
+                if key in params and params[key] is not None:
+                    _positive_int(params[key], field=f"features[].params.{key}")
+                    if key in {"high_pass_period", "low_pass_period"} and int(params[key]) <= 1:
+                        raise ConfigValidationError(f"features[].params.{key} must be > 1.")
+            if "add_derived" in params and not isinstance(params["add_derived"], bool):
+                raise ConfigValidationError("features[].params.add_derived must be boolean.")
+            if (
+                params.get("high_pass_period") is not None
+                and params.get("low_pass_period") is not None
+                and int(params["high_pass_period"]) <= int(params["low_pass_period"])
+            ):
+                raise ConfigValidationError("features[].params.high_pass_period must be > low_pass_period.")
+        if step["step"] == "hilbert_transform":
+            params = step.get("params") or {}
+            for key in (
+                "price_col",
+                "amplitude_col",
+                "phase_col",
+                "instantaneous_frequency_col",
+                "dominant_cycle_col",
+                "cycle_ok_col",
+                "amplitude_rising_col",
+            ):
+                if key in params and params[key] is not None and (
+                    not isinstance(params[key], str) or not params[key].strip()
+                ):
+                    raise ConfigValidationError(f"features[].params.{key} must be a non-empty string.")
+            if "window" in params and params["window"] is not None:
+                _positive_int(params["window"], field="features[].params.window")
+                if int(params["window"]) < 4:
+                    raise ConfigValidationError("features[].params.window must be >= 4.")
+            for key in ("min_cycle", "max_cycle", "amplitude_slope_bars"):
+                if key in params and params[key] is not None:
+                    _positive_int(params[key], field=f"features[].params.{key}")
+            if (
+                params.get("min_cycle") is not None
+                and params.get("max_cycle") is not None
+                and int(params["min_cycle"]) > int(params["max_cycle"])
+            ):
+                raise ConfigValidationError("features[].params.min_cycle must be <= max_cycle.")
+            if "add_derived" in params and not isinstance(params["add_derived"], bool):
+                raise ConfigValidationError("features[].params.add_derived must be boolean.")
+        if step["step"] == "schaff_trend_cycle":
+            params = step.get("params") or {}
+            for key in (
+                "price_col",
+                "stc_col",
+                "stc_signal_col",
+                "cross_up_col",
+                "cross_down_col",
+                "rising_col",
+                "falling_col",
+            ):
+                if key in params and params[key] is not None and (
+                    not isinstance(params[key], str) or not params[key].strip()
+                ):
+                    raise ConfigValidationError(f"features[].params.{key} must be a non-empty string.")
+            for key in ("fast", "slow", "cycle", "smooth"):
+                if key in params and params[key] is not None:
+                    _positive_int(params[key], field=f"features[].params.{key}")
+                    if int(params[key]) <= 1:
+                        raise ConfigValidationError(f"features[].params.{key} must be > 1.")
+            if (
+                params.get("fast") is not None
+                and params.get("slow") is not None
+                and int(params["fast"]) >= int(params["slow"])
+            ):
+                raise ConfigValidationError("features[].params.fast must be < slow.")
+            for key in ("long_cross_level", "short_cross_level"):
+                if key in params:
+                    value = _finite_number(params[key], field=f"features[].params.{key}")
+                    if not 0.0 <= value <= 100.0:
+                        raise ConfigValidationError(f"features[].params.{key} must be in [0, 100].")
+            if float(params.get("long_cross_level", 25.0)) >= float(params.get("short_cross_level", 75.0)):
+                raise ConfigValidationError("features[].params.long_cross_level must be < short_cross_level.")
         if step["step"] == "feature_transforms":
             params = step.get("params") or {}
             transforms = params.get("transforms")
@@ -2174,6 +2367,75 @@ def validate_model_stages_block(model_stages: Any) -> None:
         raise ConfigValidationError("model_stages must contain at least one entry with enabled=true.")
 
 
+def _validate_c1_trend_pullback_vwap_params(params: dict[str, Any], *, field_prefix: str) -> None:
+    string_keys = {
+        "trend_regime_col",
+        "long_trigger_col",
+        "short_trigger_col",
+        "ppo_hist_col",
+        "ppo_above_signal_col",
+        "ppo_below_signal_col",
+        "mfi_col",
+        "stoch_k_col",
+        "stoch_d_col",
+        "zscore_momentum_col",
+        "volatility_regime_col",
+        "trend_quality_col",
+        "long_candidate_col",
+        "short_candidate_col",
+        "long_candidate_strict_col",
+        "short_candidate_strict_col",
+        "signal_col",
+        "candidate_col",
+    }
+    for key in string_keys:
+        if key in params and params[key] is not None and not isinstance(params[key], str):
+            raise ConfigValidationError(f"{field_prefix}.{key} must be a string.")
+    if "mode" in params and params.get("mode") is not None:
+        mode = str(params.get("mode"))
+        if mode not in {"long_only", "short_only", "long_short"}:
+            raise ConfigValidationError(
+                f"{field_prefix}.mode must be one of: long_only, short_only, long_short."
+            )
+    if "use_strict_signal" in params and not isinstance(params["use_strict_signal"], bool):
+        raise ConfigValidationError(f"{field_prefix}.use_strict_signal must be boolean.")
+
+    numeric_keys = {
+        "mfi_long_min",
+        "mfi_long_max",
+        "mfi_short_min",
+        "mfi_short_max",
+        "long_zscore_min",
+        "short_zscore_max",
+        "max_volatility_regime",
+        "strict_trend_quality_min",
+        "strict_mfi_long_min",
+        "strict_mfi_short_max",
+        "strict_long_zscore_min",
+        "strict_short_zscore_max",
+    }
+    values: dict[str, float] = {}
+    for key in numeric_keys:
+        if key in params:
+            values[key] = _finite_number(params[key], field=f"{field_prefix}.{key}")
+
+    mfi_long_min = values.get("mfi_long_min", float(params.get("mfi_long_min", 40.0)))
+    mfi_long_max = values.get("mfi_long_max", float(params.get("mfi_long_max", 80.0)))
+    if mfi_long_min > mfi_long_max:
+        raise ConfigValidationError(f"{field_prefix}.mfi_long_min must be <= {field_prefix}.mfi_long_max.")
+    mfi_short_min = values.get("mfi_short_min", float(params.get("mfi_short_min", 20.0)))
+    mfi_short_max = values.get("mfi_short_max", float(params.get("mfi_short_max", 60.0)))
+    if mfi_short_min > mfi_short_max:
+        raise ConfigValidationError(f"{field_prefix}.mfi_short_min must be <= {field_prefix}.mfi_short_max.")
+
+    trend_quality_min = values.get(
+        "strict_trend_quality_min",
+        float(params.get("strict_trend_quality_min", 0.35)),
+    )
+    if not 0.0 <= trend_quality_min <= 1.0:
+        raise ConfigValidationError(f"{field_prefix}.strict_trend_quality_min must be in [0,1].")
+
+
 def validate_signals_block(signals: dict[str, Any]) -> None:
     if "kind" not in signals:
         raise ConfigValidationError("signals.kind is required.")
@@ -2427,6 +2689,10 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
             raise ConfigValidationError("signals.params.require_all_conditions must be boolean.")
     if signals["kind"] == "ppo_adx_stochrsi_trend":
         _validate_ppo_adx_stochrsi_trend_params(params, field_prefix="signals.params")
+    if signals["kind"] == "c1_trend_pullback_vwap":
+        _validate_c1_trend_pullback_vwap_params(params, field_prefix="signals.params")
+    if signals["kind"] == "stc_roofing_hilbert":
+        _validate_stc_roofing_hilbert_params(params, field_prefix="signals.params")
     if signals["kind"] == "ema_rms_ppo_vwap":
         _validate_ema_rms_ppo_vwap_params(params, field_prefix="signals.params")
     if signals["kind"] == "vwap_rms_ema_cross_long":

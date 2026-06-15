@@ -36,7 +36,12 @@ def should_apply_post_signal_target(model_cfg: dict[str, Any]) -> bool:
     if str(model_cfg.get("kind", "none")) != "none":
         return False
     target_cfg = _flatten_target_cfg(dict(model_cfg.get("target", {}) or {}))
-    return str(target_cfg.get("kind", "")) in {"forward_return", "triple_barrier", "r_multiple"}
+    return str(target_cfg.get("kind", "")) in {
+        "forward_return",
+        "triple_barrier",
+        "directional_triple_barrier",
+        "r_multiple",
+    }
 
 
 def _weighted_rate(items: list[dict[str, Any]], *, value_key: str, weight_key: str) -> float | None:
@@ -129,6 +134,9 @@ def aggregate_target_metas(per_asset_meta: dict[str, dict[str, Any]]) -> dict[st
         "labeled_rows",
         "take_profit_count",
         "stop_loss_count",
+        "profit_barrier_count",
+        "stop_barrier_count",
+        "neutral_count",
         "max_holding_close_count",
         "unavailable_tail_count",
         "invalid_entry_count",
@@ -147,6 +155,8 @@ def aggregate_target_metas(per_asset_meta: dict[str, dict[str, Any]]) -> dict[st
         "q75_trade_r",
         "avg_bars_held",
         "median_bars_held",
+        "avg_hit_step",
+        "median_hit_step",
     ):
         value = _average_present(items, key=key)
         if value is not None:

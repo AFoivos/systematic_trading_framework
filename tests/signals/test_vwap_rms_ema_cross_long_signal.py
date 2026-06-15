@@ -18,6 +18,7 @@ def _short_frame() -> pd.DataFrame:
             "vwap_20__root_mean_square": [101.0, 100.5, 99.5, 100.5, 99.5, 100.5, 99.5],
             "ppo": [-0.01, -0.02, -0.03, -0.02, -0.03, -0.02, -0.03],
             "ppo_signal": [0.0, -0.01, -0.02, -0.01, -0.02, -0.01, -0.02],
+            "mfi_14": [50.0] * 7,
         },
         index=idx,
     )
@@ -32,6 +33,53 @@ def test_vwap_rms_ema_cross_long_signal_supports_short_only_mode() -> None:
     assert out["signal_side"].tolist() == [0, 0, -1, 0, -1, 0, -1]
     assert out["signal_side"].max() == 0
     assert out["signal_candidate"].sum() == 3
+
+
+def test_vwap_rms_ema_cross_long_signal_applies_mfi_confirmation() -> None:
+    frame = _short_frame()
+    frame["ema_50"] = [100.0] * len(frame)
+    frame["ema_100"] = [99.0] * len(frame)
+    frame["vwap_20__root_mean_square"] = [99.0, 99.5, 100.5, 99.5, 100.5, 99.5, 100.5]
+    frame["ppo"] = [0.00, 0.01, 0.02, 0.01, 0.02, 0.01, 0.02]
+    frame["ppo_signal"] = [0.00, 0.00, 0.01, 0.00, 0.01, 0.00, 0.01]
+    frame["mfi_14"] = [50.0, 50.0, 35.0, 50.0, 50.0, 50.0, 85.0]
+
+    out, meta = build_vwap_rms_ema_cross_long_signal(
+        frame,
+        {"use_mfi_confirmation": True, "mfi_lower": 40.0, "mfi_upper": 80.0},
+    )
+
+    assert meta["use_mfi_confirmation"] is True
+    assert out["mfi_confirmation"].tolist() == [1, 1, 0, 1, 1, 1, 0]
+    assert out["signal_side"].sum() == 1
+    assert out.loc[frame.index[4], "signal_side"] == 1
+
+
+def test_vwap_rms_ema_cross_long_signal_can_disable_ppo_requirement() -> None:
+    frame = _short_frame().drop(columns=["ppo", "ppo_signal"])
+    frame["ema_50"] = [100.0] * len(frame)
+    frame["ema_100"] = [99.0] * len(frame)
+    frame["vwap_20__root_mean_square"] = [99.0, 99.5, 100.5, 99.5, 100.5, 99.5, 100.5]
+
+    out, meta = build_vwap_rms_ema_cross_long_signal(frame, {"use_ppo_confirmation": False})
+
+    assert meta["use_ppo_confirmation"] is False
+    assert out["signal_candidate"].sum() == 3
+
+
+def test_vwap_rms_ema_cross_long_signal_delays_entries() -> None:
+    frame = _short_frame()
+    frame["ema_50"] = [100.0] * len(frame)
+    frame["ema_100"] = [99.0] * len(frame)
+    frame["vwap_20__root_mean_square"] = [99.0, 99.5, 100.5, 99.5, 100.5, 99.5, 100.5]
+    frame["ppo"] = [0.00, 0.01, 0.02, 0.01, 0.02, 0.01, 0.02]
+    frame["ppo_signal"] = [0.00, 0.00, 0.01, 0.00, 0.01, 0.00, 0.01]
+
+    out, meta = build_vwap_rms_ema_cross_long_signal(frame, {"entry_delay_bars": 1})
+
+    assert meta["entry_delay_bars"] == 1
+    assert out["vwap_rms_ema_cross_long_setup"].tolist() == [0, 0, 1, 0, 1, 0, 1]
+    assert out["signal_side"].tolist() == [0, 0, 0, 1, 0, 1, 0]
 
 
 def test_spx500_vwap_rms_ema_cross_short_only_config_loads_without_a_model() -> None:

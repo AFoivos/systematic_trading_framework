@@ -1,0 +1,175 @@
+base_config: config/experiments/baseline_vwap_rms_ema_ppo_mfi_atr_30m.yaml
+study:
+  study_name: optuna_baseline_vwap_rms_ema_ppo_mfi_atr_30m_threshold_search
+  storage: null
+  load_if_exists: false
+  sampler: tpe
+  seed: 7
+  n_trials: 120
+  timeout: null
+  n_jobs: 1
+  logging_enabled: true
+  catch_exceptions: true
+report:
+  enabled: true
+  output_dir: logs/experiments
+  run_name: optuna_baseline_vwap_rms_ema_ppo_mfi_atr_30m_threshold_search
+objective:
+  metric_path: evaluation.primary_summary.sharpe
+  direction: maximize
+  failure_score: -1000000000000.0
+  base_metric_weight: 1.0
+  stability_weight: 0.0
+  fold_summary_path: evaluation.fold_backtest_summaries
+  constraints:
+  - metric_path: evaluation.primary_summary.profit_factor
+    op: lt
+    threshold: 1.25
+    penalty: 10.0
+    missing_penalty: 10.0
+  - metric_path: evaluation.primary_summary.sharpe
+    op: lt
+    threshold: 1.0
+    penalty: 10.0
+    missing_penalty: 10.0
+  - metric_path: evaluation.primary_summary.cost_to_gross_pnl
+    op: gt
+    threshold: 0.7
+    penalty: 5.0
+    missing_penalty: 5.0
+  - metric_path: evaluation.primary_summary.robustness_walk_forward_positive_fold_ratio
+    op: lt
+    threshold: 0.55
+    penalty: 5.0
+    missing_penalty: 5.0
+  - metric_path: evaluation.primary_summary.robustness_cost_x2_profit_factor
+    op: lt
+    threshold: 1.0
+    penalty: 3.0
+    missing_penalty: 3.0
+  - metric_path: evaluation.primary_summary.robustness_delay_1_bars_profit_factor
+    op: lt
+    threshold: 1.0
+    penalty: 2.0
+    missing_penalty: 2.0
+pruning:
+  enabled: false
+  metric_path: evaluation.primary_summary.sharpe
+  direction: maximize
+  stage_filter: []
+  pruner: none
+  n_startup_trials: 5
+  n_warmup_steps: 1
+  interval_steps: 1
+search_space:
+- name: ppo_hist_threshold
+  path: signals.params.ppo_hist_min
+  paths:
+  - signals.params_by_asset.XAUUSD.ppo_hist_min
+  - signals.params_by_asset.SPX500.ppo_hist_min
+  - signals.params_by_asset.US100.ppo_hist_min
+  - signals.params_by_asset.GER40.ppo_hist_min
+  - signals.params_by_asset.US30.ppo_hist_min
+  - signals.params_by_asset.BRENT.ppo_hist_min
+  - signals.params_by_asset.ETHUSD.ppo_hist_min
+  - signals.params_by_asset.NIKKEI225.ppo_hist_min
+  - signals.params_by_asset.USOIL.ppo_hist_min
+  kind: float
+  low: 0.0
+  high: 0.002
+  step: 5.0e-05
+- name: mfi_lower_threshold
+  path: signals.params.mfi_lower
+  kind: float
+  low: 20.0
+  high: 60.0
+  step: 5.0
+- name: mfi_upper_threshold
+  path: signals.params.mfi_upper
+  kind: float
+  low: 70.0
+  high: 100.0
+  step: 5.0
+- name: atr_stop_multiplier
+  path: backtest.stop_barrier_r
+  paths:
+  - backtest.asset_params.XAUUSD.stop_barrier_r
+  - backtest.asset_params.SPX500.stop_barrier_r
+  - backtest.asset_params.US100.stop_barrier_r
+  - backtest.asset_params.GER40.stop_barrier_r
+  - backtest.asset_params.US30.stop_barrier_r
+  - backtest.asset_params.BRENT.stop_barrier_r
+  - backtest.asset_params.ETHUSD.stop_barrier_r
+  - backtest.asset_params.NIKKEI225.stop_barrier_r
+  - backtest.asset_params.USOIL.stop_barrier_r
+  kind: float
+  low: 1.0
+  high: 3.5
+  step: 0.25
+- name: atr_take_profit_multiplier
+  path: backtest.profit_barrier_r
+  paths:
+  - backtest.asset_params.XAUUSD.profit_barrier_r
+  - backtest.asset_params.SPX500.profit_barrier_r
+  - backtest.asset_params.US100.profit_barrier_r
+  - backtest.asset_params.GER40.profit_barrier_r
+  - backtest.asset_params.US30.profit_barrier_r
+  - backtest.asset_params.BRENT.profit_barrier_r
+  - backtest.asset_params.ETHUSD.profit_barrier_r
+  - backtest.asset_params.NIKKEI225.profit_barrier_r
+  - backtest.asset_params.USOIL.profit_barrier_r
+  kind: float
+  low: 2.0
+  high: 5.5
+  step: 0.25
+- name: vwap_rms_window
+  path: features.9.params.transforms.1.window
+  paths:
+  - features.9.params_by_asset.XAUUSD.transforms.1.window
+  - features.9.params_by_asset.SPX500.transforms.1.window
+  - features.9.params_by_asset.US100.transforms.1.window
+  - features.9.params_by_asset.GER40.transforms.1.window
+  - features.9.params_by_asset.US30.transforms.1.window
+  - features.9.params_by_asset.BRENT.transforms.1.window
+  - features.9.params_by_asset.ETHUSD.transforms.1.window
+  - features.9.params_by_asset.NIKKEI225.transforms.1.window
+  - features.9.params_by_asset.USOIL.transforms.1.window
+  kind: categorical
+  choices:
+  - 8
+  - 12
+  - 16
+  - 18
+  - 24
+  - 36
+  - 48
+  - 72
+  - 96
+- name: ema_rms_window
+  path: features.9.params.transforms.0.window
+  paths:
+  - features.9.params_by_asset.XAUUSD.transforms.0.window
+  - features.9.params_by_asset.SPX500.transforms.0.window
+  - features.9.params_by_asset.US100.transforms.0.window
+  - features.9.params_by_asset.GER40.transforms.0.window
+  - features.9.params_by_asset.US30.transforms.0.window
+  - features.9.params_by_asset.BRENT.transforms.0.window
+  - features.9.params_by_asset.ETHUSD.transforms.0.window
+  - features.9.params_by_asset.NIKKEI225.transforms.0.window
+  - features.9.params_by_asset.USOIL.transforms.0.window
+  kind: categorical
+  choices:
+  - 18
+  - 24
+  - 36
+  - 48
+  - 72
+  - 96
+  - 144
+  - 192
+- name: entry_delay_bars
+  path: signals.params.entry_delay_bars
+  kind: int
+  low: 0
+  high: 2
+  step: 1

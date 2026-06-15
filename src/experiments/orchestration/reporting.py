@@ -18,6 +18,13 @@ from src.evaluation.model_diagnostics import (
 )
 from src.evaluation.metrics import compute_backtest_metrics, compute_ftmo_style_metrics
 from src.experiments.schemas import EvaluationPayload, MonitoringPayload
+from src.experiments.support.baseline_diagnostics import (
+    compute_baseline_vwap_rms_ema_ppo_mfi_atr_diagnostics,
+)
+from src.experiments.support.c2_diagnostics import compute_c2_regime_aware_momentum_diagnostics
+from src.experiments.support.stc_roofing_hilbert_diagnostics import (
+    compute_stc_roofing_hilbert_diagnostics,
+)
 from src.monitoring.drift import compute_feature_drift
 from src.models.common.runtime import classify_feature_family
 from src.portfolio import PortfolioPerformance
@@ -294,6 +301,28 @@ def _dict_metric_rows(payload: dict[str, Any], *, prefix: str | None = None) -> 
                 rows.append([f"{key}.{inner_key}" if prefix is None else f"{prefix}{key}.{inner_key}", inner_value])
         elif not isinstance(value, list):
             rows.append([key if prefix is None else f"{prefix}{key}", value])
+    return rows
+
+
+def _performance_breakdown_rows(section: dict[str, Any]) -> list[list[Any]]:
+    rows: list[list[Any]] = []
+    for group_name, buckets in sorted(section.items()):
+        if not isinstance(buckets, dict):
+            continue
+        for bucket, payload in sorted(dict(buckets).items()):
+            metrics = _safe_meta_dict(payload)
+            rows.append(
+                [
+                    group_name,
+                    bucket,
+                    metrics.get("trade_count"),
+                    metrics.get("gross_pnl"),
+                    metrics.get("cost"),
+                    metrics.get("net_pnl"),
+                    metrics.get("profit_factor"),
+                    metrics.get("hit_rate"),
+                ]
+            )
     return rows
 
 
@@ -773,6 +802,9 @@ def build_experiment_report_markdown(
     feature_diagnostics = _safe_meta_dict(evaluation.get("feature_diagnostics"))
     orb_diagnostics = _safe_meta_dict(evaluation.get("orb_diagnostics"))
     trade_diagnostics = _safe_meta_dict(evaluation.get("trade_diagnostics"))
+    baseline_diagnostics = _safe_meta_dict(evaluation.get("baseline_diagnostics"))
+    c2_diagnostics = _safe_meta_dict(evaluation.get("c2_diagnostics"))
+    stc_diagnostics = _safe_meta_dict(evaluation.get("stc_roofing_hilbert_diagnostics"))
 
     symbols = data_cfg.get("symbols") or ([data_cfg.get("symbol")] if data_cfg.get("symbol") else [])
     run_name = str(cfg.get("logging", {}).get("run_name", cfg.get("config_path", "experiment")))
@@ -993,6 +1025,146 @@ def build_experiment_report_markdown(
                     "",
                     "## Trade Diagnostics",
                     _markdown_table(["Metric", "Value"], trade_rows),
+                ]
+            )
+
+    if baseline_diagnostics:
+        primary_rows = _dict_metric_rows(_safe_meta_dict(baseline_diagnostics.get("primary")))
+        breakdown_rows = _performance_breakdown_rows(
+            {
+                "asset": _safe_meta_dict(baseline_diagnostics.get("performance_by_asset")),
+                "side": _safe_meta_dict(baseline_diagnostics.get("performance_by_side")),
+                "year": _safe_meta_dict(baseline_diagnostics.get("performance_by_year")),
+                "volatility_regime": _safe_meta_dict(
+                    baseline_diagnostics.get("performance_by_volatility_regime")
+                ),
+            }
+        )
+        lines.extend(["", "## Baseline VWAP/RMS Diagnostics"])
+        if primary_rows:
+            lines.extend(
+                [
+                    "### Primary",
+                    _markdown_table(["Metric", "Value"], primary_rows),
+                ]
+            )
+        trade_count_by_asset = _safe_meta_dict(baseline_diagnostics.get("trade_count_by_asset"))
+        if trade_count_by_asset:
+            lines.extend(
+                [
+                    "### Trade Count By Asset",
+                    _markdown_table(
+                        ["Asset", "Trades"],
+                        [[asset, count] for asset, count in sorted(trade_count_by_asset.items())],
+                    ),
+                ]
+            )
+        if breakdown_rows:
+            lines.extend(
+                [
+                    "### Performance Breakdowns",
+                    _markdown_table(
+                        ["Group", "Bucket", "Trades", "Gross PnL", "Cost", "Net PnL", "Profit Factor", "Hit Rate"],
+                        breakdown_rows,
+                    ),
+                ]
+            )
+
+    if c2_diagnostics:
+        signal_count_rows = _dict_metric_rows(_safe_meta_dict(c2_diagnostics.get("signal_counts")))
+        position_rows = _dict_metric_rows(_safe_meta_dict(c2_diagnostics.get("position_diagnostics")))
+        side_rows = _dict_metric_rows(_safe_meta_dict(c2_diagnostics.get("side_diagnostics")))
+        breakdown_rows = _performance_breakdown_rows(
+            _safe_meta_dict(c2_diagnostics.get("regime_diagnostics"))
+        )
+        lines.extend(["", "## C2 Diagnostics"])
+        if signal_count_rows:
+            lines.extend(
+                [
+                    "### Signal Counts",
+                    _markdown_table(["Metric", "Value"], signal_count_rows),
+                ]
+            )
+        if position_rows:
+            lines.extend(
+                [
+                    "### Position Diagnostics",
+                    _markdown_table(["Metric", "Value"], position_rows),
+                ]
+            )
+        if side_rows:
+            lines.extend(
+                [
+                    "### Side Diagnostics",
+                    _markdown_table(["Metric", "Value"], side_rows),
+                ]
+            )
+        if breakdown_rows:
+            lines.extend(
+                [
+                    "### Regime And Year Diagnostics",
+                    _markdown_table(
+                        ["Group", "Bucket", "Trades", "Gross PnL", "Cost", "Net PnL", "Profit Factor", "Hit Rate"],
+                        breakdown_rows,
+                    ),
+                ]
+            )
+
+    if stc_diagnostics:
+        signal_count_rows = _dict_metric_rows(_safe_meta_dict(stc_diagnostics.get("signal_counts")))
+        performance_rows = _dict_metric_rows(_safe_meta_dict(stc_diagnostics.get("performance_diagnostics")))
+        side_rows = _performance_breakdown_rows(
+            {"side": _safe_meta_dict(stc_diagnostics.get("side_diagnostics"))}
+        )
+        year_rows = _performance_breakdown_rows(
+            {"year": _safe_meta_dict(stc_diagnostics.get("performance_by_year"))}
+        )
+        volatility_rows = _performance_breakdown_rows(
+            {"volatility_regime": _safe_meta_dict(stc_diagnostics.get("performance_by_volatility_regime"))}
+        )
+        lines.extend(["", "## STC Roofing Hilbert Diagnostics"])
+        if signal_count_rows:
+            lines.extend(
+                [
+                    "### Signal Counts",
+                    _markdown_table(["Metric", "Value"], signal_count_rows),
+                ]
+            )
+        if performance_rows:
+            lines.extend(
+                [
+                    "### Performance",
+                    _markdown_table(["Metric", "Value"], performance_rows),
+                ]
+            )
+        if side_rows:
+            lines.extend(
+                [
+                    "### Side Diagnostics",
+                    _markdown_table(
+                        ["Group", "Bucket", "Trades", "Gross PnL", "Cost", "Net PnL", "Profit Factor", "Hit Rate"],
+                        side_rows,
+                    ),
+                ]
+            )
+        if year_rows:
+            lines.extend(
+                [
+                    "### Year Diagnostics",
+                    _markdown_table(
+                        ["Group", "Bucket", "Trades", "Gross PnL", "Cost", "Net PnL", "Profit Factor", "Hit Rate"],
+                        year_rows,
+                    ),
+                ]
+            )
+        if volatility_rows:
+            lines.extend(
+                [
+                    "### Volatility Regime Diagnostics",
+                    _markdown_table(
+                        ["Group", "Bucket", "Trades", "Gross PnL", "Cost", "Net PnL", "Profit Factor", "Hit Rate"],
+                        volatility_rows,
+                    ),
                 ]
             )
 
@@ -2062,6 +2234,21 @@ def build_single_asset_evaluation(
     backtest_cfg: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     trade_diagnostics = _trade_diagnostics_from_trades(performance.trades)
+    c2_diagnostics = compute_c2_regime_aware_momentum_diagnostics(
+        df,
+        performance=performance,
+        signal_col=str(dict(backtest_cfg or {}).get("signal_col", "c2_signal")),
+    )
+    baseline_diagnostics = compute_baseline_vwap_rms_ema_ppo_mfi_atr_diagnostics(
+        {asset: df},
+        performance=performance,
+        signal_col=str(dict(backtest_cfg or {}).get("signal_col", "signal_side")),
+    )
+    stc_diagnostics = compute_stc_roofing_hilbert_diagnostics(
+        df,
+        performance=performance,
+        signal_col=str(dict(backtest_cfg or {}).get("signal_col", "stc_roofing_signal")),
+    )
     primary_summary = dict(performance.summary)
     for key in ("trade_count", "average_r", "median_r"):
         if key in trade_diagnostics:
@@ -2073,6 +2260,9 @@ def build_single_asset_evaluation(
         timeline_summary=dict(performance.summary),
         extra={
             "trade_diagnostics": trade_diagnostics,
+            "baseline_diagnostics": baseline_diagnostics,
+            "c2_diagnostics": c2_diagnostics,
+            "stc_roofing_hilbert_diagnostics": stc_diagnostics,
             "mark_to_market_summary": dict(getattr(performance, "mark_to_market_summary", {}) or {}),
         },
     ).to_dict()
@@ -2146,6 +2336,9 @@ def build_single_asset_evaluation(
             "model_oos_policy_summary": policy_summary,
             "orb_diagnostics": orb_diagnostics,
             "trade_diagnostics": trade_diagnostics,
+            "baseline_diagnostics": baseline_diagnostics,
+            "c2_diagnostics": c2_diagnostics,
+            "stc_roofing_hilbert_diagnostics": stc_diagnostics,
             "mark_to_market_summary": dict(getattr(performance, "mark_to_market_summary", {}) or {}),
             "asset": asset,
         },
@@ -2163,6 +2356,11 @@ def build_portfolio_evaluation(
     backtest_cfg: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     trade_diagnostics = _trade_diagnostics_from_trades(getattr(performance, "trades", None))
+    baseline_diagnostics = compute_baseline_vwap_rms_ema_ppo_mfi_atr_diagnostics(
+        asset_frames,
+        performance=performance,
+        signal_col=str(dict(backtest_cfg or {}).get("signal_col", "signal_side")),
+    )
     primary_summary = dict(performance.summary)
     for key in ("trade_count", "average_r", "median_r"):
         if key in trade_diagnostics:
@@ -2174,6 +2372,7 @@ def build_portfolio_evaluation(
         timeline_summary=dict(performance.summary),
         extra={
             "trade_diagnostics": trade_diagnostics,
+            "baseline_diagnostics": baseline_diagnostics,
             "mark_to_market_summary": dict(getattr(performance, "mark_to_market_summary", {}) or {}),
             "risk_guard_summary": dict(performance.risk_guard_summary or {}),
         },
@@ -2338,6 +2537,7 @@ def build_portfolio_evaluation(
             "signal_diagnostics_by_asset": per_asset_policy_map,
             "orb_diagnostics": orb_diagnostics,
             "trade_diagnostics": trade_diagnostics,
+            "baseline_diagnostics": baseline_diagnostics,
             "folds_by_asset": {
                 asset: list(meta.get("folds", []) or [])
                 for asset, meta in dict(model_meta.get("per_asset", {}) or {}).items()

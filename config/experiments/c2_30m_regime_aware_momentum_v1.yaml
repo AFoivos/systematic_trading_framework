@@ -1,0 +1,269 @@
+strategy:
+  name: C2_v1_regime_aware_momentum
+  timeframe: 30m
+  assets:
+    - SPX500
+  description: 30m regime-aware trend-continuation momentum system with directional triple-barrier diagnostics.
+
+data:
+  source: dukascopy_csv
+  interval: 30m
+  start: null
+  end: null
+  alignment: inner
+  symbol: SPX500
+  pit:
+    timestamp_alignment:
+      source_timezone: UTC
+      output_timezone: UTC
+      normalize_daily: false
+      duplicate_policy: last
+    corporate_actions:
+      policy: none
+      adj_close_col: adj_close
+    universe_snapshot:
+      inactive_policy: raise
+  storage:
+    mode: cached_only
+    dataset_id: c2_30m_regime_aware_momentum_v1
+    save_raw: false
+    save_processed: true
+    load_path: data/raw/dukascopy_30m_clean/spx500_30m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed
+
+features:
+  - step: returns
+    params:
+      log: false
+      col_name: close_ret
+  - step: lags
+    params:
+      cols: [close_ret]
+      lags: [1, 2, 4, 8, 16, 24]
+      prefix: lag
+  - step: trend
+    params:
+      price_col: close
+      sma_windows: []
+      ema_spans: [20, 50, 100]
+      ema_col_template: "ema_{span}"
+  - step: trend_regime
+    params:
+      price_col: close
+      fast_span: 50
+      slow_span: 100
+      neutral_threshold: 0.0002
+      output_col: trend_regime
+      method: ema
+  - step: atr
+    params:
+      high_col: high
+      low_col: low
+      close_col: close
+      window: 14
+      windows: [14]
+      method: wilder
+      add_over_price: true
+      atr_col: atr_14
+      over_price_col: atr_over_price_14
+  - step: adx
+    params:
+      high_col: high
+      low_col: low
+      close_col: close
+      window: 14
+      windows: [14]
+  - step: volatility_regime
+    params:
+      vol_col: atr_over_price_14
+      vol_window: 20
+      regime_window: 96
+      method: percentile
+      lower_quantile: 0.33
+      upper_quantile: 0.67
+      output_col: volatility_regime
+  - step: ppo
+    params:
+      price_col: close
+      fast: 12
+      slow: 26
+      signal: 9
+      ppo_col: ppo
+      ppo_signal_col: ppo_signal
+      ppo_hist_col: ppo_hist
+  - step: roc
+    params:
+      price_col: close
+      windows: [12, 24]
+  - step: zscore_momentum
+    params:
+      price_col: close
+      window: 20
+      output_col: zscore_momentum_20
+  - step: return_momentum
+    params:
+      returns_col: close_ret
+      windows: [8, 16, 24]
+
+model:
+  kind: none
+
+signals:
+  kind: c2_regime_aware_momentum
+  params:
+    mode: long_short
+    trend_regime_col: trend_regime
+    ppo_col: ppo
+    ppo_signal_col: ppo_signal
+    ppo_hist_col: ppo_hist
+    adx_col: adx_14
+    roc_col: roc_12
+    zscore_momentum_col: zscore_momentum_20
+    volatility_regime_col: volatility_regime
+    adx_min: 18.0
+    zscore_long_min: 0.0
+    zscore_short_max: 0.0
+    roc_long_min: 0.0
+    roc_short_max: 0.0
+    use_ppo_signal_cross: true
+    allowed_volatility_regimes: [0, 1]
+    long_candidate_col: c2_long_candidate
+    short_candidate_col: c2_short_candidate
+    signal_col: c2_signal
+    candidate_col: c2_signal_candidate
+
+target:
+  kind: directional_triple_barrier
+  outputs:
+    label_col: label
+    event_ret_col: dtb_event_ret
+    fwd_col: dtb_event_ret
+    candidate_out_col: label_candidate
+    r_col: dtb_event_r
+    oriented_r_col: dtb_oriented_r
+  price_col: close
+  open_col: open
+  high_col: high
+  low_col: low
+  direction_col: c2_signal
+  candidate_col: c2_signal_candidate
+  entry_price_mode: next_open
+  profit_barrier_r: 3.0
+  stop_barrier_r: 1.5
+  vertical_barrier_bars: 24
+  volatility_col: atr_14
+  neutral_label: drop
+  tie_break: closest_to_open
+  add_r_multiple: true
+  r_clip: [-3, 3]
+  diagnostic_feature_cols:
+    - trend_regime
+    - ema_20
+    - ema_50
+    - ema_100
+    - atr_14
+    - atr_over_price_14
+    - plus_di_14
+    - minus_di_14
+    - adx_14
+    - volatility_regime
+    - ppo
+    - ppo_signal
+    - ppo_hist
+    - roc_12
+    - roc_24
+    - zscore_momentum_20
+    - close_ret_mom_8
+    - close_ret_mom_16
+    - close_ret_mom_24
+    - c2_bullish_trend
+    - c2_bearish_trend
+    - c2_adx_pass
+    - c2_ppo_long_pass
+    - c2_ppo_short_pass
+    - c2_roc_long_pass
+    - c2_roc_short_pass
+    - c2_zscore_long_pass
+    - c2_zscore_short_pass
+    - c2_volatility_regime_pass
+    - c2_long_candidate
+    - c2_short_candidate
+    - c2_signal
+    - c2_signal_candidate
+
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+
+risk:
+  cost_per_turnover: 0.00015
+  slippage_per_turnover: 0.0001
+  target_vol: null
+  max_leverage: 1.0
+  sizing: {}
+  dd_guard:
+    enabled: false
+    max_drawdown: 0.08
+    rearm_drawdown: 0.04
+    cooloff_bars: 48
+  portfolio_guard: {}
+  drawdown_sizing: {}
+  vol_col: null
+
+backtest:
+  engine: manual_barrier
+  signal_col: c2_signal
+  returns_col: close_ret
+  returns_type: simple
+  subset: full
+  periods_per_year: 12096
+  missing_return_policy: raise_if_exposed
+  allow_short: true
+  stop_mode: volatility_stop
+  vol_col: atr_over_price_14
+  open_col: open
+  high_col: high
+  low_col: low
+  close_col: close
+  take_profit_r: 3.0
+  stop_loss_r: 1.5
+  risk_per_trade: 0.006
+  max_holding_bars: 24
+  dynamic_exits: {}
+
+portfolio:
+  enabled: false
+  construction: signal_weights
+  long_short: true
+
+monitoring:
+  enabled: true
+  psi_threshold: 0.2
+  n_bins: 10
+
+diagnostics:
+  enabled: true
+  robustness:
+    enabled: true
+    cost_multipliers: [2.0, 3.0]
+    entry_delay_bars: [1, 2]
+    walk_forward_frequency: YE
+
+execution:
+  enabled: false
+  mode: paper
+  capital: 100000.0
+  price_col: close
+
+logging:
+  enabled: true
+  run_name: c2_30m_regime_aware_momentum_v1
+  output_dir: logs/experiments
+  stage_tails:
+    enabled: false
+  execution_source_audit:
+    enabled: true

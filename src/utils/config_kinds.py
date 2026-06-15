@@ -31,6 +31,7 @@ FEATURE_KINDS = frozenset(
         "roofing_filter",
         "rolling_r2_trend_quality",
         "returns",
+        "schaff_trend_cycle",
         "roc",
         "roc_long_only_conditions",
         "rsi",
@@ -61,6 +62,8 @@ FEATURE_KINDS = frozenset(
 
 SIGNAL_KINDS = frozenset(
     {
+        "c1_trend_pullback_vwap",
+        "c2_regime_aware_momentum",
         "ema_rms_ppo_vwap",
         "ema_stoch_rsi_pullback",
         "dense_return_forecast",
@@ -79,6 +82,7 @@ SIGNAL_KINDS = frozenset(
         "roc_long_only_conditions",
         "rsi",
         "stochastic",
+        "stc_roofing_hilbert",
         "trend_state",
         "volatility_regime",
         "vwap_rms_ema_cross_long_fractal_filter",

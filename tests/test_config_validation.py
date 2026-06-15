@@ -132,6 +132,100 @@ def test_validate_features_block_accepts_support_resistance_v2() -> None:
     )
 
 
+def test_validate_stc_roofing_hilbert_feature_and_signal_params() -> None:
+    validate_features_block(
+        [
+            {
+                "step": "roofing_filter",
+                "params": {
+                    "price_col": "close",
+                    "high_pass_period": 48,
+                    "low_pass_period": 10,
+                    "slope_bars": 3,
+                    "output_col": "roofing_filter",
+                },
+            },
+            {
+                "step": "schaff_trend_cycle",
+                "params": {
+                    "price_col": "close",
+                    "fast": 23,
+                    "slow": 50,
+                    "cycle": 10,
+                    "smooth": 3,
+                    "long_cross_level": 25.0,
+                    "short_cross_level": 75.0,
+                },
+            },
+            {
+                "step": "hilbert_transform",
+                "params": {
+                    "price_col": "close",
+                    "window": 64,
+                    "amplitude_col": "hilbert_amplitude",
+                    "phase_col": "hilbert_phase",
+                    "instantaneous_frequency_col": "hilbert_instantaneous_frequency",
+                    "dominant_cycle_col": "hilbert_dominant_cycle",
+                    "cycle_ok_col": "hilbert_cycle_ok",
+                    "amplitude_rising_col": "hilbert_amplitude_rising",
+                    "min_cycle": 10,
+                    "max_cycle": 48,
+                    "amplitude_slope_bars": 3,
+                },
+            },
+        ]
+    )
+    validate_signals_block(
+        {
+            "kind": "stc_roofing_hilbert",
+            "params": {
+                "mode": "long_short",
+                "stc_long_cross_level": 25.0,
+                "stc_short_cross_level": 75.0,
+                "use_hilbert_filter": False,
+                "use_roofing_slope": True,
+                "roofing_slope_bars": 3,
+                "entry_delay_bars": 0,
+            },
+        }
+    )
+
+
+def test_validate_stc_roofing_hilbert_rejects_invalid_params() -> None:
+    with pytest.raises(ConfigValidationError, match="long_cross_level"):
+        validate_features_block(
+            [
+                {
+                    "step": "schaff_trend_cycle",
+                    "params": {
+                        "fast": 23,
+                        "slow": 50,
+                        "long_cross_level": 80.0,
+                        "short_cross_level": 75.0,
+                    },
+                }
+            ]
+        )
+
+    with pytest.raises(ConfigValidationError, match="high_pass_period"):
+        validate_features_block(
+            [
+                {
+                    "step": "roofing_filter",
+                    "params": {"high_pass_period": 8, "low_pass_period": 8},
+                }
+            ]
+        )
+
+    with pytest.raises(ConfigValidationError, match="entry_delay_bars"):
+        validate_signals_block(
+            {
+                "kind": "stc_roofing_hilbert",
+                "params": {"entry_delay_bars": -1},
+            }
+        )
+
+
 def test_validate_model_outputs_reject_unknown_keys_and_signals_allow_column_mapping() -> None:
     with pytest.raises(ConfigValidationError, match="model.outputs.bad_key"):
         validate_model_block(
@@ -1525,6 +1619,48 @@ def test_validate_signals_block_rejects_non_numeric_vwap_rms_ema_cross_long_ppo_
             {
                 "kind": "vwap_rms_ema_cross_long",
                 "params": {"ppo_hist_min": "0.01"},
+            }
+        )
+
+
+def test_validate_signals_block_validates_vwap_rms_ema_cross_long_optional_filters() -> None:
+    validate_signals_block(
+        {
+            "kind": "vwap_rms_ema_cross_long",
+            "params": {
+                "use_ppo_confirmation": False,
+                "use_ema_regime": True,
+                "use_vwap_rms_cross": True,
+                "use_mfi_confirmation": True,
+                "mfi_col": "mfi_14",
+                "mfi_lower": 35.0,
+                "mfi_upper": 85.0,
+                "entry_delay_bars": 2,
+            },
+        }
+    )
+
+    with pytest.raises(ConfigValidationError, match="use_mfi_confirmation"):
+        validate_signals_block(
+            {
+                "kind": "vwap_rms_ema_cross_long",
+                "params": {"use_mfi_confirmation": "true"},
+            }
+        )
+
+    with pytest.raises(ConfigValidationError, match="mfi_lower"):
+        validate_signals_block(
+            {
+                "kind": "vwap_rms_ema_cross_long",
+                "params": {"mfi_lower": 90.0, "mfi_upper": 80.0},
+            }
+        )
+
+    with pytest.raises(ConfigValidationError, match="entry_delay_bars"):
+        validate_signals_block(
+            {
+                "kind": "vwap_rms_ema_cross_long",
+                "params": {"entry_delay_bars": -1},
             }
         )
 

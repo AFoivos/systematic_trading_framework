@@ -32,6 +32,7 @@ from src.features import (
     add_return_momentum_features,
     add_roofing_filter,
     add_rolling_r2_trend_quality,
+    add_schaff_trend_cycle_features,
     swing_extrema_context,
     add_shannon_entropy,
     add_shock_context_features,
@@ -57,6 +58,8 @@ from src.features import (
 )
 from src.features.technical.trend import add_trend_features
 from src.signals import (
+    c1_trend_pullback_vwap_signal,
+    c2_regime_aware_momentum_signal,
     conviction_sizing_signal,
     dense_return_forecast_signal,
     ema_rms_ppo_vwap_signal,
@@ -73,6 +76,7 @@ from src.signals import (
     ppo_adx_stochrsi_trend_signal,
     rsi_strategy,
     roc_long_only_conditions_signal,
+    stc_roofing_hilbert_signal,
     stochastic_strategy,
     trend_state_signal,
     volatility_regime_strategy,
@@ -158,6 +162,7 @@ FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
     "hmm_regime": add_hmm_regime,
     "hilbert_transform": add_hilbert_transform,
     "roofing_filter": add_roofing_filter,
+    "schaff_trend_cycle": add_schaff_trend_cycle_features,
     "supersmoother": add_supersmoother,
     "shannon_entropy": add_shannon_entropy,
     "permutation_entropy": add_permutation_entropy,
@@ -166,6 +171,8 @@ FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
 }
 
 SIGNAL_REGISTRY: Mapping[str, SignalFn] = {
+    "c1_trend_pullback_vwap": c1_trend_pullback_vwap_signal,
+    "c2_regime_aware_momentum": c2_regime_aware_momentum_signal,
     "trend_state": trend_state_signal,
     "ema_rms_ppo_vwap": ema_rms_ppo_vwap_signal,
     "probability_threshold": probabilistic_signal,
@@ -184,6 +191,7 @@ SIGNAL_REGISTRY: Mapping[str, SignalFn] = {
     "rsi": rsi_strategy,
     "momentum": momentum_strategy,
     "stochastic": stochastic_strategy,
+    "stc_roofing_hilbert": stc_roofing_hilbert_signal,
     "volatility_regime": volatility_regime_strategy,
     "vwap_rms_ema_cross_long_fractal_filter": vwap_rms_ema_cross_long_fractal_filter_signal,
     "vwap_rms_ema_cross_long_hmm_gate": vwap_rms_ema_cross_long_hmm_gate_signal,

@@ -135,6 +135,8 @@ AGENTS.md
 docs/*
 !docs/trading_dashboard_assumptions.md
 !docs/execution_source_audit.md
+!docs/experiments/
+!docs/experiments/c1_30m_trend_pullback_vwap.md
 notebooks/
 tests/
 !tests/
@@ -145,4 +147,3 @@ tests/*
 !tests/signals/*.py
 !tests/execution/
 !tests/execution/*.py
-

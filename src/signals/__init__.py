@@ -1,4 +1,12 @@
 from .buy_and_hold_signal import buy_and_hold_signal
+from .c1_trend_pullback_vwap import (
+    build_c1_trend_pullback_vwap_signal,
+    c1_trend_pullback_vwap_signal,
+)
+from .c2_regime_aware_momentum import (
+    build_c2_regime_aware_momentum_signal,
+    c2_regime_aware_momentum_signal,
+)
 from .conviction_sizing_signal import conviction_sizing_signal
 from .dense_return_forecast_signal import dense_return_forecast_signal
 from .ema_stoch_rsi_pullback_signal import (
@@ -37,6 +45,10 @@ from .roc_long_only_conditions_signal import roc_long_only_conditions_signal
 from .rsi_strategy import rsi_strategy
 from .stochastic_signal import compute_stochastic_signal
 from .stochastic_strategy import stochastic_strategy
+from .stc_roofing_hilbert import (
+    build_stc_roofing_hilbert_signal,
+    stc_roofing_hilbert_signal,
+)
 from .trend_signal import compute_trend_state_signal
 from .trend_state_long_only_signal import trend_state_long_only_signal
 from .trend_state_signal import trend_state_signal
@@ -58,8 +70,12 @@ from .vwap_rms_ema_cross_long_signal import (
 
 __all__ = [
     "buy_and_hold_signal",
+    "build_c1_trend_pullback_vwap_signal",
+    "build_c2_regime_aware_momentum_signal",
     "build_ema_rms_ppo_vwap_signal",
     "build_ema_stoch_rsi_signal",
+    "c1_trend_pullback_vwap_signal",
+    "c2_regime_aware_momentum_signal",
     "conviction_sizing_signal",
     "dense_return_forecast_signal",
     "ema_rms_ppo_vwap_signal",
@@ -91,6 +107,8 @@ __all__ = [
     "roc_long_only_conditions_signal",
     "rsi_strategy",
     "stochastic_strategy",
+    "build_stc_roofing_hilbert_signal",
+    "stc_roofing_hilbert_signal",
     "trend_state_long_only_signal",
     "trend_state_signal",
     "volatility_regime_strategy",

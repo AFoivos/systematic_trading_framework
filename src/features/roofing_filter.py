@@ -11,7 +11,16 @@ def add_roofing_filter(
     price_col: str = "close",
     high_pass_period: int = 48,
     low_pass_period: int = 10,
+    slope_bars: int = 3,
     output_col: str | None = None,
+    slope_col: str | None = None,
+    positive_col: str | None = None,
+    negative_col: str | None = None,
+    slope_positive_col: str | None = None,
+    slope_negative_col: str | None = None,
+    cross_up_zero_col: str | None = None,
+    cross_down_zero_col: str | None = None,
+    add_derived: bool = True,
 ) -> pd.DataFrame:
     """Add a causal Ehlers-style roofing filter.
 
@@ -21,13 +30,36 @@ def add_roofing_filter(
     _validate_columns(df, [price_col])
     _validate_period(high_pass_period, name="high_pass_period")
     _validate_period(low_pass_period, name="low_pass_period")
+    _validate_slope_bars(slope_bars)
+    if not isinstance(add_derived, bool):
+        raise ValueError("add_derived must be boolean.")
     if high_pass_period <= low_pass_period:
         raise ValueError("high_pass_period must be greater than low_pass_period.")
     col = _resolve_output_col(output_col, f"roofing_filter_{high_pass_period}_{low_pass_period}")
+    derived_cols = _resolve_derived_cols(
+        base_col=col,
+        slope_col=slope_col,
+        positive_col=positive_col,
+        negative_col=negative_col,
+        slope_positive_col=slope_positive_col,
+        slope_negative_col=slope_negative_col,
+        cross_up_zero_col=cross_up_zero_col,
+        cross_down_zero_col=cross_down_zero_col,
+    )
 
     out = df.copy()
     price = out[price_col].astype(float).to_numpy()
     out[col] = _compute_roofing_filter(price, high_pass_period=high_pass_period, low_pass_period=low_pass_period)
+    if add_derived:
+        roofing = out[col].astype(float)
+        slope = roofing - roofing.shift(int(slope_bars))
+        out[derived_cols["slope_col"]] = slope
+        out[derived_cols["positive_col"]] = roofing.gt(0.0)
+        out[derived_cols["negative_col"]] = roofing.lt(0.0)
+        out[derived_cols["slope_positive_col"]] = slope.gt(0.0)
+        out[derived_cols["slope_negative_col"]] = slope.lt(0.0)
+        out[derived_cols["cross_up_zero_col"]] = roofing.shift(1).le(0.0) & roofing.gt(0.0)
+        out[derived_cols["cross_down_zero_col"]] = roofing.shift(1).ge(0.0) & roofing.lt(0.0)
     return out
 
 
@@ -68,12 +100,52 @@ def _validate_period(period: int, *, name: str) -> None:
         raise ValueError(f"{name} must be an integer greater than 1.")
 
 
+def _validate_slope_bars(slope_bars: int) -> None:
+    if isinstance(slope_bars, bool) or not isinstance(slope_bars, Integral) or int(slope_bars) <= 0:
+        raise ValueError("slope_bars must be a positive integer.")
+
+
 def _resolve_output_col(output_col: str | None, default: str) -> str:
     if output_col is None:
         return default
     if not isinstance(output_col, str) or not output_col.strip():
         raise ValueError("output_col must be a non-empty string.")
     return output_col
+
+
+def _resolve_derived_cols(
+    *,
+    base_col: str,
+    slope_col: str | None,
+    positive_col: str | None,
+    negative_col: str | None,
+    slope_positive_col: str | None,
+    slope_negative_col: str | None,
+    cross_up_zero_col: str | None,
+    cross_down_zero_col: str | None,
+) -> dict[str, str]:
+    exact_defaults = base_col == "roofing_filter"
+    defaults = {
+        "slope_col": "roofing_slope" if exact_defaults else f"{base_col}_slope",
+        "positive_col": "roofing_positive" if exact_defaults else f"{base_col}_positive",
+        "negative_col": "roofing_negative" if exact_defaults else f"{base_col}_negative",
+        "slope_positive_col": "roofing_slope_positive" if exact_defaults else f"{base_col}_slope_positive",
+        "slope_negative_col": "roofing_slope_negative" if exact_defaults else f"{base_col}_slope_negative",
+        "cross_up_zero_col": "roofing_cross_up_zero" if exact_defaults else f"{base_col}_cross_up_zero",
+        "cross_down_zero_col": "roofing_cross_down_zero" if exact_defaults else f"{base_col}_cross_down_zero",
+    }
+    resolved = {
+        "slope_col": _resolve_output_col(slope_col, defaults["slope_col"]),
+        "positive_col": _resolve_output_col(positive_col, defaults["positive_col"]),
+        "negative_col": _resolve_output_col(negative_col, defaults["negative_col"]),
+        "slope_positive_col": _resolve_output_col(slope_positive_col, defaults["slope_positive_col"]),
+        "slope_negative_col": _resolve_output_col(slope_negative_col, defaults["slope_negative_col"]),
+        "cross_up_zero_col": _resolve_output_col(cross_up_zero_col, defaults["cross_up_zero_col"]),
+        "cross_down_zero_col": _resolve_output_col(cross_down_zero_col, defaults["cross_down_zero_col"]),
+    }
+    if base_col in set(resolved.values()) or len(set(resolved.values())) != len(resolved):
+        raise ValueError("Roofing derived output columns must be unique and distinct from output_col.")
+    return resolved
 
 
 __all__ = [

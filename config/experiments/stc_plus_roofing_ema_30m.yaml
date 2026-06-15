@@ -1,0 +1,186 @@
+strategy:
+  name: stc_plus_roofing_ema_30m
+  timeframe: 30m
+  assets:
+  - SPX500
+  description: 'Ablation alias: STC + Roofing + EMA regime without Hilbert.'
+data:
+  source: dukascopy_csv
+  interval: 30m
+  start: null
+  end: null
+  alignment: inner
+  symbol: SPX500
+  pit:
+    timestamp_alignment:
+      source_timezone: UTC
+      output_timezone: UTC
+      normalize_daily: false
+      duplicate_policy: last
+    corporate_actions:
+      policy: none
+      adj_close_col: adj_close
+    universe_snapshot:
+      inactive_policy: raise
+  storage:
+    mode: cached_only
+    dataset_id: stc_plus_roofing_ema_30m
+    save_raw: false
+    save_processed: true
+    load_path: data/raw/dukascopy_30m_clean/spx500_30m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed
+features:
+- step: returns
+  params:
+    log: false
+    col_name: close_ret
+- step: trend
+  params:
+    price_col: close
+    sma_windows: []
+    ema_spans:
+    - 50
+    - 100
+    ema_col_template: ema_{span}
+- step: atr
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    window: 14
+    windows:
+    - 14
+    method: wilder
+    add_over_price: true
+    atr_col: atr_14
+    over_price_col: atr_over_price_14
+- step: roofing_filter
+  params:
+    price_col: close
+    high_pass_period: 48
+    low_pass_period: 10
+    slope_bars: 3
+    output_col: roofing_filter
+- step: schaff_trend_cycle
+  params:
+    price_col: close
+    fast: 23
+    slow: 50
+    cycle: 10
+    smooth: 3
+    long_cross_level: 25.0
+    short_cross_level: 75.0
+    stc_col: stc
+    stc_signal_col: stc_signal
+    cross_up_col: stc_cross_up_25
+    cross_down_col: stc_cross_down_75
+    rising_col: stc_rising
+    falling_col: stc_falling
+model:
+  kind: none
+signals:
+  kind: stc_roofing_hilbert
+  params:
+    mode: long_short
+    ema_fast_col: ema_50
+    ema_slow_col: ema_100
+    roofing_col: roofing_filter
+    roofing_slope_col: roofing_slope
+    stc_col: stc
+    stc_long_cross_level: 25.0
+    stc_short_cross_level: 75.0
+    use_ema_regime: true
+    use_roofing_filter: true
+    use_roofing_slope: true
+    roofing_slope_bars: 3
+    use_hilbert_filter: false
+    use_zscore_filter: false
+    use_adx_filter: false
+    use_atr_vol_filter: false
+    entry_delay_bars: 0
+    long_candidate_col: stc_roofing_long_candidate
+    short_candidate_col: stc_roofing_short_candidate
+    signal_col: stc_roofing_signal
+    candidate_col: stc_roofing_signal_candidate
+target: {}
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+risk:
+  cost_per_turnover: 0.00015
+  slippage_per_turnover: 0.0001
+  target_vol: null
+  max_leverage: 1.0
+  sizing: {}
+  dd_guard:
+    enabled: false
+    max_drawdown: 0.08
+    rearm_drawdown: 0.04
+    cooloff_bars: 48
+  portfolio_guard: {}
+  drawdown_sizing: {}
+  vol_col: null
+backtest:
+  engine: manual_barrier
+  signal_col: stc_roofing_signal
+  returns_col: close_ret
+  returns_type: simple
+  subset: full
+  periods_per_year: 12096
+  missing_return_policy: raise_if_exposed
+  allow_short: true
+  stop_mode: volatility_stop
+  vol_col: atr_over_price_14
+  open_col: open
+  high_col: high
+  low_col: low
+  close_col: close
+  take_profit_r: 3.0
+  stop_loss_r: 1.5
+  risk_per_trade: 0.006
+  max_holding_bars: null
+  dynamic_exits: {}
+portfolio:
+  enabled: false
+  construction: signal_weights
+  long_short: true
+  gross_target: 1.0
+  constraints:
+    max_gross_leverage: 1.0
+    max_weight: 1.0
+    min_weight: -1.0
+    target_net_exposure: 0.0
+    enforce_target_net_exposure: false
+monitoring:
+  enabled: true
+  psi_threshold: 0.2
+  n_bins: 10
+diagnostics:
+  enabled: true
+  robustness:
+    enabled: true
+    cost_multipliers:
+    - 2.0
+    - 3.0
+    - 5.0
+    entry_delay_bars:
+    - 1
+    - 2
+    walk_forward_frequency: YE
+execution:
+  enabled: false
+  mode: paper
+  capital: 100000.0
+  price_col: close
+logging:
+  enabled: true
+  run_name: stc_plus_roofing_ema_30m
+  output_dir: logs/experiments
+  stage_tails:
+    enabled: false
+  execution_source_audit:
+    enabled: true
