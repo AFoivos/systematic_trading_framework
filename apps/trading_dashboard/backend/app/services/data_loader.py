@@ -301,6 +301,7 @@ class DataLoader:
         dataset_id: str | None = None,
         start: str | None = None,
         end: str | None = None,
+        limit: int | None = None,
     ) -> dict[str, list[dict[str, Any]]]:
         frame, _ = self._load_frame(
             asset=asset,
@@ -311,6 +312,8 @@ class DataLoader:
             end=end,
             require_ohlcv=False,
         )
+        if limit:
+            frame = frame.tail(limit)
         return frame_to_series(frame, columns)
 
     def catalog(

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from app.api._errors import raise_http_error
 from app.schemas.market import NamedSeries, SeriesResponse
@@ -39,6 +39,7 @@ def get_target_series(
     dataset_id: str | None = None,
     start: str | None = None,
     end: str | None = None,
+    limit: int | None = Query(default=None, ge=1),
 ) -> SeriesResponse:
     try:
         columns = parse_csv_list(targets)
@@ -50,6 +51,7 @@ def get_target_series(
             dataset_id=dataset_id,
             start=start,
             end=end,
+            limit=limit,
         )
         return SeriesResponse(
             series=[

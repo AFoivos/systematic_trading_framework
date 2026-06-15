@@ -3,9 +3,7 @@ import {
   createChart,
   LineStyle,
   type IChartApi,
-  type Range,
-  type Time,
-  type TimeRangeChangeEventHandler
+  type LogicalRangeChangeEventHandler
 } from "lightweight-charts";
 import type { OHLCVCandle, TimeValuePoint, TradeRecord } from "../types/market";
 import type { VisualizationConfig } from "../types/visualization";
@@ -55,6 +53,13 @@ interface ChartHeights {
   lower: number;
 }
 
+type RenderedSeriesApi =
+  | ReturnType<IChartApi["addLineSeries"]>
+  | ReturnType<IChartApi["addHistogramSeries"]>
+  | ReturnType<IChartApi["addAreaSeries"]>;
+
+const SHARED_PRICE_SCALE_WIDTH = 78;
+const SHARED_TIME_SCALE_HEIGHT = 24;
 const FEATURE_PRICE_FORMAT = {
   type: "price" as const,
   precision: 6,
@@ -93,17 +98,41 @@ function baseOptions(height: number, showTimeScale = true) {
       vertLines: { color: "#eef1f4" },
       horzLines: { color: "#eef1f4" }
     },
+    leftPriceScale: {
+      visible: false,
+      minimumWidth: SHARED_PRICE_SCALE_WIDTH
+    },
     rightPriceScale: {
-      borderColor: "#d9dee5"
+      borderColor: "#d9dee5",
+      minimumWidth: SHARED_PRICE_SCALE_WIDTH,
+      scaleMargins: {
+        top: 0.12,
+        bottom: 0.12
+      }
     },
     timeScale: {
       borderColor: "#d9dee5",
       visible: showTimeScale,
       timeVisible: true,
-      secondsVisible: false
+      secondsVisible: false,
+      rightOffset: 0,
+      barSpacing: 6,
+      minBarSpacing: 0.5,
+      lockVisibleTimeRangeOnResize: true,
+      minimumHeight: SHARED_TIME_SCALE_HEIGHT
     },
     crosshair: {
-      mode: 1
+      mode: 1,
+      vertLine: {
+        color: "#94a3b8",
+        style: LineStyle.Dotted,
+        width: 1 as 1
+      },
+      horzLine: {
+        color: "#cbd5e1",
+        style: LineStyle.Dotted,
+        width: 1 as 1
+      }
     }
   };
 }
@@ -136,11 +165,68 @@ function observeChartContainer(chart: IChartApi, container: HTMLDivElement, fall
   return () => observer.disconnect();
 }
 
+function rgbaColor(color: string, opacity: number): string {
+  const normalized = color.trim();
+  const match = normalized.match(/^#?([0-9a-f]{6})$/i);
+  if (!match) {
+    return normalized;
+  }
+  const value = match[1];
+  const red = Number.parseInt(value.slice(0, 2), 16);
+  const green = Number.parseInt(value.slice(2, 4), 16);
+  const blue = Number.parseInt(value.slice(4, 6), 16);
+  return `rgba(${red}, ${green}, ${blue}, ${opacity})`;
+}
+
+function isOscillatorConfig(config: VisualizationConfig): boolean {
+  const lowered = config.series_id.toLowerCase();
+  return ["rsi", "stoch", "mfi", "percent_b"].some((token) => lowered.includes(token));
+}
+
+function needsZeroReference(config: VisualizationConfig): boolean {
+  const lowered = config.series_id.toLowerCase();
+  return (
+    config.render_type === "histogram" ||
+    config.source_type.includes("signal") ||
+    config.source_type.includes("target") ||
+    ["zscore", "hist", "momentum", "ret", "return", "slope", "ratio"].some((token) => lowered.includes(token))
+  );
+}
+
+function addPanelReferenceLines(referenceSeries: RenderedSeriesApi | undefined, configs: VisualizationConfig[]) {
+  if (!referenceSeries) {
+    return;
+  }
+  if (configs.some(needsZeroReference)) {
+    referenceSeries.createPriceLine({
+      price: 0,
+      color: "#94a3b8",
+      lineWidth: 1,
+      lineStyle: LineStyle.Dotted,
+      axisLabelVisible: true,
+      title: "0"
+    });
+  }
+  if (configs.some(isOscillatorConfig)) {
+    [30, 70].forEach((price) => {
+      referenceSeries.createPriceLine({
+        price,
+        color: "#cbd5e1",
+        lineWidth: 1,
+        lineStyle: LineStyle.Dotted,
+        axisLabelVisible: true,
+        title: String(price)
+      });
+    });
+  }
+}
+
 function addConfiguredSeries(
   chart: IChartApi,
   configs: VisualizationConfig[],
   seriesData: Record<string, TimeValuePoint[]>
 ) {
+  const renderedSeries: RenderedSeriesApi[] = [];
   configs
     .filter((config) => config.visible)
     .forEach((config) => {
@@ -157,6 +243,21 @@ function addConfiguredSeries(
           priceScaleId: config.style.priceScaleId ?? ""
         });
         series.setData(toHistogramData(points, color));
+        renderedSeries.push(series);
+        return;
+      }
+      if (config.render_type === "area" || config.render_type === "probability_band") {
+        const series = chart.addAreaSeries({
+          lineColor: color,
+          topColor: rgbaColor(color, config.style.opacity ?? 0.26),
+          bottomColor: rgbaColor(color, 0.04),
+          lineWidth: (config.style.lineWidth ?? 2) as 1 | 2 | 3 | 4,
+          priceFormat: priceFormatForConfig(config),
+          priceLineVisible: false,
+          priceScaleId: config.style.priceScaleId ?? undefined
+        });
+        series.setData(toLineData(points));
+        renderedSeries.push(series);
         return;
       }
       const series = chart.addLineSeries({
@@ -167,33 +268,35 @@ function addConfiguredSeries(
         priceScaleId: config.style.priceScaleId ?? undefined
       });
       series.setData(toLineData(points));
+      renderedSeries.push(series);
     });
+  return renderedSeries;
 }
 
-function syncVisibleTimeRanges(charts: IChartApi[]) {
+function syncVisibleLogicalRanges(charts: IChartApi[]) {
   let syncing = false;
-  const handlers: Array<[IChartApi, TimeRangeChangeEventHandler<Time>]> = [];
-  const applyRange = (source: IChartApi, range: Range<Time> | null) => {
+  const handlers: Array<[IChartApi, LogicalRangeChangeEventHandler]> = [];
+  const applyRange = (source: IChartApi, range: Parameters<LogicalRangeChangeEventHandler>[0]) => {
     if (syncing || range === null) {
       return;
     }
     syncing = true;
     charts.forEach((chart) => {
       if (chart !== source) {
-        chart.timeScale().setVisibleRange(range);
+        chart.timeScale().setVisibleLogicalRange(range);
       }
     });
     syncing = false;
   };
 
   charts.forEach((chart) => {
-    const handler: TimeRangeChangeEventHandler<Time> = (range) => applyRange(chart, range);
-    chart.timeScale().subscribeVisibleTimeRangeChange(handler);
+    const handler: LogicalRangeChangeEventHandler = (range) => applyRange(chart, range);
+    chart.timeScale().subscribeVisibleLogicalRangeChange(handler);
     handlers.push([chart, handler]);
   });
 
   return () => {
-    handlers.forEach(([chart, handler]) => chart.timeScale().unsubscribeVisibleTimeRangeChange(handler));
+    handlers.forEach(([chart, handler]) => chart.timeScale().unsubscribeVisibleLogicalRangeChange(handler));
   };
 }
 
@@ -308,15 +411,16 @@ export function LinkedChartStack({
         crosshairMarkerVisible: false
       });
       timeAnchor.setData(toWhitespaceData(candles));
-      addConfiguredSeries(chart, configs, seriesData);
+      const renderedSeries = addConfiguredSeries(chart, configs, seriesData);
+      addPanelReferenceLines(renderedSeries[0], configs);
       charts.push(chart);
     });
 
     charts[0]?.timeScale().fitContent();
-    const unsubscribeSync = syncVisibleTimeRanges(charts);
-    const initialRange = charts[0]?.timeScale().getVisibleRange();
+    const unsubscribeSync = syncVisibleLogicalRanges(charts);
+    const initialRange = charts[0]?.timeScale().getVisibleLogicalRange();
     if (initialRange) {
-      charts.slice(1).forEach((chart) => chart.timeScale().setVisibleRange(initialRange));
+      charts.slice(1).forEach((chart) => chart.timeScale().setVisibleLogicalRange(initialRange));
     }
 
     const unobserveCharts = [
@@ -380,23 +484,8 @@ export function SeriesPanelChart({ title, configs, seriesData }: SeriesPanelChar
       width: Math.max(container.clientWidth, 1)
     });
 
-    configs.forEach((config) => {
-      const key = seriesKey(config.source_type, config.series_id);
-      const points = seriesData[key] ?? [];
-      const color = config.style.color ?? "#0f766e";
-      if (config.render_type === "histogram") {
-        const histogram = chart.addHistogramSeries({ color, priceFormat: priceFormatForConfig(config) });
-        histogram.setData(toHistogramData(points, color));
-        return;
-      }
-      const line = chart.addLineSeries({
-        color,
-        lineWidth: (config.style.lineWidth ?? 2) as 1 | 2 | 3 | 4,
-        priceFormat: priceFormatForConfig(config),
-        priceLineVisible: false
-      });
-      line.setData(toLineData(points));
-    });
+    const renderedSeries = addConfiguredSeries(chart, configs, seriesData);
+    addPanelReferenceLines(renderedSeries[0], configs);
 
     chart.timeScale().fitContent();
     const unobserve = observeChartContainer(chart, container, 190);

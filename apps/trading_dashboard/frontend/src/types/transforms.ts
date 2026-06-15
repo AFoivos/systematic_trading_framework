@@ -59,3 +59,9 @@ export interface TransformSeriesResponse {
   steps: TransformStepResult[];
   metadata: Record<string, unknown>;
 }
+
+export interface TransformRunSummary {
+  steps: TransformStepResult[];
+  metadata: Record<string, unknown>;
+  ran_at: string;
+}

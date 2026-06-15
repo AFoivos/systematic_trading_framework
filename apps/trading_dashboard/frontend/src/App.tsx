@@ -28,6 +28,20 @@ function seriesParams(selection: ReturnType<typeof useDashboardStore.getState>["
   };
 }
 
+function chartWindowLimit(selection: ReturnType<typeof useDashboardStore.getState>["selection"]): number | undefined {
+  return selection.start || selection.end || selection.runId ? undefined : DEFAULT_CANDLE_LIMIT;
+}
+
+function chartWindowLabel(selection: ReturnType<typeof useDashboardStore.getState>["selection"], limit: number | undefined): string {
+  if (selection.start || selection.end) {
+    return `${selection.start || "start"} -> ${selection.end || "latest"}`;
+  }
+  if (selection.runId) {
+    return "full range for selected run";
+  }
+  return `latest ${limit?.toLocaleString() ?? "all"} bars`;
+}
+
 function mergeSeries(sourceType: string, series: NamedSeries[]): Record<string, NamedSeries["points"]> {
   return series.reduce<Record<string, NamedSeries["points"]>>((acc, item) => {
     acc[seriesKey(sourceType, item.series_id)] = item.points;
@@ -60,6 +74,7 @@ export default function App() {
     candles,
     seriesData,
     trades,
+    transformRun,
     loadingMessage,
     errorMessage
   } = state;
@@ -109,6 +124,8 @@ export default function App() {
     () => seriesParams(selection),
     [selection.asset, selection.datasetId, selection.end, selection.source, selection.start, selection.timeframe]
   );
+  const dataLimit = useMemo(() => chartWindowLimit(selection), [selection.end, selection.runId, selection.start]);
+  const dataWindowLabel = useMemo(() => chartWindowLabel(selection, dataLimit), [dataLimit, selection.end, selection.runId, selection.start]);
   const selectedDataset = useMemo(
     () => datasets.find((dataset) => dataset.id === selection.datasetId),
     [datasets, selection.datasetId]
@@ -120,10 +137,12 @@ export default function App() {
     }
     let cancelled = false;
     state.setLoadingMessage("Loading candles and catalogs");
+    state.setMarketData({ candles: [], seriesData: {} });
+    state.setTransformRun(null);
     Promise.all([
       api.ohlcv({
         ...dataParams,
-        limit: selection.start || selection.end || selection.runId ? undefined : DEFAULT_CANDLE_LIMIT
+        limit: dataLimit
       }),
       api.featureCatalog(dataParams),
       api.signalCatalog(dataParams),
@@ -149,7 +168,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [dataParams, selection.runId]);
+  }, [dataLimit, dataParams]);
 
   useEffect(() => {
     if (!selection.datasetId && !selection.asset) {
@@ -158,13 +177,13 @@ export default function App() {
     let cancelled = false;
     const requests: Array<Promise<Record<string, NamedSeries["points"]>>> = [];
     if (selectedFeatureIds.length > 0) {
-      requests.push(api.featureSeries({ ...dataParams, features: selectedFeatureIds.join(",") }).then((payload) => mergeSeries("feature", payload.series)));
+      requests.push(api.featureSeries({ ...dataParams, features: selectedFeatureIds.join(","), limit: dataLimit }).then((payload) => mergeSeries("feature", payload.series)));
     }
     if (selectedSignalIds.length > 0) {
-      requests.push(api.signalSeries({ ...dataParams, signals: selectedSignalIds.join(",") }).then((payload) => mergeSeries("signal", payload.series)));
+      requests.push(api.signalSeries({ ...dataParams, signals: selectedSignalIds.join(","), limit: dataLimit }).then((payload) => mergeSeries("signal", payload.series)));
     }
     if (selectedTargetIds.length > 0) {
-      requests.push(api.targetSeries({ ...dataParams, targets: selectedTargetIds.join(",") }).then((payload) => mergeSeries("target", payload.series)));
+      requests.push(api.targetSeries({ ...dataParams, targets: selectedTargetIds.join(","), limit: dataLimit }).then((payload) => mergeSeries("target", payload.series)));
     }
     if (requests.length === 0) {
       state.setMarketData({ seriesData: {} });
@@ -191,7 +210,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [dataParams, selectedFeatureIds.join("|"), selectedSignalIds.join("|"), selectedTargetIds.join("|")]);
+  }, [dataLimit, dataParams, selectedFeatureIds.join("|"), selectedSignalIds.join("|"), selectedTargetIds.join("|")]);
 
   useEffect(() => {
     if (!selection.runId) {
@@ -242,16 +261,22 @@ export default function App() {
       return;
     }
     state.setLoadingMessage("Running parameterized builders");
+    state.setTransformRun(null);
     api
       .transformSeries({
         ...dataParams,
-        limit: selection.start || selection.end ? undefined : DEFAULT_CANDLE_LIMIT,
+        limit: dataLimit,
         features: featureSteps,
         signals: signalSteps,
         targets: targetSteps
       })
       .then((payload) => {
         state.mergeComputedSeries(payload.series);
+        state.setTransformRun({
+          steps: payload.steps,
+          metadata: payload.metadata,
+          ran_at: new Date().toISOString()
+        });
         state.setErrorMessage(null);
       })
       .catch((error: unknown) => state.setErrorMessage(error instanceof Error ? error.message : String(error)))
@@ -319,6 +344,8 @@ export default function App() {
           trades={trades}
           loadingMessage={loadingMessage}
           errorMessage={errorMessage}
+          dataWindowLabel={dataWindowLabel}
+          transformRun={transformRun}
           onAddManualLevel={state.addManualLevel}
           onRemoveSeries={state.removeSeriesConfig}
         />

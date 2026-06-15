@@ -12,13 +12,11 @@ const renderTypes: RenderType[] = [
   "line",
   "area",
   "histogram",
-  "marker",
-  "background_band",
   "horizontal_level",
   "prediction_line",
   "probability_band"
 ];
-const chartTargets: ChartTarget[] = ["main_price_chart", "lower_panel", "candle_marker", "background"];
+const chartTargets: ChartTarget[] = ["main_price_chart", "lower_panel"];
 
 export function SeriesStyleEditor({ configs, activeKey, onSelect, onUpdate }: SeriesStyleEditorProps) {
   const active = configs.find((config) => seriesKey(config.source_type, config.series_id) === activeKey) ?? configs[0];

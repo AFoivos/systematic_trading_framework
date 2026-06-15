@@ -347,6 +347,13 @@ function outputOrParam(params: Record<string, unknown>, key: string, fallback: s
   return asString(params[key], fallback);
 }
 
+function compactColumnList(columns: string[], limit = 6): string {
+  if (columns.length <= limit) {
+    return columns.join(", ");
+  }
+  return `${columns.slice(0, limit).join(", ")} +${columns.length - limit}`;
+}
+
 function deriveFeatureOutputColumns(stepName: string, params: Record<string, unknown>): string[] {
   const priceCol = asString(params.price_col, "close");
   const closeCol = asString(params.close_col, "close");
@@ -900,6 +907,7 @@ export function BuilderConfigurator({ title, sourceType, builders, steps, onChan
         {steps.map((step, index) => {
           const builder = builderByName.get(step.step);
           const nestedSourceColumns = sourceType === "feature" ? deriveFeatureOutputColumns(step.step, step.params) : [];
+          const estimatedOutputs = sourceType === "feature" ? nestedSourceColumns : [];
           const canUseNestedTransforms = sourceType === "feature" && step.step !== "feature_transforms";
           const nestedTransformsEnabled = Array.isArray(step.params.transforms);
           return (
@@ -918,6 +926,12 @@ export function BuilderConfigurator({ title, sourceType, builders, steps, onChan
                 </button>
               </div>
               {builder?.docstring ? <p className="builder-doc">{builder.docstring.split("\n")[0]}</p> : null}
+              {estimatedOutputs.length > 0 ? (
+                <div className="step-output-preview">
+                  <span>estimated outputs</span>
+                  <small>{compactColumnList(estimatedOutputs)}</small>
+                </div>
+              ) : null}
               {step.step === "feature_transforms" ? (
                 <FeatureTransformsEditor
                   transforms={featureTransformsFromParams(step.params)}

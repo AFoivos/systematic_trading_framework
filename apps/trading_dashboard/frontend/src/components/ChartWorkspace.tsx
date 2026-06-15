@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import type { OHLCVCandle, TimeValuePoint, TradeRecord } from "../types/market";
+import type { TransformRunSummary } from "../types/transforms";
 import type { ManualLevelKind, VisualizationConfig } from "../types/visualization";
 import { groupLowerPanelConfigs, seriesKey, type LowerPanelGroup } from "../utils/transforms";
 import { LinkedChartStack, type ManualPriceLine } from "./CandlestickChart";
@@ -11,6 +12,8 @@ interface ChartWorkspaceProps {
   trades: TradeRecord[];
   loadingMessage: string | null;
   errorMessage: string | null;
+  dataWindowLabel: string;
+  transformRun: TransformRunSummary | null;
   onAddManualLevel: (kind: ManualLevelKind, price: number) => void;
   onRemoveSeries: (key: string) => void;
 }
@@ -65,6 +68,29 @@ function manualPriceLineFromConfig(config: VisualizationConfig): ManualPriceLine
   };
 }
 
+function isDataBackedSeries(config: VisualizationConfig): boolean {
+  return config.source_type !== "manual_level" && config.render_type !== "horizontal_level";
+}
+
+function missingVisibleSeries(configs: VisualizationConfig[], seriesData: Record<string, TimeValuePoint[]>): string[] {
+  return configs
+    .filter((config) => config.visible && isDataBackedSeries(config))
+    .filter((config) => (seriesData[seriesKey(config.source_type, config.series_id)] ?? []).length === 0)
+    .map((config) => config.display_name);
+}
+
+function numberMetadata(value: unknown): string | null {
+  return typeof value === "number" && Number.isFinite(value) ? value.toLocaleString() : null;
+}
+
+function textMetadata(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function metadataList(value: unknown): string[] {
+  return Array.isArray(value) ? value.map((item) => String(item)).filter(Boolean) : [];
+}
+
 export function ChartWorkspace({
   candles,
   configs,
@@ -72,6 +98,8 @@ export function ChartWorkspace({
   trades,
   loadingMessage,
   errorMessage,
+  dataWindowLabel,
+  transformRun,
   onAddManualLevel,
   onRemoveSeries
 }: ChartWorkspaceProps) {
@@ -83,8 +111,12 @@ export function ChartWorkspace({
   const visibleSeriesCount = useMemo(() => configs.filter((config) => config.visible).length, [configs]);
   const manualLevelConfigs = useMemo(() => configs.filter(isManualLevelConfig), [configs]);
   const priceLines = useMemo(() => manualLevelConfigs.flatMap((config) => manualPriceLineFromConfig(config) ?? []), [manualLevelConfigs]);
+  const missingSeries = useMemo(() => missingVisibleSeries(configs, seriesData), [configs, seriesData]);
   const stopLossPrice = parsePositivePrice(stopLossDraft);
   const takeProfitPrice = parsePositivePrice(takeProfitDraft);
+  const rowsLoaded = numberMetadata(transformRun?.metadata.rows_loaded);
+  const rowsReturned = numberMetadata(transformRun?.metadata.rows_returned);
+  const transformDataset = textMetadata(transformRun?.metadata.dataset_id);
 
   useEffect(() => {
     if (!isExpanded) {
@@ -131,6 +163,7 @@ export function ChartWorkspace({
             <span>{candles.length.toLocaleString()} candles</span>
             <span>{visibleSeriesCount} visible series</span>
             <span>{trades.length.toLocaleString()} trades</span>
+            <span>{dataWindowLabel}</span>
           </div>
           <button
             className="secondary-button workspace-toggle-button"
@@ -199,6 +232,44 @@ export function ChartWorkspace({
         {isExpanded ? <div className="workspace-focus-copy">Esc closes the focused chart view.</div> : null}
         {errorMessage ? <div className="error-banner">{errorMessage}</div> : null}
         {loadingMessage ? <div className="loading-banner">{loadingMessage}</div> : null}
+        {missingSeries.length > 0 ? (
+          <div className="warning-banner">
+            No points in the current chart window for {missingSeries.slice(0, 4).join(", ")}
+            {missingSeries.length > 4 ? ` and ${missingSeries.length - 4} more` : ""}.
+          </div>
+        ) : null}
+        {transformRun ? (
+          <section className="transform-run-summary" aria-label="Last parameterized preview">
+            <div className="transform-run-header">
+              <div>
+                <strong>Parameterized preview</strong>
+                <span>{new Date(transformRun.ran_at).toLocaleString()}</span>
+              </div>
+              <div className="transform-run-metrics">
+                {rowsReturned ? <span>{rowsReturned} rows returned</span> : null}
+                {rowsLoaded ? <span>{rowsLoaded} rows loaded</span> : null}
+                {transformDataset ? <span>{transformDataset}</span> : null}
+              </div>
+            </div>
+            {transformRun.steps.length > 0 ? (
+              <div className="transform-step-results">
+                {transformRun.steps.map((step, index) => {
+                  const prerequisites = metadataList(step.metadata.materialized_prerequisites);
+                  return (
+                    <div className="transform-step-result" key={`${step.source_type}-${step.step}-${index}`}>
+                      <div>
+                        <strong>{step.step}</strong>
+                        <span>{step.source_type}</span>
+                      </div>
+                      <small>{step.output_columns.length > 0 ? step.output_columns.join(", ") : "no numeric outputs"}</small>
+                      {prerequisites.length > 0 ? <em>auto inputs: {prerequisites.join(", ")}</em> : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
         <LinkedChartStack
           candles={candles}
           overlays={mainOverlays}

@@ -10,7 +10,7 @@ import type {
   TradeRecord
 } from "../types/market";
 import type { ExperimentSummary } from "../types/experiment";
-import type { BuilderDefinition, BuilderSourceType, TransformStepConfig } from "../types/transforms";
+import type { BuilderDefinition, BuilderSourceType, TransformRunSummary, TransformStepConfig } from "../types/transforms";
 import type { DashboardLayout, DashboardSelection, LayoutSummary, ManualLevelKind, VisualizationConfig } from "../types/visualization";
 import { buildDefaultSeriesConfig, seriesKey } from "../utils/transforms";
 
@@ -40,6 +40,7 @@ interface DashboardState {
   seriesData: Record<string, TimeValuePoint[]>;
   trades: TradeRecord[];
   equity: TimeValuePoint[];
+  transformRun: TransformRunSummary | null;
   loadingMessage: string | null;
   errorMessage: string | null;
   setBootstrapData: (data: {
@@ -73,6 +74,7 @@ interface DashboardState {
     trades?: TradeRecord[];
     equity?: TimeValuePoint[];
   }) => void;
+  setTransformRun: (summary: TransformRunSummary | null) => void;
   setLoadingMessage: (message: string | null) => void;
   setErrorMessage: (message: string | null) => void;
   applyLayout: (layout: DashboardLayout) => void;
@@ -185,6 +187,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   seriesData: {},
   trades: [],
   equity: [],
+  transformRun: null,
   loadingMessage: null,
   errorMessage: null,
   setBootstrapData: ({ assets = [], datasets, experiments, layouts }) => {
@@ -285,6 +288,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     })),
   setActiveSeriesKey: (key) => set({ activeSeriesKey: key }),
   setMarketData: (payload) => set((state) => ({ ...state, ...payload })),
+  setTransformRun: (summary) => set({ transformRun: summary }),
   setLoadingMessage: (message) => set({ loadingMessage: message }),
   setErrorMessage: (message) => set({ errorMessage: message }),
   applyLayout: (layout) =>
@@ -295,6 +299,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       featureSteps: layout.transformations?.features ?? state.featureSteps,
       signalSteps: layout.transformations?.signals ?? state.signalSteps,
       targetSteps: layout.transformations?.targets ?? state.targetSteps,
+      transformRun: null,
       selectedFeatureIds: layout.series.filter((config) => config.source_type === "feature").map((config) => config.series_id),
       selectedSignalIds: layout.series.filter((config) => config.source_type === "signal").map((config) => config.series_id),
       selectedTargetIds: layout.series.filter((config) => config.source_type === "target").map((config) => config.series_id),
