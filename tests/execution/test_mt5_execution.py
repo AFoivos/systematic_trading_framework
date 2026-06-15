@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from src.execution.mt5_connector import MT5Connector, MT5CredentialsError
-from src.execution.mt5_bot_runner import SingleInstanceLock, SingleInstanceLockError
+from src.execution.mt5_bot_runner import SingleInstanceLock, SingleInstanceLockError, _feature_snapshot_payload
 from src.execution.mt5_order_manager import MT5OrderManager, TradeParameters
 from src.execution.mt5_position_manager import MT5PositionManager
 from src.execution.mt5_risk_manager import MT5RiskManager, RiskConfig, calculate_position_size
@@ -293,6 +293,34 @@ def test_max_spread_blocks_order_send() -> None:
     assert result.status == "rejected"
     assert result.reason == "max_spread_exceeded"
     assert connector.order_send_calls == 0
+
+
+def test_feature_snapshot_payload_keeps_recent_numeric_feature_rows() -> None:
+    frame = pd.DataFrame(
+        {
+            "close": [100.0, 101.0, 102.0],
+            "ema_50": [99.5, 100.2, 100.9],
+            "atr_14": [1.2, 1.3, 1.4],
+            "signal_side": [0, 1, 0],
+        },
+        index=pd.date_range("2026-06-15T12:00:00Z", periods=3, freq="30min"),
+    )
+
+    payload = _feature_snapshot_payload(
+        asset="SPX500",
+        mt5_symbol="US500.cash",
+        latest_bar=pd.Timestamp("2026-06-15T13:00:00Z"),
+        timeframe="M30",
+        strategy_config_path="config/example.yaml",
+        signal_frame=frame,
+        max_rows=2,
+    )
+
+    assert payload["row_count"] == 2
+    assert payload["market_columns"] == ["close"]
+    assert payload["feature_columns"] == ["ema_50", "atr_14"]
+    assert payload["records"][0]["time"] == "2026-06-15T12:30:00+00:00"
+    assert payload["records"][-1]["ema_50"] == 100.9
 
 
 def _order_manager(

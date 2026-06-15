@@ -10,6 +10,7 @@ from app.api import (
     routes_assets,
     routes_backtests,
     routes_data,
+    routes_execution,
     routes_experiments,
     routes_features,
     routes_layouts,
@@ -83,6 +84,7 @@ def create_app() -> FastAPI:
     app.include_router(routes_experiments.router, prefix="/api", tags=["experiments"])
     app.include_router(routes_backtests.router, prefix="/api", tags=["backtests"])
     app.include_router(routes_layouts.router, prefix="/api", tags=["layouts"])
+    app.include_router(routes_execution.router, prefix="/api", tags=["execution"])
     _configure_frontend_routes(app)
     return app
 

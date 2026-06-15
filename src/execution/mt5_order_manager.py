@@ -189,9 +189,19 @@ class MT5OrderManager:
                 sent=False,
                 details={
                     "framework_symbol": framework_symbol,
+                    "entry_price": price,
+                    "bid": bid,
+                    "ask": ask,
+                    "volume": sizing.volume,
+                    "risk_amount": sizing.risk_amount,
+                    "risk_per_lot": sizing.risk_per_lot,
+                    "raw_volume": sizing.raw_volume,
+                    "sl": sl,
+                    "tp": tp,
                     "spread_points": spread_points,
                     "stop_distance": stop_distance,
                     "volatility_distance": volatility,
+                    "volatility_col": trade_params.volatility_col,
                 },
             )
 
@@ -209,9 +219,19 @@ class MT5OrderManager:
             slippage=slippage,
             details={
                 "framework_symbol": framework_symbol,
+                "entry_price": price,
+                "bid": bid,
+                "ask": ask,
+                "volume": sizing.volume,
+                "risk_amount": sizing.risk_amount,
+                "risk_per_lot": sizing.risk_per_lot,
+                "raw_volume": sizing.raw_volume,
+                "sl": sl,
+                "tp": tp,
                 "spread_points": spread_points,
                 "stop_distance": stop_distance,
                 "volatility_distance": volatility,
+                "volatility_col": trade_params.volatility_col,
             },
         )
 

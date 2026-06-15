@@ -1,8 +1,9 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "./styles.css";
 import { api } from "./api/client";
 import { ChartWorkspace } from "./components/ChartWorkspace";
 import { ControlPanel } from "./components/ControlPanel";
+import { ExecutionMonitor } from "./components/ExecutionMonitor";
 import { SeriesStyleEditor } from "./components/SeriesStyleEditor";
 import { useDashboardStore } from "./state/dashboardStore";
 import type { NamedSeries } from "./types/market";
@@ -35,6 +36,7 @@ function mergeSeries(sourceType: string, series: NamedSeries[]): Record<string, 
 }
 
 export default function App() {
+  const [activeView, setActiveView] = useState<"research" | "execution">("research");
   const state = useDashboardStore();
   const {
     datasets,
@@ -263,8 +265,29 @@ export default function App() {
           <h1>Trading Research Dashboard</h1>
           <p>{selectedDataset?.relative_path || selection.datasetId || "No dataset"} · local artifacts</p>
         </div>
+        <div className="view-tabs" role="tablist" aria-label="Dashboard view">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeView === "research"}
+            className={activeView === "research" ? "active" : ""}
+            onClick={() => setActiveView("research")}
+          >
+            Research
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeView === "execution"}
+            className={activeView === "execution" ? "active" : ""}
+            onClick={() => setActiveView("execution")}
+          >
+            Execution
+          </button>
+        </div>
       </header>
-      <div className="dashboard-grid">
+      {activeView === "research" ? (
+        <div className="dashboard-grid">
         <ControlPanel
           datasets={datasets}
           experiments={experiments}
@@ -305,7 +328,10 @@ export default function App() {
           onSelect={state.setActiveSeriesKey}
           onUpdate={state.updateSeriesConfig}
         />
-      </div>
+        </div>
+      ) : (
+        <ExecutionMonitor />
+      )}
     </div>
   );
 }

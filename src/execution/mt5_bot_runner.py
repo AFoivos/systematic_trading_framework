@@ -4,6 +4,7 @@ import argparse
 from datetime import datetime, timezone
 import json
 import logging
+import math
 import os
 from pathlib import Path
 import sys
@@ -103,6 +104,17 @@ class JsonlEventLogger:
         payload = {"logged_at": datetime.now(timezone.utc).isoformat(), **dict(event)}
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(_jsonable(payload), sort_keys=True) + "\n")
+
+    def write_snapshot(self, relative_path: str | Path, payload: Mapping[str, Any]) -> None:
+        path = self.log_dir / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        full_payload = {"logged_at": datetime.now(timezone.utc).isoformat(), **dict(payload)}
+        temp_path = path.with_suffix(path.suffix + ".tmp")
+        temp_path.write_text(
+            json.dumps(_jsonable(full_payload), sort_keys=True),
+            encoding="utf-8",
+        )
+        temp_path.replace(path)
 
 
 class MT5DemoBot:
@@ -235,19 +247,57 @@ class MT5DemoBot:
             signal_col = str(self.strategy_config.get("backtest", {}).get("signal_col", "signal_side"))
             signal_side = int(latest.get(signal_col, 0) or 0)
             self._log_signal(framework_symbol, mt5_symbol, latest_bar, latest, signal_col, signal_side)
+            self._log_feature_snapshot(framework_symbol, mt5_symbol, latest_bar, signal_frame)
             self._last_processed_bar[framework_symbol] = latest_bar
+            trade_params, trade_params_error = self._safe_trade_params_for_asset(framework_symbol)
 
             if signal_side == 1:
+                if trade_params is None:
+                    result = OrderResult(
+                        "rejected",
+                        "trade_parameters_unavailable",
+                        details={"error": trade_params_error},
+                    )
+                    self._log_order_result(framework_symbol, mt5_symbol, latest_bar, result)
+                    self._log_decision_trace(
+                        framework_symbol=framework_symbol,
+                        mt5_symbol=mt5_symbol,
+                        latest_bar=latest_bar,
+                        candles=candles,
+                        signal_frame=signal_frame,
+                        latest=latest,
+                        signal_col=signal_col,
+                        signal_side=signal_side,
+                        trade_params=trade_params,
+                        trade_params_error=trade_params_error,
+                        order_action="buy",
+                        order_result=result,
+                    )
+                    return
                 result = self.order_manager.place_market_order(
                     framework_symbol=framework_symbol,
                     mt5_symbol=mt5_symbol,
                     side="buy",
                     latest_row=latest,
                     account_info=account,
-                    trade_params=self._trade_params_for_asset(framework_symbol),
+                    trade_params=trade_params,
                     now_utc=datetime.now(timezone.utc),
                 )
                 self._log_order_result(framework_symbol, mt5_symbol, latest_bar, result)
+                self._log_decision_trace(
+                    framework_symbol=framework_symbol,
+                    mt5_symbol=mt5_symbol,
+                    latest_bar=latest_bar,
+                    candles=candles,
+                    signal_frame=signal_frame,
+                    latest=latest,
+                    signal_col=signal_col,
+                    signal_side=signal_side,
+                    trade_params=trade_params,
+                    trade_params_error=trade_params_error,
+                    order_action="buy",
+                    order_result=result,
+                )
             elif signal_side < 0:
                 self.event_logger.write(
                     "rejected_orders",
@@ -259,8 +309,49 @@ class MT5DemoBot:
                         "signal_side": signal_side,
                     },
                 )
-        except Exception:
+                self._log_decision_trace(
+                    framework_symbol=framework_symbol,
+                    mt5_symbol=mt5_symbol,
+                    latest_bar=latest_bar,
+                    candles=candles,
+                    signal_frame=signal_frame,
+                    latest=latest,
+                    signal_col=signal_col,
+                    signal_side=signal_side,
+                    trade_params=trade_params,
+                    trade_params_error=trade_params_error,
+                    order_action="short_ignored",
+                    order_result=None,
+                    order_reason="short_signals_ignored",
+                )
+            else:
+                self._log_decision_trace(
+                    framework_symbol=framework_symbol,
+                    mt5_symbol=mt5_symbol,
+                    latest_bar=latest_bar,
+                    candles=candles,
+                    signal_frame=signal_frame,
+                    latest=latest,
+                    signal_col=signal_col,
+                    signal_side=signal_side,
+                    trade_params=trade_params,
+                    trade_params_error=trade_params_error,
+                    order_action="none",
+                    order_result=None,
+                    order_reason="flat_signal",
+                )
+        except Exception as exc:
             self.logger.exception("failed processing symbol %s (%s)", framework_symbol, mt5_symbol)
+            self.event_logger.write(
+                "errors",
+                {
+                    "asset": framework_symbol,
+                    "mt5_symbol": mt5_symbol,
+                    "event": "process_symbol_failed",
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                },
+            )
 
     def _trade_params_for_asset(self, framework_symbol: str) -> TradeParameters:
         backtest_cfg = dict(self.strategy_config.get("backtest", {}) or {})
@@ -281,6 +372,130 @@ class MT5DemoBot:
             take_profit_r=float(take_profit_r),
             volatility_col=str(volatility_col) if volatility_col else None,
             deviation_points=int(self.execution_cfg.get("deviation_points", 20)),
+        )
+
+    def _safe_trade_params_for_asset(self, framework_symbol: str) -> tuple[TradeParameters | None, str | None]:
+        try:
+            return self._trade_params_for_asset(framework_symbol), None
+        except Exception as exc:
+            return None, f"{type(exc).__name__}: {exc}"
+
+    def _log_decision_trace(
+        self,
+        *,
+        framework_symbol: str,
+        mt5_symbol: str,
+        latest_bar: pd.Timestamp,
+        candles: pd.DataFrame,
+        signal_frame: pd.DataFrame,
+        latest: pd.Series,
+        signal_col: str,
+        signal_side: int,
+        trade_params: TradeParameters | None,
+        trade_params_error: str | None,
+        order_action: str,
+        order_result: OrderResult | None,
+        order_reason: str | None = None,
+    ) -> None:
+        signal_cfg = dict(self.strategy_config.get("signals", {}) or {})
+        signal_params = _effective_params(signal_cfg, framework_symbol)
+        signal_columns = _signal_input_columns(signal_params, signal_col)
+        previous = signal_frame.iloc[-2] if len(signal_frame.index) > 1 else None
+        payload = {
+            "event": "decision",
+            "asset": framework_symbol,
+            "mt5_symbol": mt5_symbol,
+            "bar_time": latest_bar.isoformat(),
+            "timeframe": str(self.execution_cfg.get("timeframe", "M30")),
+            "execution": {
+                "mode": self.execution_mode,
+                "dry_run": self.dry_run,
+                "config_path": str(self.config_path),
+                "strategy_config_path": str(self.strategy_config_path),
+                "poll_seconds": self.execution_cfg.get("poll_seconds"),
+                "lookback_bars": self.execution_cfg.get("lookback_bars"),
+            },
+            "market_data": _market_data_snapshot(candles),
+            "strategy": {
+                "signal_kind": signal_cfg.get("kind", "none"),
+                "signal_params": signal_params,
+                "feature_steps": _effective_feature_steps(
+                    list(self.strategy_config.get("features", []) or []),
+                    framework_symbol,
+                ),
+            },
+            "latest_values": _series_values(latest, list(signal_frame.columns)),
+            "signal": {
+                "signal_col": signal_col,
+                "signal_side": signal_side,
+                "inputs": _series_values(latest, signal_columns),
+                "previous_inputs": _series_values(previous, signal_columns) if previous is not None else {},
+                "checks": _signal_checks(latest, signal_params, signal_col),
+            },
+            "risk": self._risk_trace(trade_params=trade_params, trade_params_error=trade_params_error),
+            "order": _order_trace(order_action, order_result, reason=order_reason),
+        }
+        self.event_logger.write("decision_trace", payload)
+
+    def _risk_trace(
+        self,
+        *,
+        trade_params: TradeParameters | None,
+        trade_params_error: str | None,
+    ) -> dict[str, Any]:
+        config = self.risk_manager.config
+        kill_switch_path = config.kill_switch_path
+        return {
+            "limits": {
+                "risk_per_trade": config.risk_per_trade,
+                "max_daily_loss_pct": config.max_daily_loss_pct,
+                "max_total_drawdown_pct": config.max_total_drawdown_pct,
+                "max_positions": config.max_positions,
+                "max_positions_per_symbol": config.max_positions_per_symbol,
+                "max_symbol_exposure": config.max_symbol_exposure,
+                "max_spread_points": config.max_spread_points,
+                "allow_short": config.allow_short,
+                "demo_only": config.demo_only,
+                "disable_weekend_trading": config.disable_weekend_trading,
+                "trading_hours_utc": config.trading_hours_utc,
+            },
+            "state": {
+                "initial_equity": self.risk_manager.initial_equity,
+                "daily_start_equity": self.risk_manager.daily_start_equity,
+                "equity_peak": self.risk_manager.equity_peak,
+                "kill_switch_path": str(kill_switch_path) if kill_switch_path is not None else None,
+                "kill_switch_active": bool(kill_switch_path.exists()) if kill_switch_path is not None else False,
+            },
+            "trade_params": {
+                "stop_loss_r": trade_params.stop_loss_r if trade_params is not None else None,
+                "take_profit_r": trade_params.take_profit_r if trade_params is not None else None,
+                "volatility_col": trade_params.volatility_col if trade_params is not None else None,
+                "deviation_points": trade_params.deviation_points if trade_params is not None else None,
+                "error": trade_params_error,
+            },
+        }
+
+    def _log_feature_snapshot(
+        self,
+        framework_symbol: str,
+        mt5_symbol: str,
+        latest_bar: pd.Timestamp,
+        signal_frame: pd.DataFrame,
+    ) -> None:
+        max_rows = int(dict(self.config.get("logging", {}) or {}).get("feature_snapshot_rows", 300))
+        max_rows = max(1, min(max_rows, 2000))
+        snapshot = _feature_snapshot_payload(
+            asset=framework_symbol,
+            mt5_symbol=mt5_symbol,
+            latest_bar=latest_bar,
+            timeframe=str(self.execution_cfg.get("timeframe", "M30")),
+            strategy_config_path=str(self.strategy_config_path),
+            signal_frame=signal_frame,
+            max_rows=max_rows,
+        )
+        self.event_logger.write_snapshot(
+            Path("feature_snapshots") / f"{_safe_filename(framework_symbol)}.json",
+            snapshot,
         )
 
     def _log_account(self, account: Any) -> None:
@@ -350,6 +565,181 @@ def load_execution_config(path: str | Path) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise TypeError("execution config must be a YAML mapping.")
     return raw
+
+
+def _effective_params(cfg: Mapping[str, Any], asset: str) -> dict[str, Any]:
+    params = dict(cfg.get("params", {}) or {})
+    params_by_asset = dict(cfg.get("params_by_asset", {}) or {})
+    params.update(dict(params_by_asset.get(str(asset), {}) or {}))
+    return params
+
+
+def _effective_feature_steps(steps: list[dict[str, Any]], asset: str) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for idx, step in enumerate(steps):
+        params = dict(step.get("params", {}) or {})
+        params_by_asset = dict(step.get("params_by_asset", {}) or {})
+        params.update(dict(params_by_asset.get(str(asset), {}) or {}))
+        out.append(
+            {
+                "index": idx,
+                "step": step.get("step"),
+                "enabled": step.get("enabled", True) is not False,
+                "params": params,
+                "outputs": step.get("outputs", {}) or {},
+            }
+        )
+    return out
+
+
+def _market_data_snapshot(candles: pd.DataFrame) -> dict[str, Any]:
+    latest = candles.iloc[-1] if not candles.empty else None
+    return {
+        "source": "mt5.copy_rates_from_pos",
+        "closed_only": True,
+        "count": int(len(candles.index)),
+        "columns": [str(column) for column in candles.columns],
+        "first_bar": candles.index[0].isoformat() if not candles.empty else None,
+        "latest_bar": candles.index[-1].isoformat() if not candles.empty else None,
+        "latest_ohlcv": _series_values(
+            latest,
+            ["open", "high", "low", "close", "volume", "tick_volume", "spread", "real_volume"],
+        )
+        if latest is not None
+        else {},
+    }
+
+
+def _feature_snapshot_payload(
+    *,
+    asset: str,
+    mt5_symbol: str,
+    latest_bar: pd.Timestamp,
+    timeframe: str,
+    strategy_config_path: str,
+    signal_frame: pd.DataFrame,
+    max_rows: int,
+) -> dict[str, Any]:
+    tail = signal_frame.tail(max_rows).copy()
+    numeric_columns = [
+        str(column)
+        for column in tail.columns
+        if pd.api.types.is_numeric_dtype(tail[column])
+    ]
+    market_columns = {
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "tick_volume",
+        "spread",
+        "real_volume",
+    }
+    feature_columns = [
+        column
+        for column in numeric_columns
+        if column not in market_columns and not column.startswith("signal")
+    ]
+    return {
+        "asset": asset,
+        "mt5_symbol": mt5_symbol,
+        "bar_time": latest_bar.isoformat(),
+        "timeframe": timeframe,
+        "strategy_config_path": strategy_config_path,
+        "row_count": int(len(tail.index)),
+        "columns": [str(column) for column in tail.columns],
+        "numeric_columns": numeric_columns,
+        "feature_columns": feature_columns,
+        "market_columns": [column for column in numeric_columns if column in market_columns],
+        "records": _frame_records(tail),
+    }
+
+
+def _frame_records(frame: pd.DataFrame) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for index, row in frame.iterrows():
+        record = {"time": _jsonable(index)}
+        record.update({str(column): _jsonable(row[column]) for column in frame.columns})
+        records.append(record)
+    return records
+
+
+def _signal_input_columns(params: Mapping[str, Any], signal_col: str) -> list[str]:
+    columns = {signal_col}
+    for key, value in params.items():
+        if str(key).endswith("_col") and isinstance(value, str) and value.strip():
+            columns.add(value.strip())
+    return sorted(columns)
+
+
+def _signal_checks(latest: pd.Series, params: Mapping[str, Any], signal_col: str) -> dict[str, Any]:
+    checks: dict[str, Any] = {"signal": _series_value(latest, signal_col)}
+    for label, param_key in (
+        ("candidate", "candidate_col"),
+        ("long_regime", "regime_col"),
+        ("short_regime", "short_regime_col"),
+        ("cross_up", "cross_up_col"),
+        ("cross_down", "cross_down_col"),
+        ("ppo_hist_positive", "ppo_hist_positive_col"),
+        ("ppo_hist_negative", "ppo_hist_negative_col"),
+        ("ppo_above_signal", "ppo_above_signal_col"),
+        ("ppo_below_signal", "ppo_below_signal_col"),
+        ("long_setup", "long_setup_col"),
+        ("short_setup", "short_setup_col"),
+    ):
+        column = params.get(param_key)
+        if isinstance(column, str) and column in latest:
+            checks[label] = _series_value(latest, column)
+    hist_col = params.get("ppo_hist_col")
+    hist = _series_value(latest, hist_col) if isinstance(hist_col, str) else None
+    threshold = params.get("ppo_hist_min")
+    checks["ppo_hist"] = hist
+    checks["ppo_hist_min"] = threshold
+    if isinstance(hist, (int, float)) and isinstance(threshold, (int, float)):
+        checks["ppo_hist_above_min"] = float(hist) > float(threshold)
+        checks["ppo_hist_below_negative_min"] = float(hist) < -float(threshold)
+    return checks
+
+
+def _order_trace(action: str, result: OrderResult | None, *, reason: str | None = None) -> dict[str, Any]:
+    if result is None:
+        return {
+            "action": action,
+            "status": "not_sent",
+            "reason": reason,
+            "sent": False,
+        }
+    return {
+        "action": action,
+        "status": result.status,
+        "reason": result.reason,
+        "request": result.request,
+        "response": result.response,
+        "sent": result.sent,
+        "slippage": result.slippage,
+        "details": result.details,
+    }
+
+
+def _series_values(row: pd.Series | None, columns: list[str]) -> dict[str, Any]:
+    if row is None:
+        return {}
+    return {
+        str(column): _series_value(row, str(column))
+        for column in columns
+        if str(column) in row
+    }
+
+
+def _series_value(row: pd.Series, column: str | None) -> Any:
+    if column is None or column not in row:
+        return None
+    return _jsonable(row[column])
+
+
+def _safe_filename(value: str) -> str:
+    return "".join(char if char.isalnum() or char in {"-", "_"} else "_" for char in str(value))
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -474,14 +864,20 @@ def _jsonable(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [_jsonable(item) for item in value]
     if isinstance(value, (pd.Timestamp, datetime)):
+        if pd.isna(value):
+            return None
         return value.isoformat()
     if isinstance(value, Path):
         return str(value)
     if hasattr(value, "item"):
         try:
-            return value.item()
+            return _jsonable(value.item())
         except Exception:
             pass
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if pd.isna(value):
+        return None
     return value
 
 

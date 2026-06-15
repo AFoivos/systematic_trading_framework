@@ -7,6 +7,14 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 *.pyc
+**/__pycache__/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/*.pyc
+**/node_modules/
+**/dist/
+**/*.tsbuildinfo
 
 data/
 logs/
