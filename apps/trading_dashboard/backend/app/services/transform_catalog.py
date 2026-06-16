@@ -30,19 +30,35 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.features import (  # noqa: E402
     TSFRESH_ROLLING_CALCULATORS,
     add_adx_features,
+    add_autocorrelation_periodogram,
     add_atr_features,
     add_bollinger_features,
+    add_center_of_gravity,
     add_close_returns,
+    add_cyber_cycle,
+    add_decycler,
+    add_decycler_oscillator,
+    add_dominant_cycle_period,
+    add_dominant_cycle_phase,
+    add_even_better_sinewave,
+    add_fama,
     add_feature_transforms,
+    add_fisher_transform,
     add_fractal_dimension,
+    add_frama,
     add_garman_klass_volatility,
     add_hilbert_transform,
+    add_homodyne_discriminator,
     add_hmm_regime,
     add_hurst_exponent,
+    add_instantaneous_trendline,
     add_indicator_pullback_features,
+    add_inverse_fisher_transform,
     add_lagged_features,
+    add_laguerre_rsi,
     add_macd_features,
     add_macro_context_features,
+    add_mama,
     add_mfi_features,
     add_multi_timeframe_features,
     add_opening_range_breakout_features,
@@ -62,6 +78,7 @@ from src.features import (  # noqa: E402
     add_session_context_features,
     add_shannon_entropy,
     add_shock_context_features,
+    add_sinewave_indicator,
     add_supersmoother,
     add_stochastic_features,
     add_stochastic_rsi_features,
@@ -150,6 +167,23 @@ FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
     "ema_stoch_rsi_pullback": ema_stoch_rsi_pullback_signal,
     "indicator_pullback": add_indicator_pullback_features,
     "indicator_model_adaptive_pullback": indicator_model_adaptive_pullback_signal,
+    "mama": add_mama,
+    "fama": add_fama,
+    "dominant_cycle_period": add_dominant_cycle_period,
+    "dominant_cycle_phase": add_dominant_cycle_phase,
+    "instantaneous_trendline": add_instantaneous_trendline,
+    "fisher_transform": add_fisher_transform,
+    "inverse_fisher_transform": add_inverse_fisher_transform,
+    "sinewave_indicator": add_sinewave_indicator,
+    "cyber_cycle": add_cyber_cycle,
+    "decycler": add_decycler,
+    "decycler_oscillator": add_decycler_oscillator,
+    "laguerre_rsi": add_laguerre_rsi,
+    "frama": add_frama,
+    "center_of_gravity": add_center_of_gravity,
+    "even_better_sinewave": add_even_better_sinewave,
+    "autocorrelation_periodogram": add_autocorrelation_periodogram,
+    "homodyne_discriminator": add_homodyne_discriminator,
     "parkinson_volatility": add_parkinson_volatility,
     "garman_klass_volatility": add_garman_klass_volatility,
     "yang_zhang_volatility": add_yang_zhang_volatility,
@@ -292,6 +326,116 @@ PARAM_OPTIONS: dict[str, list[Any]] = {
 
 SKIPPED_RUNTIME_PARAMETERS = {"df"}
 FEATURE_PARAM_DEFAULTS: dict[str, dict[str, Any]] = {
+    "mama": {
+        "price_col": "close",
+        "fast_limit": 0.5,
+        "slow_limit": 0.05,
+        "output_col": "mama",
+    },
+    "fama": {
+        "price_col": "close",
+        "fast_limit": 0.5,
+        "slow_limit": 0.05,
+        "output_col": "fama",
+    },
+    "dominant_cycle_period": {
+        "price_col": "close",
+        "output_col": "dominant_cycle_period",
+    },
+    "dominant_cycle_phase": {
+        "price_col": "close",
+        "output_col": "dominant_cycle_phase",
+    },
+    "instantaneous_trendline": {
+        "price_col": "close",
+        "alpha": 0.07,
+        "output_col": "instantaneous_trendline",
+        "trigger_col": "instantaneous_trendline_trigger",
+        "add_trigger": True,
+    },
+    "fisher_transform": {
+        "price_col": "close",
+        "window": 10,
+        "clip": 0.999,
+        "output_col": "fisher_transform_10",
+        "signal_col": "fisher_transform_10_signal",
+        "add_signal": True,
+    },
+    "inverse_fisher_transform": {
+        "input_col": "close",
+        "window": 10,
+        "scale": 1.0,
+        "normalize": True,
+        "output_col": "inverse_fisher_transform_10",
+    },
+    "sinewave_indicator": {
+        "price_col": "close",
+        "lead_degrees": 45.0,
+        "output_col": "sinewave",
+        "lead_output_col": "lead_sinewave",
+    },
+    "cyber_cycle": {
+        "price_col": "close",
+        "alpha": 0.07,
+        "output_col": "cyber_cycle",
+        "trigger_col": "cyber_cycle_trigger",
+        "add_trigger": True,
+    },
+    "decycler": {
+        "price_col": "close",
+        "period": 60,
+        "output_col": "decycler_60",
+    },
+    "decycler_oscillator": {
+        "price_col": "close",
+        "fast_period": 30,
+        "slow_period": 60,
+        "output_col": "decycler_oscillator_30_60",
+    },
+    "laguerre_rsi": {
+        "price_col": "close",
+        "gamma": 0.5,
+        "output_col": "laguerre_rsi",
+        "as_percent": False,
+    },
+    "frama": {
+        "price_col": "close",
+        "high_col": "high",
+        "low_col": "low",
+        "window": 16,
+        "fast_period": 4,
+        "slow_period": 300,
+        "output_col": "frama_16",
+        "alpha_col": "frama_16_alpha",
+        "fractal_dimension_col": "frama_16_fractal_dimension",
+        "add_diagnostics": False,
+    },
+    "center_of_gravity": {
+        "price_col": "close",
+        "window": 10,
+        "output_col": "center_of_gravity_10",
+    },
+    "even_better_sinewave": {
+        "price_col": "close",
+        "duration": 40,
+        "smoothing_period": 10,
+        "power_window": 3,
+        "output_col": "even_better_sinewave",
+    },
+    "autocorrelation_periodogram": {
+        "price_col": "close",
+        "min_period": 10,
+        "max_period": 48,
+        "window": 96,
+        "output_col": "autocorrelation_periodogram_10_48",
+        "power_col": "autocorrelation_periodogram_10_48_power",
+        "add_power": False,
+    },
+    "homodyne_discriminator": {
+        "price_col": "close",
+        "use_smoothed_period": False,
+        "output_col": "homodyne_discriminator",
+    },
     "feature_transforms": {
         "transforms": [
             {
@@ -357,6 +501,94 @@ FEATURE_PARAM_OPTIONS: dict[str, dict[str, list[Any]]] = {
         "mode": ["expanding", "static_train"],
         "covariance_type": ["diag", "full", "tied", "spherical"],
     }
+}
+
+FEATURE_METADATA: dict[str, dict[str, Any]] = {
+    "mama": {
+        "display_name": "MAMA",
+        "description": "Mesa Adaptive Moving Average from John Ehlers.",
+        "category": "Ehlers",
+    },
+    "fama": {
+        "display_name": "FAMA",
+        "description": "Following Adaptive Moving Average paired with MAMA.",
+        "category": "Ehlers",
+    },
+    "dominant_cycle_period": {
+        "display_name": "Dominant Cycle Period",
+        "description": "Causal MESA estimate of the current dominant cycle length.",
+        "category": "Ehlers",
+    },
+    "dominant_cycle_phase": {
+        "display_name": "Dominant Cycle Phase",
+        "description": "Causal MESA estimate of cycle phase in degrees.",
+        "category": "Ehlers",
+    },
+    "instantaneous_trendline": {
+        "display_name": "Instantaneous Trendline",
+        "description": "Ehlers low-lag instantaneous trendline with optional trigger.",
+        "category": "Ehlers",
+    },
+    "fisher_transform": {
+        "display_name": "Fisher Transform",
+        "description": "Trailing-range Fisher Transform oscillator.",
+        "category": "Ehlers",
+    },
+    "inverse_fisher_transform": {
+        "display_name": "Inverse Fisher Transform",
+        "description": "Bounded inverse Fisher transform for normalized inputs.",
+        "category": "Ehlers",
+    },
+    "sinewave_indicator": {
+        "display_name": "Sinewave Indicator",
+        "description": "Cycle sine and lead-sine values derived from causal MESA phase.",
+        "category": "Ehlers",
+    },
+    "cyber_cycle": {
+        "display_name": "Cyber Cycle",
+        "description": "Ehlers Cyber Cycle oscillator with optional trigger.",
+        "category": "Ehlers",
+    },
+    "decycler": {
+        "display_name": "Decycler",
+        "description": "Ehlers decycler trend filter using a causal high-pass removal.",
+        "category": "Ehlers",
+    },
+    "decycler_oscillator": {
+        "display_name": "Decycler Oscillator",
+        "description": "Difference between fast and slow decyclers scaled by price.",
+        "category": "Ehlers",
+    },
+    "laguerre_rsi": {
+        "display_name": "Laguerre RSI",
+        "description": "Ehlers Laguerre-filtered RSI oscillator.",
+        "category": "Ehlers",
+    },
+    "frama": {
+        "display_name": "FRAMA",
+        "description": "Fractal Adaptive Moving Average with optional alpha diagnostics.",
+        "category": "Ehlers",
+    },
+    "center_of_gravity": {
+        "display_name": "Center of Gravity",
+        "description": "Ehlers Center of Gravity oscillator over a trailing window.",
+        "category": "Ehlers",
+    },
+    "even_better_sinewave": {
+        "display_name": "Even Better Sinewave",
+        "description": "High-pass plus SuperSmoother normalized sinewave oscillator.",
+        "category": "Ehlers",
+    },
+    "autocorrelation_periodogram": {
+        "display_name": "Autocorrelation Periodogram",
+        "description": "Causal autocorrelation-based dominant-period estimate.",
+        "category": "Ehlers",
+    },
+    "homodyne_discriminator": {
+        "display_name": "Homodyne Discriminator",
+        "description": "Homodyne discriminator period estimate from in-phase/quadrature components.",
+        "category": "Ehlers",
+    },
 }
 SIGNAL_PARAM_DEFAULTS: dict[str, dict[str, Any]] = {
     "ema_rms_ppo_vwap": {
@@ -658,9 +890,14 @@ def feature_builders() -> list[BuilderDefinition]:
     definitions: list[BuilderDefinition] = []
     for name in sorted(FEATURE_REGISTRY):
         fn = get_feature_fn(name)
+        feature_meta = dict(FEATURE_METADATA.get(name, {}))
+        display_name = feature_meta.pop("display_name", None)
+        description = feature_meta.pop("description", None)
         definitions.append(
             BuilderDefinition(
                 name=name,
+                display_name=display_name,
+                description=description,
                 source_type="feature",
                 import_path=_callable_import_path(fn),
                 parameters=_parameter_definitions(
@@ -669,6 +906,7 @@ def feature_builders() -> list[BuilderDefinition]:
                     option_overrides=FEATURE_PARAM_OPTIONS.get(name),
                 ),
                 docstring=_docstring(fn),
+                metadata=feature_meta,
             )
         )
     return definitions

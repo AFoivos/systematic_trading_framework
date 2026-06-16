@@ -50,10 +50,26 @@ from .technical import (
     add_vwap_features,
 )
 from .fractal_dimension import add_fractal_dimension
+from .autocorrelation_periodogram import add_autocorrelation_periodogram
+from .center_of_gravity import add_center_of_gravity
+from .cyber_cycle import add_cyber_cycle
+from .decycler import add_decycler
+from .decycler_oscillator import add_decycler_oscillator
+from .dominant_cycle_period import add_dominant_cycle_period
+from .dominant_cycle_phase import add_dominant_cycle_phase
+from .even_better_sinewave import add_even_better_sinewave
+from .fama import add_fama
+from .fisher_transform import add_fisher_transform
+from .frama import add_frama
 from .garman_klass_volatility import add_garman_klass_volatility
 from .hilbert_transform import add_hilbert_transform
+from .homodyne_discriminator import add_homodyne_discriminator
 from .hmm_regime import add_hmm_regime
 from .hurst_exponent import add_hurst_exponent
+from .instantaneous_trendline import add_instantaneous_trendline
+from .inverse_fisher_transform import add_inverse_fisher_transform
+from .laguerre_rsi import add_laguerre_rsi
+from .mama import add_mama
 from .order_flow_imbalance import add_order_flow_imbalance
 from .parkinson_volatility import add_parkinson_volatility
 from .permutation_entropy import add_permutation_entropy
@@ -61,6 +77,7 @@ from .rate_of_change import add_rate_of_change
 from .roofing_filter import add_roofing_filter
 from .rolling_r2_trend_quality import add_rolling_r2_trend_quality
 from .shannon_entropy import add_shannon_entropy
+from .sinewave_indicator import add_sinewave_indicator
 from .supersmoother import add_supersmoother
 from .trend_regime import add_trend_regime
 from .trend_slope_volatility import add_trend_slope_volatility
@@ -116,11 +133,27 @@ __all__ = [
     "add_vol_normalized_momentum_features",
     "add_indicator_features",
     "add_indicator_pullback_features",
+    "add_autocorrelation_periodogram",
+    "add_center_of_gravity",
+    "add_cyber_cycle",
+    "add_decycler",
+    "add_decycler_oscillator",
+    "add_dominant_cycle_period",
+    "add_dominant_cycle_phase",
+    "add_even_better_sinewave",
+    "add_fama",
+    "add_fisher_transform",
     "add_fractal_dimension",
+    "add_frama",
     "add_garman_klass_volatility",
     "add_hilbert_transform",
+    "add_homodyne_discriminator",
     "add_hmm_regime",
     "add_hurst_exponent",
+    "add_instantaneous_trendline",
+    "add_inverse_fisher_transform",
+    "add_laguerre_rsi",
+    "add_mama",
     "add_order_flow_imbalance",
     "add_parkinson_volatility",
     "add_permutation_entropy",
@@ -128,6 +161,7 @@ __all__ = [
     "add_roofing_filter",
     "add_rolling_r2_trend_quality",
     "add_shannon_entropy",
+    "add_sinewave_indicator",
     "add_supersmoother",
     "add_trend_regime",
     "add_trend_slope_volatility",

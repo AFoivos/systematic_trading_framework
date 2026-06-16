@@ -347,6 +347,10 @@ function outputOrParam(params: Record<string, unknown>, key: string, fallback: s
   return asString(params[key], fallback);
 }
 
+function builderDisplayName(builder?: BuilderDefinition): string {
+  return builder?.display_name || builder?.name || "";
+}
+
 function compactColumnList(columns: string[], limit = 6): string {
   if (columns.length <= limit) {
     return columns.join(", ");
@@ -460,6 +464,91 @@ function deriveFeatureOutputColumns(stepName: string, params: Record<string, unk
       return asIntegerList(params.windows, [5, 20, 60]).map((item) => `${returnsCol}_mom_${item}`);
     case "vol_normalized_momentum":
       return asIntegerList(params.windows, [5, 20, 60]).map((item) => `${returnsCol}_norm_mom_${item}`);
+    case "mama":
+      return [outputOrParam(params, "output_col", "mama")];
+    case "fama":
+      return [outputOrParam(params, "output_col", "fama")];
+    case "dominant_cycle_period":
+      return [outputOrParam(params, "output_col", "dominant_cycle_period")];
+    case "dominant_cycle_phase":
+      return [outputOrParam(params, "output_col", "dominant_cycle_phase")];
+    case "instantaneous_trendline": {
+      const outputCol = outputOrParam(params, "output_col", "instantaneous_trendline");
+      return [
+        outputCol,
+        ...(asBoolean(params.add_trigger, true)
+          ? [outputOrParam(params, "trigger_col", `${outputCol}_trigger`)]
+          : [])
+      ];
+    }
+    case "fisher_transform": {
+      const fisherWindow = asInteger(params.window, 10);
+      const outputCol = outputOrParam(params, "output_col", `fisher_transform_${fisherWindow}`);
+      return [
+        outputCol,
+        ...(asBoolean(params.add_signal, true)
+          ? [outputOrParam(params, "signal_col", `${outputCol}_signal`)]
+          : [])
+      ];
+    }
+    case "inverse_fisher_transform":
+      return [outputOrParam(params, "output_col", `inverse_fisher_transform_${window}`)];
+    case "sinewave_indicator":
+      return [
+        outputOrParam(params, "output_col", "sinewave"),
+        outputOrParam(params, "lead_output_col", "lead_sinewave")
+      ];
+    case "cyber_cycle": {
+      const outputCol = outputOrParam(params, "output_col", "cyber_cycle");
+      return [
+        outputCol,
+        ...(asBoolean(params.add_trigger, true)
+          ? [outputOrParam(params, "trigger_col", `${outputCol}_trigger`)]
+          : [])
+      ];
+    }
+    case "decycler":
+      return [outputOrParam(params, "output_col", `decycler_${asInteger(params.period, 60)}`)];
+    case "decycler_oscillator":
+      return [
+        outputOrParam(
+          params,
+          "output_col",
+          `decycler_oscillator_${asInteger(params.fast_period, 30)}_${asInteger(params.slow_period, 60)}`
+        )
+      ];
+    case "laguerre_rsi":
+      return [outputOrParam(params, "output_col", "laguerre_rsi")];
+    case "frama": {
+      const framaWindow = asInteger(params.window, 16);
+      const outputCol = outputOrParam(params, "output_col", `frama_${framaWindow}`);
+      return [
+        outputCol,
+        ...(asBoolean(params.add_diagnostics, false)
+          ? [
+              outputOrParam(params, "alpha_col", `${outputCol}_alpha`),
+              outputOrParam(params, "fractal_dimension_col", `${outputCol}_fractal_dimension`)
+            ]
+          : [])
+      ];
+    }
+    case "center_of_gravity":
+      return [outputOrParam(params, "output_col", `center_of_gravity_${window}`)];
+    case "even_better_sinewave":
+      return [outputOrParam(params, "output_col", "even_better_sinewave")];
+    case "autocorrelation_periodogram": {
+      const minPeriod = asInteger(params.min_period, 10);
+      const maxPeriod = asInteger(params.max_period, 48);
+      const outputCol = outputOrParam(params, "output_col", `autocorrelation_periodogram_${minPeriod}_${maxPeriod}`);
+      return [
+        outputCol,
+        ...(asBoolean(params.add_power, false)
+          ? [outputOrParam(params, "power_col", `${outputCol}_power`)]
+          : [])
+      ];
+    }
+    case "homodyne_discriminator":
+      return [outputOrParam(params, "output_col", "homodyne_discriminator")];
     case "hmm_regime": {
       const outputCol = outputOrParam(params, "output_col", "hmm_regime");
       return asBoolean(params.include_probabilities, false)
@@ -893,7 +982,7 @@ export function BuilderConfigurator({ title, sourceType, builders, steps, onChan
           <select value={selectableBuilder} onChange={(event) => setSelectedBuilder(event.target.value)}>
             {selectableBuilders.map((builder) => (
               <option key={builder.name} value={builder.name}>
-                {builder.name}
+                {builderDisplayName(builder)}
               </option>
             ))}
           </select>
@@ -919,13 +1008,15 @@ export function BuilderConfigurator({ title, sourceType, builders, steps, onChan
                     checked={step.enabled}
                     onChange={(event) => updateStep(index, { enabled: event.target.checked })}
                   />
-                  <span>{step.step}</span>
+                  <span>{builderDisplayName(builder) || step.step}</span>
                 </label>
                 <button className="icon-button" type="button" onClick={() => removeStep(index)} title="Remove step">
                   x
                 </button>
               </div>
-              {builder?.docstring ? <p className="builder-doc">{builder.docstring.split("\n")[0]}</p> : null}
+              {builder?.description || builder?.docstring ? (
+                <p className="builder-doc">{builder.description || builder.docstring?.split("\n")[0]}</p>
+              ) : null}
               {estimatedOutputs.length > 0 ? (
                 <div className="step-output-preview">
                   <span>estimated outputs</span>

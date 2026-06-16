@@ -54,6 +54,9 @@ def test_builder_catalog_exposes_registered_feature_signal_and_target_defaults()
     assert "rolling_r2_trend_quality" in feature_by_name
     assert "trend_slope_volatility" in feature_by_name
     assert "volatility_of_volatility" in feature_by_name
+    assert feature_by_name["mama"].display_name == "MAMA"
+    assert feature_by_name["frama"].display_name == "FRAMA"
+    assert feature_by_name["laguerre_rsi"].metadata["category"] == "Ehlers"
     assert set(FEATURE_KINDS).issubset(feature_by_name)
     assert "ema_rms_ppo_vwap" in signal_by_name
     assert "vwap_rms_ema_cross_long" in signal_by_name
@@ -93,6 +96,10 @@ def test_builder_catalog_exposes_registered_feature_signal_and_target_defaults()
     vov_params = {param.name: param for param in feature_by_name["volatility_of_volatility"].parameters}
     assert vov_params["volatility_col"].default_value == "atr_over_price_20"
     assert vov_params["output_col"].default_value == "vov_atr_96"
+
+    frama_params = {param.name: param for param in feature_by_name["frama"].parameters}
+    assert frama_params["window"].default_value == 16
+    assert frama_params["output_col"].default_value == "frama_16"
 
     trend_state_params = {param.name: param for param in signal_by_name["trend_state"].parameters}
     assert trend_state_params["state_col"].required is False
@@ -297,6 +304,60 @@ def test_transform_series_runs_quant_trend_volatility_builders_from_ui_defaults(
         "vov_atr_96_high",
     }.issubset(series_ids)
     assert "atr_over_price_20" in response.steps[1].metadata["materialized_prerequisites"]
+
+
+def test_transform_series_runs_ehlers_builders_from_ui_defaults(monkeypatch) -> None:
+    _install_fake_loader(monkeypatch, _ohlcv_frame(periods=220))
+
+    ehlers_steps = [
+        "mama",
+        "fama",
+        "dominant_cycle_period",
+        "dominant_cycle_phase",
+        "instantaneous_trendline",
+        "fisher_transform",
+        "inverse_fisher_transform",
+        "sinewave_indicator",
+        "cyber_cycle",
+        "decycler",
+        "decycler_oscillator",
+        "laguerre_rsi",
+        "frama",
+        "center_of_gravity",
+        "even_better_sinewave",
+        "autocorrelation_periodogram",
+        "homodyne_discriminator",
+    ]
+    response = transform_catalog.run_transform_series(
+        TransformSeriesRequest(
+            asset="XAUUSD",
+            features=[
+                TransformStepConfig(step=step, params=_builder_default_params(step))
+                for step in ehlers_steps
+            ],
+        )
+    )
+
+    series_ids = {series.series_id for series in response.series}
+    assert {
+        "mama",
+        "fama",
+        "dominant_cycle_period",
+        "dominant_cycle_phase",
+        "instantaneous_trendline",
+        "fisher_transform_10",
+        "inverse_fisher_transform_10",
+        "sinewave",
+        "cyber_cycle",
+        "decycler_60",
+        "decycler_oscillator_30_60",
+        "laguerre_rsi",
+        "frama_16",
+        "center_of_gravity_10",
+        "even_better_sinewave",
+        "autocorrelation_periodogram_10_48",
+        "homodyne_discriminator",
+    }.issubset(series_ids)
 
 
 def test_transform_series_expands_nested_adx_rms_to_all_adx_outputs(monkeypatch) -> None:

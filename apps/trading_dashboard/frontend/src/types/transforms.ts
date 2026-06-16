@@ -15,10 +15,13 @@ export interface ParameterDefinition {
 
 export interface BuilderDefinition {
   name: string;
+  display_name: string | null;
+  description: string | null;
   source_type: BuilderSourceType;
   import_path: string | null;
   parameters: ParameterDefinition[];
   docstring: string | null;
+  metadata: Record<string, unknown>;
 }
 
 export interface TransformStepConfig {

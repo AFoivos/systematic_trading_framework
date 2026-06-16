@@ -23,10 +23,13 @@ class ParameterDefinition(BaseModel):
 
 class BuilderDefinition(BaseModel):
     name: str
+    display_name: str | None = None
+    description: str | None = None
     source_type: BuilderSourceType
     import_path: str | None = None
     parameters: list[ParameterDefinition] = Field(default_factory=list)
     docstring: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class TransformStepConfig(BaseModel):
