@@ -1723,6 +1723,51 @@ def test_validate_signals_block_rejects_legacy_signal_name() -> None:
         )
 
 
+def test_validate_signals_block_accepts_manual_long_model_filter_gates() -> None:
+    validate_signals_block(
+        {
+            "kind": "manual_long_model_filter",
+            "params": {
+                "prob_col": "pred_prob",
+                "candidate_col": "manual_long_candidate",
+                "base_signal_col": "manual_vol_adjusted_candidate",
+                "gate_col": "session_spx_power",
+                "gate_cols_any": ["session_spx_power", "session_spx_late"],
+                "expected_value_col": None,
+                "threshold": 0.42,
+                "min_signal_abs": 0.75,
+                "min_expected_value_r": 0.18,
+                "profit_barrier_r": 1.8,
+                "stop_barrier_r": 1.0,
+            },
+        }
+    )
+
+
+def test_validate_signals_block_rejects_invalid_manual_long_model_filter_gates() -> None:
+    with pytest.raises(ConfigValidationError, match="min_signal_abs"):
+        validate_signals_block(
+            {
+                "kind": "manual_long_model_filter",
+                "params": {"threshold": 0.42, "min_signal_abs": -0.1},
+            }
+        )
+    with pytest.raises(ConfigValidationError, match="stop_barrier_r"):
+        validate_signals_block(
+            {
+                "kind": "manual_long_model_filter",
+                "params": {"threshold": 0.42, "stop_barrier_r": 0.0},
+            }
+        )
+    with pytest.raises(ConfigValidationError, match="gate_cols_any"):
+        validate_signals_block(
+            {
+                "kind": "manual_long_model_filter",
+                "params": {"threshold": 0.42, "gate_cols_any": "session_spx_power"},
+            }
+        )
+
+
 def test_validate_data_block_accepts_dukascopy_csv_with_explicit_load_path() -> None:
     validate_data_block(
         {

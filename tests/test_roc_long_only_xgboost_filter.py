@@ -81,6 +81,66 @@ def test_manual_long_model_filter_signal_only_filters_manual_long_candidates() -
     assert bool(signal.ge(0.0).all())
 
 
+def test_manual_long_model_filter_signal_applies_gate_and_min_signal_abs() -> None:
+    frame = pd.DataFrame(
+        {
+            "pred_prob": [0.80, 0.80, 0.80, 0.80],
+            "manual_long_candidate": [1, 1, 1, 1],
+            "manual_vol_adjusted_candidate": [0.70, 0.80, 0.90, 1.00],
+            "session_spx_power": [1, 0, 1, 1],
+        }
+    )
+
+    signal = manual_long_model_filter_signal(
+        frame,
+        threshold=0.55,
+        gate_col="session_spx_power",
+        min_signal_abs=0.80,
+    )
+
+    assert signal.tolist() == pytest.approx([0.0, 0.0, 0.9, 1.0])
+
+
+def test_manual_long_model_filter_signal_supports_any_gate_columns() -> None:
+    frame = pd.DataFrame(
+        {
+            "pred_prob": [0.80, 0.80, 0.80],
+            "manual_long_candidate": [1, 1, 1],
+            "manual_vol_adjusted_candidate": [1.0, 1.0, 1.0],
+            "session_spx_power": [1, 0, 0],
+            "session_spx_late": [0, 1, 0],
+        }
+    )
+
+    signal = manual_long_model_filter_signal(
+        frame,
+        threshold=0.55,
+        gate_cols_any=["session_spx_power", "session_spx_late"],
+    )
+
+    assert signal.tolist() == pytest.approx([1.0, 1.0, 0.0])
+
+
+def test_manual_long_model_filter_signal_can_filter_by_expected_value_r() -> None:
+    frame = pd.DataFrame(
+        {
+            "pred_prob": [0.52, 0.55, 0.70],
+            "manual_long_candidate": [1, 1, 1],
+            "manual_vol_adjusted_candidate": [0.7, 0.8, 1.0],
+        }
+    )
+
+    signal = manual_long_model_filter_signal(
+        frame,
+        threshold=0.50,
+        min_expected_value_r=0.50,
+        profit_barrier_r=1.8,
+        stop_barrier_r=1.0,
+    )
+
+    assert signal.tolist() == pytest.approx([0.0, 0.8, 1.0])
+
+
 def test_manual_long_model_filter_signal_validates_threshold_and_columns() -> None:
     frame = pd.DataFrame(
         {
@@ -92,8 +152,16 @@ def test_manual_long_model_filter_signal_validates_threshold_and_columns() -> No
 
     with pytest.raises(ValueError, match="threshold"):
         manual_long_model_filter_signal(frame, threshold=1.0)
+    with pytest.raises(ValueError, match="min_signal_abs"):
+        manual_long_model_filter_signal(frame, min_signal_abs=-0.1)
+    with pytest.raises(ValueError, match="profit_barrier_r"):
+        manual_long_model_filter_signal(frame, profit_barrier_r=0.0)
     with pytest.raises(KeyError, match="Missing columns"):
         manual_long_model_filter_signal(frame.drop(columns=["pred_prob"]))
+    with pytest.raises(KeyError, match="Missing columns"):
+        manual_long_model_filter_signal(frame, gate_col="session_spx_power")
+    with pytest.raises(ValueError, match="gate_cols_any"):
+        manual_long_model_filter_signal(frame, gate_cols_any="session_spx_power")  # type: ignore[arg-type]
 
 
 def test_r_multiple_target_uses_manual_long_candidate_for_model_filtering() -> None:
@@ -203,6 +271,38 @@ def test_xauusd_xgboost_filter_optuna_yaml_matches_base_config_contract() -> Non
     assert constraint_index[("evaluation.primary_summary.flat_rate", 0.985)]["penalty"] == pytest.approx(1.0)
     assert constraint_index[("derived.entry_count", 100.0)]["penalty"] == pytest.approx(5.0)
     assert constraint_index[("evaluation.primary_summary.cumulative_return", 0.05)]["penalty"] == pytest.approx(2.0)
+
+
+def test_spx500_roc_ml_strong_config_wires_validated_gates_and_diagnostics() -> None:
+    cfg = load_experiment_config(
+        "config/experiments/roc_long_only/V2/spx500_roc_long_only_xgboost_r_multiple_filter_strong.yaml"
+    )
+
+    feature_steps = [step["step"] for step in cfg["features"]]
+    assert "rolling_r2_trend_quality" in feature_steps
+    assert "trend_slope_volatility" in feature_steps
+    assert "volatility_of_volatility" in feature_steps
+
+    roc_params = next(step["params"] for step in cfg["features"] if step["step"] == "roc_long_only_conditions")
+    session_params = next(step["params"] for step in cfg["features"] if step["step"] == "session_context")
+    assert session_params["sessions"]["spx_power"] == [15, 18]
+    assert session_params["sessions"]["spx_late"] == [20, 23]
+    assert roc_params["macro_condition_col"] is None
+    assert roc_params["vol_adjustment_strength"] == pytest.approx(1.7)
+    assert roc_params["vol_z_max"] == pytest.approx(2.1)
+    assert cfg["model"]["target"]["target_r_min"] == pytest.approx(0.5)
+
+    signal_params = cfg["signals"]["params"]
+    assert signal_params["gate_cols_any"] == ["session_spx_power", "session_spx_late"]
+    assert signal_params["min_signal_abs"] == pytest.approx(0.75)
+    assert signal_params["min_expected_value_r"] == pytest.approx(0.18)
+    assert signal_params["profit_barrier_r"] == pytest.approx(cfg["backtest"]["take_profit_r"])
+    assert signal_params["stop_barrier_r"] == pytest.approx(cfg["backtest"]["stop_loss_r"])
+
+    dynamic_exits = cfg["backtest"]["dynamic_exits"]
+    assert dynamic_exits["enabled"] is False
+    assert dynamic_exits["breakeven"]["enabled"] is True
+    assert dynamic_exits["profit_lock"]["enabled"] is True
 
 
 def test_xauusd_dynamic_exit_optuna_yaml_only_tunes_exit_params() -> None:

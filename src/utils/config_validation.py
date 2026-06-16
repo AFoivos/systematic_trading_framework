@@ -2621,12 +2621,37 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
                     "signals.params.mode must be one of: long_only, short_only, long_short."
                 )
     if signals["kind"] == "manual_long_model_filter":
-        for key in ("prob_col", "candidate_col", "base_signal_col", "signal_col"):
+        for key in (
+            "prob_col",
+            "candidate_col",
+            "base_signal_col",
+            "signal_col",
+            "gate_col",
+            "expected_value_col",
+        ):
             if key in params and params[key] is not None and not isinstance(params[key], str):
                 raise ConfigValidationError(f"signals.params.{key} must be a string or null.")
+        if params.get("gate_cols_any") is not None:
+            gate_cols_any = params.get("gate_cols_any")
+            if not isinstance(gate_cols_any, list):
+                raise ConfigValidationError("signals.params.gate_cols_any must be a list when provided.")
+            if any(not isinstance(col, str) or not col.strip() for col in gate_cols_any):
+                raise ConfigValidationError("signals.params.gate_cols_any entries must be non-empty strings.")
         threshold = _finite_number(params.get("threshold", 0.55), field="signals.params.threshold")
         if not 0.0 < threshold < 1.0:
             raise ConfigValidationError("signals.params.threshold must be in (0,1).")
+        min_signal_abs = _finite_number(
+            params.get("min_signal_abs", 0.0),
+            field="signals.params.min_signal_abs",
+        )
+        if min_signal_abs < 0.0:
+            raise ConfigValidationError("signals.params.min_signal_abs must be >= 0.")
+        if params.get("min_expected_value_r") is not None:
+            _finite_number(params.get("min_expected_value_r"), field="signals.params.min_expected_value_r")
+        for key in ("profit_barrier_r", "stop_barrier_r"):
+            value = _finite_number(params.get(key, 1.0), field=f"signals.params.{key}")
+            if value <= 0.0:
+                raise ConfigValidationError(f"signals.params.{key} must be > 0.")
     if signals["kind"] == "roc_long_only_conditions":
         nullable_string_keys = {
             "roc_col",
