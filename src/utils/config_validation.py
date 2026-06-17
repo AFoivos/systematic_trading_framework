@@ -963,6 +963,42 @@ def _validate_stc_roofing_hilbert_params(params: dict[str, Any], *, field_prefix
             _finite_number(regime, field=f"{field_prefix}.allowed_volatility_regimes[{idx}]")
 
 
+def _validate_ehlers_continuation_long_params(params: dict[str, Any], *, field_prefix: str) -> None:
+    string_keys = {
+        "ema_fast_col",
+        "ema_slow_col",
+        "mama_col",
+        "fama_col",
+        "roofing_col",
+        "roofing_slope_col",
+        "decycler_osc_col",
+        "ema_condition_col",
+        "mama_condition_col",
+        "roofing_positive_col",
+        "roofing_slope_positive_col",
+        "roofing_gt_slope_col",
+        "decycler_positive_col",
+        "state_col",
+        "entry_col",
+        "signal_col",
+        "candidate_col",
+    }
+    for key in string_keys:
+        if key in params and (not isinstance(params[key], str) or not params[key].strip()):
+            raise ConfigValidationError(f"{field_prefix}.{key} must be a non-empty string.")
+    if "entry_mode" in params:
+        entry_mode = str(params["entry_mode"])
+        if entry_mode not in {"state", "transition"}:
+            raise ConfigValidationError(f"{field_prefix}.entry_mode must be one of: state, transition.")
+    for key in ("long_only", "use_ema_regime", "use_mama_fama", "use_roofing_gt_slope", "use_decycler"):
+        if key in params and not isinstance(params[key], bool):
+            raise ConfigValidationError(f"{field_prefix}.{key} must be boolean.")
+    if params.get("long_only") is False:
+        raise ConfigValidationError(f"{field_prefix}.long_only must be true for ehlers_continuation_long.")
+    if "entry_delay_bars" in params:
+        _non_negative_int(params["entry_delay_bars"], field=f"{field_prefix}.entry_delay_bars")
+
+
 def validate_features_block(features: Any) -> None:
     if not isinstance(features, list):
         raise ConfigValidationError("features must be a list of steps.")
@@ -2718,6 +2754,8 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
         _validate_c1_trend_pullback_vwap_params(params, field_prefix="signals.params")
     if signals["kind"] == "stc_roofing_hilbert":
         _validate_stc_roofing_hilbert_params(params, field_prefix="signals.params")
+    if signals["kind"] in {"ehlers_continuation_long", "ehlers_continuation_long_signal"}:
+        _validate_ehlers_continuation_long_params(params, field_prefix="signals.params")
     if signals["kind"] == "ema_rms_ppo_vwap":
         _validate_ema_rms_ppo_vwap_params(params, field_prefix="signals.params")
     if signals["kind"] == "vwap_rms_ema_cross_long":
@@ -3142,20 +3180,15 @@ def validate_portfolio_block(portfolio: dict[str, Any]) -> None:
             cap,
             field=f"portfolio.constraints.group_max_exposure[{group}]",
         )
-    from src.portfolio.constraints import PortfolioConstraints
-
-    try:
-        PortfolioConstraints(
-            min_weight=min_weight,
-            max_weight=max_weight,
-            max_gross_leverage=max_gross_leverage,
-            target_net_exposure=target_net_exposure,
-            enforce_target_net_exposure=enforce_target_net_exposure,
-            turnover_limit=turnover_limit,
-            group_max_exposure=group_caps or None,
-        )
-    except ValueError as exc:
-        raise ConfigValidationError(str(exc)) from exc
+    if min_weight > max_weight:
+        raise ConfigValidationError("min_weight must be <= max_weight.")
+    if max_gross_leverage <= 0:
+        raise ConfigValidationError("max_gross_leverage must be > 0.")
+    if turnover_limit is not None and turnover_limit < 0:
+        raise ConfigValidationError("turnover_limit must be >= 0 when provided.")
+    for group, cap in group_caps.items():
+        if cap <= 0:
+            raise ConfigValidationError(f"group_max_exposure[{group!r}] must be > 0.")
     if not isinstance(portfolio.get("asset_groups", {}), dict):
         raise ConfigValidationError("portfolio.asset_groups must be a mapping.")
     for asset, group in portfolio.get("asset_groups", {}).items():

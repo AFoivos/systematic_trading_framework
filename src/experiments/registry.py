@@ -79,6 +79,7 @@ from src.signals import (
     c2_regime_aware_momentum_signal,
     conviction_sizing_signal,
     dense_return_forecast_signal,
+    ehlers_continuation_long_signal,
     ema_rms_ppo_vwap_signal,
     ema_stoch_rsi_pullback_signal,
     indicator_model_adaptive_pullback_signal,
@@ -207,6 +208,8 @@ FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
 SIGNAL_REGISTRY: Mapping[str, SignalFn] = {
     "c1_trend_pullback_vwap": c1_trend_pullback_vwap_signal,
     "c2_regime_aware_momentum": c2_regime_aware_momentum_signal,
+    "ehlers_continuation_long": ehlers_continuation_long_signal,
+    "ehlers_continuation_long_signal": ehlers_continuation_long_signal,
     "trend_state": trend_state_signal,
     "ema_rms_ppo_vwap": ema_rms_ppo_vwap_signal,
     "probability_threshold": probabilistic_signal,

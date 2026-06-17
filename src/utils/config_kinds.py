@@ -81,6 +81,8 @@ SIGNAL_KINDS = frozenset(
     {
         "c1_trend_pullback_vwap",
         "c2_regime_aware_momentum",
+        "ehlers_continuation_long",
+        "ehlers_continuation_long_signal",
         "ema_rms_ppo_vwap",
         "ema_stoch_rsi_pullback",
         "dense_return_forecast",

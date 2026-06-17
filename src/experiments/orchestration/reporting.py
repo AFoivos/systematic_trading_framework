@@ -4,31 +4,28 @@ from html import escape as html_escape
 import inspect
 import math
 import re
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 import yaml
 
 from src.backtesting.engine import BacktestResult
-from src.evaluation.model_diagnostics import (
-    prediction_quantile_table,
-    prediction_realized_metrics,
-    quantile_monotonicity,
-)
 from src.evaluation.metrics import compute_backtest_metrics, compute_ftmo_style_metrics
 from src.experiments.schemas import EvaluationPayload, MonitoringPayload
 from src.experiments.support.baseline_diagnostics import (
     compute_baseline_vwap_rms_ema_ppo_mfi_atr_diagnostics,
 )
 from src.experiments.support.c2_diagnostics import compute_c2_regime_aware_momentum_diagnostics
+from src.experiments.support.ehlers_continuation_long_diagnostics import (
+    compute_ehlers_continuation_long_diagnostics,
+)
 from src.experiments.support.stc_roofing_hilbert_diagnostics import (
     compute_stc_roofing_hilbert_diagnostics,
 )
-from src.monitoring.drift import compute_feature_drift
-from src.models.common.runtime import classify_feature_family
-from src.portfolio import PortfolioPerformance
-from src.utils.html_reports import render_dashboard_html_document
+
+if TYPE_CHECKING:
+    from src.portfolio import PortfolioPerformance
 
 
 def _yaml_block(value: Any) -> str:
@@ -225,6 +222,8 @@ def _markdown_blocks_to_html(markdown_text: str) -> str:
 
 
 def render_markdown_report_html(markdown_text: str, *, title: str = "Report") -> str:
+    from src.utils.html_reports import render_dashboard_html_document
+
     body = _markdown_blocks_to_html(markdown_text)
     return render_dashboard_html_document(
         title=title,
@@ -330,6 +329,14 @@ def _safe_meta_dict(value: Any) -> dict[str, Any]:
     return dict(value or {}) if isinstance(value, dict) else {}
 
 
+def _classify_feature_family(feature: str) -> str | None:
+    try:
+        from src.models.common.runtime import classify_feature_family
+    except ModuleNotFoundError:
+        return None
+    return classify_feature_family(feature)
+
+
 def _extract_drifted_features(monitoring: dict[str, Any], limit: int = 8) -> list[tuple[str, str, float]]:
     drifted: list[tuple[str, str, float]] = []
     for asset, asset_report in sorted(dict(monitoring.get("per_asset", {}) or {}).items()):
@@ -346,7 +353,7 @@ def _feature_family_drift_rows(monitoring: dict[str, Any]) -> list[list[Any]]:
     for _, asset_report in sorted(dict(monitoring.get("per_asset", {}) or {}).items()):
         per_feature = dict(asset_report.get("per_feature", {}) or {})
         for feature, details in per_feature.items():
-            family = classify_feature_family(str(feature)) or "unclassified"
+            family = _classify_feature_family(str(feature)) or "unclassified"
             info = bucket.setdefault(
                 family,
                 {
@@ -805,6 +812,8 @@ def build_experiment_report_markdown(
     baseline_diagnostics = _safe_meta_dict(evaluation.get("baseline_diagnostics"))
     c2_diagnostics = _safe_meta_dict(evaluation.get("c2_diagnostics"))
     stc_diagnostics = _safe_meta_dict(evaluation.get("stc_roofing_hilbert_diagnostics"))
+    ehlers_diagnostics = _safe_meta_dict(evaluation.get("ehlers_continuation_long_diagnostics"))
+    robustness_diagnostics = _safe_meta_dict(evaluation.get("robustness"))
 
     symbols = data_cfg.get("symbols") or ([data_cfg.get("symbol")] if data_cfg.get("symbol") else [])
     run_name = str(cfg.get("logging", {}).get("run_name", cfg.get("config_path", "experiment")))
@@ -1167,6 +1176,71 @@ def build_experiment_report_markdown(
                     ),
                 ]
             )
+
+    if ehlers_diagnostics:
+        signal_count_rows = _dict_metric_rows(_safe_meta_dict(ehlers_diagnostics.get("signal_counts")))
+        overlap_rows = _dict_metric_rows(_safe_meta_dict(ehlers_diagnostics.get("overlap_diagnostics")))
+        position_rows = _dict_metric_rows(_safe_meta_dict(ehlers_diagnostics.get("position_diagnostics")))
+        performance_rows = _dict_metric_rows(_safe_meta_dict(ehlers_diagnostics.get("performance_diagnostics")))
+        year_rows = _performance_breakdown_rows(
+            {"year": _safe_meta_dict(ehlers_diagnostics.get("performance_by_year"))}
+        )
+        lines.extend(["", "## Ehlers Continuation Long Diagnostics"])
+        if signal_count_rows:
+            lines.extend(
+                [
+                    "### Signal Counts",
+                    _markdown_table(["Metric", "Value"], signal_count_rows),
+                ]
+            )
+        if overlap_rows:
+            lines.extend(
+                [
+                    "### Overlap Diagnostics",
+                    _markdown_table(["Metric", "Value"], overlap_rows),
+                ]
+            )
+        if position_rows:
+            lines.extend(
+                [
+                    "### Position Diagnostics",
+                    _markdown_table(["Metric", "Value"], position_rows),
+                ]
+            )
+        if performance_rows:
+            lines.extend(
+                [
+                    "### Performance Diagnostics",
+                    _markdown_table(["Metric", "Value"], performance_rows),
+                ]
+            )
+        if year_rows:
+            lines.extend(
+                [
+                    "### Year Diagnostics",
+                    _markdown_table(
+                        ["Group", "Bucket", "Trades", "Gross PnL", "Cost", "Net PnL", "Profit Factor", "Hit Rate"],
+                        year_rows,
+                    ),
+                ]
+            )
+
+    if robustness_diagnostics:
+        lines.extend(["", "## Robustness Diagnostics"])
+        for label, section in (
+            ("Cost Stress", "cost_stress"),
+            ("Entry Delay", "entry_delay"),
+            ("Walk Forward", "walk_forward"),
+            ("Gap Stress", "gap_stress"),
+        ):
+            rows = _dict_metric_rows(_safe_meta_dict(robustness_diagnostics.get(section)))
+            if rows:
+                lines.extend(
+                    [
+                        f"### {label}",
+                        _markdown_table(["Metric", "Value"], rows),
+                    ]
+                )
 
     if target_meta:
         target_rows: list[list[Any]] = []
@@ -1909,6 +1983,12 @@ def _portfolio_forecast_quality_summary(
 
     prediction = pd.concat(predictions, ignore_index=True)
     realized_return = pd.concat(realized, ignore_index=True)
+    from src.evaluation.model_diagnostics import (
+        prediction_quantile_table,
+        prediction_realized_metrics,
+        quantile_monotonicity,
+    )
+
     metrics = prediction_realized_metrics(prediction, realized_return)
     quantile_table = prediction_quantile_table(
         prediction,
@@ -1994,10 +2074,11 @@ def _orb_pnl_attribution(
     returns_type: str,
     alignment: str,
 ) -> dict[str, dict[str, float]]:
-    if isinstance(performance, PortfolioPerformance):
-        if performance.applied_weights is None:
+    if hasattr(performance, "applied_weights"):
+        applied_weights = getattr(performance, "applied_weights")
+        if applied_weights is None:
             return {"pnl_by_asset": {}, "gross_pnl_by_asset": {}, "cost_by_asset": {}, "pnl_by_session": {}}
-        weights = performance.applied_weights.astype(float)
+        weights = applied_weights.astype(float)
         costs = performance.costs.reindex(weights.index).fillna(0.0).astype(float)
     else:
         only_asset = next(iter(sorted(asset_frames)))
@@ -2249,6 +2330,11 @@ def build_single_asset_evaluation(
         performance=performance,
         signal_col=str(dict(backtest_cfg or {}).get("signal_col", "stc_roofing_signal")),
     )
+    ehlers_diagnostics = compute_ehlers_continuation_long_diagnostics(
+        df,
+        performance=performance,
+        signal_col=str(dict(backtest_cfg or {}).get("signal_col", "ehlers_continuation_signal")),
+    )
     primary_summary = dict(performance.summary)
     for key in ("trade_count", "average_r", "median_r"):
         if key in trade_diagnostics:
@@ -2263,6 +2349,7 @@ def build_single_asset_evaluation(
             "baseline_diagnostics": baseline_diagnostics,
             "c2_diagnostics": c2_diagnostics,
             "stc_roofing_hilbert_diagnostics": stc_diagnostics,
+            "ehlers_continuation_long_diagnostics": ehlers_diagnostics,
             "mark_to_market_summary": dict(getattr(performance, "mark_to_market_summary", {}) or {}),
         },
     ).to_dict()
@@ -2339,6 +2426,7 @@ def build_single_asset_evaluation(
             "baseline_diagnostics": baseline_diagnostics,
             "c2_diagnostics": c2_diagnostics,
             "stc_roofing_hilbert_diagnostics": stc_diagnostics,
+            "ehlers_continuation_long_diagnostics": ehlers_diagnostics,
             "mark_to_market_summary": dict(getattr(performance, "mark_to_market_summary", {}) or {}),
             "asset": asset,
         },
@@ -2561,6 +2649,11 @@ def compute_monitoring_for_asset(
     ref = df.loc[~oos_mask, feature_cols]
     cur = df.loc[oos_mask, feature_cols]
     if ref.empty or cur.empty:
+        return None
+
+    try:
+        from src.monitoring.drift import compute_feature_drift
+    except ModuleNotFoundError:
         return None
 
     return compute_feature_drift(
