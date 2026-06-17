@@ -1,0 +1,7 @@
+docker compose up -d --build app trading-dashboard
+docker compose exec app bash
+http://127.0.0.1:8000
+docker compose logs -f trading-dashboard
+docker compose up -d --build --force-recreate trading-dashboard
+docker compose stop
+docker compose down
