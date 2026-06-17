@@ -999,6 +999,42 @@ def _validate_ehlers_continuation_long_params(params: dict[str, Any], *, field_p
         _non_negative_int(params["entry_delay_bars"], field=f"{field_prefix}.entry_delay_bars")
 
 
+def _validate_ehlers_continuation_short_params(params: dict[str, Any], *, field_prefix: str) -> None:
+    string_keys = {
+        "ema_fast_col",
+        "ema_slow_col",
+        "mama_col",
+        "fama_col",
+        "roofing_col",
+        "roofing_slope_col",
+        "decycler_osc_col",
+        "ema_condition_col",
+        "mama_condition_col",
+        "roofing_negative_col",
+        "roofing_slope_negative_col",
+        "roofing_lt_slope_col",
+        "decycler_negative_col",
+        "state_col",
+        "entry_col",
+        "signal_col",
+        "candidate_col",
+    }
+    for key in string_keys:
+        if key in params and (not isinstance(params[key], str) or not params[key].strip()):
+            raise ConfigValidationError(f"{field_prefix}.{key} must be a non-empty string.")
+    if "entry_mode" in params:
+        entry_mode = str(params["entry_mode"])
+        if entry_mode not in {"state", "transition"}:
+            raise ConfigValidationError(f"{field_prefix}.entry_mode must be one of: state, transition.")
+    for key in ("short_only", "use_ema_regime", "use_mama_fama", "use_roofing_lt_slope", "use_decycler"):
+        if key in params and not isinstance(params[key], bool):
+            raise ConfigValidationError(f"{field_prefix}.{key} must be boolean.")
+    if params.get("short_only") is False:
+        raise ConfigValidationError(f"{field_prefix}.short_only must be true for ehlers_continuation_short.")
+    if "entry_delay_bars" in params:
+        _non_negative_int(params["entry_delay_bars"], field=f"{field_prefix}.entry_delay_bars")
+
+
 def validate_features_block(features: Any) -> None:
     if not isinstance(features, list):
         raise ConfigValidationError("features must be a list of steps.")
@@ -2756,6 +2792,8 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
         _validate_stc_roofing_hilbert_params(params, field_prefix="signals.params")
     if signals["kind"] in {"ehlers_continuation_long", "ehlers_continuation_long_signal"}:
         _validate_ehlers_continuation_long_params(params, field_prefix="signals.params")
+    if signals["kind"] in {"ehlers_continuation_short", "ehlers_continuation_short_signal"}:
+        _validate_ehlers_continuation_short_params(params, field_prefix="signals.params")
     if signals["kind"] == "ema_rms_ppo_vwap":
         _validate_ema_rms_ppo_vwap_params(params, field_prefix="signals.params")
     if signals["kind"] == "vwap_rms_ema_cross_long":

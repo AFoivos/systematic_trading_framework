@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Callable, Mapping, Optional, Union
+from importlib import import_module
+from typing import Any, Callable, Mapping, Optional, Union
 
 import pandas as pd
 
@@ -80,6 +81,7 @@ from src.signals import (
     conviction_sizing_signal,
     dense_return_forecast_signal,
     ehlers_continuation_long_signal,
+    ehlers_continuation_short_signal,
     ema_rms_ppo_vwap_signal,
     ema_stoch_rsi_pullback_signal,
     indicator_model_adaptive_pullback_signal,
@@ -102,24 +104,6 @@ from src.signals import (
     vwap_rms_ema_cross_long_hmm_gate_signal,
     vwap_rms_ema_cross_long_signal,
 )
-from src.experiments.models import (
-    train_dqn_agent,
-    train_dqn_portfolio_agent,
-    train_elastic_net_classifier,
-    train_event_transformer_encoder,
-    train_garch_forecaster,
-    train_lightgbm_classifier,
-    train_lightgbm_regressor,
-    train_logistic_regression_classifier,
-    train_ppo_agent,
-    train_ppo_portfolio_agent,
-    train_sarimax_forecaster,
-    train_lstm_forecaster,
-    train_patchtst_forecaster,
-    train_tft_forecaster,
-    train_tsfresh_extrema_feature_discovery,
-    train_xgboost_classifier,
-)
 from src.utils.config_kinds import PORTFOLIO_MODEL_KINDS as CONFIG_PORTFOLIO_MODEL_KINDS
 from src.utils.config_kinds import RL_MODEL_KINDS as CONFIG_RL_MODEL_KINDS
 
@@ -128,6 +112,24 @@ SignalFn = Callable[..., Union[pd.DataFrame, pd.Series]]
 SingleAssetModelFn = Callable[..., tuple[pd.DataFrame, Optional[object], dict]]
 PortfolioModelFn = Callable[..., tuple[dict[str, pd.DataFrame], Optional[object], dict]]
 ModelFn = Union[SingleAssetModelFn, PortfolioModelFn]
+
+
+def _lazy_single_asset_model(attr_name: str) -> SingleAssetModelFn:
+    def _call(*args: Any, **kwargs: Any) -> tuple[pd.DataFrame, Optional[object], dict]:
+        module = import_module("src.experiments.models")
+        return getattr(module, attr_name)(*args, **kwargs)
+
+    _call.__name__ = attr_name
+    return _call
+
+
+def _lazy_portfolio_model(attr_name: str) -> PortfolioModelFn:
+    def _call(*args: Any, **kwargs: Any) -> tuple[dict[str, pd.DataFrame], Optional[object], dict]:
+        module = import_module("src.experiments.models")
+        return getattr(module, attr_name)(*args, **kwargs)
+
+    _call.__name__ = attr_name
+    return _call
 
 
 FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
@@ -210,6 +212,8 @@ SIGNAL_REGISTRY: Mapping[str, SignalFn] = {
     "c2_regime_aware_momentum": c2_regime_aware_momentum_signal,
     "ehlers_continuation_long": ehlers_continuation_long_signal,
     "ehlers_continuation_long_signal": ehlers_continuation_long_signal,
+    "ehlers_continuation_short": ehlers_continuation_short_signal,
+    "ehlers_continuation_short_signal": ehlers_continuation_short_signal,
     "trend_state": trend_state_signal,
     "ema_rms_ppo_vwap": ema_rms_ppo_vwap_signal,
     "probability_threshold": probabilistic_signal,
@@ -236,25 +240,25 @@ SIGNAL_REGISTRY: Mapping[str, SignalFn] = {
 }
 
 SINGLE_ASSET_MODEL_REGISTRY: Mapping[str, SingleAssetModelFn] = {
-    "elastic_net_clf": train_elastic_net_classifier,
-    "lightgbm_clf": train_lightgbm_classifier,
-    "lightgbm_regressor": train_lightgbm_regressor,
-    "logistic_regression_clf": train_logistic_regression_classifier,
-    "xgboost_clf": train_xgboost_classifier,
-    "event_transformer_encoder": train_event_transformer_encoder,
-    "sarimax_forecaster": train_sarimax_forecaster,
-    "garch_forecaster": train_garch_forecaster,
-    "lstm_forecaster": train_lstm_forecaster,
-    "patchtst_forecaster": train_patchtst_forecaster,
-    "tft_forecaster": train_tft_forecaster,
-    "tsfresh_extrema_feature_discovery": train_tsfresh_extrema_feature_discovery,
-    "ppo_agent": train_ppo_agent,
-    "dqn_agent": train_dqn_agent,
+    "elastic_net_clf": _lazy_single_asset_model("train_elastic_net_classifier"),
+    "lightgbm_clf": _lazy_single_asset_model("train_lightgbm_classifier"),
+    "lightgbm_regressor": _lazy_single_asset_model("train_lightgbm_regressor"),
+    "logistic_regression_clf": _lazy_single_asset_model("train_logistic_regression_classifier"),
+    "xgboost_clf": _lazy_single_asset_model("train_xgboost_classifier"),
+    "event_transformer_encoder": _lazy_single_asset_model("train_event_transformer_encoder"),
+    "sarimax_forecaster": _lazy_single_asset_model("train_sarimax_forecaster"),
+    "garch_forecaster": _lazy_single_asset_model("train_garch_forecaster"),
+    "lstm_forecaster": _lazy_single_asset_model("train_lstm_forecaster"),
+    "patchtst_forecaster": _lazy_single_asset_model("train_patchtst_forecaster"),
+    "tft_forecaster": _lazy_single_asset_model("train_tft_forecaster"),
+    "tsfresh_extrema_feature_discovery": _lazy_single_asset_model("train_tsfresh_extrema_feature_discovery"),
+    "ppo_agent": _lazy_single_asset_model("train_ppo_agent"),
+    "dqn_agent": _lazy_single_asset_model("train_dqn_agent"),
 }
 
 PORTFOLIO_MODEL_REGISTRY: Mapping[str, PortfolioModelFn] = {
-    "ppo_portfolio_agent": train_ppo_portfolio_agent,
-    "dqn_portfolio_agent": train_dqn_portfolio_agent,
+    "ppo_portfolio_agent": _lazy_portfolio_model("train_ppo_portfolio_agent"),
+    "dqn_portfolio_agent": _lazy_portfolio_model("train_dqn_portfolio_agent"),
 }
 
 MODEL_REGISTRY: Mapping[str, ModelFn] = {

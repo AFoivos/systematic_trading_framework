@@ -11,6 +11,7 @@ import pytest
         ("buy_and_hold_signal", "buy_and_hold_signal"),
         ("conviction_sizing_signal", "conviction_sizing_signal"),
         ("ehlers_continuation_long_signal", "ehlers_continuation_long_signal"),
+        ("ehlers_continuation_short_signal", "ehlers_continuation_short_signal"),
         ("ema_rms_ppo_vwap_signal", "ema_rms_ppo_vwap_signal"),
         ("ema_stoch_rsi_pullback_signal", "ema_stoch_rsi_pullback_signal"),
         ("forecast_threshold_signal", "forecast_threshold_signal"),

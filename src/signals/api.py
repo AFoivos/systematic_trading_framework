@@ -4,6 +4,7 @@ from src.signals.buy_and_hold_signal import buy_and_hold_signal
 from src.signals.conviction_sizing_signal import conviction_sizing_signal
 from src.signals.dense_return_forecast_signal import dense_return_forecast_signal
 from src.signals.ehlers_continuation_long_signal import ehlers_continuation_long_signal
+from src.signals.ehlers_continuation_short_signal import ehlers_continuation_short_signal
 from src.signals.ema_rms_ppo_vwap_signal import ema_rms_ppo_vwap_signal
 from src.signals.ema_stoch_rsi_pullback_signal import ema_stoch_rsi_pullback_signal
 from src.signals.forecast_threshold_signal import forecast_threshold_signal
@@ -45,6 +46,7 @@ __all__ = [
     "conviction_sizing_signal",
     "dense_return_forecast_signal",
     "ehlers_continuation_long_signal",
+    "ehlers_continuation_short_signal",
     "ema_rms_ppo_vwap_signal",
     "forecast_threshold_signal",
     "forecast_vol_adjusted_signal",

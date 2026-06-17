@@ -20,6 +20,9 @@ from src.experiments.support.c2_diagnostics import compute_c2_regime_aware_momen
 from src.experiments.support.ehlers_continuation_long_diagnostics import (
     compute_ehlers_continuation_long_diagnostics,
 )
+from src.experiments.support.ehlers_continuation_short_diagnostics import (
+    compute_ehlers_continuation_short_diagnostics,
+)
 from src.experiments.support.stc_roofing_hilbert_diagnostics import (
     compute_stc_roofing_hilbert_diagnostics,
 )
@@ -813,6 +816,7 @@ def build_experiment_report_markdown(
     c2_diagnostics = _safe_meta_dict(evaluation.get("c2_diagnostics"))
     stc_diagnostics = _safe_meta_dict(evaluation.get("stc_roofing_hilbert_diagnostics"))
     ehlers_diagnostics = _safe_meta_dict(evaluation.get("ehlers_continuation_long_diagnostics"))
+    ehlers_short_diagnostics = _safe_meta_dict(evaluation.get("ehlers_continuation_short_diagnostics"))
     robustness_diagnostics = _safe_meta_dict(evaluation.get("robustness"))
 
     symbols = data_cfg.get("symbols") or ([data_cfg.get("symbol")] if data_cfg.get("symbol") else [])
@@ -1186,6 +1190,54 @@ def build_experiment_report_markdown(
             {"year": _safe_meta_dict(ehlers_diagnostics.get("performance_by_year"))}
         )
         lines.extend(["", "## Ehlers Continuation Long Diagnostics"])
+        if signal_count_rows:
+            lines.extend(
+                [
+                    "### Signal Counts",
+                    _markdown_table(["Metric", "Value"], signal_count_rows),
+                ]
+            )
+        if overlap_rows:
+            lines.extend(
+                [
+                    "### Overlap Diagnostics",
+                    _markdown_table(["Metric", "Value"], overlap_rows),
+                ]
+            )
+        if position_rows:
+            lines.extend(
+                [
+                    "### Position Diagnostics",
+                    _markdown_table(["Metric", "Value"], position_rows),
+                ]
+            )
+        if performance_rows:
+            lines.extend(
+                [
+                    "### Performance Diagnostics",
+                    _markdown_table(["Metric", "Value"], performance_rows),
+                ]
+            )
+        if year_rows:
+            lines.extend(
+                [
+                    "### Year Diagnostics",
+                    _markdown_table(
+                        ["Group", "Bucket", "Trades", "Gross PnL", "Cost", "Net PnL", "Profit Factor", "Hit Rate"],
+                        year_rows,
+                    ),
+                ]
+            )
+
+    if ehlers_short_diagnostics:
+        signal_count_rows = _dict_metric_rows(_safe_meta_dict(ehlers_short_diagnostics.get("signal_counts")))
+        overlap_rows = _dict_metric_rows(_safe_meta_dict(ehlers_short_diagnostics.get("overlap_diagnostics")))
+        position_rows = _dict_metric_rows(_safe_meta_dict(ehlers_short_diagnostics.get("position_diagnostics")))
+        performance_rows = _dict_metric_rows(_safe_meta_dict(ehlers_short_diagnostics.get("performance_diagnostics")))
+        year_rows = _performance_breakdown_rows(
+            {"year": _safe_meta_dict(ehlers_short_diagnostics.get("performance_by_year"))}
+        )
+        lines.extend(["", "## Ehlers Continuation Short Diagnostics"])
         if signal_count_rows:
             lines.extend(
                 [
@@ -2335,6 +2387,11 @@ def build_single_asset_evaluation(
         performance=performance,
         signal_col=str(dict(backtest_cfg or {}).get("signal_col", "ehlers_continuation_signal")),
     )
+    ehlers_short_diagnostics = compute_ehlers_continuation_short_diagnostics(
+        df,
+        performance=performance,
+        signal_col=str(dict(backtest_cfg or {}).get("signal_col", "ehlers_continuation_signal")),
+    )
     primary_summary = dict(performance.summary)
     for key in ("trade_count", "average_r", "median_r"):
         if key in trade_diagnostics:
@@ -2350,6 +2407,7 @@ def build_single_asset_evaluation(
             "c2_diagnostics": c2_diagnostics,
             "stc_roofing_hilbert_diagnostics": stc_diagnostics,
             "ehlers_continuation_long_diagnostics": ehlers_diagnostics,
+            "ehlers_continuation_short_diagnostics": ehlers_short_diagnostics,
             "mark_to_market_summary": dict(getattr(performance, "mark_to_market_summary", {}) or {}),
         },
     ).to_dict()
@@ -2427,6 +2485,7 @@ def build_single_asset_evaluation(
             "c2_diagnostics": c2_diagnostics,
             "stc_roofing_hilbert_diagnostics": stc_diagnostics,
             "ehlers_continuation_long_diagnostics": ehlers_diagnostics,
+            "ehlers_continuation_short_diagnostics": ehlers_short_diagnostics,
             "mark_to_market_summary": dict(getattr(performance, "mark_to_market_summary", {}) or {}),
             "asset": asset,
         },

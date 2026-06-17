@@ -4,7 +4,11 @@ from numbers import Integral
 
 import numpy as np
 import pandas as pd
-from scipy.signal import hilbert
+
+try:
+    from scipy.signal import hilbert as _scipy_hilbert
+except ModuleNotFoundError:  # pragma: no cover - exercised only when SciPy is absent.
+    _scipy_hilbert = None
 
 
 def add_hilbert_transform(
@@ -55,13 +59,15 @@ def add_hilbert_transform(
     amplitude = np.full(len(out), np.nan, dtype=float)
     phase = np.full(len(out), np.nan, dtype=float)
     frequency = np.full(len(out), np.nan, dtype=float)
+    if _scipy_hilbert is None:
+        raise ImportError("scipy is required for add_hilbert_transform. Install scipy to use the hilbert_transform feature.")
 
     for idx in range(window - 1, len(out)):
         sample = values[idx - window + 1 : idx + 1]
         if not np.isfinite(sample).all():
             continue
         centered = sample - np.mean(sample)
-        analytic = hilbert(centered)
+        analytic = _scipy_hilbert(centered)
         endpoint_phase = np.unwrap(np.angle(analytic))
         amplitude[idx] = float(np.abs(analytic[-1]))
         phase[idx] = float(endpoint_phase[-1])

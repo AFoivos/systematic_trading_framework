@@ -21,6 +21,10 @@ from .ehlers_continuation_long_signal import (
     build_ehlers_continuation_long_signal,
     ehlers_continuation_long_signal,
 )
+from .ehlers_continuation_short_signal import (
+    build_ehlers_continuation_short_signal,
+    ehlers_continuation_short_signal,
+)
 from .forecast_threshold_signal import forecast_threshold_signal
 from .forecast_vol_adjusted_signal import forecast_vol_adjusted_signal
 from .rsi_signal import compute_rsi_signal
@@ -79,11 +83,13 @@ __all__ = [
     "build_ema_rms_ppo_vwap_signal",
     "build_ema_stoch_rsi_signal",
     "build_ehlers_continuation_long_signal",
+    "build_ehlers_continuation_short_signal",
     "c1_trend_pullback_vwap_signal",
     "c2_regime_aware_momentum_signal",
     "conviction_sizing_signal",
     "dense_return_forecast_signal",
     "ehlers_continuation_long_signal",
+    "ehlers_continuation_short_signal",
     "ema_rms_ppo_vwap_signal",
     "ema_stoch_rsi_pullback_signal",
     "compute_rsi_signal",

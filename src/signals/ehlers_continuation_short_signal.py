@@ -1,0 +1,222 @@
+from __future__ import annotations
+
+import math
+from typing import Any, Mapping
+
+import pandas as pd
+
+
+_ALLOWED_ENTRY_MODES = frozenset({"state", "transition"})
+
+_DEFAULT_CFG: dict[str, Any] = {
+    "entry_mode": "state",
+    "entry_delay_bars": 0,
+    "short_only": True,
+    "use_ema_regime": True,
+    "use_mama_fama": True,
+    "use_roofing_lt_slope": True,
+    "use_decycler": True,
+    "ema_fast_col": "ema_50",
+    "ema_slow_col": "ema_100",
+    "mama_col": "mama",
+    "fama_col": "fama",
+    "roofing_col": "roofing_filter_48_10",
+    "roofing_slope_col": "roofing_filter_48_10_slope",
+    "decycler_osc_col": "decycler_oscillator_30_60",
+    "ema_condition_col": "ehlers_continuation_ema50_lt_ema100",
+    "mama_condition_col": "ehlers_continuation_mama_lt_fama",
+    "roofing_negative_col": "ehlers_continuation_roofing_lt_zero",
+    "roofing_slope_negative_col": "ehlers_continuation_roofing_slope_lt_zero",
+    "roofing_lt_slope_col": "ehlers_continuation_roofing_lt_slope",
+    "decycler_negative_col": "ehlers_continuation_decycler_osc_lt_zero",
+    "state_col": "ehlers_continuation_short_state",
+    "entry_col": "ehlers_continuation_short_entry",
+    "signal_col": "ehlers_continuation_signal",
+    "candidate_col": "ehlers_continuation_candidate",
+}
+
+
+def _merge_cfg(signal_cfg: Mapping[str, Any] | None, overrides: Mapping[str, Any]) -> dict[str, Any]:
+    cfg = dict(_DEFAULT_CFG)
+    raw_cfg = dict(signal_cfg or {})
+    nested_params = raw_cfg.pop("params", None)
+    cfg.update(raw_cfg)
+    if nested_params is not None:
+        if not isinstance(nested_params, Mapping):
+            raise TypeError("signal_cfg.params must be a mapping when provided.")
+        cfg.update(dict(nested_params))
+    cfg.update(dict(overrides))
+    return cfg
+
+
+def _string_value(value: Any, *, field: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field} must be a non-empty string.")
+    return value.strip()
+
+
+def _bool_value(value: Any, *, field: str) -> bool:
+    if not isinstance(value, bool):
+        raise TypeError(f"{field} must be boolean.")
+    return bool(value)
+
+
+def _non_negative_int(value: Any, *, field: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or int(value) < 0:
+        raise ValueError(f"{field} must be a non-negative integer.")
+    return int(value)
+
+
+def _validate_cfg(cfg: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(cfg)
+    entry_mode = str(normalized.get("entry_mode", "state"))
+    if entry_mode not in _ALLOWED_ENTRY_MODES:
+        raise ValueError(f"entry_mode must be one of: {sorted(_ALLOWED_ENTRY_MODES)}.")
+    normalized["entry_mode"] = entry_mode
+    normalized["entry_delay_bars"] = _non_negative_int(
+        normalized.get("entry_delay_bars"),
+        field="entry_delay_bars",
+    )
+
+    for key in ("short_only", "use_ema_regime", "use_mama_fama", "use_roofing_lt_slope", "use_decycler"):
+        normalized[key] = _bool_value(normalized.get(key), field=key)
+    if not bool(normalized["short_only"]):
+        raise ValueError("ehlers_continuation_short_signal is short-only; short_only must be true.")
+
+    string_keys = (
+        "ema_fast_col",
+        "ema_slow_col",
+        "mama_col",
+        "fama_col",
+        "roofing_col",
+        "roofing_slope_col",
+        "decycler_osc_col",
+        "ema_condition_col",
+        "mama_condition_col",
+        "roofing_negative_col",
+        "roofing_slope_negative_col",
+        "roofing_lt_slope_col",
+        "decycler_negative_col",
+        "state_col",
+        "entry_col",
+        "signal_col",
+        "candidate_col",
+    )
+    for key in string_keys:
+        normalized[key] = _string_value(normalized.get(key), field=key)
+    return normalized
+
+
+def _require_columns(df: pd.DataFrame, columns: list[str]) -> None:
+    missing = [column for column in columns if column not in df.columns]
+    if missing:
+        raise KeyError(f"Missing columns for ehlers_continuation_short_signal: {missing}")
+
+
+def _numeric(frame: pd.DataFrame, column: str) -> pd.Series:
+    return pd.to_numeric(frame[column], errors="coerce").astype(float)
+
+
+def _optional_numeric(frame: pd.DataFrame, column: str) -> pd.Series:
+    if column not in frame.columns:
+        return pd.Series(math.nan, index=frame.index, dtype=float)
+    return _numeric(frame, column)
+
+
+def build_ehlers_continuation_short_signal(
+    df: pd.DataFrame,
+    signal_cfg: Mapping[str, Any] | None = None,
+    **overrides: Any,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """
+    Build the short-only Ehlers bearish continuation signal.
+
+    The default state is the short-side mirror of the long v1 rule. Optional condition
+    toggles are used only for ablations and leave the v1 defaults unchanged.
+    """
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("df must be a pandas DataFrame.")
+
+    cfg = _validate_cfg(_merge_cfg(signal_cfg, overrides))
+    required_cols = [str(cfg["roofing_col"]), str(cfg["roofing_slope_col"])]
+    if bool(cfg["use_ema_regime"]):
+        required_cols.extend([str(cfg["ema_fast_col"]), str(cfg["ema_slow_col"])])
+    if bool(cfg["use_mama_fama"]):
+        required_cols.extend([str(cfg["mama_col"]), str(cfg["fama_col"])])
+    if bool(cfg["use_decycler"]):
+        required_cols.append(str(cfg["decycler_osc_col"]))
+    _require_columns(df, list(dict.fromkeys(required_cols)))
+
+    out = df.copy()
+    ema_fast = _optional_numeric(out, str(cfg["ema_fast_col"]))
+    ema_slow = _optional_numeric(out, str(cfg["ema_slow_col"]))
+    mama = _optional_numeric(out, str(cfg["mama_col"]))
+    fama = _optional_numeric(out, str(cfg["fama_col"]))
+    roofing = _numeric(out, str(cfg["roofing_col"]))
+    roofing_slope = _numeric(out, str(cfg["roofing_slope_col"]))
+    decycler_osc = _optional_numeric(out, str(cfg["decycler_osc_col"]))
+
+    ema_condition = ema_fast.lt(ema_slow)
+    mama_condition = mama.lt(fama)
+    roofing_negative = roofing.lt(0.0)
+    roofing_slope_negative = roofing_slope.lt(0.0)
+    roofing_lt_slope = roofing.lt(roofing_slope)
+    decycler_negative = decycler_osc.lt(0.0)
+
+    valid = roofing.notna() & roofing_slope.notna()
+    short_state = roofing_negative & roofing_slope_negative
+    if bool(cfg["use_ema_regime"]):
+        valid &= ema_fast.notna() & ema_slow.notna()
+        short_state &= ema_condition
+    if bool(cfg["use_mama_fama"]):
+        valid &= mama.notna() & fama.notna()
+        short_state &= mama_condition
+    if bool(cfg["use_roofing_lt_slope"]):
+        short_state &= roofing_lt_slope
+    if bool(cfg["use_decycler"]):
+        valid &= decycler_osc.notna()
+        short_state &= decycler_negative
+    short_state &= valid
+    short_entry = short_state & ~short_state.shift(1, fill_value=False)
+
+    selected = short_state if str(cfg["entry_mode"]) == "state" else short_entry
+    signal = selected.fillna(False).astype("int8") * -1
+    if int(cfg["entry_delay_bars"]) > 0:
+        signal = signal.shift(int(cfg["entry_delay_bars"])).fillna(0).astype("int8")
+
+    out[str(cfg["ema_condition_col"])] = ema_condition.fillna(False).astype("int8")
+    out[str(cfg["mama_condition_col"])] = mama_condition.fillna(False).astype("int8")
+    out[str(cfg["roofing_negative_col"])] = roofing_negative.fillna(False).astype("int8")
+    out[str(cfg["roofing_slope_negative_col"])] = roofing_slope_negative.fillna(False).astype("int8")
+    out[str(cfg["roofing_lt_slope_col"])] = roofing_lt_slope.fillna(False).astype("int8")
+    out[str(cfg["decycler_negative_col"])] = decycler_negative.fillna(False).astype("int8")
+    out[str(cfg["state_col"])] = short_state.fillna(False).astype("int8")
+    out[str(cfg["entry_col"])] = short_entry.fillna(False).astype("int8")
+    out[str(cfg["signal_col"])] = signal
+    out[str(cfg["candidate_col"])] = signal.ne(0).astype("int8")
+
+    return out, {
+        "kind": "ehlers_continuation_short",
+        "entry_mode": str(cfg["entry_mode"]),
+        "entry_delay_bars": int(cfg["entry_delay_bars"]),
+        "short_only": True,
+        "use_ema_regime": bool(cfg["use_ema_regime"]),
+        "use_mama_fama": bool(cfg["use_mama_fama"]),
+        "use_roofing_lt_slope": bool(cfg["use_roofing_lt_slope"]),
+        "use_decycler": bool(cfg["use_decycler"]),
+        "short_state_rows": int(short_state.sum()),
+        "short_entry_rows": int(short_entry.sum()),
+        "signal_rows": int(signal.ne(0).sum()),
+        "state_col": str(cfg["state_col"]),
+        "entry_col": str(cfg["entry_col"]),
+        "signal_col": str(cfg["signal_col"]),
+        "candidate_col": str(cfg["candidate_col"]),
+    }
+
+
+def ehlers_continuation_short_signal(df: pd.DataFrame, **params: Any) -> pd.DataFrame:
+    out, _ = build_ehlers_continuation_short_signal(df, params)
+    return out
+
+
+__all__ = ["build_ehlers_continuation_short_signal", "ehlers_continuation_short_signal"]
