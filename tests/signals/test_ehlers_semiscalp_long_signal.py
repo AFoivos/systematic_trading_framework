@@ -5,13 +5,23 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from src.experiments.registry import SIGNAL_REGISTRY
+from src.experiments.optuna_search import (
+    load_optuna_spec_yaml,
+    validate_search_space_feature_contract,
+)
+from src.experiments.registry import FEATURE_REGISTRY, SIGNAL_REGISTRY
 from src.signals.ehlers_semiscalp_long_signal import build_ehlers_semiscalp_long_signal
 from src.utils.config import load_experiment_config
 from src.utils.config_kinds import FEATURE_KINDS, SIGNAL_KINDS
 
 
 CONFIG_PATH = Path("config/experiments/spx500_30m_ehlers_semiscalp_long_v1.yaml")
+EXPERIMENT_CASES = (
+    ("spx500_30m_ehlers_semiscalp_long_v1.yaml", "none"),
+    ("spx500_30m_ehlers_semiscalp_logistic_meta_v1.yaml", "logistic_regression_clf"),
+    ("spx500_30m_ehlers_semiscalp_lightgbm_meta_v1.yaml", "lightgbm_clf"),
+    ("spx500_30m_ehlers_semiscalp_xgboost_meta_v1.yaml", "xgboost_clf"),
+)
 
 
 def _signal_frame() -> pd.DataFrame:
@@ -42,9 +52,54 @@ def test_ehlers_semiscalp_config_loads_and_resolves_registered_steps() -> None:
     assert cfg["signals"]["params"]["entry_mode"] == "transition"
     assert cfg["backtest"]["allow_short"] is False
     assert cfg["backtest"]["max_holding_bars"] == 6
-    assert cfg["target"]["max_holding"] == 6
+    assert cfg["target"]["max_holding_bars"] == 6
     for step in cfg["features"]:
         assert step["step"] in FEATURE_KINDS
+
+
+def test_ehlers_semiscalp_is_registered_additively_for_feature_stage() -> None:
+    assert "ehlers_semiscalp_long" in FEATURE_KINDS
+    assert FEATURE_REGISTRY["ehlers_semiscalp_long"] is not SIGNAL_REGISTRY["ehlers_semiscalp_long"]
+
+
+@pytest.mark.parametrize(("filename", "model_kind"), EXPERIMENT_CASES)
+def test_ehlers_semiscalp_experiment_family_preserves_shared_trade_contract(
+    filename: str,
+    model_kind: str,
+) -> None:
+    cfg = load_experiment_config(Path("config/experiments") / filename)
+
+    assert cfg["model"]["kind"] == model_kind
+    assert cfg["backtest"]["engine"] == "manual_barrier"
+    assert cfg["backtest"]["take_profit_r"] == 1.5
+    assert cfg["backtest"]["stop_loss_r"] == 1.0
+    assert cfg["backtest"]["max_holding_bars"] == 6
+    assert cfg["backtest"]["stop_mode"] == "volatility_stop"
+
+    if model_kind == "none":
+        assert cfg["signals"]["kind"] == "ehlers_semiscalp_long"
+        assert cfg["target"]["max_holding_bars"] == cfg["backtest"]["max_holding_bars"]
+    else:
+        assert cfg["features"][-1]["step"] == "ehlers_semiscalp_long"
+        assert cfg["signals"]["kind"] == "manual_long_model_filter"
+        assert cfg["model"]["target"]["max_holding_bars"] == cfg["backtest"]["max_holding_bars"]
+        assert cfg["model"]["split"]["method"] == "purged"
+        assert cfg["model"]["split"]["purge_bars"] >= cfg["model"]["target"]["max_holding_bars"]
+
+
+@pytest.mark.parametrize(("filename", "_model_kind"), EXPERIMENT_CASES)
+def test_ehlers_semiscalp_optuna_specs_resolve_valid_base_contracts(
+    filename: str,
+    _model_kind: str,
+) -> None:
+    stem = Path(filename).stem
+    spec_path = Path("config/optuna/ehlers") / f"optuna_{stem}.yaml"
+    spec = load_optuna_spec_yaml(spec_path)
+    base_cfg = load_experiment_config(spec["base_config"])
+
+    validate_search_space_feature_contract(base_cfg, spec["search_space"])
+    assert Path(spec["base_config"]).name == filename
+    assert spec["study"]["n_jobs"] == 1
 
 
 def test_ehlers_semiscalp_signal_emits_only_false_to_true_transitions() -> None:

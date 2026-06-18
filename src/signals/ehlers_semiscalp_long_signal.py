@@ -233,18 +233,37 @@ def build_ehlers_semiscalp_long_signal(
     }
 
 
+def ehlers_semiscalp_long_feature(df: pd.DataFrame, **params: Any) -> pd.DataFrame:
+    """
+    Generate deterministic Ehlers semi-scalp candidates before model training.
+
+    YAML declaration::
+
+        features:
+          - step: ehlers_semiscalp_long
+            params: {}
+    """
+    out, _ = build_ehlers_semiscalp_long_signal(df, params)
+    return out
+
+
 def ehlers_semiscalp_long_signal(df: pd.DataFrame, **params: Any) -> pd.DataFrame:
     """
-    Apply the registered ``ehlers_semiscalp_long`` signal transformation.
+    Apply the registered ``ehlers_semiscalp_long`` candidate transformation.
 
     YAML declaration::
 
         signals:
           kind: ehlers_semiscalp_long
           params: {}
+
     """
     out, _ = build_ehlers_semiscalp_long_signal(df, params)
     return out
 
 
-__all__ = ["build_ehlers_semiscalp_long_signal", "ehlers_semiscalp_long_signal"]
+__all__ = [
+    "build_ehlers_semiscalp_long_signal",
+    "ehlers_semiscalp_long_feature",
+    "ehlers_semiscalp_long_signal",
+]

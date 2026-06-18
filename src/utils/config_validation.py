@@ -1102,6 +1102,11 @@ def validate_features_block(features: Any) -> None:
         _validate_string_mapping(step.get("outputs"), field="features[].outputs")
         if step["step"] == "roc_long_only_conditions":
             _validate_roc_long_only_conditions_params(step.get("params") or {}, field_prefix="features[].params")
+        if step["step"] == "ehlers_semiscalp_long":
+            _validate_ehlers_semiscalp_long_params(
+                step.get("params") or {},
+                field_prefix="features[].params",
+            )
         if step["step"] == "roofing_filter":
             params = step.get("params") or {}
             for key in (

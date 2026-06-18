@@ -27,6 +27,7 @@ from .ehlers_continuation_short_signal import (
 )
 from .ehlers_semiscalp_long_signal import (
     build_ehlers_semiscalp_long_signal,
+    ehlers_semiscalp_long_feature,
     ehlers_semiscalp_long_signal,
 )
 from .forecast_threshold_signal import forecast_threshold_signal
@@ -95,6 +96,7 @@ __all__ = [
     "dense_return_forecast_signal",
     "ehlers_continuation_long_signal",
     "ehlers_continuation_short_signal",
+    "ehlers_semiscalp_long_feature",
     "ehlers_semiscalp_long_signal",
     "ema_rms_ppo_vwap_signal",
     "ema_stoch_rsi_pullback_signal",

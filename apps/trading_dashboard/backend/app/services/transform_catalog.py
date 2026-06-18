@@ -99,6 +99,7 @@ from src.features import (  # noqa: E402
 from src.features.technical.trend import add_trend_features, add_trend_regime_features  # noqa: E402
 from src.experiments.registry import SIGNAL_REGISTRY as EXPERIMENT_SIGNAL_REGISTRY  # noqa: E402
 from src.signals import (  # noqa: E402
+    ehlers_semiscalp_long_feature,
     ema_stoch_rsi_pullback_signal,
     indicator_model_adaptive_pullback_signal,
     regime_filtered_signal,
@@ -152,6 +153,7 @@ FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
     "ema_stoch_rsi_pullback": ema_stoch_rsi_pullback_signal,
     "indicator_pullback": add_indicator_pullback_features,
     "indicator_model_adaptive_pullback": indicator_model_adaptive_pullback_signal,
+    "ehlers_semiscalp_long": ehlers_semiscalp_long_feature,
     "mama": add_mama,
     "fama": add_fama,
     "dominant_cycle_period": add_dominant_cycle_period,
