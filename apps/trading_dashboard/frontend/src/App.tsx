@@ -74,7 +74,6 @@ export default function App() {
     candles,
     seriesData,
     trades,
-    transformRun,
     loadingMessage,
     errorMessage
   } = state;
@@ -345,9 +344,6 @@ export default function App() {
           loadingMessage={loadingMessage}
           errorMessage={errorMessage}
           dataWindowLabel={dataWindowLabel}
-          transformRun={transformRun}
-          onAddManualLevel={state.addManualLevel}
-          onRemoveSeries={state.removeSeriesConfig}
         />
         <SeriesStyleEditor
           configs={seriesConfigs}

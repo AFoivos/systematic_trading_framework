@@ -1,6 +1,5 @@
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { OHLCVCandle, TimeValuePoint, TradeRecord } from "../types/market";
-import type { TransformRunSummary } from "../types/transforms";
 import type { ManualLevelKind, VisualizationConfig } from "../types/visualization";
 import { groupLowerPanelConfigs, seriesKey, type LowerPanelGroup } from "../utils/transforms";
 import { LinkedChartStack, type ManualPriceLine } from "./CandlestickChart";
@@ -13,14 +12,6 @@ interface ChartWorkspaceProps {
   loadingMessage: string | null;
   errorMessage: string | null;
   dataWindowLabel: string;
-  transformRun: TransformRunSummary | null;
-  onAddManualLevel: (kind: ManualLevelKind, price: number) => void;
-  onRemoveSeries: (key: string) => void;
-}
-
-function parsePositivePrice(value: string): number | null {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 function configPrice(config: VisualizationConfig): number | null {
@@ -79,18 +70,6 @@ function missingVisibleSeries(configs: VisualizationConfig[], seriesData: Record
     .map((config) => config.display_name);
 }
 
-function numberMetadata(value: unknown): string | null {
-  return typeof value === "number" && Number.isFinite(value) ? value.toLocaleString() : null;
-}
-
-function textMetadata(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value : null;
-}
-
-function metadataList(value: unknown): string[] {
-  return Array.isArray(value) ? value.map((item) => String(item)).filter(Boolean) : [];
-}
-
 export function ChartWorkspace({
   candles,
   configs,
@@ -98,25 +77,15 @@ export function ChartWorkspace({
   trades,
   loadingMessage,
   errorMessage,
-  dataWindowLabel,
-  transformRun,
-  onAddManualLevel,
-  onRemoveSeries
+  dataWindowLabel
 }: ChartWorkspaceProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [stopLossDraft, setStopLossDraft] = useState("");
-  const [takeProfitDraft, setTakeProfitDraft] = useState("");
   const mainOverlays = useMemo(() => configs.filter((config) => config.chart_target === "main_price_chart"), [configs]);
   const lowerPanels: LowerPanelGroup[] = useMemo(() => groupLowerPanelConfigs(configs), [configs]);
   const visibleSeriesCount = useMemo(() => configs.filter((config) => config.visible).length, [configs]);
   const manualLevelConfigs = useMemo(() => configs.filter(isManualLevelConfig), [configs]);
   const priceLines = useMemo(() => manualLevelConfigs.flatMap((config) => manualPriceLineFromConfig(config) ?? []), [manualLevelConfigs]);
   const missingSeries = useMemo(() => missingVisibleSeries(configs, seriesData), [configs, seriesData]);
-  const stopLossPrice = parsePositivePrice(stopLossDraft);
-  const takeProfitPrice = parsePositivePrice(takeProfitDraft);
-  const rowsLoaded = numberMetadata(transformRun?.metadata.rows_loaded);
-  const rowsReturned = numberMetadata(transformRun?.metadata.rows_returned);
-  const transformDataset = textMetadata(transformRun?.metadata.dataset_id);
 
   useEffect(() => {
     if (!isExpanded) {
@@ -138,22 +107,6 @@ export function ChartWorkspace({
     };
   }, [isExpanded]);
 
-  const addPriceLine = (event: FormEvent<HTMLFormElement>, kind: ManualLevelKind) => {
-    event.preventDefault();
-    const price = kind === "stop_loss" ? stopLossPrice : takeProfitPrice;
-    if (price === null) {
-      return;
-    }
-
-    onAddManualLevel(kind, price);
-
-    if (kind === "stop_loss") {
-      setStopLossDraft("");
-    } else {
-      setTakeProfitDraft("");
-    }
-  };
-
   return (
     <>
       {isExpanded ? <div className="workspace-focus-backdrop" onClick={() => setIsExpanded(false)} /> : null}
@@ -174,62 +127,6 @@ export function ChartWorkspace({
             {isExpanded ? "Exit fullscreen" : "Fullscreen chart"}
           </button>
         </div>
-        <div className="price-line-controls" aria-label="Manual price levels">
-          <form className="price-line-form" onSubmit={(event) => addPriceLine(event, "stop_loss")}>
-            <label className="price-line-field">
-              <span>Stop loss</span>
-              <input
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="any"
-                placeholder="Price"
-                value={stopLossDraft}
-                onChange={(event) => setStopLossDraft(event.target.value)}
-              />
-            </label>
-            <button className="secondary-button price-line-add-button" type="submit" disabled={stopLossPrice === null}>
-              Add
-            </button>
-          </form>
-          <form className="price-line-form" onSubmit={(event) => addPriceLine(event, "take_profit")}>
-            <label className="price-line-field">
-              <span>Take profit</span>
-              <input
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="any"
-                placeholder="Price"
-                value={takeProfitDraft}
-                onChange={(event) => setTakeProfitDraft(event.target.value)}
-              />
-            </label>
-            <button className="secondary-button price-line-add-button" type="submit" disabled={takeProfitPrice === null}>
-              Add
-            </button>
-          </form>
-          {manualLevelConfigs.length > 0 ? (
-            <div className="price-line-list" aria-label="Active price levels">
-              {manualLevelConfigs.map((config) => {
-                const key = seriesKey(config.source_type, config.series_id);
-                const kind = configKind(config);
-                return (
-                  <button
-                    className={`price-line-chip price-line-chip-${kind}${config.visible ? "" : " price-line-chip-hidden"}`}
-                    type="button"
-                    key={key}
-                    onClick={() => onRemoveSeries(key)}
-                    title={`Remove ${config.display_name}`}
-                  >
-                    {config.display_name} x
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
-        </div>
-        {isExpanded ? <div className="workspace-focus-copy">Esc closes the focused chart view.</div> : null}
         {errorMessage ? <div className="error-banner">{errorMessage}</div> : null}
         {loadingMessage ? <div className="loading-banner">{loadingMessage}</div> : null}
         {missingSeries.length > 0 ? (
@@ -237,38 +134,6 @@ export function ChartWorkspace({
             No points in the current chart window for {missingSeries.slice(0, 4).join(", ")}
             {missingSeries.length > 4 ? ` and ${missingSeries.length - 4} more` : ""}.
           </div>
-        ) : null}
-        {transformRun ? (
-          <section className="transform-run-summary" aria-label="Last parameterized preview">
-            <div className="transform-run-header">
-              <div>
-                <strong>Parameterized preview</strong>
-                <span>{new Date(transformRun.ran_at).toLocaleString()}</span>
-              </div>
-              <div className="transform-run-metrics">
-                {rowsReturned ? <span>{rowsReturned} rows returned</span> : null}
-                {rowsLoaded ? <span>{rowsLoaded} rows loaded</span> : null}
-                {transformDataset ? <span>{transformDataset}</span> : null}
-              </div>
-            </div>
-            {transformRun.steps.length > 0 ? (
-              <div className="transform-step-results">
-                {transformRun.steps.map((step, index) => {
-                  const prerequisites = metadataList(step.metadata.materialized_prerequisites);
-                  return (
-                    <div className="transform-step-result" key={`${step.source_type}-${step.step}-${index}`}>
-                      <div>
-                        <strong>{step.step}</strong>
-                        <span>{step.source_type}</span>
-                      </div>
-                      <small>{step.output_columns.length > 0 ? step.output_columns.join(", ") : "no numeric outputs"}</small>
-                      {prerequisites.length > 0 ? <em>auto inputs: {prerequisites.join(", ")}</em> : null}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : null}
-          </section>
         ) : null}
         <LinkedChartStack
           candles={candles}
