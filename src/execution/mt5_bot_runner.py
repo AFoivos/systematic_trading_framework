@@ -195,6 +195,9 @@ class MT5DemoBot:
             self.risk_manager.config.demo_only
         )
         self.connector.ensure_demo_account(require_demo=require_demo)
+        self.connector.ensure_algo_trading_enabled(
+            require_enabled=self.execution_mode == "demo_mt5" and not self.dry_run
+        )
         account = self.connector.account_info()
         equity = float(_attr(account, "equity"))
         self.risk_manager.update_equity_baselines(equity, now_utc=datetime.now(timezone.utc))
@@ -205,6 +208,9 @@ class MT5DemoBot:
         self.connector.shutdown()
 
     def run_once(self) -> None:
+        self.connector.ensure_algo_trading_enabled(
+            require_enabled=self.execution_mode == "demo_mt5" and not self.dry_run
+        )
         account = self.connector.account_info()
         self._log_account(account)
         for framework_symbol in self.mapper.enabled_symbols():
@@ -454,6 +460,7 @@ class MT5DemoBot:
                 "max_positions_per_symbol": config.max_positions_per_symbol,
                 "max_symbol_exposure": config.max_symbol_exposure,
                 "max_spread_points": config.max_spread_points,
+                "max_spread_points_by_symbol": config.max_spread_points_by_symbol,
                 "allow_short": config.allow_short,
                 "demo_only": config.demo_only,
                 "disable_weekend_trading": config.disable_weekend_trading,

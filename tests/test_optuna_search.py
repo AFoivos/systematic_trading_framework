@@ -430,7 +430,37 @@ def test_compute_derived_metrics_weekly_participation_uses_strict_oos_entries() 
     assert metrics["min_entries_per_week"] == pytest.approx(0.0)
     assert metrics["median_entries_per_week"] == pytest.approx(1.0)
     assert metrics["mean_entries_per_week"] == pytest.approx(1.0)
+    assert metrics["total_2week_window_count"] == pytest.approx(2.0)
+    assert metrics["active_2week_window_count"] == pytest.approx(2.0)
+    assert metrics["active_2week_window_ratio"] == pytest.approx(1.0)
+    assert metrics["min_entries_per_2_weeks"] == pytest.approx(2.0)
+    assert metrics["mean_entries_per_2_weeks"] == pytest.approx(2.5)
     assert get_nested_value(result, "derived.active_week_ratio") == pytest.approx(2.0 / 3.0)
+    assert get_nested_value(result, "derived.min_entries_per_2_weeks") == pytest.approx(2.0)
+
+
+def test_compute_derived_metrics_detects_inactive_overlapping_two_week_window() -> None:
+    index = pd.date_range("2024-01-01", periods=33, freq="D", tz="UTC")
+    positions = pd.Series(0.0, index=index)
+    positions.loc["2024-01-02":"2024-01-03"] = 1.0
+    positions.loc["2024-01-30":"2024-01-31"] = 1.0
+    result = SimpleNamespace(
+        evaluation={"scope": "timeline"},
+        backtest=SimpleNamespace(
+            positions=positions,
+            turnover=positions.diff().abs().fillna(0.0),
+        ),
+        data=pd.DataFrame(index=index),
+    )
+
+    metrics = compute_derived_metrics(result)
+
+    assert metrics["entry_count"] == pytest.approx(2.0)
+    assert metrics["total_2week_window_count"] == pytest.approx(4.0)
+    assert metrics["active_2week_window_count"] == pytest.approx(2.0)
+    assert metrics["inactive_2week_window_count"] == pytest.approx(2.0)
+    assert metrics["active_2week_window_ratio"] == pytest.approx(0.5)
+    assert metrics["min_entries_per_2_weeks"] == pytest.approx(0.0)
 
 
 def test_compute_derived_metrics_weekly_participation_uses_portfolio_weights() -> None:
@@ -458,6 +488,51 @@ def test_compute_derived_metrics_weekly_participation_uses_portfolio_weights() -
     assert metrics["total_week_count"] == pytest.approx(3.0)
     assert metrics["active_week_count"] == pytest.approx(2.0)
     assert metrics["active_week_ratio"] == pytest.approx(2.0 / 3.0)
+
+
+def test_spx500_scalp_biweekly_optuna_yaml_matches_base_config_contract() -> None:
+    optuna_cfg_path = Path(
+        "config/optuna/ema_rms_ppo_vwap/long_only/"
+        "optuna_spx500_30m_vwap_rms_cross_scalp_v1_biweekly.yaml"
+    )
+    payload = yaml.safe_load(optuna_cfg_path.read_text(encoding="utf-8"))
+
+    search_space = load_search_space_yaml(optuna_cfg_path)
+    objective = normalize_objective_spec(payload["objective"])
+    base_cfg = load_experiment_config(payload["base_config"])
+    validate_search_space_feature_contract(base_cfg, search_space)
+
+    trial_params = {
+        dimension.name: (
+            list(dimension.choices or [])[0]
+            if dimension.kind == "categorical"
+            else float(dimension.low)
+        )
+        for dimension in search_space
+    }
+    trial_cfg = prepare_trial_config(
+        base_cfg,
+        trial_params=trial_params,
+        search_space=search_space,
+        logging_enabled=False,
+    )
+    validate_resolved_config(trial_cfg)
+
+    assert payload["base_config"].endswith("spx500_30m_vwap_rms_cross_scalp_v1.yaml")
+    assert objective.metric_path == "evaluation.primary_summary.sharpe"
+    min_biweekly = [
+        constraint
+        for constraint in objective.constraints
+        if constraint.metric_path == "derived.min_entries_per_2_weeks"
+    ]
+    assert len(min_biweekly) == 1
+    assert min_biweekly[0].op == "lt"
+    assert min_biweekly[0].threshold == pytest.approx(1.0)
+    assert min_biweekly[0].penalty == pytest.approx(100.0)
+    assert trial_cfg["data"]["storage"]["save_processed"] is False
+    assert trial_cfg["backtest"]["take_profit_r"] == trial_cfg["target"]["upper_mult"]
+    assert trial_cfg["backtest"]["stop_loss_r"] == trial_cfg["target"]["lower_mult"]
+    assert trial_cfg["backtest"]["max_holding_bars"] == trial_cfg["target"]["max_holding"]
 
 
 def test_dense_return_forecasting_v2_optuna_penalizes_rank_cost_and_turnover() -> None:

@@ -6,7 +6,11 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from src.execution.mt5_connector import MT5Connector, MT5CredentialsError
+from src.execution.mt5_connector import (
+    MT5Connector,
+    MT5CredentialsError,
+    MT5TradingDisabledError,
+)
 from src.execution.mt5_bot_runner import SingleInstanceLock, SingleInstanceLockError, _feature_snapshot_payload
 from src.execution.mt5_order_manager import MT5OrderManager, TradeParameters
 from src.execution.mt5_position_manager import MT5PositionManager
@@ -45,7 +49,17 @@ class FakeMT5Module:
         return (0, "")
 
     def account_info(self) -> SimpleNamespace:
-        return SimpleNamespace(login=123, server="FTMO-Demo", trade_mode=self.ACCOUNT_TRADE_MODE_DEMO, equity=10000)
+        return SimpleNamespace(
+            login=123,
+            server="FTMO-Demo",
+            trade_mode=self.ACCOUNT_TRADE_MODE_DEMO,
+            trade_allowed=True,
+            trade_expert=True,
+            equity=10000,
+        )
+
+    def terminal_info(self) -> SimpleNamespace:
+        return SimpleNamespace(trade_allowed=True, tradeapi_disabled=False)
 
 
 class FakeConnector:
@@ -254,6 +268,18 @@ def test_direct_mt5_credentials_require_all_fields() -> None:
         connector.credentials_from_mapping({"login": 1513691391, "server": "FTMO-Demo"})
 
 
+def test_algo_trading_preflight_rejects_disabled_terminal() -> None:
+    fake_mt5 = FakeMT5Module()
+    fake_mt5.terminal_info = lambda: SimpleNamespace(
+        trade_allowed=False,
+        tradeapi_disabled=False,
+    )
+    connector = MT5Connector(mt5_module=fake_mt5)
+
+    with pytest.raises(MT5TradingDisabledError, match="terminal.trade_allowed=false"):
+        connector.ensure_algo_trading_enabled()
+
+
 def test_single_instance_lock_rejects_second_active_holder(tmp_path) -> None:
     lock_path = tmp_path / "mt5_demo_bot.lock"
 
@@ -295,6 +321,47 @@ def test_max_spread_blocks_order_send() -> None:
     assert connector.order_send_calls == 0
 
 
+def test_per_symbol_spread_limit_overrides_global_limit() -> None:
+    connector = FakeConnector(bid=100.0, ask=100.8)
+    order_manager = _order_manager(
+        connector,
+        dry_run=False,
+        execution_mode="demo_mt5",
+        max_spread_points=50.0,
+        max_spread_points_by_symbol={"SPX500": 100.0},
+    )
+
+    result = order_manager.place_market_order(
+        framework_symbol="SPX500",
+        mt5_symbol="US500.cash",
+        side="buy",
+        latest_row=pd.Series({"close": 100.0, "atr_14": 1.0}),
+        account_info=SimpleNamespace(equity=10_000.0),
+        trade_params=TradeParameters(stop_loss_r=3.0, take_profit_r=4.0, volatility_col="atr_14"),
+        now_utc=NOW,
+    )
+
+    assert result.status == "filled"
+    assert connector.order_send_calls == 1
+
+
+def test_risk_config_parses_per_symbol_spread_limits() -> None:
+    config = RiskConfig.from_mapping(
+        {
+            "max_spread_points": 50,
+            "max_spread_points_by_symbol": {"SPX500": 70, "US100.cash": 225},
+        }
+    )
+    manager = MT5RiskManager(config)
+
+    assert manager.spread_limit_for_symbol(
+        framework_symbol="SPX500",
+        mt5_symbol="US500.cash",
+    ) == pytest.approx(70.0)
+    assert manager.spread_limit_for_symbol(mt5_symbol="US100.cash") == pytest.approx(225.0)
+    assert manager.spread_limit_for_symbol(mt5_symbol="UNKNOWN") == pytest.approx(50.0)
+
+
 def test_feature_snapshot_payload_keeps_recent_numeric_feature_rows() -> None:
     frame = pd.DataFrame(
         {
@@ -329,10 +396,15 @@ def _order_manager(
     dry_run: bool,
     execution_mode: str,
     max_spread_points: float = 50.0,
+    max_spread_points_by_symbol: dict[str, float] | None = None,
 ) -> MT5OrderManager:
     position_manager = MT5PositionManager(connector, magic_number=MAGIC)
     risk_manager = MT5RiskManager(
-        RiskConfig(max_spread_points=max_spread_points, disable_weekend_trading=False),
+        RiskConfig(
+            max_spread_points=max_spread_points,
+            max_spread_points_by_symbol=max_spread_points_by_symbol or {},
+            disable_weekend_trading=False,
+        ),
         initial_equity=10_000.0,
         daily_start_equity=10_000.0,
     )

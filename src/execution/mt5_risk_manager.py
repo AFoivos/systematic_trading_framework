@@ -34,6 +34,7 @@ class RiskConfig:
     max_positions_per_symbol: int = 1
     max_symbol_exposure: float | None = None
     max_spread_points: float | None = 50.0
+    max_spread_points_by_symbol: dict[str, float] = field(default_factory=dict)
     allow_short: bool = False
     demo_only: bool = True
     trading_hours_utc: Any | None = None
@@ -51,6 +52,9 @@ class RiskConfig:
             max_positions_per_symbol=int(cfg.get("max_positions_per_symbol", 1)),
             max_symbol_exposure=_optional_float(cfg.get("max_symbol_exposure")),
             max_spread_points=_optional_float(cfg.get("max_spread_points", 50.0)),
+            max_spread_points_by_symbol=_spread_limits_by_symbol(
+                cfg.get("max_spread_points_by_symbol")
+            ),
             allow_short=bool(cfg.get("allow_short", False)),
             demo_only=bool(cfg.get("demo_only", True)),
             trading_hours_utc=cfg.get("trading_hours_utc"),
@@ -188,6 +192,7 @@ class MT5RiskManager:
         account_equity: float,
         positions: Sequence[Any],
         mt5_symbol: str,
+        framework_symbol: str | None = None,
         side: str,
         spread_points: float | None,
         now_utc: datetime | None = None,
@@ -234,12 +239,18 @@ class MT5RiskManager:
                 symbol=mt5_symbol,
                 open_positions=len(symbol_positions),
             )
-        if self.config.max_spread_points is not None and spread_points is not None:
-            if float(spread_points) > self.config.max_spread_points:
+        spread_limit = self.spread_limit_for_symbol(
+            mt5_symbol=mt5_symbol,
+            framework_symbol=framework_symbol,
+        )
+        if spread_limit is not None and spread_points is not None:
+            if float(spread_points) > spread_limit:
                 return RiskDecision.reject(
                     "max_spread_exceeded",
                     spread_points=float(spread_points),
-                    max_spread_points=self.config.max_spread_points,
+                    max_spread_points=spread_limit,
+                    framework_symbol=framework_symbol,
+                    mt5_symbol=mt5_symbol,
                 )
         if self.config.max_symbol_exposure is not None:
             exposure = _symbol_exposure(
@@ -257,7 +268,23 @@ class MT5RiskManager:
                     exposure=exposure,
                     max_symbol_exposure=self.config.max_symbol_exposure,
                 )
-        return RiskDecision.allow(spread_points=spread_points, open_positions=len(positions))
+        return RiskDecision.allow(
+            spread_points=spread_points,
+            max_spread_points=spread_limit,
+            open_positions=len(positions),
+        )
+
+    def spread_limit_for_symbol(
+        self,
+        *,
+        mt5_symbol: str,
+        framework_symbol: str | None = None,
+    ) -> float | None:
+        per_symbol = self.config.max_spread_points_by_symbol
+        for symbol in (framework_symbol, mt5_symbol):
+            if symbol and symbol in per_symbol:
+                return per_symbol[symbol]
+        return self.config.max_spread_points
 
     def _now(self) -> datetime:
         if self._now_fn is not None:
@@ -271,6 +298,25 @@ def _first_positive_attr(obj: Any, names: Sequence[str]) -> float | None:
         if value is not None and value > 0.0:
             return value
     return None
+
+
+def _spread_limits_by_symbol(value: Any) -> dict[str, float]:
+    if value in (None, ""):
+        return {}
+    if not isinstance(value, Mapping):
+        raise TypeError("max_spread_points_by_symbol must be a mapping.")
+    limits: dict[str, float] = {}
+    for raw_symbol, raw_limit in value.items():
+        symbol = str(raw_symbol).strip()
+        limit = _optional_float(raw_limit)
+        if not symbol:
+            raise ValueError("max_spread_points_by_symbol keys must be non-empty.")
+        if limit is None or limit < 0.0:
+            raise ValueError(
+                f"max_spread_points_by_symbol[{symbol!r}] must be a non-negative finite number."
+            )
+        limits[symbol] = limit
+    return limits
 
 
 def _floor_to_step(value: float, step: float) -> float:

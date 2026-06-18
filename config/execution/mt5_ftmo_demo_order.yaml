@@ -58,6 +58,18 @@ risk:
   max_positions_per_symbol: 1
   max_symbol_exposure: null
   max_spread_points: 50
+  # Per-symbol caps derived from the recent 300 M30 bars and rounded above p99.
+  # The global value remains a conservative fallback for newly added symbols.
+  max_spread_points_by_symbol:
+    XAUUSD: 60
+    SPX500: 70
+    US100: 225
+    US30: 320
+    GER40: 400
+    BRENT: 100
+    ETHUSD: 80
+    NIKKEI225: 2200
+    USOIL: 100
   trading_hours_utc: null
   disable_weekend_trading: true
   allow_short: false

@@ -27,6 +27,10 @@ class MT5DemoAccountError(MT5ConnectorError):
     """Raised when a configured account is not verifiably a demo account."""
 
 
+class MT5TradingDisabledError(MT5ConnectorError):
+    """Raised when MT5 or the account blocks automated trading."""
+
+
 _TIMEFRAME_NAMES = {
     "M1": "TIMEFRAME_M1",
     "M5": "TIMEFRAME_M5",
@@ -165,6 +169,12 @@ class MT5Connector:
             raise MT5ConnectorError(f"MT5 account_info failed: {self.last_error()}")
         return info
 
+    def terminal_info(self) -> Any:
+        info = self.mt5.terminal_info()
+        if info is None:
+            raise MT5ConnectorError(f"MT5 terminal_info failed: {self.last_error()}")
+        return info
+
     def ensure_demo_account(self, *, require_demo: bool = True) -> None:
         if not require_demo:
             return
@@ -178,6 +188,25 @@ class MT5Connector:
             server = _attr(info, "server", "<unknown>")
             raise MT5DemoAccountError(
                 f"Refusing to trade because MT5 account login={login}, server={server} is not DEMO."
+            )
+
+    def ensure_algo_trading_enabled(self, *, require_enabled: bool = True) -> None:
+        if not require_enabled:
+            return
+        terminal = self.terminal_info()
+        account = self.account_info()
+        blockers: list[str] = []
+        if _attr(terminal, "trade_allowed") is False:
+            blockers.append("terminal.trade_allowed=false")
+        if _attr(terminal, "tradeapi_disabled") is True:
+            blockers.append("terminal.tradeapi_disabled=true")
+        if _attr(account, "trade_allowed") is False:
+            blockers.append("account.trade_allowed=false")
+        if _attr(account, "trade_expert") is False:
+            blockers.append("account.trade_expert=false")
+        if blockers:
+            raise MT5TradingDisabledError(
+                "MT5 automated trading is disabled: " + ", ".join(blockers)
             )
 
     def timeframe(self, timeframe: str) -> Any:
@@ -309,4 +338,5 @@ __all__ = [
     "MT5DemoAccountError",
     "MT5ImportError",
     "MT5LoginError",
+    "MT5TradingDisabledError",
 ]

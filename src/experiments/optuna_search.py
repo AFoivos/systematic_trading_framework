@@ -766,6 +766,12 @@ def _weekly_entry_participation_metrics(result: Any) -> dict[str, float]:
             "min_entries_per_week": 0.0,
             "median_entries_per_week": 0.0,
             "mean_entries_per_week": 0.0,
+            "total_2week_window_count": 0.0,
+            "active_2week_window_count": 0.0,
+            "inactive_2week_window_count": 0.0,
+            "active_2week_window_ratio": 0.0,
+            "min_entries_per_2_weeks": 0.0,
+            "mean_entries_per_2_weeks": 0.0,
         }
 
     entries = entries.sort_index()
@@ -782,6 +788,18 @@ def _weekly_entry_participation_metrics(result: Any) -> dict[str, float]:
         active_week_count = float((weekly_counts > 0.0).sum())
     inactive_week_count = max(total_week_count - active_week_count, 0.0)
     active_week_ratio = active_week_count / total_week_count if total_week_count > 0.0 else 0.0
+    two_week_counts = weekly_counts.rolling(window=2, min_periods=2).sum().dropna()
+    total_2week_window_count = float(len(two_week_counts))
+    active_2week_window_count = float((two_week_counts > 0.0).sum())
+    inactive_2week_window_count = max(
+        total_2week_window_count - active_2week_window_count,
+        0.0,
+    )
+    active_2week_window_ratio = (
+        active_2week_window_count / total_2week_window_count
+        if total_2week_window_count > 0.0
+        else 0.0
+    )
     return {
         "total_week_count": total_week_count,
         "active_week_count": active_week_count,
@@ -790,6 +808,16 @@ def _weekly_entry_participation_metrics(result: Any) -> dict[str, float]:
         "min_entries_per_week": float(weekly_counts.min()) if total_week_count > 0.0 else 0.0,
         "median_entries_per_week": float(weekly_counts.median()) if total_week_count > 0.0 else 0.0,
         "mean_entries_per_week": float(weekly_counts.mean()) if total_week_count > 0.0 else 0.0,
+        "total_2week_window_count": total_2week_window_count,
+        "active_2week_window_count": active_2week_window_count,
+        "inactive_2week_window_count": inactive_2week_window_count,
+        "active_2week_window_ratio": float(active_2week_window_ratio),
+        "min_entries_per_2_weeks": (
+            float(two_week_counts.min()) if total_2week_window_count > 0.0 else 0.0
+        ),
+        "mean_entries_per_2_weeks": (
+            float(two_week_counts.mean()) if total_2week_window_count > 0.0 else 0.0
+        ),
     }
 
 
@@ -1665,6 +1693,11 @@ def _build_study_report_markdown(payload: Mapping[str, Any]) -> str:
                 "- Active weeks: "
                 f"`{derived.get('active_week_count', 'n/a')}/{derived.get('total_week_count', 'n/a')}`",
                 f"- Active week ratio: `{derived.get('active_week_ratio', 'n/a')}`",
+                "- Active two-week windows: "
+                f"`{derived.get('active_2week_window_count', 'n/a')}/"
+                f"{derived.get('total_2week_window_count', 'n/a')}`",
+                "- Minimum entries per two-week window: "
+                f"`{derived.get('min_entries_per_2_weeks', 'n/a')}`",
                 f"- Candidate count by asset: `{orb_diagnostics.get('candidate_count_by_asset', {})}`",
                 f"- Trade count by asset: `{orb_diagnostics.get('trade_count_by_asset', {})}`",
                 f"- PnL by asset: `{orb_diagnostics.get('pnl_by_asset', {})}`",
