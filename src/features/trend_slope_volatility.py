@@ -21,12 +21,19 @@ def add_trend_slope_volatility(
     strong_trend_col: str | None = None,
     strong_threshold: float = 1.0,
 ) -> pd.DataFrame:
-    """Add a causal trend-slope divided by volatility feature.
+    """
+    Add a causal trend-slope divided by volatility feature.
 
     A positive ratio means the rolling trend slope is positive relative to the
     volatility used. A large absolute ratio means the trend is cleaner or
     stronger relative to noise. ``price_col`` is used as provided, so callers
     may pass raw price or a precomputed log-price column.
+
+    YAML declaration::
+
+        features:
+          - step: trend_slope_volatility
+            params: {}
     """
     _validate_columns(df, [price_col], feature="trend slope volatility")
     if volatility_col is not None:

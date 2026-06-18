@@ -13,6 +13,15 @@ def add_rsi_features(
     method: str = "wilder",
     inplace: bool = False,
 ) -> pd.DataFrame:
+    """
+    Apply the registered ``rsi`` feature transformation.
+
+    YAML declaration::
+
+        features:
+          - step: rsi
+            params: {}
+    """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame")
     out = df if inplace else df.copy()

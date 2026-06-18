@@ -18,6 +18,15 @@ def add_trend_features(
     ema_col_template: str | None = None,
     inplace: bool = False,
 ) -> pd.DataFrame:
+    """
+    Apply the registered ``trend`` feature transformation.
+
+    YAML declaration::
+
+        features:
+          - step: trend
+            params: {}
+    """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame")
 

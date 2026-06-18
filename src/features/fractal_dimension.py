@@ -12,10 +12,17 @@ def add_fractal_dimension(
     window: int = 128,
     output_col: str | None = None,
 ) -> pd.DataFrame:
-    """Add causal rolling Katz fractal dimension.
+    """
+    Add causal rolling Katz fractal dimension.
 
     This module uses the Katz method, not Higuchi. Each value is computed from
     the current and trailing ``window - 1`` observations only.
+
+    YAML declaration::
+
+        features:
+          - step: fractal_dimension
+            params: {}
     """
     _validate_columns(df, [price_col])
     _validate_window(window)

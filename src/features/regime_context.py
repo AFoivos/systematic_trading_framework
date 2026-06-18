@@ -19,6 +19,15 @@ def add_regime_context_features(
     vol_ratio_low_threshold: float = 0.85,
     vol_window_pairs: Sequence[Sequence[int]] | None = None,
 ) -> pd.DataFrame:
+    """
+    Apply the registered ``regime_context`` feature transformation.
+
+    YAML declaration::
+
+        features:
+          - step: regime_context
+            params: {}
+    """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame.")
 

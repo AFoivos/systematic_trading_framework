@@ -11,6 +11,15 @@ def add_price_momentum_features(
     windows: Sequence[int] = (5, 20, 60),
     inplace: bool = False,
 ) -> pd.DataFrame:
+    """
+    Apply the registered ``price_momentum`` feature transformation.
+
+    YAML declaration::
+
+        features:
+          - step: price_momentum
+            params: {}
+    """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame")
     out = df if inplace else df.copy()

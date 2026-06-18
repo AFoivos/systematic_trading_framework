@@ -14,7 +14,15 @@ def add_even_better_sinewave(
     power_window: int = 3,
     output_col: str | None = None,
 ) -> pd.DataFrame:
-    """Add Ehlers' causal Even Better Sinewave oscillator."""
+    """
+    Add Ehlers' causal Even Better Sinewave oscillator.
+
+    YAML declaration::
+
+        features:
+          - step: even_better_sinewave
+            params: {}
+    """
     require_columns(df, [price_col], feature="Even Better Sinewave")
     resolved_duration = validate_int(duration, name="duration", minimum=4)
     resolved_smoothing = validate_int(smoothing_period, name="smoothing_period", minimum=2)

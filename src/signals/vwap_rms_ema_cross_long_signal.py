@@ -244,6 +244,19 @@ def build_vwap_rms_ema_cross_long_signal(
 
 
 def vwap_rms_ema_cross_long_signal(df: pd.DataFrame, **params: Any) -> pd.DataFrame:
+    """
+    Apply the registered ``vwap_rms_ema_cross_long`` feature and ``vwap_rms_ema_cross_long`` signal transformation.
+
+    YAML declaration::
+
+        features:
+          - step: vwap_rms_ema_cross_long
+            params: {}
+
+        signals:
+          kind: vwap_rms_ema_cross_long
+          params: {}
+    """
     out, _ = build_vwap_rms_ema_cross_long_signal(df, params)
     return out
 

@@ -613,6 +613,12 @@ def add_opening_range_breakout_features(
     The function converts UTC timestamps to each session's local timezone before comparing
     session times, so DST transitions are handled by the IANA timezone database rather than by
     fixed UTC-hour assumptions.
+
+    YAML declaration::
+
+        features:
+          - step: opening_range_breakout
+            params: {}
     """
     _ = price_col, open_col  # Kept for config symmetry with other OHLCV feature steps.
     if int(post_breakout_active_bars) <= 0:

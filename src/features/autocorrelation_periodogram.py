@@ -25,7 +25,15 @@ def add_autocorrelation_periodogram(
     power_col: str | None = None,
     add_power: bool = False,
 ) -> pd.DataFrame:
-    """Add a causal autocorrelation periodogram dominant-period estimate."""
+    """
+    Add a causal autocorrelation periodogram dominant-period estimate.
+
+    YAML declaration::
+
+        features:
+          - step: autocorrelation_periodogram
+            params: {}
+    """
     require_columns(df, [price_col], feature="autocorrelation periodogram")
     min_p = validate_int(min_period, name="min_period", minimum=2)
     max_p = validate_int(max_period, name="max_period", minimum=2)

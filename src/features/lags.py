@@ -11,7 +11,8 @@ def add_lagged_features(
     lags: Sequence[int] = (1, 2, 5),
     prefix: str = "lag",
 ) -> pd.DataFrame:
-    """Add lagged versions of specified columns.
+    """
+    Add lagged versions of specified columns.
 
     Parameters
     ----------
@@ -23,6 +24,13 @@ def add_lagged_features(
         Lags in periods.
     prefix : str
         Prefix for new lag columns.
+
+    YAML declaration::
+
+        features:
+          - step: lags
+            params:
+              cols: [close]
     """
 
     out = df.copy()
@@ -32,4 +40,3 @@ def add_lagged_features(
         for lag in lags:
             out[f"{prefix}_{col}_{lag}"] = out[col].shift(lag)
     return out
-

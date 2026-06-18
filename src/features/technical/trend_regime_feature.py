@@ -14,6 +14,15 @@ def add_trend_regime_features(
     long_sma: int = 50,
     inplace: bool = False,
 ) -> pd.DataFrame:
+    """
+    Add the SMA-based trend regime features used by the dashboard builder.
+
+    YAML declaration::
+
+        features:
+          - step: trend_regime
+            params: {}
+    """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame")
 

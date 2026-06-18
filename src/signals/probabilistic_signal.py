@@ -19,6 +19,13 @@ def probabilistic_signal(
 ) -> pd.Series:
     """
     Map probability forecasts to {-1,0,1} signal with dead-zone.
+
+    YAML declaration::
+
+        signals:
+          kind: probability_threshold
+          params:
+            prob_col: pred_prob
     """
     if prob_col not in df.columns:
         raise KeyError(f"prob_col '{prob_col}' not found in DataFrame")

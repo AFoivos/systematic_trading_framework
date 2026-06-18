@@ -13,6 +13,15 @@ def add_stochastic_features(
     smooth: int = 3,
     inplace: bool = False,
 ) -> pd.DataFrame:
+    """
+    Apply the registered ``stochastic`` feature transformation.
+
+    YAML declaration::
+
+        features:
+          - step: stochastic
+            params: {}
+    """
     missing = [c for c in (price_col, high_col, low_col) if c not in df.columns]
     if missing:
         raise KeyError(f"Missing columns for stochastic features: {missing}")

@@ -29,6 +29,12 @@ def meta_probability_side_signal(
     pred_prob is interpreted as P(candidate succeeds), not P(price goes up). A high probability
     activates the configured side; a low probability stays flat and never flips to the opposite
     direction.
+
+    YAML declaration::
+
+        signals:
+          kind: meta_probability_side
+          params: {}
     """
     if prob_col not in df.columns:
         raise KeyError(f"prob_col '{prob_col}' not found in DataFrame")

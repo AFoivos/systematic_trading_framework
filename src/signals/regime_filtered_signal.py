@@ -14,6 +14,14 @@ def regime_filtered_signal(
 ) -> pd.Series:
     """
     Keep base signal only when regime_col == active_value.
+
+    YAML declaration::
+
+        signals:
+          kind: regime_filtered
+          params:
+            base_signal_col: signal
+            regime_col: trend_regime
     """
     if base_signal_col not in df.columns:
         raise KeyError(f"base_signal_col '{base_signal_col}' not found in DataFrame")

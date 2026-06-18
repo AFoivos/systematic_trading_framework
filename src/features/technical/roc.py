@@ -11,6 +11,15 @@ def add_roc_features(
     windows: Sequence[int] = (10, 20),
     inplace: bool = False,
 ) -> pd.DataFrame:
+    """
+    Apply the registered ``roc`` feature transformation.
+
+    YAML declaration::
+
+        features:
+          - step: roc
+            params: {}
+    """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame")
     out = df if inplace else df.copy()

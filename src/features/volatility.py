@@ -73,6 +73,12 @@ def add_volatility_features(
     Adds volatility features to DataFrame:
     - vol_rolling_{w}
     - vol_ewma_{span}
+
+    YAML declaration::
+
+        features:
+          - step: volatility
+            params: {}
     """
     out = df if inplace else df.copy()
     out = ensure_close_based_returns(out, returns_col=returns_col)

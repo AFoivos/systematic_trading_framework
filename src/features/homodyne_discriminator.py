@@ -11,7 +11,15 @@ def add_homodyne_discriminator(
     use_smoothed_period: bool = False,
     output_col: str | None = None,
 ) -> pd.DataFrame:
-    """Add a causal Ehlers homodyne discriminator period estimate."""
+    """
+    Add a causal Ehlers homodyne discriminator period estimate.
+
+    YAML declaration::
+
+        features:
+          - step: homodyne_discriminator
+            params: {}
+    """
     require_columns(df, [price_col], feature="homodyne discriminator")
     validate_bool(use_smoothed_period, name="use_smoothed_period")
     col = resolve_output_col(output_col, "homodyne_discriminator")

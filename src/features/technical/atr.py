@@ -20,6 +20,15 @@ def add_atr_features(
     over_price_col: str | None = None,
     inplace: bool = False,
 ) -> pd.DataFrame:
+    """
+    Apply the registered ``atr`` feature transformation.
+
+    YAML declaration::
+
+        features:
+          - step: atr
+            params: {}
+    """
     missing = [c for c in (high_col, low_col, close_col) if c not in df.columns]
     if missing:
         raise KeyError(f"Missing columns for ATR features: {missing}")

@@ -42,6 +42,12 @@ def manual_long_model_filter_signal(
 
     The model is only a long-entry filter. It cannot create trades without a manual candidate,
     cannot flip direction, and cannot emit short exposure.
+
+    YAML declaration::
+
+        signals:
+          kind: manual_long_model_filter
+          params: {}
     """
     output_col = str(signal_col or "model_filtered_long_signal")
     threshold_value = float(threshold)

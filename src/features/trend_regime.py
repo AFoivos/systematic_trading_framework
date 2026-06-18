@@ -20,11 +20,18 @@ def add_trend_regime(
     short_sma: int | None = None,
     long_sma: int | None = None,
 ) -> pd.DataFrame:
-    """Add a causal trend regime feature.
+    """
+    Add a causal trend regime feature.
 
     ``method='ema'`` compares fast and slow EMAs and emits ``1, 0, -1``. The
     legacy ``method='sma_legacy'`` path preserves the existing project
     ``trend_regime`` YAML contract based on SMA columns.
+
+    YAML declaration::
+
+        features:
+          - step: trend_regime
+            params: {}
     """
     if method == "ema" and any(value is not None for value in (base_sma_for_sign, short_sma, long_sma)):
         method = "sma_legacy"

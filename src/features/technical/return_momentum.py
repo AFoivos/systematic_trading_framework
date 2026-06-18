@@ -13,6 +13,15 @@ def add_return_momentum_features(
     windows: Sequence[int] = (5, 20, 60),
     inplace: bool = False,
 ) -> pd.DataFrame:
+    """
+    Apply the registered ``return_momentum`` feature transformation.
+
+    YAML declaration::
+
+        features:
+          - step: return_momentum
+            params: {}
+    """
     out = df if inplace else df.copy()
     out = ensure_close_based_returns(out, returns_col=returns_col)
     returns = out[returns_col].astype(float)

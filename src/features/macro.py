@@ -23,6 +23,13 @@ def add_macro_context_features(
     The input columns are assumed to represent externally sourced covariates whose publication or
     ingestion timing may lag market timestamps. To avoid inadvertent lookahead, every source
     series is shifted by `availability_lag` before any derived features are computed.
+
+    YAML declaration::
+
+        features:
+          - step: macro_context
+            params:
+              columns: [macro_value]
     """
     if not isinstance(columns, Sequence) or isinstance(columns, (str, bytes)):
         raise TypeError("columns must be a sequence of column names.")

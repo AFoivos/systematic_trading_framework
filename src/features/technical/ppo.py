@@ -14,6 +14,15 @@ def add_ppo_features(
     ppo_hist_col: str | None = None,
     inplace: bool = False,
 ) -> pd.DataFrame:
+    """
+    Apply the registered ``ppo`` feature transformation.
+
+    YAML declaration::
+
+        features:
+          - step: ppo
+            params: {}
+    """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame")
     out = df if inplace else df.copy()

@@ -145,6 +145,12 @@ def add_shock_context_features(
 
     Candidate shocks are event columns, not persistent regimes: they are active only on the bar
     where the shock rule is satisfied.
+
+    YAML declaration::
+
+        features:
+          - step: shock_context
+            params: {}
     """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame.")

@@ -19,6 +19,15 @@ def add_stochastic_rsi_features(
     method: str = "wilder",
     inplace: bool = False,
 ) -> pd.DataFrame:
+    """
+    Apply the registered ``stochastic_rsi`` feature transformation.
+
+    YAML declaration::
+
+        features:
+          - step: stochastic_rsi
+            params: {}
+    """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame")
 

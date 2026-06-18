@@ -999,6 +999,48 @@ def _validate_ehlers_continuation_long_params(params: dict[str, Any], *, field_p
         _non_negative_int(params["entry_delay_bars"], field=f"{field_prefix}.entry_delay_bars")
 
 
+def _validate_ehlers_semiscalp_long_params(params: dict[str, Any], *, field_prefix: str) -> None:
+    string_keys = {
+        "price_col",
+        "supersmoother_col",
+        "supersmoother_slope_col",
+        "roofing_col",
+        "roofing_slope_col",
+        "roofing_cross_up_col",
+        "roofing_cross_down_col",
+        "hilbert_amplitude_col",
+        "dominant_cycle_period_col",
+        "atr_col",
+        "trend_ok_col",
+        "timing_ok_col",
+        "cycle_ok_col",
+        "energy_ok_col",
+        "volatility_ok_col",
+        "long_setup_col",
+        "entry_col",
+        "signal_col",
+        "candidate_col",
+    }
+    for key in string_keys:
+        if key in params and (not isinstance(params[key], str) or not params[key].strip()):
+            raise ConfigValidationError(f"{field_prefix}.{key} must be a non-empty string.")
+    if "entry_mode" in params and str(params["entry_mode"]) not in {"state", "transition"}:
+        raise ConfigValidationError(f"{field_prefix}.entry_mode must be one of: state, transition.")
+    for key in ("amplitude_quantile_lookback", "atr_quantile_lookback"):
+        if key in params:
+            _positive_int(params[key], field=f"{field_prefix}.{key}")
+    for key in ("min_cycle_period", "max_cycle_period"):
+        if key in params and _finite_number(params[key], field=f"{field_prefix}.{key}") <= 0.0:
+            raise ConfigValidationError(f"{field_prefix}.{key} must be > 0.")
+    if float(params.get("min_cycle_period", 10.0)) > float(params.get("max_cycle_period", 48.0)):
+        raise ConfigValidationError(f"{field_prefix}.min_cycle_period must be <= max_cycle_period.")
+    for key in ("amplitude_min_quantile", "atr_min_quantile"):
+        if key in params:
+            value = _finite_number(params[key], field=f"{field_prefix}.{key}")
+            if not 0.0 <= value <= 1.0:
+                raise ConfigValidationError(f"{field_prefix}.{key} must be in [0, 1].")
+
+
 def _validate_ehlers_continuation_short_params(params: dict[str, Any], *, field_prefix: str) -> None:
     string_keys = {
         "ema_fast_col",
@@ -2792,6 +2834,8 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
         _validate_stc_roofing_hilbert_params(params, field_prefix="signals.params")
     if signals["kind"] in {"ehlers_continuation_long", "ehlers_continuation_long_signal"}:
         _validate_ehlers_continuation_long_params(params, field_prefix="signals.params")
+    if signals["kind"] == "ehlers_semiscalp_long":
+        _validate_ehlers_semiscalp_long_params(params, field_prefix="signals.params")
     if signals["kind"] in {"ehlers_continuation_short", "ehlers_continuation_short_signal"}:
         _validate_ehlers_continuation_short_params(params, field_prefix="signals.params")
     if signals["kind"] == "ema_rms_ppo_vwap":

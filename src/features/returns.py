@@ -51,6 +51,12 @@ def add_close_returns(
     -------
     pd.DataFrame
         DataFrame with added returns column.
+
+    YAML declaration::
+
+        features:
+          - step: returns
+            params: {}
     """
     if "close" not in df.columns:
         raise ValueError("Expected column 'close' in df.")

@@ -248,6 +248,15 @@ def build_ema_rms_ppo_vwap_signal(
 
 
 def ema_rms_ppo_vwap_signal(df: pd.DataFrame, **params: Any) -> pd.DataFrame:
+    """
+    Apply the registered ``ema_rms_ppo_vwap`` signal transformation.
+
+    YAML declaration::
+
+        signals:
+          kind: ema_rms_ppo_vwap
+          params: {}
+    """
     out, _ = build_ema_rms_ppo_vwap_signal(df, params)
     return out
 

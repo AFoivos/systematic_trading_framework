@@ -13,7 +13,15 @@ def add_laguerre_rsi(
     output_col: str | None = None,
     as_percent: bool = False,
 ) -> pd.DataFrame:
-    """Add Ehlers' causal Laguerre RSI oscillator."""
+    """
+    Add Ehlers' causal Laguerre RSI oscillator.
+
+    YAML declaration::
+
+        features:
+          - step: laguerre_rsi
+            params: {}
+    """
     require_columns(df, [price_col], feature="Laguerre RSI")
     resolved_gamma = validate_float(gamma, name="gamma", minimum=0.0, maximum=1.0)
     percent = validate_bool(as_percent, name="as_percent")

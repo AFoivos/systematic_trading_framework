@@ -16,13 +16,20 @@ def add_vpin(
     bucket_volume: float | None = None,
     output_col: str | None = None,
 ) -> pd.DataFrame:
-    """Add VPIN from real signed or buy/sell volume data.
+    """
+    Add VPIN from real signed or buy/sell volume data.
 
     The function does not infer buy/sell volume from OHLC prices. Provide either
     ``buy_volume_col`` and ``sell_volume_col`` or ``signed_volume_col`` plus
     ``volume_col``. With ``bucket_volume=None`` it emits a bar-window VPIN ratio;
     with ``bucket_volume`` it uses causal volume buckets and forward-fills the
     last completed bucket estimate.
+
+    YAML declaration::
+
+        features:
+          - step: vpin
+            params: {}
     """
     _validate_positive_int(window, name="window")
     if bucket_volume is not None and (not isinstance(bucket_volume, Real) or isinstance(bucket_volume, bool) or bucket_volume <= 0):

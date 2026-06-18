@@ -27,6 +27,12 @@ def add_support_resistance_features(
     Support is defined as the rolling minimum of `low_col` over each window.
     Resistance is defined as the rolling maximum of `high_col` over each window.
     Distances are computed relative to the current `price_col` and optionally normalized by ATR.
+
+    YAML declaration::
+
+        features:
+          - step: support_resistance
+            params: {}
     """
     missing = [col for col in (price_col, high_col, low_col) if col not in df.columns]
     if missing:

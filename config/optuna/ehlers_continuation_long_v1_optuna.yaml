@@ -1,0 +1,171 @@
+base_config: config/experiments/ehlers_continuation_long_v1.yaml
+
+study:
+  study_name: optuna_ehlers_continuation_long_v1_full_features
+  storage: sqlite:///logs/optuna/ehlers_continuation_long_v1_full_features.db
+  load_if_exists: true
+  sampler: tpe
+  seed: 7
+  n_trials: 100
+  timeout: null
+  n_jobs: 1
+  logging_enabled: false
+  catch_exceptions: true
+
+report:
+  enabled: true
+  output_dir: logs/experiments
+  run_name: optuna_ehlers_continuation_long_v1_full_features
+
+objective:
+  metric_path: evaluation.primary_summary.sharpe
+  direction: maximize
+  failure_score: -1000000000000.0
+  base_metric_weight: 1.0
+  stability_weight: 0.0
+  fold_summary_path: evaluation.fold_backtest_summaries
+  constraints:
+    - metric_path: evaluation.primary_summary.cumulative_return
+      op: le
+      threshold: 0.0
+      penalty: 100.0
+      missing_penalty: 100.0
+    - metric_path: evaluation.primary_summary.max_drawdown
+      op: lt
+      threshold: -0.08
+      penalty: 100.0
+      missing_penalty: 100.0
+    - metric_path: evaluation.primary_summary.profit_factor
+      op: lt
+      threshold: 1.0
+      penalty: 10.0
+      missing_penalty: 10.0
+    - metric_path: evaluation.primary_summary.cost_to_gross_pnl
+      op: gt
+      threshold: 0.70
+      penalty: 5.0
+      missing_penalty: 5.0
+    - metric_path: derived.entry_count
+      op: lt
+      threshold: 30.0
+      penalty: 3.0
+      missing_penalty: 3.0
+    - metric_path: evaluation.primary_summary.robustness_cost_x2_profit_factor
+      op: lt
+      threshold: 1.0
+      penalty: 3.0
+      missing_penalty: 3.0
+    - metric_path: evaluation.primary_summary.robustness_delay_1_bars_profit_factor
+      op: lt
+      threshold: 1.0
+      penalty: 2.0
+      missing_penalty: 2.0
+
+pruning:
+  enabled: false
+  metric_path: evaluation.primary_summary.sharpe
+  direction: maximize
+  stage_filter: []
+  pruner: none
+  n_startup_trials: 5
+  n_warmup_steps: 1
+  interval_steps: 1
+
+search_space:
+  - name: save_processed
+    path: data.storage.save_processed
+    kind: categorical
+    choices: [false]
+
+  - name: ema_fast_span
+    path: features.1.params.ema_spans.0
+    kind: categorical
+    choices: [20, 30, 40, 50, 60, 72]
+    value_templates:
+      - path: signals.params.ema_fast_col
+        template: ema_{ema_fast_span}
+
+  - name: ema_slow_span
+    path: features.1.params.ema_spans.1
+    kind: categorical
+    choices: [80, 100, 120, 144, 168, 200]
+    value_templates:
+      - path: signals.params.ema_slow_col
+        template: ema_{ema_slow_span}
+
+  - name: mama_fast_limit
+    path: features.2.params.fast_limit
+    paths:
+      - features.3.params.fast_limit
+    kind: categorical
+    choices: [0.30, 0.40, 0.50, 0.60, 0.70]
+
+  - name: mama_slow_limit
+    path: features.2.params.slow_limit
+    paths:
+      - features.3.params.slow_limit
+    kind: categorical
+    choices: [0.02, 0.03, 0.05, 0.07, 0.10]
+
+  - name: roofing_high_pass_period
+    path: features.4.params.high_pass_period
+    kind: categorical
+    choices: [32, 40, 48, 64, 80, 96]
+
+  - name: roofing_low_pass_period
+    path: features.4.params.low_pass_period
+    kind: categorical
+    choices: [6, 8, 10, 12, 16]
+
+  - name: roofing_slope_bars
+    path: features.4.params.slope_bars
+    kind: categorical
+    choices: [1, 2, 3, 4, 6]
+
+  - name: decycler_fast_period
+    path: features.5.params.fast_period
+    kind: categorical
+    choices: [15, 20, 24, 30, 36, 40]
+
+  - name: decycler_slow_period
+    path: features.5.params.slow_period
+    kind: categorical
+    choices: [48, 60, 72, 90, 120]
+
+  - name: atr_window
+    path: features.6.params.window
+    paths:
+      - features.6.params.windows.0
+    kind: categorical
+    choices: [7, 10, 14, 20, 28, 36]
+
+  - name: entry_mode
+    path: signals.params.entry_mode
+    kind: categorical
+    choices: [state, transition]
+
+  - name: entry_delay_bars
+    path: signals.params.entry_delay_bars
+    kind: int
+    low: 0
+    high: 2
+    step: 1
+
+  - name: take_profit_r
+    path: backtest.take_profit_r
+    kind: float
+    low: 0.25
+    high: 4.0
+    step: 0.25
+
+  - name: stop_loss_r
+    path: backtest.stop_loss_r
+    kind: float
+    low: 0.25
+    high: 3.0
+    step: 0.25
+
+  - name: max_holding_bars
+    path: backtest.max_holding_bars
+    kind: categorical
+    choices: [12, 24, 48, 96, 192, null]

@@ -26,13 +26,20 @@ def add_hmm_regime(
     standardize: bool = False,
     standardize_eps: float = 1e-12,
 ) -> pd.DataFrame:
-    """Add Hidden Markov Model regimes without full-sample fitting.
+    """
+    Add Hidden Markov Model regimes without full-sample fitting.
 
     ``mode='expanding'`` fits on observations strictly before the row being
     scored. ``mode='static_train'`` fits once on the first ``train_size`` valid
     observations and only scores later rows. If ``standardize=True``,
     normalization statistics are estimated from the HMM training window only.
     The ``hmmlearn`` package is required at runtime.
+
+    YAML declaration::
+
+        features:
+          - step: hmm_regime
+            params: {}
     """
     _validate_positive_int(n_states, name="n_states")
     if n_states < 2:

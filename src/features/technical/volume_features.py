@@ -15,6 +15,15 @@ def add_volume_features(
     vol_z_window: int = 20,
     inplace: bool = False,
 ) -> pd.DataFrame:
+    """
+    Apply the registered ``volume_features`` feature transformation.
+
+    YAML declaration::
+
+        features:
+          - step: volume_features
+            params: {}
+    """
     if volume_col not in df.columns:
         raise KeyError(f"volume_col '{volume_col}' not found in DataFrame")
 

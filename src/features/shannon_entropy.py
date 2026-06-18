@@ -14,7 +14,15 @@ def add_shannon_entropy(
     normalize: bool = True,
     output_col: str | None = None,
 ) -> pd.DataFrame:
-    """Add causal rolling Shannon entropy over discretized values."""
+    """
+    Add causal rolling Shannon entropy over discretized values.
+
+    YAML declaration::
+
+        features:
+          - step: shannon_entropy
+            params: {}
+    """
     _validate_columns(df, [source_col])
     _validate_window(window, name="window")
     _validate_window(bins, name="bins")

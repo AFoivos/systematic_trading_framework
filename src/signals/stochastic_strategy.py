@@ -14,6 +14,16 @@ def stochastic_strategy(
     signal_col: str | None = None,
     mode: str = "long_short_hold",
 ) -> pd.Series:
+    """
+    Apply the registered ``stochastic`` signal transformation.
+
+    YAML declaration::
+
+        signals:
+          kind: stochastic
+          params:
+            k_col: stoch_k_14
+    """
     output_col = resolve_signal_output_name(
         signal_col=signal_col,
         default="signal_stochastic",

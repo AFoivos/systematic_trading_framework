@@ -11,6 +11,15 @@ def add_macd_features(
     signal: int = 9,
     inplace: bool = False,
 ) -> pd.DataFrame:
+    """
+    Apply the registered ``macd`` feature transformation.
+
+    YAML declaration::
+
+        features:
+          - step: macd
+            params: {}
+    """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame")
     out = df if inplace else df.copy()

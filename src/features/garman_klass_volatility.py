@@ -15,10 +15,17 @@ def add_garman_klass_volatility(
     window: int = 20,
     output_col: str | None = None,
 ) -> pd.DataFrame:
-    """Add causal rolling Garman-Klass volatility from OHLC prices.
+    """
+    Add causal rolling Garman-Klass volatility from OHLC prices.
 
     The calculation uses the trailing ``window`` bars and never references
     future observations.
+
+    YAML declaration::
+
+        features:
+          - step: garman_klass_volatility
+            params: {}
     """
     _validate_columns(df, [open_col, high_col, low_col, close_col])
     _validate_window(window)

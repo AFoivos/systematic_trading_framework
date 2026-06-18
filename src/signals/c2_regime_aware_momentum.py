@@ -277,6 +277,15 @@ def build_c2_regime_aware_momentum_signal(
 
 
 def c2_regime_aware_momentum_signal(df: pd.DataFrame, **params: Any) -> pd.DataFrame:
+    """
+    Apply the registered ``c2_regime_aware_momentum`` signal transformation.
+
+    YAML declaration::
+
+        signals:
+          kind: c2_regime_aware_momentum
+          params: {}
+    """
     out, _ = build_c2_regime_aware_momentum_signal(df, params)
     return out
 

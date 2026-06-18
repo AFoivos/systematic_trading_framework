@@ -10,7 +10,15 @@ def add_dominant_cycle_phase(
     price_col: str = "close",
     output_col: str | None = None,
 ) -> pd.DataFrame:
-    """Add Ehlers' causal dominant cycle phase estimate in degrees."""
+    """
+    Add Ehlers' causal dominant cycle phase estimate in degrees.
+
+    YAML declaration::
+
+        features:
+          - step: dominant_cycle_phase
+            params: {}
+    """
     require_columns(df, [price_col], feature="dominant cycle phase")
     col = resolve_output_col(output_col, "dominant_cycle_phase")
 

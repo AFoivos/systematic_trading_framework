@@ -10,6 +10,15 @@ def add_bollinger_features(
     n_std: float = 2.0,
     inplace: bool = False,
 ) -> pd.DataFrame:
+    """
+    Apply the registered ``bollinger`` feature transformation.
+
+    YAML declaration::
+
+        features:
+          - step: bollinger
+            params: {}
+    """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame")
     out = df if inplace else df.copy()

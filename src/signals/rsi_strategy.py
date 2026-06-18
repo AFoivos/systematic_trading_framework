@@ -14,6 +14,16 @@ def rsi_strategy(
     signal_col: str | None = None,
     mode: str = "long_short_hold",
 ) -> pd.Series:
+    """
+    Apply the registered ``rsi`` signal transformation.
+
+    YAML declaration::
+
+        signals:
+          kind: rsi
+          params:
+            rsi_col: rsi_14
+    """
     output_col = resolve_signal_output_name(
         signal_col=signal_col,
         default="signal_rsi",

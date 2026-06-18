@@ -386,6 +386,13 @@ def add_feature_transforms(
     - rolling_stat
     - rolling_zscore
     - tsfresh_rolling
+
+    YAML declaration::
+
+        features:
+          - step: feature_transforms
+            params:
+              transforms: [{kind: rolling_zscore, source_col: close, output_col: close_z}]
     """
     if not isinstance(transforms, Sequence) or isinstance(transforms, (str, bytes)):
         raise TypeError("transforms must be a sequence of transform mappings.")

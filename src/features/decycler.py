@@ -11,7 +11,15 @@ def add_decycler(
     period: int = 60,
     output_col: str | None = None,
 ) -> pd.DataFrame:
-    """Add Ehlers' causal decycler trend filter."""
+    """
+    Add Ehlers' causal decycler trend filter.
+
+    YAML declaration::
+
+        features:
+          - step: decycler
+            params: {}
+    """
     require_columns(df, [price_col], feature="Decycler")
     resolved_period = validate_int(period, name="period", minimum=3)
     col = resolve_output_col(output_col, f"decycler_{resolved_period}")

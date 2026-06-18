@@ -11,9 +11,16 @@ def add_zscore_momentum(
     window: int = 20,
     output_col: str | None = None,
 ) -> pd.DataFrame:
-    """Add causal rolling price z-score as a momentum feature.
+    """
+    Add causal rolling price z-score as a momentum feature.
 
     Positive values mean the current price is above its trailing rolling mean.
+
+    YAML declaration::
+
+        features:
+          - step: zscore_momentum
+            params: {}
     """
     _validate_columns(df, [price_col])
     _validate_window(window)

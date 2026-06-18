@@ -12,6 +12,16 @@ def trend_state_signal(
     signal_col: str | None = None,
     mode: str = "long_short_hold",
 ) -> pd.Series:
+    """
+    Apply the registered ``trend_state`` signal transformation.
+
+    YAML declaration::
+
+        signals:
+          kind: trend_state
+          params:
+            state_col: trend_regime
+    """
     output_col = resolve_signal_output_name(
         signal_col=signal_col,
         default="signal_trend_state",

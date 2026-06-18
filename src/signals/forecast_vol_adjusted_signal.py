@@ -14,6 +14,15 @@ def forecast_vol_adjusted_signal(
     clip: float = 1.0,
     vol_floor: float = 1e-6,
 ) -> pd.Series:
+    """
+    Apply the registered ``forecast_vol_adjusted`` signal transformation.
+
+    YAML declaration::
+
+        signals:
+          kind: forecast_vol_adjusted
+          params: {}
+    """
     output_col = resolve_signal_output_name(
         signal_col=signal_col,
         default="signal_forecast_vol_adj",

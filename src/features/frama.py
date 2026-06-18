@@ -28,7 +28,15 @@ def add_frama(
     fractal_dimension_col: str | None = None,
     add_diagnostics: bool = False,
 ) -> pd.DataFrame:
-    """Add Ehlers' causal Fractal Adaptive Moving Average."""
+    """
+    Add Ehlers' causal Fractal Adaptive Moving Average.
+
+    YAML declaration::
+
+        features:
+          - step: frama
+            params: {}
+    """
     require_columns(df, [price_col, high_col, low_col], feature="FRAMA")
     resolved_window = validate_int(window, name="window", minimum=4)
     if resolved_window % 2 != 0:

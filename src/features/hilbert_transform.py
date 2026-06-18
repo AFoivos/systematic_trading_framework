@@ -26,12 +26,19 @@ def add_hilbert_transform(
     amplitude_slope_bars: int = 3,
     add_derived: bool = True,
 ) -> pd.DataFrame:
-    """Add rolling endpoint Hilbert transform features.
+    """
+    Add rolling endpoint Hilbert transform features.
 
     This is a trailing-window FFT Hilbert approximation. It is causal because
     each row uses only the trailing window ending at that row, but endpoint
     phase/frequency estimates can have window-edge artifacts and should not be
     treated as full-sample analytic-signal values.
+
+    YAML declaration::
+
+        features:
+          - step: hilbert_transform
+            params: {}
     """
     _validate_columns(df, [price_col])
     _validate_window(window)

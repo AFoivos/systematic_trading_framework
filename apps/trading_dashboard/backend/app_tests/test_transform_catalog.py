@@ -13,7 +13,7 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from app.schemas.transforms import TransformSeriesRequest, TransformStepConfig
 from app.services import transform_catalog
-from src.utils.config_kinds import FEATURE_KINDS
+from src.utils.config_kinds import FEATURE_KINDS, SIGNAL_KINDS
 
 
 def _ohlcv_frame(periods: int = 80) -> pd.DataFrame:
@@ -60,8 +60,19 @@ def test_builder_catalog_exposes_registered_feature_signal_and_target_defaults()
     assert set(FEATURE_KINDS).issubset(feature_by_name)
     assert "ema_rms_ppo_vwap" in signal_by_name
     assert "vwap_rms_ema_cross_long" in signal_by_name
+    assert "ehlers_continuation_long" in signal_by_name
+    assert "ehlers_continuation_short" in signal_by_name
     assert "trend_state" in signal_by_name
+    canonical_signal_kinds = {name for name in SIGNAL_KINDS if not name.endswith("_signal")}
+    assert canonical_signal_kinds.issubset(signal_by_name)
     assert "forward_return" in target_by_name
+
+    for name, builder in feature_by_name.items():
+        assert "YAML declaration::" in (builder.docstring or "")
+        assert f"step: {name}" in builder.docstring
+    for name, builder in signal_by_name.items():
+        assert "YAML declaration::" in (builder.docstring or "")
+        assert f"kind: {name}" in builder.docstring
 
     rsi_params = {param.name: param for param in feature_by_name["rsi"].parameters}
     assert rsi_params["windows"].kind == "list"
@@ -104,6 +115,24 @@ def test_builder_catalog_exposes_registered_feature_signal_and_target_defaults()
     trend_state_params = {param.name: param for param in signal_by_name["trend_state"].parameters}
     assert trend_state_params["state_col"].required is False
     assert trend_state_params["state_col"].default_value == "close_trend_state_sma_20_50"
+
+    ehlers_params = {param.name: param for param in signal_by_name["ehlers_continuation_long"].parameters}
+    assert "params" not in ehlers_params
+    assert ehlers_params["entry_mode"].default_value == "state"
+    assert ehlers_params["use_mama_fama"].kind == "boolean"
+    assert ehlers_params["use_mama_fama"].default_value is True
+    assert ehlers_params["ema_fast_col"].default_value == "ema_50"
+
+    vwap_cross_params = {param.name: param for param in signal_by_name["vwap_rms_ema_cross_long"].parameters}
+    assert "params" not in vwap_cross_params
+    assert vwap_cross_params["ppo_hist_min"].kind == "number"
+    assert vwap_cross_params["use_ema_regime"].kind == "boolean"
+
+    feature_wrapper_params = {
+        param.name: param for param in feature_by_name["ema_stoch_rsi_pullback"].parameters
+    }
+    assert "params" not in feature_wrapper_params
+    assert feature_wrapper_params["oversold"].kind == "number"
 
     forward_return_params = {param.name: param for param in target_by_name["forward_return"].parameters}
     assert forward_return_params["horizon"].default_value == 1

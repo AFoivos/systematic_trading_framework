@@ -35,10 +35,14 @@ features:
   - step: mama
     params:
       price_col: close
+      fast_limit: 0.5
+      slow_limit: 0.05
       output_col: mama
   - step: fama
     params:
       price_col: close
+      fast_limit: 0.5
+      slow_limit: 0.05
       output_col: fama
   - step: roofing_filter
     params:
@@ -72,7 +76,7 @@ model:
 signals:
   kind: ehlers_continuation_long
   params:
-    entry_mode: state
+    entry_mode: transition
     entry_delay_bars: 0
     long_only: true
     use_ema_regime: true
@@ -131,9 +135,9 @@ backtest:
   high_col: high
   low_col: low
   close_col: close
-  take_profit_r: 3.0
-  stop_loss_r: 1.5
-  risk_per_trade: 0.006
+  take_profit_r: 1.0
+  stop_loss_r: 1.0
+  risk_per_trade: 0.0025
   max_holding_bars: null
   dynamic_exits: {}
 

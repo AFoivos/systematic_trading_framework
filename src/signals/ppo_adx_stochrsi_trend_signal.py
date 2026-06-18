@@ -474,6 +474,12 @@ def ppo_adx_stochrsi_trend_signal(
 ) -> pd.DataFrame:
     """
     Registry-compatible wrapper returning only the transformed DataFrame.
+
+    YAML declaration::
+
+        signals:
+          kind: ppo_adx_stochrsi_trend
+          params: {}
     """
     out, _ = build_ppo_adx_stochrsi_trend_signal(df, params)
     return out

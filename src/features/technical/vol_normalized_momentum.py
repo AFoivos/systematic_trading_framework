@@ -54,6 +54,15 @@ def add_vol_normalized_momentum_features(
     eps: float = 1e-8,
     inplace: bool = False,
 ) -> pd.DataFrame:
+    """
+    Apply the registered ``vol_normalized_momentum`` feature transformation.
+
+    YAML declaration::
+
+        features:
+          - step: vol_normalized_momentum
+            params: {}
+    """
     if vol_window is not None and (
         isinstance(vol_window, bool) or not isinstance(vol_window, int) or vol_window <= 0
     ):

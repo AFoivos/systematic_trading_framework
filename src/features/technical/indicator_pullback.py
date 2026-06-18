@@ -188,6 +188,12 @@ def add_indicator_pullback_features(
 
     All rolling statistics use the current row and historical rows only. The function does not
     shift features forward and does not inspect future bars.
+
+    YAML declaration::
+
+        features:
+          - step: indicator_pullback
+            params: {}
     """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("df must be a pandas DataFrame.")

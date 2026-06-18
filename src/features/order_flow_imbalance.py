@@ -18,10 +18,17 @@ def add_order_flow_imbalance(
     normalize: bool = False,
     output_col: str | None = None,
 ) -> pd.DataFrame:
-    """Add causal order-flow imbalance from real flow or quote data.
+    """
+    Add causal order-flow imbalance from real flow or quote data.
 
     Provide buy/sell volume columns or full bid/ask price and size columns. The
     function does not derive order flow from OHLC bars.
+
+    YAML declaration::
+
+        features:
+          - step: order_flow_imbalance
+            params: {}
     """
     _validate_positive_int(window, name="window")
     col = _resolve_output_col(output_col, "order_flow_imbalance" if window == 1 else f"order_flow_imbalance_{window}")

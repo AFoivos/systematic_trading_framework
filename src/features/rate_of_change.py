@@ -11,7 +11,15 @@ def add_rate_of_change(
     window: int = 10,
     output_col: str | None = None,
 ) -> pd.DataFrame:
-    """Add causal rate of change, ``price / price.shift(window) - 1``."""
+    """
+    Add causal rate of change, ``price / price.shift(window) - 1``.
+
+    YAML declaration::
+
+        features:
+          - step: rate_of_change
+            params: {}
+    """
     _validate_columns(df, [price_col])
     _validate_window(window)
     col = _resolve_output_col(output_col, f"roc_{window}")

@@ -19,6 +19,15 @@ def add_vwap_features(
     distance_col: str | None = None,
     inplace: bool = False,
 ) -> pd.DataFrame:
+    """
+    Apply the registered ``vwap`` feature transformation.
+
+    YAML declaration::
+
+        features:
+          - step: vwap
+            params: {}
+    """
     missing = [c for c in (high_col, low_col, close_col, volume_col) if c not in df.columns]
     if missing:
         raise KeyError(f"Missing columns for VWAP features: {missing}")

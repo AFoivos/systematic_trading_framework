@@ -14,6 +14,16 @@ def momentum_strategy(
     signal_col: str | None = None,
     mode: str = "long_short_hold",
 ) -> pd.Series:
+    """
+    Apply the registered ``momentum`` signal transformation.
+
+    YAML declaration::
+
+        signals:
+          kind: momentum
+          params:
+            momentum_col: momentum_20
+    """
     output_col = resolve_signal_output_name(
         signal_col=signal_col,
         default="signal_momentum",

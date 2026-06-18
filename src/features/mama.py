@@ -12,7 +12,15 @@ def add_mama(
     slow_limit: float = 0.05,
     output_col: str | None = None,
 ) -> pd.DataFrame:
-    """Add John Ehlers' causal MESA Adaptive Moving Average."""
+    """
+    Add John Ehlers' causal MESA Adaptive Moving Average.
+
+    YAML declaration::
+
+        features:
+          - step: mama
+            params: {}
+    """
     require_columns(df, [price_col], feature="MAMA")
     validate_mama_limits(fast_limit, slow_limit)
     col = resolve_output_col(output_col, "mama")

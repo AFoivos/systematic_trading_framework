@@ -18,12 +18,19 @@ def add_volatility_regime(
     upper_quantile: float = 0.67,
     output_col: str | None = None,
 ) -> pd.DataFrame:
-    """Add a causal volatility regime feature.
+    """
+    Add a causal volatility regime feature.
 
     ``method='ratio'`` emits ``vol / trailing_mean(vol)``. ``method='percentile'``
     emits ``0, 1, 2`` based on trailing rolling quantiles of the volatility
     series. If ``vol_col`` is not provided, trailing return volatility is
     computed from ``returns_col`` or ``price_col``.
+
+    YAML declaration::
+
+        features:
+          - step: volatility_regime
+            params: {}
     """
     _validate_window(vol_window, name="vol_window")
     _validate_window(regime_window, name="regime_window")

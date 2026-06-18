@@ -23,6 +23,15 @@ def probability_vol_adjusted_signal(
     top_quantile_window: int | None = None,
     max_trade_rate: float | None = None,
 ) -> pd.Series:
+    """
+    Apply the registered ``probability_vol_adjusted`` signal transformation.
+
+    YAML declaration::
+
+        signals:
+          kind: probability_vol_adjusted
+          params: {}
+    """
     output_col = resolve_signal_output_name(
         signal_col=signal_col,
         default="signal_prob_vol_adj",

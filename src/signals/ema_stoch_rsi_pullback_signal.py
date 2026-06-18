@@ -308,6 +308,16 @@ def ema_stoch_rsi_pullback_signal(
 ) -> pd.DataFrame:
     """
     Registry-compatible wrapper returning only the transformed DataFrame.
+
+    YAML declaration::
+
+        features:
+          - step: ema_stoch_rsi_pullback
+            params: {}
+
+        signals:
+          kind: ema_stoch_rsi_pullback
+          params: {}
     """
     out, _ = build_ema_stoch_rsi_signal(df, params)
     return out

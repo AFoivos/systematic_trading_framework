@@ -13,6 +13,15 @@ def add_mfi_features(
     window: int = 14,
     inplace: bool = False,
 ) -> pd.DataFrame:
+    """
+    Apply the registered ``mfi`` feature transformation.
+
+    YAML declaration::
+
+        features:
+          - step: mfi
+            params: {}
+    """
     missing = [c for c in (high_col, low_col, close_col, volume_col) if c not in df.columns]
     if missing:
         raise KeyError(f"Missing columns for MFI features: {missing}")

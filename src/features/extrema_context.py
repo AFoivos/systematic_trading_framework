@@ -34,6 +34,12 @@ def swing_extrema_context(
 
     Raw local extrema are also emitted for diagnostics, but they are future-looking and should be
     excluded from model feature columns.
+
+    YAML declaration::
+
+        features:
+          - step: swing_extrema_context
+            params: {}
     """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("df must be a pandas DataFrame.")

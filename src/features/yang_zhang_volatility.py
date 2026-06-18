@@ -21,10 +21,17 @@ def add_yang_zhang_volatility(
     rising_col: str | None = None,
     high_vol_regime_col: str | None = None,
 ) -> pd.DataFrame:
-    """Add causal rolling Yang-Zhang volatility from OHLC prices.
+    """
+    Add causal rolling Yang-Zhang volatility from OHLC prices.
 
     Overnight, open-close, and Rogers-Satchell components are estimated over
     trailing windows. The overnight return uses ``close.shift(1)`` only.
+
+    YAML declaration::
+
+        features:
+          - step: yang_zhang_volatility
+            params: {}
     """
     _validate_columns(df, [open_col, high_col, low_col, close_col])
     _validate_window(window)

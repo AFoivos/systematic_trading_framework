@@ -33,6 +33,15 @@ def add_session_context_features(
     include_weekend_flag: bool = True,
     sessions: Mapping[str, Sequence[int]] | None = None,
 ) -> pd.DataFrame:
+    """
+    Apply the registered ``session_context`` feature transformation.
+
+    YAML declaration::
+
+        features:
+          - step: session_context
+            params: {}
+    """
     out = df.copy()
     local_idx = index_in_timezone(out.index, timezone)
     hours = pd.Index(local_idx.hour, dtype="int32")

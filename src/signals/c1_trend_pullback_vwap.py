@@ -288,6 +288,15 @@ def build_c1_trend_pullback_vwap_signal(
 
 
 def c1_trend_pullback_vwap_signal(df: pd.DataFrame, **params: Any) -> pd.DataFrame:
+    """
+    Apply the registered ``c1_trend_pullback_vwap`` signal transformation.
+
+    YAML declaration::
+
+        signals:
+          kind: c1_trend_pullback_vwap
+          params: {}
+    """
     out, _ = build_c1_trend_pullback_vwap_signal(df, params)
     return out
 

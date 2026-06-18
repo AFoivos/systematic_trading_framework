@@ -26,7 +26,15 @@ def add_fisher_transform(
     signal_col: str | None = None,
     add_signal: bool = True,
 ) -> pd.DataFrame:
-    """Add Ehlers' causal Fisher Transform over a trailing price range."""
+    """
+    Add Ehlers' causal Fisher Transform over a trailing price range.
+
+    YAML declaration::
+
+        features:
+          - step: fisher_transform
+            params: {}
+    """
     require_columns(df, [price_col], feature="Fisher Transform")
     resolved_window = validate_int(window, name="window", minimum=2)
     clip_value = validate_float(clip, name="clip", minimum=0.1, maximum=0.999999)

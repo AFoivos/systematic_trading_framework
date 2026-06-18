@@ -43,6 +43,12 @@ def add_support_resistance_v2_features(
 
     A pivot is confirmed only after `pivot_confirm_bars` future bars have elapsed, so all
     emitted levels are available without lookahead at the current timestamp.
+
+    YAML declaration::
+
+        features:
+          - step: support_resistance_v2
+            params: {}
     """
     missing = [col for col in (price_col, high_col, low_col) if col not in df.columns]
     if missing:

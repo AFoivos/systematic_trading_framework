@@ -22,7 +22,15 @@ def add_cyber_cycle(
     trigger_col: str | None = None,
     add_trigger: bool = True,
 ) -> pd.DataFrame:
-    """Add Ehlers' causal Cyber Cycle oscillator and optional trigger."""
+    """
+    Add Ehlers' causal Cyber Cycle oscillator and optional trigger.
+
+    YAML declaration::
+
+        features:
+          - step: cyber_cycle
+            params: {}
+    """
     require_columns(df, [price_col], feature="Cyber Cycle")
     a = validate_float(alpha, name="alpha", minimum=0.0, maximum=1.0)
     validate_bool(add_trigger, name="add_trigger")

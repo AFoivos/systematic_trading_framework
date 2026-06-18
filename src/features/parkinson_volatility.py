@@ -13,10 +13,17 @@ def add_parkinson_volatility(
     window: int = 20,
     output_col: str | None = None,
 ) -> pd.DataFrame:
-    """Add causal rolling Parkinson volatility from high/low prices.
+    """
+    Add causal rolling Parkinson volatility from high/low prices.
 
     The estimator uses only the current and trailing ``window - 1`` bars:
     ``sqrt(mean(log(high / low)^2) / (4 * log(2)))``.
+
+    YAML declaration::
+
+        features:
+          - step: parkinson_volatility
+            params: {}
     """
     _validate_columns(df, [high_col, low_col])
     _validate_window(window)

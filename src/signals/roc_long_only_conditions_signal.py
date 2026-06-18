@@ -66,6 +66,16 @@ def roc_long_only_conditions_signal(
     The function does not fit or predict a model. It only combines condition columns that are
     available at the current bar close. Backtesting remains responsible for shifting execution
     to the next bar/open.
+
+    YAML declaration::
+
+        features:
+          - step: roc_long_only_conditions
+            params: {}
+
+        signals:
+          kind: roc_long_only_conditions
+          params: {}
     """
     if int(roc_window) <= 0:
         raise ValueError("roc_window must be positive.")

@@ -21,7 +21,15 @@ def add_sinewave_indicator(
     output_col: str | None = None,
     lead_output_col: str | None = None,
 ) -> pd.DataFrame:
-    """Add Ehlers' causal sinewave and lead sine cycle indicators."""
+    """
+    Add Ehlers' causal sinewave and lead sine cycle indicators.
+
+    YAML declaration::
+
+        features:
+          - step: sinewave_indicator
+            params: {}
+    """
     require_columns(df, [price_col], feature="sinewave indicator")
     lead = validate_float(lead_degrees, name="lead_degrees")
     sine_col = resolve_output_col(output_col, "sinewave")

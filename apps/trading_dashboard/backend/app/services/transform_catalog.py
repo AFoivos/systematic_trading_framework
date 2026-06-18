@@ -97,27 +97,12 @@ from src.features import (  # noqa: E402
     swing_extrema_context,
 )
 from src.features.technical.trend import add_trend_features, add_trend_regime_features  # noqa: E402
+from src.experiments.registry import SIGNAL_REGISTRY as EXPERIMENT_SIGNAL_REGISTRY  # noqa: E402
 from src.signals import (  # noqa: E402
-    c1_trend_pullback_vwap_signal,
-    c2_regime_aware_momentum_signal,
-    conviction_sizing_signal,
-    ema_rms_ppo_vwap_signal,
     ema_stoch_rsi_pullback_signal,
-    forecast_threshold_signal,
-    forecast_vol_adjusted_signal,
     indicator_model_adaptive_pullback_signal,
-    manual_long_model_filter_signal,
-    meta_probability_side_signal,
-    momentum_strategy,
-    orb_candidate_side_signal,
-    probability_vol_adjusted_signal,
-    probabilistic_signal,
+    regime_filtered_signal,
     roc_long_only_conditions_signal,
-    rsi_strategy,
-    stc_roofing_hilbert_signal,
-    stochastic_strategy,
-    trend_state_signal,
-    volatility_regime_strategy,
     vwap_rms_ema_cross_long_signal,
 )
 from src.targets.classifier import build_classifier_target  # noqa: E402
@@ -207,26 +192,12 @@ FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
 }
 
 SIGNAL_REGISTRY: Mapping[str, SignalFn] = {
-    "c1_trend_pullback_vwap": c1_trend_pullback_vwap_signal,
-    "c2_regime_aware_momentum": c2_regime_aware_momentum_signal,
-    "trend_state": trend_state_signal,
-    "ema_rms_ppo_vwap": ema_rms_ppo_vwap_signal,
-    "probability_threshold": probabilistic_signal,
-    "probability_conviction": conviction_sizing_signal,
-    "probability_vol_adjusted": probability_vol_adjusted_signal,
-    "meta_probability_side": meta_probability_side_signal,
-    "orb_candidate_side": orb_candidate_side_signal,
-    "roc_long_only_conditions": roc_long_only_conditions_signal,
-    "ema_stoch_rsi_pullback": ema_stoch_rsi_pullback_signal,
-    "manual_long_model_filter": manual_long_model_filter_signal,
-    "forecast_threshold": forecast_threshold_signal,
-    "forecast_vol_adjusted": forecast_vol_adjusted_signal,
-    "rsi": rsi_strategy,
-    "momentum": momentum_strategy,
-    "stochastic": stochastic_strategy,
-    "stc_roofing_hilbert": stc_roofing_hilbert_signal,
-    "volatility_regime": volatility_regime_strategy,
-    "vwap_rms_ema_cross_long": vwap_rms_ema_cross_long_signal,
+    **{
+        name: fn
+        for name, fn in EXPERIMENT_SIGNAL_REGISTRY.items()
+        if not (name.endswith("_signal") and name.removesuffix("_signal") in EXPERIMENT_SIGNAL_REGISTRY)
+    },
+    "regime_filtered": regime_filtered_signal,
 }
 
 TARGET_REGISTRY: dict[str, Callable[[pd.DataFrame, dict[str, Any] | None], tuple[pd.DataFrame, str, str, dict[str, Any]]]] = {
@@ -707,6 +678,14 @@ def _callable_import_path(fn: BuilderFn) -> str | None:
     return f"{module}.{name}"
 
 
+def _callable_default_overrides(fn: BuilderFn) -> dict[str, Any]:
+    module = inspect.getmodule(fn)
+    defaults = getattr(module, "_DEFAULT_CFG", None) if module is not None else None
+    if not isinstance(defaults, Mapping):
+        return {}
+    return dict(defaults)
+
+
 def _parameter_definitions(
     fn: BuilderFn,
     *,
@@ -720,8 +699,15 @@ def _parameter_definitions(
     parameters: list[ParameterDefinition] = []
     overrides = dict(default_overrides or {})
     options = dict(option_overrides or {})
+    defined_names: set[str] = set()
+    accepts_keyword_params = False
     for name, param in signature.parameters.items():
         if name in SKIPPED_RUNTIME_PARAMETERS:
+            continue
+        if param.kind is inspect.Parameter.VAR_KEYWORD:
+            accepts_keyword_params = True
+            continue
+        if param.kind is inspect.Parameter.VAR_POSITIONAL:
             continue
         default = overrides.get(name, param.default)
         parameters.append(
@@ -734,6 +720,20 @@ def _parameter_definitions(
                 options=options.get(name, PARAM_OPTIONS.get(name)),
             )
         )
+        defined_names.add(name)
+    if accepts_keyword_params:
+        for name, default in overrides.items():
+            if name in defined_names:
+                continue
+            parameters.append(
+                ParameterDefinition(
+                    name=name,
+                    kind=_infer_kind(default, inspect._empty),
+                    required=False,
+                    default_value=_safe_value(default),
+                    options=options.get(name, PARAM_OPTIONS.get(name)),
+                )
+            )
     return parameters
 
 
@@ -902,7 +902,10 @@ def feature_builders() -> list[BuilderDefinition]:
                 import_path=_callable_import_path(fn),
                 parameters=_parameter_definitions(
                     fn,
-                    default_overrides=FEATURE_PARAM_DEFAULTS.get(name),
+                    default_overrides={
+                        **_callable_default_overrides(fn),
+                        **FEATURE_PARAM_DEFAULTS.get(name, {}),
+                    },
                     option_overrides=FEATURE_PARAM_OPTIONS.get(name),
                 ),
                 docstring=_docstring(fn),
@@ -923,7 +926,10 @@ def signal_builders() -> list[BuilderDefinition]:
                 import_path=_callable_import_path(fn),
                 parameters=_parameter_definitions(
                     fn,
-                    default_overrides=SIGNAL_PARAM_DEFAULTS.get(name),
+                    default_overrides={
+                        **_callable_default_overrides(fn),
+                        **SIGNAL_PARAM_DEFAULTS.get(name, {}),
+                    },
                 ),
                 docstring=_docstring(fn),
             )

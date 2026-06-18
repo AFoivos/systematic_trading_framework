@@ -18,10 +18,18 @@ def add_volatility_of_volatility(
     high_vov_col: str | None = None,
     high_vov_mult: float = 1.0,
 ) -> pd.DataFrame:
-    """Add causal volatility-of-volatility diagnostics.
+    """
+    Add causal volatility-of-volatility diagnostics.
 
     Volatility of volatility measures how unstable the volatility series itself
     is. High vol-of-vol points to an unstable or risky volatility regime.
+
+    YAML declaration::
+
+        features:
+          - step: volatility_of_volatility
+            params:
+              volatility_col: vol_rolling_20
     """
     _validate_columns(df, [volatility_col])
     _validate_window(window, field="window")

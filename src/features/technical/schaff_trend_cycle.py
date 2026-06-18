@@ -25,11 +25,18 @@ def add_schaff_trend_cycle_features(
     falling_col: str = "stc_falling",
     inplace: bool = False,
 ) -> pd.DataFrame:
-    """Add a causal Schaff Trend Cycle feature set.
+    """
+    Add a causal Schaff Trend Cycle feature set.
 
     The implementation follows the common STC construction: EMA fast/slow
     oscillator, trailing stochastic normalization, and two causal EMA smoothing
     passes. All rolling windows are trailing windows.
+
+    YAML declaration::
+
+        features:
+          - step: schaff_trend_cycle
+            params: {}
     """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame")

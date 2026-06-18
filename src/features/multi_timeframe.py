@@ -294,6 +294,12 @@ def add_multi_timeframe_features(
     resampled HTF bars at their close and asof-merges backward, so a base row cannot receive
     a higher-timeframe feature whose close time is after the row timestamp. Use
     `timestamp_convention="bar_start"` for feeds whose timestamps are bar opens.
+
+    YAML declaration::
+
+        features:
+          - step: multi_timeframe
+            params: {}
     """
     if not shift_to_last_closed:
         raise ValueError("multi_timeframe currently supports only shift_to_last_closed=true.")

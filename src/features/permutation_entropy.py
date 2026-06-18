@@ -16,10 +16,17 @@ def add_permutation_entropy(
     normalize: bool = True,
     output_col: str | None = None,
 ) -> pd.DataFrame:
-    """Add causal rolling permutation entropy.
+    """
+    Add causal rolling permutation entropy.
 
     Ties are resolved deterministically by NumPy's stable order; no future
     samples are used.
+
+    YAML declaration::
+
+        features:
+          - step: permutation_entropy
+            params: {}
     """
     _validate_columns(df, [source_col])
     _validate_positive_int(window, name="window")

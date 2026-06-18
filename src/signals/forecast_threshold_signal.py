@@ -14,6 +14,15 @@ def forecast_threshold_signal(
     lower: float | None = None,
     mode: str = "long_short_hold",
 ) -> pd.Series:
+    """
+    Apply the registered ``forecast_threshold`` signal transformation.
+
+    YAML declaration::
+
+        signals:
+          kind: forecast_threshold
+          params: {}
+    """
     output_col = resolve_signal_output_name(
         signal_col=signal_col,
         default="signal_forecast",

@@ -379,6 +379,15 @@ def build_stc_roofing_hilbert_signal(
 
 
 def stc_roofing_hilbert_signal(df: pd.DataFrame, **params: Any) -> pd.DataFrame:
+    """
+    Apply the registered ``stc_roofing_hilbert`` signal transformation.
+
+    YAML declaration::
+
+        signals:
+          kind: stc_roofing_hilbert
+          params: {}
+    """
     out, _ = build_stc_roofing_hilbert_signal(df, params)
     return out
 

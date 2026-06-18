@@ -12,10 +12,17 @@ def add_supersmoother(
     period: int = 10,
     output_col: str | None = None,
 ) -> pd.DataFrame:
-    """Add John Ehlers' causal two-pole SuperSmoother filter.
+    """
+    Add John Ehlers' causal two-pole SuperSmoother filter.
 
     The filter is low lag relative to a same-period SMA and only uses current
     and prior observations.
+
+    YAML declaration::
+
+        features:
+          - step: supersmoother
+            params: {}
     """
     _validate_columns(df, [price_col])
     _validate_period(period)

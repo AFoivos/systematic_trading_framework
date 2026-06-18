@@ -17,6 +17,15 @@ def add_adx_features(
     windows: Sequence[int] | None = None,
     inplace: bool = False,
 ) -> pd.DataFrame:
+    """
+    Apply the registered ``adx`` feature transformation.
+
+    YAML declaration::
+
+        features:
+          - step: adx
+            params: {}
+    """
     missing = [c for c in (high_col, low_col, close_col) if c not in df.columns]
     if missing:
         raise KeyError(f"Missing columns for ADX features: {missing}")

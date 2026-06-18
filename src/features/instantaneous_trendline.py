@@ -22,7 +22,15 @@ def add_instantaneous_trendline(
     trigger_col: str | None = None,
     add_trigger: bool = True,
 ) -> pd.DataFrame:
-    """Add Ehlers' causal instantaneous trendline and optional trigger."""
+    """
+    Add Ehlers' causal instantaneous trendline and optional trigger.
+
+    YAML declaration::
+
+        features:
+          - step: instantaneous_trendline
+            params: {}
+    """
     require_columns(df, [price_col], feature="instantaneous trendline")
     a = validate_float(alpha, name="alpha", minimum=0.0, maximum=1.0)
     validate_bool(add_trigger, name="add_trigger")

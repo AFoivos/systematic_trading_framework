@@ -13,7 +13,15 @@ def add_decycler_oscillator(
     slow_period: int = 60,
     output_col: str | None = None,
 ) -> pd.DataFrame:
-    """Add a causal Ehlers decycler oscillator from fast and slow decyclers."""
+    """
+    Add a causal Ehlers decycler oscillator from fast and slow decyclers.
+
+    YAML declaration::
+
+        features:
+          - step: decycler_oscillator
+            params: {}
+    """
     require_columns(df, [price_col], feature="Decycler Oscillator")
     fast = validate_int(fast_period, name="fast_period", minimum=3)
     slow = validate_int(slow_period, name="slow_period", minimum=3)

@@ -85,6 +85,7 @@ SIGNAL_KINDS = frozenset(
         "ehlers_continuation_long_signal",
         "ehlers_continuation_short",
         "ehlers_continuation_short_signal",
+        "ehlers_semiscalp_long",
         "ema_rms_ppo_vwap",
         "ema_stoch_rsi_pullback",
         "dense_return_forecast",

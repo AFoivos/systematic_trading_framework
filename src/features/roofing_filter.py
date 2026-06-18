@@ -22,10 +22,17 @@ def add_roofing_filter(
     cross_down_zero_col: str | None = None,
     add_derived: bool = True,
 ) -> pd.DataFrame:
-    """Add a causal Ehlers-style roofing filter.
+    """
+    Add a causal Ehlers-style roofing filter.
 
     The implementation applies a two-pole high-pass filter followed by a
     SuperSmoother low-pass filter, using only current and prior samples.
+
+    YAML declaration::
+
+        features:
+          - step: roofing_filter
+            params: {}
     """
     _validate_columns(df, [price_col])
     _validate_period(high_pass_period, name="high_pass_period")

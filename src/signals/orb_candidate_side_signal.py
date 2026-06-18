@@ -19,6 +19,12 @@ def orb_candidate_side_signal(
 
     This intentionally does not apply model probabilities, thresholds, or side flipping. It is
     useful as a raw candidate-side comparator against `meta_probability_side`.
+
+    YAML declaration::
+
+        signals:
+          kind: orb_candidate_side
+          params: {}
     """
     if candidate_col not in df.columns:
         raise KeyError(f"candidate_col '{candidate_col}' not found in DataFrame")

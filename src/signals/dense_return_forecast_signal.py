@@ -27,6 +27,12 @@ def dense_return_forecast_signal(
     The output is intentionally continuous. It is not a candidate filter and it does not apply
     independent asset thresholds. Portfolio ranking/hysteresis decides whether the score is
     worth allocating capital to.
+
+    YAML declaration::
+
+        signals:
+          kind: dense_return_forecast
+          params: {}
     """
     if forecast_col not in df.columns:
         raise KeyError(f"forecast_col '{forecast_col}' not found in DataFrame")

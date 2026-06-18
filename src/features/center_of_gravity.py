@@ -12,7 +12,15 @@ def add_center_of_gravity(
     window: int = 10,
     output_col: str | None = None,
 ) -> pd.DataFrame:
-    """Add Ehlers' causal Center of Gravity oscillator."""
+    """
+    Add Ehlers' causal Center of Gravity oscillator.
+
+    YAML declaration::
+
+        features:
+          - step: center_of_gravity
+            params: {}
+    """
     require_columns(df, [price_col], feature="Center of Gravity")
     resolved_window = validate_int(window, name="window", minimum=2)
     col = resolve_output_col(output_col, f"center_of_gravity_{resolved_window}")

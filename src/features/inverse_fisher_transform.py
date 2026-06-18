@@ -23,7 +23,15 @@ def add_inverse_fisher_transform(
     normalize: bool = True,
     output_col: str | None = None,
 ) -> pd.DataFrame:
-    """Add a causal inverse Fisher transform bounded between -1 and 1."""
+    """
+    Add a causal inverse Fisher transform bounded between -1 and 1.
+
+    YAML declaration::
+
+        features:
+          - step: inverse_fisher_transform
+            params: {}
+    """
     require_columns(df, [input_col], feature="inverse Fisher Transform")
     resolved_window = validate_int(window, name="window", minimum=2)
     resolved_scale = validate_float(scale, name="scale", minimum=0.0)
