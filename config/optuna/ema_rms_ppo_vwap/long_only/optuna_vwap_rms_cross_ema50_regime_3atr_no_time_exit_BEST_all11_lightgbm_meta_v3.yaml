@@ -1,0 +1,128 @@
+base_config: config/experiments/ema_rms_ppo_vwap/best_long_only/vwap_rms_cross_ema50_regime_3atr_no_time_exit_BEST_all11_lightgbm_meta_v3.yaml
+
+study:
+  study_name: optuna_vwap_rms_cross_ema50_regime_3atr_no_time_exit_BEST_all11_lightgbm_meta_v3
+  storage: sqlite:///logs/optuna/vwap_rms_cross_ema50_regime_3atr_no_time_exit_BEST_all11_lightgbm_meta_v3.db
+  load_if_exists: true
+  sampler: tpe
+  seed: 7
+  n_trials: 1200
+  timeout: null
+  n_jobs: 1
+  logging_enabled: true
+  catch_exceptions: true
+
+report:
+  enabled: true
+  output_dir: logs/experiments
+  run_name: optuna_vwap_rms_cross_ema50_regime_3atr_no_time_exit_BEST_all11_lightgbm_meta_v3
+
+objective:
+  metric_path: evaluation.primary_summary.sharpe
+  direction: maximize
+  failure_score: -1000000000000.0
+  base_metric_weight: 1.0
+  stability_weight: 0.35
+  stability_metric_path: metrics.sharpe
+  stability_std_penalty: 1.0
+  fold_summary_path: evaluation.fold_backtest_summaries
+  constraints:
+  - {metric_path: evaluation.primary_summary.cumulative_return, op: le, threshold: 0.0, penalty: 100.0, missing_penalty: 100.0}
+  - {metric_path: evaluation.primary_summary.max_drawdown, op: lt, threshold: -0.15, penalty: 50.0, missing_penalty: 50.0}
+  - {metric_path: evaluation.primary_summary.profit_factor, op: lt, threshold: 1.0, penalty: 15.0, missing_penalty: 15.0}
+  - {metric_path: evaluation.primary_summary.cost_to_gross_pnl, op: gt, threshold: 0.65, penalty: 12.0, missing_penalty: 12.0}
+  - {metric_path: evaluation.primary_summary.gross_pnl, op: le, threshold: 0.0, penalty: 20.0, missing_penalty: 10.0}
+  - {metric_path: derived.entry_count, op: lt, threshold: 150.0, penalty: 8.0, missing_penalty: 8.0}
+  - {metric_path: derived.entry_count, op: gt, threshold: 5000.0, penalty: 5.0, missing_penalty: 2.0}
+  - {metric_path: evaluation.primary_summary.robustness_cost_x2_profit_factor, op: lt, threshold: 1.0, penalty: 8.0, missing_penalty: 4.0}
+  - {metric_path: evaluation.primary_summary.robustness_delay_1_bars_profit_factor, op: lt, threshold: 1.0, penalty: 5.0, missing_penalty: 3.0}
+
+pruning:
+  enabled: false
+  metric_path: classification_metrics.roc_auc
+  direction: maximize
+  stage_filter: [lightgbm_clf]
+  pruner: none
+  n_startup_trials: 50
+  n_warmup_steps: 2
+  interval_steps: 1
+
+search_space:
+  - {name: xauusd_ppo_hist_min, path: features.24.params_by_asset.XAUUSD.ppo_hist_min, kind: float, low: 0.0, high: 0.0025, step: 0.00005}
+  - {name: xagusd_ppo_hist_min, path: features.24.params_by_asset.XAGUSD.ppo_hist_min, kind: float, low: 0.0, high: 0.0025, step: 0.00005}
+  - {name: spx500_ppo_hist_min, path: features.24.params_by_asset.SPX500.ppo_hist_min, kind: float, low: 0.0, high: 0.0025, step: 0.00005}
+  - {name: us100_ppo_hist_min, path: features.24.params_by_asset.US100.ppo_hist_min, kind: float, low: 0.0, high: 0.0025, step: 0.00005}
+  - {name: ger40_ppo_hist_min, path: features.24.params_by_asset.GER40.ppo_hist_min, kind: float, low: 0.0, high: 0.0025, step: 0.00005}
+  - {name: us30_ppo_hist_min, path: features.24.params_by_asset.US30.ppo_hist_min, kind: float, low: 0.0, high: 0.0025, step: 0.00005}
+  - {name: brent_ppo_hist_min, path: features.24.params_by_asset.BRENT.ppo_hist_min, kind: float, low: 0.0, high: 0.0025, step: 0.00005}
+  - {name: ethusd_ppo_hist_min, path: features.24.params_by_asset.ETHUSD.ppo_hist_min, kind: float, low: 0.0, high: 0.0040, step: 0.00005}
+  - {name: eurusd_ppo_hist_min, path: features.24.params_by_asset.EURUSD.ppo_hist_min, kind: float, low: 0.0, high: 0.0025, step: 0.00005}
+  - {name: nikkei225_ppo_hist_min, path: features.24.params_by_asset.NIKKEI225.ppo_hist_min, kind: float, low: 0.0, high: 0.0025, step: 0.00005}
+  - {name: usoil_ppo_hist_min, path: features.24.params_by_asset.USOIL.ppo_hist_min, kind: float, low: 0.0, high: 0.0030, step: 0.00005}
+
+  - {name: xauusd_profit_barrier_r, path: backtest.asset_params.XAUUSD.profit_barrier_r, kind: float, low: 1.5, high: 5.0, step: 0.25}
+  - {name: xauusd_stop_barrier_r, path: backtest.asset_params.XAUUSD.stop_barrier_r, kind: float, low: 0.75, high: 3.5, step: 0.25}
+  - {name: xagusd_profit_barrier_r, path: backtest.asset_params.XAGUSD.profit_barrier_r, kind: float, low: 1.5, high: 5.0, step: 0.25}
+  - {name: xagusd_stop_barrier_r, path: backtest.asset_params.XAGUSD.stop_barrier_r, kind: float, low: 0.75, high: 3.5, step: 0.25}
+  - {name: spx500_profit_barrier_r, path: backtest.asset_params.SPX500.profit_barrier_r, kind: float, low: 1.5, high: 5.0, step: 0.25}
+  - {name: spx500_stop_barrier_r, path: backtest.asset_params.SPX500.stop_barrier_r, kind: float, low: 0.75, high: 3.5, step: 0.25}
+  - {name: us100_profit_barrier_r, path: backtest.asset_params.US100.profit_barrier_r, kind: float, low: 1.5, high: 5.0, step: 0.25}
+  - {name: us100_stop_barrier_r, path: backtest.asset_params.US100.stop_barrier_r, kind: float, low: 0.75, high: 3.5, step: 0.25}
+  - {name: ger40_profit_barrier_r, path: backtest.asset_params.GER40.profit_barrier_r, kind: float, low: 1.5, high: 5.0, step: 0.25}
+  - {name: ger40_stop_barrier_r, path: backtest.asset_params.GER40.stop_barrier_r, kind: float, low: 0.75, high: 3.5, step: 0.25}
+  - {name: us30_profit_barrier_r, path: backtest.asset_params.US30.profit_barrier_r, kind: float, low: 1.5, high: 5.0, step: 0.25}
+  - {name: us30_stop_barrier_r, path: backtest.asset_params.US30.stop_barrier_r, kind: float, low: 0.75, high: 3.5, step: 0.25}
+  - {name: brent_profit_barrier_r, path: backtest.asset_params.BRENT.profit_barrier_r, kind: float, low: 1.5, high: 5.0, step: 0.25}
+  - {name: brent_stop_barrier_r, path: backtest.asset_params.BRENT.stop_barrier_r, kind: float, low: 0.75, high: 3.5, step: 0.25}
+  - {name: ethusd_profit_barrier_r, path: backtest.asset_params.ETHUSD.profit_barrier_r, kind: float, low: 1.5, high: 5.0, step: 0.25}
+  - {name: ethusd_stop_barrier_r, path: backtest.asset_params.ETHUSD.stop_barrier_r, kind: float, low: 0.75, high: 3.5, step: 0.25}
+  - {name: eurusd_profit_barrier_r, path: backtest.asset_params.EURUSD.profit_barrier_r, kind: float, low: 1.5, high: 5.0, step: 0.25}
+  - {name: eurusd_stop_barrier_r, path: backtest.asset_params.EURUSD.stop_barrier_r, kind: float, low: 0.75, high: 3.5, step: 0.25}
+  - {name: nikkei225_profit_barrier_r, path: backtest.asset_params.NIKKEI225.profit_barrier_r, kind: float, low: 1.5, high: 5.0, step: 0.25}
+  - {name: nikkei225_stop_barrier_r, path: backtest.asset_params.NIKKEI225.stop_barrier_r, kind: float, low: 0.75, high: 3.5, step: 0.25}
+  - {name: usoil_profit_barrier_r, path: backtest.asset_params.USOIL.profit_barrier_r, kind: float, low: 1.5, high: 5.0, step: 0.25}
+  - {name: usoil_stop_barrier_r, path: backtest.asset_params.USOIL.stop_barrier_r, kind: float, low: 0.75, high: 3.5, step: 0.25}
+
+  - name: risk_per_trade
+    path: backtest.asset_params.XAUUSD.risk_per_trade
+    paths:
+    - backtest.asset_params.XAGUSD.risk_per_trade
+    - backtest.asset_params.SPX500.risk_per_trade
+    - backtest.asset_params.US100.risk_per_trade
+    - backtest.asset_params.GER40.risk_per_trade
+    - backtest.asset_params.US30.risk_per_trade
+    - backtest.asset_params.BRENT.risk_per_trade
+    - backtest.asset_params.ETHUSD.risk_per_trade
+    - backtest.asset_params.EURUSD.risk_per_trade
+    - backtest.asset_params.NIKKEI225.risk_per_trade
+    - backtest.asset_params.USOIL.risk_per_trade
+    kind: float
+    low: 0.0005
+    high: 0.0040
+    step: 0.00025
+  - {name: target_return_threshold, path: model.target.threshold, kind: float, low: 0.0, high: 0.0030, step: 0.0001}
+  - name: target_horizon_bars
+    path: model.target.horizon
+    paths: [model.split.purge_bars, model.split.embargo_bars]
+    kind: categorical
+    choices: [8, 12, 16, 24, 32, 48]
+  - {name: probability_threshold, path: signals.params.threshold, kind: float, low: 0.50, high: 0.75, step: 0.01}
+  - {name: max_cost_r, path: backtest.max_cost_r, kind: float, low: 0.10, high: 0.50, step: 0.05}
+  - {name: max_open_trades, path: risk.portfolio_guard.max_open_trades, kind: int, low: 2, high: 7}
+  - name: portfolio_gross_target
+    path: portfolio.gross_target
+    paths: [risk.max_leverage, portfolio.constraints.max_gross_leverage]
+    kind: float
+    low: 0.75
+    high: 2.0
+    step: 0.25
+  - {name: lgbm_n_estimators, path: model.params.n_estimators, kind: int, low: 150, high: 1200, step: 50}
+  - {name: lgbm_learning_rate, path: model.params.learning_rate, kind: float, low: 0.005, high: 0.15, log: true}
+  - {name: lgbm_num_leaves, path: model.params.num_leaves, kind: categorical, choices: [7, 15, 31, 63, 127]}
+  - {name: lgbm_max_depth, path: model.params.max_depth, kind: categorical, choices: [-1, 3, 4, 5, 6, 8, 10]}
+  - {name: lgbm_min_child_samples, path: model.params.min_child_samples, kind: int, low: 10, high: 160, step: 10}
+  - {name: lgbm_subsample, path: model.params.subsample, kind: float, low: 0.50, high: 1.00, step: 0.05}
+  - {name: lgbm_colsample_bytree, path: model.params.colsample_bytree, kind: float, low: 0.40, high: 1.00, step: 0.05}
+  - {name: lgbm_reg_lambda, path: model.params.reg_lambda, kind: float, low: 0.0001, high: 100.0, log: true}
+  - {name: lgbm_reg_alpha, path: model.params.reg_alpha, kind: float, low: 0.0001, high: 10.0, log: true}
+  - {name: lgbm_class_weight, path: model.params.class_weight, kind: categorical, choices: [null, balanced]}
