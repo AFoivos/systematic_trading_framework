@@ -5,7 +5,7 @@
 __pycache__/
 *.py[codz]
 *$py.class
-
+/analysis
 *.so
 .venv
 .Python
