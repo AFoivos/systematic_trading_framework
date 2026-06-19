@@ -147,3 +147,5 @@ tests/*
 !tests/signals/*.py
 !tests/execution/
 !tests/execution/*.py
+!tests/backtesting/
+!tests/backtesting/*.py

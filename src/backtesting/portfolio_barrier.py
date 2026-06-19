@@ -420,13 +420,35 @@ def run_portfolio_barrier_backtest(
     kill_switch_drawdown = guard_cfg.get("kill_switch_max_drawdown", guard_cfg.get("max_drawdown"))
     if kill_switch_drawdown is not None:
         kill_switch_drawdown = _positive_float(kill_switch_drawdown, field="portfolio_guard.kill_switch_max_drawdown")
+    max_daily_loss = guard_cfg.get("max_daily_loss_pct")
+    if max_daily_loss is not None:
+        max_daily_loss = _positive_float(max_daily_loss, field="portfolio_guard.max_daily_loss_pct")
+    disable_weekend_trading = bool(guard_cfg.get("disable_weekend_trading", False))
+    guard_equity_source = str(guard_cfg.get("equity_source", "realized"))
+    if guard_equity_source not in {"realized", "mark_to_market"}:
+        raise ValueError(
+            "portfolio_barrier portfolio_guard.equity_source must be 'realized' or 'mark_to_market'."
+        )
 
     required_columns = [signal_col, open_col, high_col, low_col, close_col]
     frames = _prepare_asset_frames(asset_frames, required_columns=required_columns)
     for asset, frame in frames.items():
         params = dict(asset_params_by_asset.get(asset, {}) or {})
         asset_volatility_col = str(params.get("volatility_col", params.get("vol_col", volatility_col)))
-        _require_columns(frame, asset=asset, columns=[asset_volatility_col])
+        asset_required_columns = [asset_volatility_col]
+        if params.get("max_spread_points") is not None:
+            asset_required_columns.extend(
+                [
+                    str(params.get("spread_bid_col", "bid_open")),
+                    str(params.get("spread_ask_col", "ask_open")),
+                ]
+            )
+            _positive_float(params.get("point_size"), field=f"asset_params.{asset}.point_size")
+            _positive_float(
+                params.get("max_spread_points"),
+                field=f"asset_params.{asset}.max_spread_points",
+            )
+        _require_columns(frame, asset=asset, columns=asset_required_columns)
     signals = _align_signal_index(frames, signal_col=signal_col, alignment=alignment)
     if signals.empty:
         raise ValueError("portfolio_barrier aligned signal frame is empty.")
@@ -462,15 +484,33 @@ def run_portfolio_barrier_backtest(
     skipped_group_max_open_trades = 0
     skipped_group_cap = 0
     skipped_guard = 0
+    skipped_daily_loss = 0
+    skipped_weekend = 0
+    skipped_spread_filter = 0
+    skipped_invalid_spread = 0
     risk_sized_trade_count = 0
     guard_equity = 1.0
     guard_peak_equity = 1.0
+    guard_daily_start_equity = 1.0
+    guard_daily_date: Any | None = None
+    guard_daily_blocked_date: Any | None = None
     guard_permanent_flat = False
     guard_trigger_count = 0
+    daily_loss_trigger_count = 0
 
     for timestamp, signal_row in signals.iterrows():
+        timestamp_date = pd.Timestamp(timestamp).date()
+        if guard_daily_date != timestamp_date:
+            guard_daily_date = timestamp_date
+            guard_daily_start_equity = guard_equity
+            guard_daily_blocked_date = None
         if timestamp in net_returns.index:
-            guard_equity *= 1.0 + float(net_returns.loc[timestamp])
+            guard_return = (
+                float(mark_to_market_returns.loc[timestamp])
+                if guard_equity_source == "mark_to_market"
+                else float(net_returns.loc[timestamp])
+            )
+            guard_equity *= 1.0 + guard_return
             guard_peak_equity = max(guard_peak_equity, guard_equity)
             guard_drawdown = float(guard_equity / guard_peak_equity - 1.0) if guard_peak_equity > 0.0 else 0.0
             if (
@@ -481,6 +521,19 @@ def run_portfolio_barrier_backtest(
             ):
                 guard_permanent_flat = True
                 guard_trigger_count += 1
+            daily_loss = (
+                float((guard_daily_start_equity - guard_equity) / guard_daily_start_equity)
+                if guard_daily_start_equity > 0.0
+                else 0.0
+            )
+            if (
+                guard_enabled
+                and max_daily_loss is not None
+                and guard_daily_blocked_date is None
+                and daily_loss >= float(max_daily_loss)
+            ):
+                guard_daily_blocked_date = timestamp_date
+                daily_loss_trigger_count += 1
 
         for asset, active in list(active_by_asset.items()):
             if active["exit_time"] <= timestamp:
@@ -490,6 +543,12 @@ def run_portfolio_barrier_backtest(
             continue
         if guard_permanent_flat:
             skipped_guard += int(signal_row.fillna(0.0).astype(float).ne(0.0).sum())
+            continue
+        if guard_daily_blocked_date == timestamp_date:
+            skipped_daily_loss += int(signal_row.fillna(0.0).astype(float).ne(0.0).sum())
+            continue
+        if disable_weekend_trading and pd.Timestamp(timestamp).weekday() >= 5:
+            skipped_weekend += int(signal_row.fillna(0.0).astype(float).ne(0.0).sum())
             continue
 
         current_gross = float(sum(abs(float(active["weight"])) for active in active_by_asset.values()))
@@ -567,6 +626,30 @@ def run_portfolio_barrier_backtest(
             if event is None:
                 skipped_tail += 1
                 continue
+            asset_max_spread_raw = params.get("max_spread_points")
+            spread_points: float | None = None
+            asset_max_spread: float | None = None
+            if asset_max_spread_raw is not None:
+                asset_max_spread = _positive_float(
+                    asset_max_spread_raw,
+                    field=f"asset_params.{asset}.max_spread_points",
+                )
+                point_size = _positive_float(
+                    params.get("point_size"),
+                    field=f"asset_params.{asset}.point_size",
+                )
+                bid_col = str(params.get("spread_bid_col", "bid_open"))
+                ask_col = str(params.get("spread_ask_col", "ask_open"))
+                entry_row = frame.iloc[int(event["entry_idx"])]
+                bid = float(pd.to_numeric(pd.Series([entry_row[bid_col]]), errors="coerce").iloc[0])
+                ask = float(pd.to_numeric(pd.Series([entry_row[ask_col]]), errors="coerce").iloc[0])
+                if not np.isfinite(bid) or not np.isfinite(ask) or ask < bid:
+                    skipped_invalid_spread += 1
+                    continue
+                spread_points = float((ask - bid) / point_size)
+                if spread_points > asset_max_spread:
+                    skipped_spread_filter += 1
+                    continue
             raw_entry_time = event["entry_time"]
             raw_exit_time = event["exit_time"]
             entry_time, entry_remapped = _remap_to_next_aligned_timestamp(weights.index, raw_entry_time)
@@ -690,6 +773,8 @@ def run_portfolio_barrier_backtest(
                 "estimated_cost": cost_filter_stats["estimated_cost"],
                 "estimated_cost_r": cost_filter_stats["estimated_cost_r"],
                 "max_cost_r": asset_max_cost_r,
+                "spread_points": spread_points,
+                "max_spread_points": asset_max_spread,
                 "cost": pnl["cost"],
                 "fixed_cost": pnl["fixed_cost"],
                 "slippage": pnl["slippage"],
@@ -782,6 +867,14 @@ def run_portfolio_barrier_backtest(
             "group_max_open_trades": dict(group_max_open_trades),
             "skipped_group_max_open_trades": int(skipped_group_max_open_trades),
             "skipped_group_cap": int(skipped_group_cap),
+            "max_daily_loss_pct": max_daily_loss,
+            "daily_loss_trigger_count": int(daily_loss_trigger_count),
+            "skipped_daily_loss": int(skipped_daily_loss),
+            "disable_weekend_trading": disable_weekend_trading,
+            "skipped_weekend": int(skipped_weekend),
+            "equity_source": guard_equity_source,
+            "skipped_spread_filter": int(skipped_spread_filter),
+            "skipped_invalid_spread": int(skipped_invalid_spread),
         },
         risk_guard_timeline=pd.DataFrame(index=weights.index),
         trades=trades_df,
@@ -812,6 +905,11 @@ def run_portfolio_barrier_backtest(
         "skipped_max_open_trades": int(skipped_max_open_trades),
         "skipped_group_max_open_trades": int(skipped_group_max_open_trades),
         "skipped_group_cap": int(skipped_group_cap),
+        "skipped_daily_loss": int(skipped_daily_loss),
+        "skipped_weekend": int(skipped_weekend),
+        "skipped_spread_filter": int(skipped_spread_filter),
+        "skipped_invalid_spread": int(skipped_invalid_spread),
+        "daily_loss_trigger_count": int(daily_loss_trigger_count),
         "risk_sized_trade_count": int(risk_sized_trade_count),
         "remapped_entry_timestamps": int(remapped_entry_timestamps),
         "remapped_exit_timestamps": int(remapped_exit_timestamps),
