@@ -550,6 +550,8 @@ def test_rules_only_all11_optuna_uses_runtime_result_paths_without_fold_stabilit
     assert objective.stability_metric_path is None
     assert "derived.entry_count" in constraints_by_path
     assert payload["pruning"]["metric_path"] == "evaluation.primary_summary.sharpe"
+    assert payload["study"]["storage"] is None
+    assert payload["study"]["load_if_exists"] is False
 
 
 def test_dense_return_forecasting_v2_optuna_penalizes_rank_cost_and_turnover() -> None:

@@ -239,6 +239,7 @@ function addConfiguredSeries(
       if (config.render_type === "histogram") {
         const series = chart.addHistogramSeries({
           color,
+          title: config.display_name,
           priceFormat: priceFormatForConfig(config),
           priceScaleId: config.style.priceScaleId ?? ""
         });
@@ -248,6 +249,7 @@ function addConfiguredSeries(
       }
       if (config.render_type === "area" || config.render_type === "probability_band") {
         const series = chart.addAreaSeries({
+          title: config.display_name,
           lineColor: color,
           topColor: rgbaColor(color, config.style.opacity ?? 0.26),
           bottomColor: rgbaColor(color, 0.04),
@@ -261,6 +263,7 @@ function addConfiguredSeries(
         return;
       }
       const series = chart.addLineSeries({
+        title: config.display_name,
         color,
         lineWidth: (config.style.lineWidth ?? 2) as 1 | 2 | 3 | 4,
         priceFormat: priceFormatForConfig(config),

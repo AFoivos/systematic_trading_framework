@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import type { ExecutionAssetSummary, ExecutionFeatureSnapshot, ExecutionStatus, JsonRecord } from "../types/execution";
+import { ExecutionChartWorkspace } from "./ExecutionChartWorkspace";
 
 const POLL_MS = 15_000;
 
@@ -78,14 +79,6 @@ function signalClass(value: unknown): string {
 
 function objectEntries(record: JsonRecord): Array<[string, unknown]> {
   return Object.entries(record).filter(([, value]) => value !== undefined);
-}
-
-function featureOptions(snapshot: ExecutionFeatureSnapshot | null): string[] {
-  if (!snapshot) {
-    return [];
-  }
-  const preferred = snapshot.feature_columns.filter((column) => snapshot.numeric_columns.includes(column));
-  return preferred.length > 0 ? preferred : snapshot.numeric_columns;
 }
 
 function ValueTable({ record, emptyLabel = "No records" }: { record: JsonRecord; emptyLabel?: string }) {
@@ -182,95 +175,11 @@ function EventsList({ records }: { records: JsonRecord[] }) {
   );
 }
 
-function FeatureChart({
-  snapshot,
-  selectedFeature,
-  onFeatureChange
-}: {
-  snapshot: ExecutionFeatureSnapshot | null;
-  selectedFeature: string;
-  onFeatureChange: (feature: string) => void;
-}) {
-  const options = featureOptions(snapshot);
-  const feature = selectedFeature && options.includes(selectedFeature) ? selectedFeature : options[0] || "";
-  const points = useMemo(() => {
-    if (!snapshot || !feature) {
-      return [];
-    }
-    return snapshot.records
-      .map((record, index) => ({
-        index,
-        time: asString(record.time),
-        value: numberValue(record[feature])
-      }))
-      .filter((point): point is { index: number; time: string; value: number } => point.value !== null);
-  }, [snapshot, feature]);
-
-  const path = useMemo(() => {
-    if (points.length < 2) {
-      return "";
-    }
-    const width = 720;
-    const height = 240;
-    const padding = 18;
-    const values = points.map((point) => point.value);
-    const minValue = Math.min(...values);
-    const maxValue = Math.max(...values);
-    const span = maxValue - minValue || 1;
-    return points
-      .map((point, idx) => {
-        const x = padding + (point.index / Math.max(points[points.length - 1].index, 1)) * (width - padding * 2);
-        const y = height - padding - ((point.value - minValue) / span) * (height - padding * 2);
-        return `${idx === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
-      })
-      .join(" ");
-  }, [points]);
-
-  const latestPoint = points[points.length - 1];
-
-  if (!snapshot || snapshot.row_count === 0) {
-    return <p className="empty-copy">No MT5 feature snapshot yet</p>;
-  }
-  if (options.length === 0) {
-    return <p className="empty-copy">No numeric feature columns found</p>;
-  }
-
-  return (
-    <div className="feature-chart-panel">
-      <div className="feature-chart-toolbar">
-        <label className="field">
-          <span>Feature</span>
-          <select value={feature} onChange={(event) => onFeatureChange(event.target.value)}>
-            {options.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="feature-chart-stats">
-          <span>Rows {snapshot.row_count}</span>
-          <strong>{formatValue(latestPoint?.value)}</strong>
-          <small>{formatTime(latestPoint?.time || snapshot.bar_time)}</small>
-        </div>
-      </div>
-      <div className="feature-chart-shell">
-        <svg className="feature-chart" viewBox="0 0 720 240" role="img" aria-label={`${feature} feature chart`}>
-          <line x1="18" y1="222" x2="702" y2="222" />
-          <line x1="18" y1="18" x2="18" y2="222" />
-          {path ? <path d={path} /> : null}
-        </svg>
-      </div>
-    </div>
-  );
-}
-
 export function ExecutionMonitor() {
   const [status, setStatus] = useState<ExecutionStatus | null>(null);
   const [events, setEvents] = useState<JsonRecord[]>([]);
   const [decisions, setDecisions] = useState<JsonRecord[]>([]);
   const [featureSnapshot, setFeatureSnapshot] = useState<ExecutionFeatureSnapshot | null>(null);
-  const [selectedFeature, setSelectedFeature] = useState("");
   const [selectedAsset, setSelectedAsset] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -337,17 +246,6 @@ export function ExecutionMonitor() {
       cancelled = true;
     };
   }, [selectedAsset, status?.health?.last_heartbeat_at]);
-
-  useEffect(() => {
-    const options = featureOptions(featureSnapshot);
-    if (options.length === 0) {
-      setSelectedFeature("");
-      return;
-    }
-    if (!selectedFeature || !options.includes(selectedFeature)) {
-      setSelectedFeature(options[0]);
-    }
-  }, [featureSnapshot?.asset, featureSnapshot?.bar_time, featureSnapshot?.feature_columns.join("|"), selectedFeature]);
 
   const health = asRecord(status?.health);
   const account = asRecord(status?.account);
@@ -430,8 +328,8 @@ export function ExecutionMonitor() {
                 <ValueTable record={riskLimits} />
               </div>
               <div className="wide-panel">
-                <h3>MT5 Feature Chart</h3>
-                <FeatureChart snapshot={featureSnapshot} selectedFeature={selectedFeature} onFeatureChange={setSelectedFeature} />
+                <h3>Live Market &amp; Features</h3>
+                <ExecutionChartWorkspace snapshot={featureSnapshot} />
               </div>
               <div className="wide-panel">
                 <h3>Latest Values</h3>
@@ -452,8 +350,8 @@ export function ExecutionMonitor() {
                 <p className="empty-copy">No decision_trace records yet</p>
               </div>
               <div className="wide-panel">
-                <h3>MT5 Feature Chart</h3>
-                <FeatureChart snapshot={featureSnapshot} selectedFeature={selectedFeature} onFeatureChange={setSelectedFeature} />
+                <h3>Live Market &amp; Features</h3>
+                <ExecutionChartWorkspace snapshot={featureSnapshot} />
               </div>
             </div>
           )}

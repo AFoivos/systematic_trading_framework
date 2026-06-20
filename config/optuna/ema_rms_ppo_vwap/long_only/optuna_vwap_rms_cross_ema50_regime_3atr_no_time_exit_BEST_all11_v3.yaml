@@ -2,8 +2,8 @@ base_config: config/experiments/ema_rms_ppo_vwap/best_long_only/vwap_rms_cross_e
 
 study:
   study_name: optuna_vwap_rms_cross_ema50_regime_3atr_no_time_exit_BEST_all11_v3
-  storage: sqlite:///logs/optuna/vwap_rms_cross_ema50_regime_3atr_no_time_exit_BEST_all11_v3.db
-  load_if_exists: true
+  storage: null
+  load_if_exists: false
   sampler: tpe
   seed: 7
   n_trials: 1500

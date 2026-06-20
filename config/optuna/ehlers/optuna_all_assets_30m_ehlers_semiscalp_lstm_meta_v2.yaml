@@ -2,8 +2,8 @@ base_config: config/experiments/ehlers/all_assets_30m_ehlers_semiscalp_lstm_meta
 
 study:
   study_name: optuna_all_assets_30m_ehlers_semiscalp_lstm_meta_v2
-  storage: sqlite:///logs/optuna/all_assets_30m_ehlers_semiscalp_lstm_meta_v2.db
-  load_if_exists: true
+  storage: null
+  load_if_exists: false
   sampler: tpe
   seed: 7
   n_trials: 300
