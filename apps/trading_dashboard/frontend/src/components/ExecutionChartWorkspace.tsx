@@ -78,6 +78,7 @@ export function ExecutionChartWorkspace({ snapshot }: ExecutionChartWorkspacePro
   const [configs, setConfigs] = useState<VisualizationConfig[]>([]);
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const columnsKey = snapshot?.feature_columns.join("|") ?? "";
   useEffect(() => {
@@ -92,6 +93,23 @@ export function ExecutionChartWorkspace({ snapshot }: ExecutionChartWorkspacePro
     const first = configs[0];
     setActiveKey(first ? seriesKey(first.source_type, first.series_id) : null);
   }, [activeKey, configs]);
+
+  useEffect(() => {
+    if (!isExpanded) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsExpanded(false);
+      }
+    };
+    document.body.classList.add("dashboard-focus-active");
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.classList.remove("dashboard-focus-active");
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isExpanded]);
 
   const candles = useMemo(() => (snapshot ? snapshotCandles(snapshot) : []), [snapshot]);
   const seriesData = useMemo(() => (snapshot ? snapshotSeries(snapshot) : {}), [snapshot]);
@@ -124,13 +142,25 @@ export function ExecutionChartWorkspace({ snapshot }: ExecutionChartWorkspacePro
   }
 
   return (
-    <div className="execution-chart-workspace">
+    <>
+    {isExpanded ? <div className="workspace-focus-backdrop" onClick={() => setIsExpanded(false)} /> : null}
+    <div className={`execution-chart-workspace${isExpanded ? " execution-chart-workspace-expanded" : ""}`}>
       <div className="execution-chart-stage">
-        <div className="workspace-status execution-chart-status">
-          <span>{candles.length.toLocaleString()} candles</span>
-          <span>{visibleCount} visible features</span>
-          <span>{snapshot.timeframe || "timeframe n/a"}</span>
-          <span>Updated {snapshot.bar_time ? new Date(snapshot.bar_time).toLocaleString() : "n/a"}</span>
+        <div className="execution-chart-toolbar">
+          <div className="workspace-status execution-chart-status">
+            <span>{candles.length.toLocaleString()} candles</span>
+            <span>{visibleCount} visible features</span>
+            <span>{snapshot.timeframe || "timeframe n/a"}</span>
+            <span>Updated {snapshot.bar_time ? new Date(snapshot.bar_time).toLocaleString() : "n/a"}</span>
+          </div>
+          <button
+            className="secondary-button workspace-toggle-button"
+            type="button"
+            aria-pressed={isExpanded}
+            onClick={() => setIsExpanded((value) => !value)}
+          >
+            {isExpanded ? "Exit fullscreen" : "Fullscreen chart"}
+          </button>
         </div>
         {candles.length === 0 ? (
           <div className="warning-banner">The live snapshot does not contain complete OHLC rows; feature panels remain available.</div>
@@ -141,6 +171,7 @@ export function ExecutionChartWorkspace({ snapshot }: ExecutionChartWorkspacePro
           panels={panels}
           seriesData={seriesData}
           trades={[]}
+          sizeMode={isExpanded ? "expanded" : "standard"}
         />
         <div className="execution-chart-legend" aria-label="Visible feature legend">
           {configs.filter((config) => config.visible).map((config) => (
@@ -237,5 +268,6 @@ export function ExecutionChartWorkspace({ snapshot }: ExecutionChartWorkspacePro
         ) : null}
       </aside>
     </div>
+    </>
   );
 }
