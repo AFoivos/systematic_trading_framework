@@ -535,6 +535,23 @@ def test_spx500_scalp_biweekly_optuna_yaml_matches_base_config_contract() -> Non
     assert trial_cfg["backtest"]["max_holding_bars"] == trial_cfg["target"]["max_holding"]
 
 
+def test_rules_only_all11_optuna_uses_runtime_result_paths_without_fold_stability() -> None:
+    optuna_cfg_path = Path(
+        "config/optuna/ema_rms_ppo_vwap/long_only/"
+        "optuna_vwap_rms_cross_ema50_regime_3atr_no_time_exit_BEST_all11_v3.yaml"
+    )
+    payload = yaml.safe_load(optuna_cfg_path.read_text(encoding="utf-8"))
+
+    objective = normalize_objective_spec(payload["objective"])
+    constraints_by_path = {constraint.metric_path: constraint for constraint in objective.constraints}
+
+    assert objective.metric_path == "evaluation.primary_summary.sharpe"
+    assert objective.stability_weight == pytest.approx(0.0)
+    assert objective.stability_metric_path is None
+    assert "derived.entry_count" in constraints_by_path
+    assert payload["pruning"]["metric_path"] == "evaluation.primary_summary.sharpe"
+
+
 def test_dense_return_forecasting_v2_optuna_penalizes_rank_cost_and_turnover() -> None:
     optuna_cfg_path = Path("config/optuna/dense_return_forecasting_v2_optuna.yaml")
     payload = yaml.safe_load(optuna_cfg_path.read_text(encoding="utf-8"))

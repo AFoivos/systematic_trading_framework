@@ -22,8 +22,8 @@ objective:
   direction: maximize
   failure_score: -1000000000000.0
   base_metric_weight: 1.0
-  stability_weight: 0.35
-  stability_metric_path: metrics.sharpe
+  stability_weight: 0.0
+  stability_metric_path: null
   stability_std_penalty: 1.0
   fold_summary_path: evaluation.fold_backtest_summaries
   constraints:
