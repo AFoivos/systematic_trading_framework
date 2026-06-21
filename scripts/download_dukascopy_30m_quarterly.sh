@@ -3,7 +3,7 @@
 # Download Dukascopy 30-minute BID and ASK OHLCV CSV files in quarterly chunks.
 #
 # Defaults:
-#   START_YEAR=2020
+#   START_YEAR=2015
 #   END_DATE=2026-04-28
 #   OUT_ROOT=data/raw/dukascopy_quarterly
 #
@@ -15,8 +15,8 @@
 
 set -uo pipefail
 
-START_YEAR="${START_YEAR:-2020}"
-END_DATE="${END_DATE:-2026-04-28}"
+START_YEAR="${START_YEAR:-2015}"
+END_DATE="${END_DATE:-2026-05-20}"
 OUT_ROOT="${OUT_ROOT:-data/raw/dukascopy_quarterly}"
 FAILED_LOG="$OUT_ROOT/failed_downloads.txt"
 
@@ -158,9 +158,6 @@ while [ "$YEAR" -le "${END_DATE%%-*}" ]; do
     done <<'INSTRUMENTS'
 XAUUSD|xauusd|xauusd
 US100|usatechidxusd|us100
-US30|usa30idxusd|us30
-SPX500|usa500idxusd|spx500
-GER40|deuidxeur|ger40
 INSTRUMENTS
 
     echo

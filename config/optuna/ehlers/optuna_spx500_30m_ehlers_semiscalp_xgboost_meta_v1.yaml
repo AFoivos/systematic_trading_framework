@@ -1,4 +1,4 @@
-base_config: config/experiments/spx500_30m_ehlers_semiscalp_xgboost_meta_v1.yaml
+base_config: config/experiments/ehlers/spx500_30m_ehlers_semiscalp_xgboost_meta_v1.yaml
 
 study:
   study_name: optuna_spx500_30m_ehlers_semiscalp_xgboost_meta_v1
