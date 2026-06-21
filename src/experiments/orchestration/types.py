@@ -26,5 +26,13 @@ class ExperimentResult:
     execution: dict[str, Any]
     portfolio_weights: pd.DataFrame | None = None
 
+    @property
+    def summary(self) -> dict[str, Any]:
+        """Expose the same primary metric namespace written to ``summary.json``."""
+        primary = self.evaluation.get("primary_summary")
+        if primary is None:
+            primary = getattr(self.backtest, "summary", {})
+        return dict(primary or {})
+
 
 __all__ = ["ExperimentResult"]

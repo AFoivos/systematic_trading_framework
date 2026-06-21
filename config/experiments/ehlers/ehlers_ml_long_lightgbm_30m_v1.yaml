@@ -1,0 +1,248 @@
+strategy:
+  name: ehlers_ml_long_lightgbm_30m_v1
+  timeframe: 30m
+  assets: &assets [SPX500, US100, GER40, XAUUSD, EURUSD]
+  description: Pure Ehlers candidate generation followed by per-asset purged walk-forward LightGBM long-entry classification.
+
+data:
+  source: dukascopy_csv
+  interval: 30m
+  start: null
+  end: null
+  alignment: inner
+  symbols: *assets
+  pit:
+    timestamp_alignment: {source_timezone: UTC, output_timezone: UTC, normalize_daily: false, duplicate_policy: last}
+    corporate_actions: {policy: none, adj_close_col: adj_close}
+    universe_snapshot: {inactive_policy: raise}
+  storage:
+    mode: cached_only
+    dataset_id: ehlers_ml_long_lightgbm_30m_v1
+    save_raw: false
+    save_processed: false
+    load_paths:
+      SPX500: data/raw/dukascopy_30m_clean/spx500_30m.csv
+      US100: data/raw/dukascopy_30m_clean/us100_30m.csv
+      GER40: data/raw/dukascopy_30m_clean/ger40_30m.csv
+      XAUUSD: data/raw/dukascopy_30m_clean/xauusd_30m.csv
+      EURUSD: data/raw/dukascopy_30m_clean/eurusd_30m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed
+
+features:
+  - step: returns
+    params: {log: false, col_name: close_ret}
+  - step: mama
+    params: {price_col: close, fast_limit: 0.5, slow_limit: 0.05, output_col: mama}
+  - step: fama
+    params: {price_col: close, fast_limit: 0.5, slow_limit: 0.05, output_col: fama}
+  - step: decycler
+    params: {price_col: close, period: 60, output_col: decycler}
+  - step: instantaneous_trendline
+    params: {price_col: close, alpha: 0.07, output_col: instantaneous_trendline, add_trigger: false}
+  - step: frama
+    params: {price_col: close, high_col: high, low_col: low, window: 16, fast_period: 4, slow_period: 300, output_col: frama, add_diagnostics: false}
+  - step: supersmoother
+    params: {price_col: close, period: 10, output_col: supersmoother}
+  - step: roofing_filter
+    params: {price_col: close, high_pass_period: 48, low_pass_period: 10, slope_bars: 1, output_col: roofing_filter, slope_col: roofing_filter_slope, add_derived: true}
+  - step: hilbert_transform
+    params: {price_col: close, window: 64, amplitude_col: hilbert_amplitude, phase_col: hilbert_phase, instantaneous_frequency_col: hilbert_instantaneous_frequency, add_derived: false}
+  - step: dominant_cycle_period
+    params: {price_col: close, output_col: dominant_cycle_period}
+  - step: dominant_cycle_phase
+    params: {price_col: close, output_col: dominant_cycle_phase}
+  - step: sinewave_indicator
+    params: {price_col: close, lead_degrees: 45.0, output_col: sinewave, lead_output_col: lead_sine}
+  - step: cyber_cycle
+    params: {price_col: close, alpha: 0.07, output_col: cyber_cycle, trigger_col: cyber_cycle_signal, add_trigger: true}
+  - step: even_better_sinewave
+    params: {price_col: close, duration: 40, smoothing_period: 10, power_window: 3, output_col: even_better_sinewave}
+  - step: autocorrelation_periodogram
+    params: {price_col: close, min_period: 10, max_period: 48, window: 96, output_col: autocorrelation_periodogram_period, add_power: false}
+  - step: homodyne_discriminator
+    params: {price_col: close, use_smoothed_period: false, output_col: homodyne_period}
+  - step: fisher_transform
+    params: {price_col: close, window: 10, output_col: fisher_transform, add_signal: false}
+  - step: inverse_fisher_transform
+    params: {input_col: fisher_transform, window: 10, scale: 1.0, normalize: false, output_col: inverse_fisher_transform}
+  - step: decycler_oscillator
+    params: {price_col: close, fast_period: 30, slow_period: 60, output_col: decycler_oscillator}
+  - step: laguerre_rsi
+    params: {price_col: close, gamma: 0.5, output_col: laguerre_rsi, as_percent: false}
+  - step: center_of_gravity
+    params: {price_col: close, window: 10, output_col: center_of_gravity}
+  - step: atr
+    params: {high_col: high, low_col: low, close_col: close, window: 20, windows: [20], method: wilder, add_over_price: true, atr_col: atr_20, over_price_col: atr_over_price_20}
+  - step: ehlers_ml_long_candidate
+    params:
+      amplitude_col: hilbert_amplitude
+      cycle_period_col: dominant_cycle_period
+      roofing_col: roofing_filter
+      mama_col: mama
+      fama_col: fama
+      close_col: close
+      decycler_col: decycler
+      instantaneous_trendline_col: instantaneous_trendline
+      frama_col: frama
+      supersmoother_col: supersmoother
+      dominant_cycle_phase_col: dominant_cycle_phase
+      amplitude_lookback: 128
+      amplitude_min_quantile: 0.50
+      min_cycle_period: 8.0
+      max_cycle_period: 60.0
+      slope_bars: 1
+      candidate_col: ehlers_ml_candidate
+      side_col: signal_side
+
+model:
+  kind: lightgbm_clf
+  pred_prob_col: ehlers_long_probability
+  pred_is_oos_col: pred_is_oos
+  preprocessing: {scaler: none}
+  target:
+    kind: triple_barrier
+    candidate_col: ehlers_ml_candidate
+    candidate_out_col: ehlers_ml_target_candidate
+    side_col: signal_side
+    label_mode: meta
+    label_col: label
+    fwd_col: triple_barrier_event_return
+    price_col: close
+    open_col: open
+    high_col: high
+    low_col: low
+    volatility_col: atr_over_price_20
+    entry_price_mode: next_open
+    upper_mult: 2.0
+    lower_mult: 1.25
+    max_holding: 12
+    neutral_label: lower
+    tie_break: closest_to_open
+    min_vol: 0.000001
+  split:
+    method: purged
+    train_size: 36000
+    test_size: 6000
+    step_size: 6000
+    expanding: true
+    max_folds: 4
+    purge_bars: 12
+    embargo_bars: 12
+  feature_cols: &model_features
+    - mama
+    - fama
+    - mama_minus_fama
+    - close_minus_decycler
+    - instantaneous_trendline_slope
+    - decycler_slope
+    - frama_slope
+    - supersmoother_slope
+    - roofing_filter
+    - roofing_filter_slope
+    - hilbert_amplitude
+    - hilbert_instantaneous_frequency
+    - dominant_cycle_period
+    - dominant_cycle_phase_normalized
+    - sinewave
+    - lead_sine
+    - cyber_cycle
+    - cyber_cycle_signal
+    - even_better_sinewave
+    - autocorrelation_periodogram_period
+    - homodyne_period
+    - fisher_transform
+    - inverse_fisher_transform
+    - decycler_oscillator
+    - laguerre_rsi
+    - center_of_gravity
+  params:
+    n_estimators: 400
+    learning_rate: 0.03
+    num_leaves: 31
+    max_depth: 5
+    min_child_samples: 40
+    subsample: 0.80
+    colsample_bytree: 0.75
+    reg_lambda: 2.0
+    reg_alpha: 0.10
+    class_weight: balanced
+    random_state: 7
+    n_jobs: 1
+    verbosity: -1
+
+signals:
+  kind: manual_long_model_filter
+  params:
+    prob_col: ehlers_long_probability
+    candidate_col: ehlers_ml_candidate
+    base_signal_col: signal_side
+    threshold: 0.55
+    min_signal_abs: 0.0
+    profit_barrier_r: 2.0
+    stop_barrier_r: 1.25
+    signal_col: ehlers_ml_long_signal
+
+target: {}
+runtime: {seed: 7, repro_mode: strict, deterministic: true, threads: 1, seed_torch: false}
+risk:
+  cost_per_turnover: 0.00015
+  slippage_per_turnover: 0.00010
+  target_vol: null
+  max_leverage: 1.0
+  sizing: {}
+  dd_guard: {enabled: false, max_drawdown: 0.10, rearm_drawdown: 0.05, cooloff_bars: 48}
+  portfolio_guard:
+    enabled: true
+    max_open_trades: 5
+    group_max_open_trades: {equity_indices: 3, metals: 1, fx: 1}
+    kill_switch_max_drawdown: 0.10
+  drawdown_sizing: {}
+  vol_col: null
+
+backtest:
+  engine: portfolio_barrier
+  signal_col: ehlers_ml_long_signal
+  returns_col: close_ret
+  returns_type: simple
+  subset: test
+  periods_per_year: 12096
+  missing_return_policy: raise_if_exposed
+  min_holding_bars: 0
+  open_col: open
+  high_col: high
+  low_col: low
+  close_col: close
+  volatility_col: atr_20
+  entry_price_mode: next_open
+  profit_barrier_r: 2.0
+  stop_barrier_r: 1.25
+  vertical_barrier_bars: 12
+  tie_break: closest_to_open
+  risk_per_trade: 0.0015
+
+portfolio:
+  enabled: true
+  construction: signal_weights
+  long_short: false
+  gross_target: 1.0
+  constraints: {max_gross_leverage: 1.0, max_weight: 0.25, min_weight: 0.0, target_net_exposure: 1.0, enforce_target_net_exposure: false, group_max_exposure: {equity_indices: 0.75, metals: 0.25, fx: 0.25}}
+  asset_groups: {SPX500: equity_indices, US100: equity_indices, GER40: equity_indices, XAUUSD: metals, EURUSD: fx}
+
+monitoring: {enabled: true, psi_threshold: 0.20, n_bins: 10}
+diagnostics:
+  enabled: true
+  robustness:
+    enabled: true
+    cost_multipliers: [1.0, 2.0, 3.0]
+    entry_delay_bars: [1]
+    walk_forward_frequency: YE
+    gap_loss_per_exposure: 0.001
+    max_gap_multiple: 3.0
+execution: {enabled: false, mode: paper, capital: 100000.0, price_col: close}
+logging:
+  enabled: true
+  run_name: ehlers_ml_long_lightgbm_30m_v1
+  output_dir: logs/experiments
+  stage_tails: {enabled: false}
+  execution_source_audit: {enabled: true}

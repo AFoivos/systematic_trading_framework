@@ -35,6 +35,9 @@ def manual_long_model_filter_signal(
     min_expected_value_r: float | None = None,
     profit_barrier_r: float = 1.0,
     stop_barrier_r: float = 1.0,
+    volatility_col: str | None = None,
+    round_trip_cost_return: float = 0.0,
+    cost_buffer_r: float = 0.0,
     signal_col: str | None = None,
 ) -> pd.Series:
     """
@@ -67,6 +70,14 @@ def manual_long_model_filter_signal(
         min_ev = float(min_expected_value_r)
         if not np.isfinite(min_ev):
             raise ValueError("manual_long_model_filter_signal min_expected_value_r must be finite.")
+    round_trip_cost = float(round_trip_cost_return)
+    if not np.isfinite(round_trip_cost) or round_trip_cost < 0.0:
+        raise ValueError("manual_long_model_filter_signal round_trip_cost_return must be >= 0.")
+    cost_buffer = float(cost_buffer_r)
+    if not np.isfinite(cost_buffer) or cost_buffer < 0.0:
+        raise ValueError("manual_long_model_filter_signal cost_buffer_r must be >= 0.")
+    if round_trip_cost > 0.0 and volatility_col is None:
+        raise ValueError("manual_long_model_filter_signal volatility_col is required when round_trip_cost_return > 0.")
 
     any_gate_cols = _normalize_optional_columns(gate_cols_any, field="gate_cols_any")
     required_columns = [prob_col, candidate_col, base_signal_col]
@@ -75,6 +86,8 @@ def manual_long_model_filter_signal(
     required_columns.extend(any_gate_cols)
     if expected_value_col is not None:
         required_columns.append(expected_value_col)
+    if volatility_col is not None:
+        required_columns.append(volatility_col)
     _require_columns(df, required_columns)
 
     pred_prob = pd.to_numeric(df[prob_col], errors="coerce")
@@ -102,6 +115,11 @@ def manual_long_model_filter_signal(
         else:
             probability = pred_prob.clip(lower=0.0, upper=1.0)
             expected_value = probability * profit_r - (1.0 - probability) * stop_r
+            if round_trip_cost > 0.0:
+                volatility = pd.to_numeric(df[str(volatility_col)], errors="coerce")
+                stop_distance = stop_r * volatility.where(volatility.gt(0.0), np.nan)
+                expected_value = expected_value - round_trip_cost / stop_distance
+            expected_value = expected_value - cost_buffer
         passes_filter &= expected_value.ge(min_ev).fillna(False)
 
     signal = long_exposure.where(passes_filter, other=0.0).astype("float32")

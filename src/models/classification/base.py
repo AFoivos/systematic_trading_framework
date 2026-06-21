@@ -5,6 +5,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
 
 from src.evaluation.time_splits import (
     assert_no_forward_label_leakage,
@@ -70,6 +71,71 @@ def _apply_fold_feature_preprocessing(
     )
 
 
+def _resolve_calibration_cfg(model_cfg: dict[str, Any]) -> dict[str, Any]:
+    cfg = dict(model_cfg.get("calibration", {}) or {})
+    method = str(cfg.get("method", "none") or "none").strip().lower()
+    if method not in {"none", "sigmoid"}:
+        raise ValueError("model.calibration.method must be one of: none, sigmoid.")
+    fraction = float(cfg.get("fraction", 0.20))
+    if not 0.0 < fraction < 0.5:
+        raise ValueError("model.calibration.fraction must be in (0, 0.5).")
+    min_rows = int(cfg.get("min_rows", 200))
+    if min_rows <= 0:
+        raise ValueError("model.calibration.min_rows must be positive.")
+    return {"method": method, "fraction": fraction, "min_rows": min_rows}
+
+
+def _split_fit_and_calibration_rows(
+    train_fit: pd.DataFrame,
+    *,
+    full_index: pd.Index,
+    target_horizon: int,
+    calibration_cfg: dict[str, Any],
+) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
+    method = str(calibration_cfg["method"])
+    if method == "none":
+        return train_fit, train_fit.iloc[0:0], {"enabled": False, "method": "none"}
+
+    calibration_rows = max(
+        int(round(len(train_fit) * float(calibration_cfg["fraction"]))),
+        int(calibration_cfg["min_rows"]),
+    )
+    if calibration_rows >= len(train_fit):
+        raise ValueError("Not enough training rows for the requested fold-local calibration window.")
+    calibration = train_fit.iloc[-calibration_rows:].copy()
+    calibration_start = int(full_index.get_loc(calibration.index[0]))
+    fit_cutoff = calibration_start - int(target_horizon)
+    train_positions = full_index.get_indexer(train_fit.index)
+    fit = train_fit.iloc[train_positions < fit_cutoff].copy()
+    if fit.empty:
+        raise ValueError("Fold-local calibration purge removed all estimator fit rows.")
+    return fit, calibration, {
+        "enabled": True,
+        "method": method,
+        "fit_rows": int(len(fit)),
+        "calibration_rows": int(len(calibration)),
+        "calibration_start_position": calibration_start,
+        "fit_end_position": int(full_index.get_loc(fit.index[-1])),
+        "purge_bars": int(target_horizon),
+    }
+
+
+def _fit_sigmoid_calibrator(raw_probability: np.ndarray, labels: pd.Series) -> LogisticRegression:
+    raw = np.asarray(raw_probability, dtype=float)
+    clipped = np.clip(raw, 1e-6, 1.0 - 1e-6)
+    logits = np.log(clipped / (1.0 - clipped)).reshape(-1, 1)
+    calibrator = LogisticRegression(random_state=0, max_iter=500)
+    calibrator.fit(logits, labels.to_numpy(dtype=int, copy=False))
+    return calibrator
+
+
+def _apply_sigmoid_calibrator(calibrator: LogisticRegression, raw_probability: np.ndarray) -> np.ndarray:
+    raw = np.asarray(raw_probability, dtype=float)
+    clipped = np.clip(raw, 1e-6, 1.0 - 1e-6)
+    logits = np.log(clipped / (1.0 - clipped)).reshape(-1, 1)
+    return calibrator.predict_proba(logits)[:, 1].astype("float32")
+
+
 def train_forward_classifier(
     df: pd.DataFrame,
     model_cfg: dict[str, Any],
@@ -98,6 +164,12 @@ def train_forward_classifier(
 
     pred_prob_col = str(model_cfg.get("pred_prob_col") or "pred_prob")
     pred_is_oos_col = str(model_cfg.get("pred_is_oos_col") or "pred_is_oos")
+    calibration_cfg = _resolve_calibration_cfg(model_cfg)
+    emit_raw_probability = bool(
+        model_cfg.get("pred_raw_prob_col")
+        or calibration_cfg["method"] != "none"
+    )
+    pred_raw_prob_col = str(model_cfg.get("pred_raw_prob_col") or f"{pred_prob_col}_raw")
     target_cfg = model_cfg.get("target", {}) or {}
     out, label_col, fwd_col, target_meta = build_classifier_target(df=work_df, target_cfg=target_cfg)
 
@@ -117,7 +189,7 @@ def train_forward_classifier(
         out,
         explicit_cols=model_cfg.get("feature_cols"),
         feature_selectors=model_cfg.get("feature_selectors"),
-        exclude={label_col, fwd_col, pred_prob_col, *target_output_cols},
+        exclude={label_col, fwd_col, pred_prob_col, pred_raw_prob_col, *target_output_cols},
     )
     feature_cols = [col for col in feature_cols if col not in target_output_cols]
     if not feature_cols:
@@ -142,6 +214,11 @@ def train_forward_classifier(
     )
 
     pred_prob = pd.Series(np.nan, index=out.index, name=pred_prob_col, dtype="float32")
+    pred_raw_prob = (
+        pd.Series(np.nan, index=out.index, name=pred_raw_prob_col, dtype="float32")
+        if emit_raw_probability
+        else None
+    )
     oos_mask = pd.Series(False, index=out.index, name=pred_is_oos_col)
     oos_assignment_count = pd.Series(0, index=out.index, dtype="int32")
     extra_prediction_cols: dict[str, pd.Series] = {}
@@ -210,8 +287,14 @@ def train_forward_classifier(
         train_rows_dropped_missing = int(len(train_df) - len(train_fit))
         total_train_rows_dropped_missing += train_rows_dropped_missing
 
-        X_train = train_fit[feature_cols]
-        y_train = train_fit[label_col].astype(int)
+        estimator_fit, calibration_fit, fold_calibration_meta = _split_fit_and_calibration_rows(
+            train_fit,
+            full_index=out.index,
+            target_horizon=target_horizon,
+            calibration_cfg=calibration_cfg,
+        )
+        X_train = estimator_fit[feature_cols]
+        y_train = estimator_fit[label_col].astype(int)
         if int(y_train.nunique()) < 2:
             raise ValueError(f"Fold {split.fold} has a single target class after preprocessing.")
         train_label_distribution = summarize_label_distribution(y_train)
@@ -255,6 +338,26 @@ def train_forward_classifier(
                 X_train_input = np.asarray(X_train_input, dtype=np.float32)
             y_train_input = y_train.to_numpy(dtype=np.int32, copy=False)
         model.fit(X_train_input, y_train_input)
+        calibrator: LogisticRegression | None = None
+        if bool(fold_calibration_meta.get("enabled", False)):
+            calibration_labels = calibration_fit[label_col].astype(int)
+            if int(calibration_labels.nunique()) < 2:
+                raise ValueError(f"Fold {split.fold} calibration window has a single target class.")
+            calibration_features = calibration_fit[feature_cols]
+            _, calibration_input, _ = _apply_fold_feature_preprocessing(
+                estimator_fit[feature_cols],
+                calibration_features,
+                preprocessing_cfg=preprocessing_cfg,
+            )
+            if estimator_family == "xgboost":
+                calibration_input = np.asarray(calibration_input, dtype=np.float32)
+            calibration_raw = model.predict_proba(calibration_input)[:, 1]
+            calibrator = _fit_sigmoid_calibrator(calibration_raw, calibration_labels)
+            fold_calibration_meta["calibration_positive_rate"] = float(calibration_labels.mean())
+            fold_calibration_meta["raw_probability_mean"] = float(np.mean(calibration_raw))
+            fold_calibration_meta["calibrated_probability_mean"] = float(
+                np.mean(_apply_sigmoid_calibrator(calibrator, calibration_raw))
+            )
         fold_feature_importance = extract_feature_importance(model, feature_cols)
         fold_feature_importances.append(fold_feature_importance)
 
@@ -268,7 +371,15 @@ def train_forward_classifier(
                     test_input = test_input.to_numpy(dtype=np.float32, copy=False)
                 else:
                     test_input = np.asarray(test_input, dtype=np.float32)
-            proba = model.predict_proba(test_input)[:, 1].astype("float32")
+            raw_proba = model.predict_proba(test_input)[:, 1].astype("float32")
+            proba = (
+                _apply_sigmoid_calibrator(calibrator, raw_proba)
+                if calibrator is not None
+                else raw_proba
+            )
+            raw_pred_series = pd.Series(raw_proba, index=pred_index, dtype="float32")
+            if pred_raw_prob is not None:
+                pred_raw_prob.loc[pred_index] = raw_pred_series
             pred_series = pd.Series(proba, index=pred_index, dtype="float32")
             pred_prob.loc[pred_index] = pred_series
 
@@ -319,7 +430,7 @@ def train_forward_classifier(
         oos_mask.loc[fold_test_idx] = True
         oos_assignment_count.loc[fold_test_idx] += 1
 
-        total_train_rows += int(len(train_fit))
+        total_train_rows += int(len(estimator_fit))
         total_test_pred_rows += pred_rows
         fold_meta.append(
             {
@@ -346,6 +457,7 @@ def train_forward_classifier(
                 "train_label_distribution": train_label_distribution,
                 "eval_label_distribution": eval_label_distribution,
                 "preprocessing": fold_preprocessing_meta,
+                "calibration": fold_calibration_meta,
                 "feature_importance": fold_feature_importance,
                 "classification_metrics": fold_eval_metrics,
                 "regression_metrics": empty_regression_metrics(),
@@ -369,6 +481,8 @@ def train_forward_classifier(
         oos_classification_summary = binary_classification_metrics(y_all, p_all)
 
     out[pred_prob_col] = pred_prob
+    if pred_raw_prob is not None:
+        out[pred_raw_prob_col] = pred_raw_prob
     out[pred_is_oos_col] = oos_mask
     for col_name, series in sorted(extra_prediction_cols.items(), key=lambda kv: str(kv[0])):
         out[col_name] = series
@@ -395,6 +509,7 @@ def train_forward_classifier(
             feature_selectors=model_cfg.get("feature_selectors"),
         ),
         "pred_prob_col": pred_prob_col,
+        "pred_raw_prob_col": pred_raw_prob_col if pred_raw_prob is not None else None,
         "pred_is_oos_col": pred_is_oos_col,
         "label_col": label_col,
         "fwd_col": fwd_col,
@@ -422,6 +537,7 @@ def train_forward_classifier(
             "folds_with_zero_predictions": int(folds_with_zero_predictions),
         },
         "preprocessing": preprocessing_meta,
+        "calibration": calibration_cfg,
         "target": target_meta,
         "returns_col": returns_col,
         "overlay": overlay_meta,

@@ -1,0 +1,213 @@
+strategy:
+  name: ehlers_semiscalp_long_30m_v1
+  timeframe: 30m
+  assets: [SPX500]
+  description: Causal long-only Ehlers semi-scalp strategy with next-open ATR-barrier execution.
+
+data:
+  source: dukascopy_csv
+  interval: 30m
+  start: null
+  end: null
+  alignment: inner
+  symbol: SPX500
+  storage:
+    mode: cached_only
+    dataset_id: ehlers_semiscalp_long_30m_v1
+    save_raw: false
+    save_processed: false
+    load_path: data/raw/dukascopy_30m_clean/spx500_30m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed
+
+features:
+  - step: returns
+    params:
+      log: false
+      col_name: close_ret
+  - step: atr
+    params:
+      high_col: high
+      low_col: low
+      close_col: close
+      window: 14
+      windows: [14]
+      method: wilder
+      add_over_price: true
+      atr_col: atr_14
+      over_price_col: atr_over_price_14
+  - step: mama
+    params:
+      price_col: close
+      output_col: mama
+  - step: fama
+    params:
+      price_col: close
+      output_col: fama
+  - step: decycler
+    params:
+      price_col: close
+      period: 60
+      output_col: decycler
+  - step: roofing_filter
+    params:
+      price_col: close
+      high_pass_period: 48
+      low_pass_period: 10
+      slope_bars: 1
+      output_col: roofing_filter_48_10
+      add_derived: false
+  - step: laguerre_rsi
+    params:
+      price_col: close
+      gamma: 0.5
+      output_col: laguerre_rsi
+      as_percent: false
+  - step: fisher_transform
+    params:
+      price_col: close
+      window: 10
+      output_col: fisher_transform
+      add_signal: false
+  - step: hilbert_transform
+    params:
+      price_col: close
+      window: 64
+      amplitude_col: hilbert_amplitude_64
+      phase_col: hilbert_phase_64
+      instantaneous_frequency_col: hilbert_frequency_64
+      add_derived: false
+  - step: dominant_cycle_period
+    params:
+      price_col: close
+      output_col: dominant_cycle_period
+
+model:
+  kind: none
+
+signals:
+  kind: ehlers_semiscalp_long
+  params:
+    entry_mode: transition
+    require_mama_rising: false
+    roofing_trigger_mode: rising
+    price_col: close
+    mama_col: mama
+    fama_col: fama
+    decycler_col: decycler
+    roofing_col: roofing_filter_48_10
+    laguerre_col: laguerre_rsi
+    fisher_col: fisher_transform
+    hilbert_amplitude_col: hilbert_amplitude_64
+    dominant_cycle_period_col: dominant_cycle_period
+    amplitude_lookback: 100
+    laguerre_min: 0.50
+    min_cycle_period: 10
+    max_cycle_period: 48
+    use_cycle_period_filter: false
+    signal_col: signal_side
+    candidate_col: signal_candidate
+
+target:
+  kind: triple_barrier
+  outputs:
+    label_col: label
+    event_ret_col: tb_event_ret
+    fwd_col: tb_event_ret
+    candidate_out_col: label_candidate
+    r_col: tb_event_r
+    oriented_r_col: tb_oriented_r
+  price_col: close
+  open_col: open
+  high_col: high
+  low_col: low
+  label_mode: meta
+  side_col: signal_side
+  candidate_col: signal_candidate
+  candidate_mode: all_nonzero
+  entry_price_mode: next_open
+  max_holding: 12
+  upper_mult: 2.0
+  lower_mult: 1.25
+  vol_window: 14
+  min_vol: 0.0001
+  neutral_label: lower
+  tie_break: closest_to_open
+  add_r_multiple: true
+
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+
+risk:
+  cost_per_turnover: 0.00015
+  slippage_per_turnover: 0.00010
+  target_vol: null
+  max_leverage: 1.0
+  sizing: {}
+  dd_guard:
+    enabled: false
+    max_drawdown: 0.08
+    rearm_drawdown: 0.04
+    cooloff_bars: 48
+  portfolio_guard: {}
+  drawdown_sizing: {}
+  vol_col: null
+
+backtest:
+  engine: manual_barrier
+  signal_col: signal_side
+  returns_col: close_ret
+  returns_type: simple
+  subset: full
+  periods_per_year: 12096
+  missing_return_policy: raise_if_exposed
+  allow_short: false
+  long_only: true
+  stop_mode: volatility_stop
+  vol_col: atr_over_price_14
+  open_col: open
+  high_col: high
+  low_col: low
+  close_col: close
+  entry_price_mode: next_open
+  take_profit_r: 2.0
+  stop_loss_r: 1.25
+  max_holding_bars: 12
+  risk_per_trade: 0.0025
+  dynamic_exits: {}
+
+portfolio:
+  enabled: false
+  construction: signal_weights
+  long_short: false
+  gross_target: 1.0
+
+evaluation:
+  probability_thresholds: []
+  primary_metric: sharpe
+  secondary_metrics: [cumulative_return, max_drawdown, profit_factor, trade_count, cost_to_gross_pnl]
+
+monitoring:
+  enabled: true
+  psi_threshold: 0.2
+  n_bins: 10
+
+diagnostics:
+  enabled: false
+
+execution:
+  enabled: false
+  mode: paper
+  capital: 100000.0
+  price_col: close
+
+logging:
+  enabled: true
+  run_name: ehlers_semiscalp_long_30m_v1
+  output_dir: logs/experiments
+  stage_tails:
+    enabled: false

@@ -58,6 +58,7 @@ from .decycler_oscillator import add_decycler_oscillator
 from .dominant_cycle_period import add_dominant_cycle_period
 from .dominant_cycle_phase import add_dominant_cycle_phase
 from .even_better_sinewave import add_even_better_sinewave
+from .ehlers_ml_long_candidate import ehlers_ml_long_candidate_feature
 from .fama import add_fama
 from .fisher_transform import add_fisher_transform
 from .frama import add_frama
@@ -141,6 +142,7 @@ __all__ = [
     "add_dominant_cycle_period",
     "add_dominant_cycle_phase",
     "add_even_better_sinewave",
+    "ehlers_ml_long_candidate_feature",
     "add_fama",
     "add_fisher_transform",
     "add_fractal_dimension",

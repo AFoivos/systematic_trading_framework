@@ -13,6 +13,42 @@ from src.experiments.support.diagnostics import (
 from src.experiments.registry import get_model_fn, is_portfolio_model_kind
 
 
+def synchronize_asset_frames_for_model(
+    asset_frames: dict[str, pd.DataFrame],
+    *,
+    enabled: bool,
+) -> tuple[dict[str, pd.DataFrame], dict[str, Any]]:
+    model_frames = dict(sorted(asset_frames.items()))
+    if not enabled or len(model_frames) <= 1:
+        return model_frames, {"enabled": False}
+    indices = [frame.index for frame in model_frames.values()]
+    if any(not isinstance(index, pd.DatetimeIndex) for index in indices):
+        raise TypeError("model.split.synchronize_assets requires DatetimeIndex asset frames.")
+    common_index = indices[0]
+    for index in indices[1:]:
+        common_index = common_index.intersection(index)
+    common_index = common_index.sort_values()
+    if common_index.empty:
+        raise ValueError("model.split.synchronize_assets produced an empty common timestamp index.")
+    original_rows = {asset: int(len(frame)) for asset, frame in model_frames.items()}
+    synchronized = {
+        asset: frame.loc[common_index].copy()
+        for asset, frame in model_frames.items()
+    }
+    return synchronized, {
+        "enabled": True,
+        "method": "common_timestamp_intersection",
+        "common_rows": int(len(common_index)),
+        "first_timestamp": common_index[0].isoformat(),
+        "last_timestamp": common_index[-1].isoformat(),
+        "original_rows": original_rows,
+        "dropped_rows": {
+            asset: int(original_rows[asset] - len(frame))
+            for asset, frame in synchronized.items()
+        },
+    }
+
+
 def apply_model_step(
     df: pd.DataFrame,
     model_cfg: dict[str, Any],
@@ -283,15 +319,22 @@ def apply_model_to_assets(
     if kind == "none":
         return asset_frames, None, {}
 
+    split_cfg = dict(model_cfg.get("split", {}) or {})
+    model_frames, synchronization_meta = synchronize_asset_frames_for_model(
+        asset_frames,
+        enabled=bool(split_cfg.get("synchronize_assets", False)),
+    )
+
     if is_portfolio_model_kind(str(kind)):
         fn = get_model_fn(str(kind))
-        return fn(dict(sorted(asset_frames.items())), model_cfg, returns_col)
+        frames, model, meta = fn(model_frames, model_cfg, returns_col)
+        return frames, model, dict(meta) | {"split_synchronization": synchronization_meta}
 
     out: dict[str, pd.DataFrame] = {}
     models: dict[str, object] = {}
     metas: dict[str, dict[str, Any]] = {}
 
-    for asset, df in sorted(asset_frames.items()):
+    for asset, df in sorted(model_frames.items()):
         frame, model, meta = apply_model_step(df, model_cfg, returns_col)
         out[asset] = frame
         models[asset] = model
@@ -299,8 +342,12 @@ def apply_model_to_assets(
 
     if len(out) == 1:
         only_asset = next(iter(sorted(out)))
-        return out, models[only_asset], metas[only_asset]
-    return out, models, aggregate_model_meta(metas)
+        meta = dict(metas[only_asset])
+        meta["split_synchronization"] = synchronization_meta
+        return out, models[only_asset], meta
+    meta = aggregate_model_meta(metas)
+    meta["split_synchronization"] = synchronization_meta
+    return out, models, meta
 
 
 def _stage_record(
@@ -398,4 +445,5 @@ __all__ = [
     "apply_model_pipeline_to_assets",
     "apply_model_step",
     "apply_model_to_assets",
+    "synchronize_asset_frames_for_model",
 ]

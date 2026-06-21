@@ -104,6 +104,7 @@ class ModelConfig:
     params: dict[str, Any] = field(default_factory=dict)
     outputs: dict[str, str] = field(default_factory=dict)
     preprocessing: dict[str, Any] = field(default_factory=dict)
+    calibration: dict[str, Any] = field(default_factory=dict)
     feature_cols: list[str] | None = None
     feature_selectors: dict[str, Any] | None = None
     target: dict[str, Any] = field(default_factory=dict)
@@ -112,6 +113,7 @@ class ModelConfig:
     env: dict[str, Any] = field(default_factory=dict)
     use_features: bool = True
     pred_prob_col: str | None = None
+    pred_raw_prob_col: str | None = None
     pred_ret_col: str | None = None
     pred_is_oos_col: str | None = None
     returns_input_col: str | None = None
@@ -126,6 +128,7 @@ class ModelConfig:
             "params",
             "outputs",
             "preprocessing",
+            "calibration",
             "feature_cols",
             "feature_selectors",
             "target",
@@ -134,6 +137,7 @@ class ModelConfig:
             "env",
             "use_features",
             "pred_prob_col",
+            "pred_raw_prob_col",
             "pred_ret_col",
             "pred_is_oos_col",
             "returns_input_col",
@@ -151,6 +155,7 @@ class ModelConfig:
             params=dict(data.get("params", {}) or {}),
             outputs={str(k): str(v) for k, v in dict(data.get("outputs", {}) or {}).items()},
             preprocessing=dict(data.get("preprocessing", {}) or {}),
+            calibration=dict(data.get("calibration", {}) or {}),
             feature_cols=[str(v) for v in feature_cols_raw] if feature_cols_raw is not None else None,
             feature_selectors=dict(feature_selectors_raw) if feature_selectors_raw is not None else None,
             target=dict(data.get("target", {}) or {}),
@@ -159,6 +164,7 @@ class ModelConfig:
             env=dict(data.get("env", {}) or {}),
             use_features=bool(data.get("use_features", True)),
             pred_prob_col=data.get("pred_prob_col"),
+            pred_raw_prob_col=data.get("pred_raw_prob_col"),
             pred_ret_col=data.get("pred_ret_col"),
             pred_is_oos_col=data.get("pred_is_oos_col"),
             returns_input_col=data.get("returns_input_col"),
@@ -173,6 +179,7 @@ class ModelConfig:
             "params": dict(self.params),
             "outputs": dict(self.outputs),
             "preprocessing": dict(self.preprocessing),
+            "calibration": dict(self.calibration),
             "feature_cols": list(self.feature_cols) if self.feature_cols is not None else None,
             "target": dict(self.target),
             "split": dict(self.split),
@@ -180,6 +187,7 @@ class ModelConfig:
             "env": dict(self.env),
             "use_features": self.use_features,
             "pred_prob_col": self.pred_prob_col,
+            "pred_raw_prob_col": self.pred_raw_prob_col,
             "pred_ret_col": self.pred_ret_col,
             "pred_is_oos_col": self.pred_is_oos_col,
             "returns_input_col": self.returns_input_col,
@@ -200,6 +208,7 @@ class ModelStageConfig:
     params: dict[str, Any] = field(default_factory=dict)
     outputs: dict[str, str] = field(default_factory=dict)
     preprocessing: dict[str, Any] = field(default_factory=dict)
+    calibration: dict[str, Any] = field(default_factory=dict)
     feature_cols: list[str] | None = None
     feature_selectors: dict[str, Any] | None = None
     target: dict[str, Any] = field(default_factory=dict)
@@ -208,6 +217,7 @@ class ModelStageConfig:
     env: dict[str, Any] = field(default_factory=dict)
     use_features: bool = True
     pred_prob_col: str | None = None
+    pred_raw_prob_col: str | None = None
     pred_ret_col: str | None = None
     pred_is_oos_col: str | None = None
     returns_input_col: str | None = None
@@ -225,6 +235,7 @@ class ModelStageConfig:
             "params",
             "outputs",
             "preprocessing",
+            "calibration",
             "feature_cols",
             "feature_selectors",
             "target",
@@ -233,6 +244,7 @@ class ModelStageConfig:
             "env",
             "use_features",
             "pred_prob_col",
+            "pred_raw_prob_col",
             "pred_ret_col",
             "pred_is_oos_col",
             "returns_input_col",
@@ -253,6 +265,7 @@ class ModelStageConfig:
             params=dict(data.get("params", {}) or {}),
             outputs={str(k): str(v) for k, v in dict(data.get("outputs", {}) or {}).items()},
             preprocessing=dict(data.get("preprocessing", {}) or {}),
+            calibration=dict(data.get("calibration", {}) or {}),
             feature_cols=[str(v) for v in feature_cols_raw] if feature_cols_raw is not None else None,
             feature_selectors=dict(feature_selectors_raw) if feature_selectors_raw is not None else None,
             target=dict(data.get("target", {}) or {}),
@@ -261,6 +274,7 @@ class ModelStageConfig:
             env=dict(data.get("env", {}) or {}),
             use_features=bool(data.get("use_features", True)),
             pred_prob_col=data.get("pred_prob_col"),
+            pred_raw_prob_col=data.get("pred_raw_prob_col"),
             pred_ret_col=data.get("pred_ret_col"),
             pred_is_oos_col=data.get("pred_is_oos_col"),
             returns_input_col=data.get("returns_input_col"),
@@ -278,6 +292,7 @@ class ModelStageConfig:
             "params": dict(self.params),
             "outputs": dict(self.outputs),
             "preprocessing": dict(self.preprocessing),
+            "calibration": dict(self.calibration),
             "feature_cols": list(self.feature_cols) if self.feature_cols is not None else None,
             "target": dict(self.target),
             "split": dict(self.split),
@@ -285,6 +300,7 @@ class ModelStageConfig:
             "env": dict(self.env),
             "use_features": self.use_features,
             "pred_prob_col": self.pred_prob_col,
+            "pred_raw_prob_col": self.pred_raw_prob_col,
             "pred_ret_col": self.pred_ret_col,
             "pred_is_oos_col": self.pred_is_oos_col,
             "returns_input_col": self.returns_input_col,

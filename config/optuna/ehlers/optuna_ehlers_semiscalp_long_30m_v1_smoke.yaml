@@ -1,0 +1,104 @@
+base_config: config/experiments/ehlers/ehlers_semiscalp_long_30m_v1.yaml
+
+study:
+  study_name: optuna_ehlers_semiscalp_long_30m_v1_smoke
+  storage: null
+  load_if_exists: false
+  sampler: tpe
+  seed: 7
+  n_trials: 30
+  timeout: null
+  n_jobs: 1
+  logging_enabled: true
+  catch_exceptions: true
+
+report:
+  enabled: true
+  output_dir: logs/experiments
+  run_name: optuna_ehlers_semiscalp_long_30m_v1_smoke
+
+objective:
+  metric_path: summary.sharpe
+  direction: maximize
+  failure_score: -1000000000000.0
+  base_metric_weight: 1.0
+  stability_weight: 0.0
+  constraints:
+    - {metric_path: summary.cumulative_return, op: le, threshold: 0.0, penalty: 100.0, missing_penalty: 100.0}
+    - {metric_path: summary.max_drawdown, op: le, threshold: -0.10, penalty: 100.0, missing_penalty: 100.0}
+    - {metric_path: summary.profit_factor, op: le, threshold: 1.05, penalty: 25.0, missing_penalty: 25.0}
+    - {metric_path: summary.trade_count, op: lt, threshold: 100, penalty: 10.0, missing_penalty: 10.0}
+    - {metric_path: summary.trade_count, op: gt, threshold: 3000, penalty: 10.0, missing_penalty: 10.0}
+    - {metric_path: summary.cost_to_gross_pnl, op: ge, threshold: 0.65, penalty: 10.0, missing_penalty: 10.0}
+
+pruning:
+  enabled: false
+  metric_path: summary.sharpe
+  direction: maximize
+  stage_filter: []
+  pruner: none
+  n_startup_trials: 10
+  n_warmup_steps: 1
+  interval_steps: 1
+
+search_space:
+  - name: roofing_high_pass_period
+    path: features.5.params.high_pass_period
+    kind: categorical
+    choices: [32, 40, 48, 64]
+  - name: roofing_low_pass_period
+    path: features.5.params.low_pass_period
+    kind: categorical
+    choices: [8, 10, 12, 16]
+  - name: hilbert_window
+    path: features.8.params.window
+    kind: categorical
+    choices: [48, 64, 80, 96]
+  - name: amplitude_lookback
+    path: signals.params.amplitude_lookback
+    kind: categorical
+    choices: [64, 96, 128, 192]
+  - name: laguerre_min
+    path: signals.params.laguerre_min
+    kind: float
+    low: 0.45
+    high: 0.65
+    step: 0.05
+  - name: take_profit_r
+    path: backtest.take_profit_r
+    paths: [target.upper_mult]
+    kind: float
+    low: 1.5
+    high: 3.0
+    step: 0.25
+  - name: stop_loss_r
+    path: backtest.stop_loss_r
+    paths: [target.lower_mult]
+    kind: float
+    low: 0.75
+    high: 1.75
+    step: 0.25
+  - name: max_holding_bars
+    path: backtest.max_holding_bars
+    paths: [target.max_holding]
+    kind: categorical
+    choices: [6, 8, 10, 12, 16]
+  - name: risk_per_trade
+    path: backtest.risk_per_trade
+    kind: float
+    low: 0.001
+    high: 0.003
+    step: 0.00025
+  - name: use_cycle_period_filter
+    path: signals.params.use_cycle_period_filter
+    kind: categorical
+    choices: [false, true]
+  - name: min_cycle_period
+    path: signals.params.min_cycle_period
+    kind: categorical
+    choices: [8, 10, 12]
+  - name: max_cycle_period
+    path: signals.params.max_cycle_period
+    kind: categorical
+    choices: [36, 48, 60]
+

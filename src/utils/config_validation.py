@@ -130,6 +130,7 @@ _TARGET_OUTPUT_KEYS = {
 }
 _MODEL_OUTPUT_KEYS = {
     "pred_prob_col",
+    "pred_raw_prob_col",
     "pred_ret_col",
     "pred_is_oos_col",
     "returns_input_col",
@@ -1002,43 +1003,76 @@ def _validate_ehlers_continuation_long_params(params: dict[str, Any], *, field_p
 def _validate_ehlers_semiscalp_long_params(params: dict[str, Any], *, field_prefix: str) -> None:
     string_keys = {
         "price_col",
-        "supersmoother_col",
-        "supersmoother_slope_col",
+        "mama_col",
+        "fama_col",
+        "decycler_col",
         "roofing_col",
-        "roofing_slope_col",
-        "roofing_cross_up_col",
-        "roofing_cross_down_col",
+        "laguerre_col",
+        "fisher_col",
         "hilbert_amplitude_col",
         "dominant_cycle_period_col",
-        "atr_col",
-        "trend_ok_col",
-        "timing_ok_col",
-        "cycle_ok_col",
-        "energy_ok_col",
-        "volatility_ok_col",
-        "long_setup_col",
-        "entry_col",
         "signal_col",
         "candidate_col",
     }
     for key in string_keys:
         if key in params and (not isinstance(params[key], str) or not params[key].strip()):
             raise ConfigValidationError(f"{field_prefix}.{key} must be a non-empty string.")
-    if "entry_mode" in params and str(params["entry_mode"]) not in {"state", "transition"}:
+    if "entry_mode" in params and params["entry_mode"] not in {"state", "transition"}:
         raise ConfigValidationError(f"{field_prefix}.entry_mode must be one of: state, transition.")
-    for key in ("amplitude_quantile_lookback", "atr_quantile_lookback"):
-        if key in params:
-            _positive_int(params[key], field=f"{field_prefix}.{key}")
+    if "roofing_trigger_mode" in params and params["roofing_trigger_mode"] not in {"rising", "cross_up"}:
+        raise ConfigValidationError(f"{field_prefix}.roofing_trigger_mode must be one of: rising, cross_up.")
+    if "require_mama_rising" in params and not isinstance(params["require_mama_rising"], bool):
+        raise ConfigValidationError(f"{field_prefix}.require_mama_rising must be boolean.")
+    if "amplitude_lookback" in params:
+        _positive_int(params["amplitude_lookback"], field=f"{field_prefix}.amplitude_lookback")
+    if "use_cycle_period_filter" in params and not isinstance(params["use_cycle_period_filter"], bool):
+        raise ConfigValidationError(f"{field_prefix}.use_cycle_period_filter must be boolean.")
+    if "laguerre_min" in params:
+        laguerre_min = _finite_number(params["laguerre_min"], field=f"{field_prefix}.laguerre_min")
+        if not 0.0 <= laguerre_min <= 1.0:
+            raise ConfigValidationError(f"{field_prefix}.laguerre_min must be in [0, 1].")
     for key in ("min_cycle_period", "max_cycle_period"):
         if key in params and _finite_number(params[key], field=f"{field_prefix}.{key}") <= 0.0:
             raise ConfigValidationError(f"{field_prefix}.{key} must be > 0.")
     if float(params.get("min_cycle_period", 10.0)) > float(params.get("max_cycle_period", 48.0)):
         raise ConfigValidationError(f"{field_prefix}.min_cycle_period must be <= max_cycle_period.")
-    for key in ("amplitude_min_quantile", "atr_min_quantile"):
+
+
+def _validate_ehlers_ml_long_candidate_params(params: dict[str, Any], *, field_prefix: str) -> None:
+    string_keys = {
+        "amplitude_col",
+        "cycle_period_col",
+        "roofing_col",
+        "mama_col",
+        "fama_col",
+        "close_col",
+        "decycler_col",
+        "instantaneous_trendline_col",
+        "frama_col",
+        "supersmoother_col",
+        "dominant_cycle_phase_col",
+        "candidate_col",
+        "side_col",
+    }
+    for key in string_keys:
+        if key in params and (not isinstance(params[key], str) or not params[key].strip()):
+            raise ConfigValidationError(f"{field_prefix}.{key} must be a non-empty string.")
+    if "atr_col" in params and params["atr_col"] is not None and (
+        not isinstance(params["atr_col"], str) or not params["atr_col"].strip()
+    ):
+        raise ConfigValidationError(f"{field_prefix}.atr_col must be a non-empty string or null.")
+    for key in ("amplitude_lookback", "slope_bars"):
         if key in params:
-            value = _finite_number(params[key], field=f"{field_prefix}.{key}")
-            if not 0.0 <= value <= 1.0:
-                raise ConfigValidationError(f"{field_prefix}.{key} must be in [0, 1].")
+            _positive_int(params[key], field=f"{field_prefix}.{key}")
+    if "amplitude_min_quantile" in params:
+        quantile = _finite_number(params["amplitude_min_quantile"], field=f"{field_prefix}.amplitude_min_quantile")
+        if not 0.0 <= quantile <= 1.0:
+            raise ConfigValidationError(f"{field_prefix}.amplitude_min_quantile must be in [0, 1].")
+    for key in ("min_cycle_period", "max_cycle_period"):
+        if key in params and _finite_number(params[key], field=f"{field_prefix}.{key}") <= 0.0:
+            raise ConfigValidationError(f"{field_prefix}.{key} must be > 0.")
+    if float(params.get("min_cycle_period", 8.0)) > float(params.get("max_cycle_period", 60.0)):
+        raise ConfigValidationError(f"{field_prefix}.min_cycle_period must be <= max_cycle_period.")
 
 
 def _validate_ehlers_continuation_short_params(params: dict[str, Any], *, field_prefix: str) -> None:
@@ -1104,6 +1138,11 @@ def validate_features_block(features: Any) -> None:
             _validate_roc_long_only_conditions_params(step.get("params") or {}, field_prefix="features[].params")
         if step["step"] == "ehlers_semiscalp_long":
             _validate_ehlers_semiscalp_long_params(
+                step.get("params") or {},
+                field_prefix="features[].params",
+            )
+        if step["step"] == "ehlers_ml_long_candidate":
+            _validate_ehlers_ml_long_candidate_params(
                 step.get("params") or {},
                 field_prefix="features[].params",
             )
@@ -1768,6 +1807,17 @@ def validate_model_block(model: dict[str, Any]) -> None:
         return
 
     if model["kind"] != "none":
+        calibration = model.get("calibration", {}) or {}
+        if not isinstance(calibration, dict):
+            raise ConfigValidationError("model.calibration must be a mapping when provided.")
+        calibration_method = str(calibration.get("method", "none") or "none").strip().lower()
+        if calibration_method not in {"none", "sigmoid"}:
+            raise ConfigValidationError("model.calibration.method must be one of: none, sigmoid.")
+        if calibration_method != "none":
+            fraction = _finite_number(calibration.get("fraction", 0.20), field="model.calibration.fraction")
+            if not 0.0 < fraction < 0.5:
+                raise ConfigValidationError("model.calibration.fraction must be in (0, 0.5).")
+            _positive_int(calibration.get("min_rows", 200), field="model.calibration.min_rows")
         feature_cols = model.get("feature_cols")
         if feature_cols is not None:
             if (
@@ -2353,6 +2403,8 @@ def validate_model_block(model: dict[str, Any]) -> None:
     if method == "purged":
         _non_negative_int(split.get("purge_bars", 0), field="model.split.purge_bars")
         _non_negative_int(split.get("embargo_bars", 0), field="model.split.embargo_bars")
+    if "synchronize_assets" in split and not isinstance(split["synchronize_assets"], bool):
+        raise ConfigValidationError("model.split.synchronize_assets must be boolean.")
 
 
 def validate_standalone_target_block(target: Any) -> None:
@@ -2747,6 +2799,7 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
             "signal_col",
             "gate_col",
             "expected_value_col",
+            "volatility_col",
         ):
             if key in params and params[key] is not None and not isinstance(params[key], str):
                 raise ConfigValidationError(f"signals.params.{key} must be a string or null.")
@@ -2767,6 +2820,14 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
             raise ConfigValidationError("signals.params.min_signal_abs must be >= 0.")
         if params.get("min_expected_value_r") is not None:
             _finite_number(params.get("min_expected_value_r"), field="signals.params.min_expected_value_r")
+        for key in ("round_trip_cost_return", "cost_buffer_r"):
+            value = _finite_number(params.get(key, 0.0), field=f"signals.params.{key}")
+            if value < 0.0:
+                raise ConfigValidationError(f"signals.params.{key} must be >= 0.")
+        if float(params.get("round_trip_cost_return", 0.0) or 0.0) > 0.0 and not params.get("volatility_col"):
+            raise ConfigValidationError(
+                "signals.params.volatility_col is required when round_trip_cost_return > 0."
+            )
         for key in ("profit_barrier_r", "stop_barrier_r"):
             value = _finite_number(params.get(key, 1.0), field=f"signals.params.{key}")
             if value <= 0.0:

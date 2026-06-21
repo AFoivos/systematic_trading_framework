@@ -62,7 +62,7 @@ instance/
 
 .scrapy
 
-docs/_build/
+docs/
 
 .pybuilder/
 target/

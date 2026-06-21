@@ -14,6 +14,7 @@ FEATURE_KINDS = frozenset(
         "dominant_cycle_phase",
         "ema_stoch_rsi_pullback",
         "ehlers_semiscalp_long",
+        "ehlers_ml_long_candidate",
         "even_better_sinewave",
         "fama",
         "feature_transforms",

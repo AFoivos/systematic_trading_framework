@@ -144,6 +144,10 @@ The container uses `.devcontainer/devcontainer.json` and auto-configures:
 
 ## ⚙️ Config-Based Experiments
 
+Για αναλυτικό ελληνικό οδηγό σχετικά με YAML structure, features, signals, targets, models,
+parameter discovery και επέκταση registries, δες το
+[`docs/yaml_experiments_guide_gr.md`](docs/yaml_experiments_guide_gr.md).
+
 Define experiments as fully self-contained YAML files under `config/experiments/`. Each tracked experiment should include its own data/model/signal/backtest/runtime blocks explicitly. Load and run:
 
 ```python
