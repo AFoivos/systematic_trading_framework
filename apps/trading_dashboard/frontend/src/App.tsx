@@ -9,7 +9,7 @@ import { useDashboardStore } from "./state/dashboardStore";
 import type { NamedSeries } from "./types/market";
 import { seriesKey } from "./utils/transforms";
 
-const DEFAULT_CANDLE_LIMIT = 50000;
+const DEFAULT_CANDLE_LIMIT = 5000;
 
 function seriesParams(selection: ReturnType<typeof useDashboardStore.getState>["selection"]) {
   if (selection.datasetId) {

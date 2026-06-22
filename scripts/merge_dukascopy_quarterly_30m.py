@@ -9,7 +9,7 @@ from pathlib import Path
 import pandas as pd
 
 
-ASSETS = ("xauusd", "us100", "us30", "spx500", "ger40")
+ASSETS = ("xauusd", "us100")
 SIDES = ("bid", "ask")
 TIMESTAMP_CANDIDATES = (
     "timestamp",
