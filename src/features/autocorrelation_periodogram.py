@@ -28,12 +28,46 @@ def add_autocorrelation_periodogram(
     """
     Add a causal autocorrelation periodogram dominant-period estimate.
 
+    The indicator estimates the dominant cycle period by computing
+    lagged autocorrelations over a rolling causal window. Positive
+    autocorrelations are squared and used as power weights across
+    candidate periods.
+
     YAML declaration::
 
         features:
           - step: autocorrelation_periodogram
-            params: {}
+            params:
+              price_col: close
+              min_period: 10
+              max_period: 48
+              window: 96
+              output_col: autocorrelation_periodogram_10_48
+              power_col: autocorrelation_periodogram_10_48_power
+              add_power: true
+            output_cols:
+              - autocorrelation_periodogram_10_48
+              - autocorrelation_periodogram_10_48_power
+
+    Parameters
+    ----------
+    price_col:
+        Input price column used for the calculation.
+    min_period:
+        Minimum candidate cycle period.
+    max_period:
+        Maximum candidate cycle period.
+    window:
+        Rolling causal lookback window. Must be greater than max_period.
+    output_col:
+        Output column for the dominant-period estimate.
+    power_col:
+        Output column for the maximum autocorrelation power.
+        Used only when add_power is true.
+    add_power:
+        If true, also adds the max power column.
     """
+    
     require_columns(df, [price_col], feature="autocorrelation periodogram")
     min_p = validate_int(min_period, name="min_period", minimum=2)
     max_p = validate_int(max_period, name="max_period", minimum=2)
