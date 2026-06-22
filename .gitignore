@@ -62,8 +62,6 @@ instance/
 
 .scrapy
 
-docs/
-
 .pybuilder/
 target/
 
