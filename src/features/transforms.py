@@ -73,10 +73,42 @@ def compute_rolling_clip_transform(
     shift: int = 1,
 ) -> pd.Series:
     """
-    Point-in-time safe rolling winsorization via shifted rolling quantile bounds.
+    features:
+    - step: feature_transforms
+        params:
+        transforms:
+            - kind: rolling_zscore
+            source_col: close
+            output_col: close_zscore_2520
+            window: 2520
+            shift: 1
+            ddof: 0
 
-    The bounds are estimated on past values only and shifted forward so the current bar never
-    contributes to its own clipping thresholds.
+            - kind: rolling_stat
+            source_col: close
+            output_col: close_rms_48
+            mode: root_mean_square
+            window: 48
+            shift: 0
+            ddof: 0
+
+            - kind: rolling_stat
+            source_col: close
+            output_col: close_mean_48
+            mode: mean
+            window: 48
+            shift: 0
+
+            - kind: ratio
+            numerator_col: close
+            denominator_col: vwap
+            output_col: close_to_vwap_ratio
+            eps: 1.0e-8
+        output_cols:
+        - close_zscore_2520
+        - close_rms_48
+        - close_mean_48
+        - close_to_vwap_ratio
     """
     if not isinstance(series, pd.Series):
         raise TypeError("series must be a pandas Series.")

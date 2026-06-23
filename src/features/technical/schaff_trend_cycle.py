@@ -36,8 +36,62 @@ def add_schaff_trend_cycle_features(
 
         features:
           - step: schaff_trend_cycle
-            params: {}
+            params:
+              price_col: close
+              fast: 23
+              slow: 50
+              cycle: 10
+              smooth: 3
+              long_cross_level: 25.0
+              short_cross_level: 75.0
+              stc_col: stc
+              stc_signal_col: stc_signal
+              cross_up_col: stc_cross_up_25
+              cross_down_col: stc_cross_down_75
+              rising_col: stc_rising
+              falling_col: stc_falling
+              inplace: false
+            output_cols:
+              - stc
+              - stc_signal
+              - stc_cross_up_25
+              - stc_cross_down_75
+              - stc_rising
+              - stc_falling
+
+    Parameters
+    ----------
+    price_col:
+        Input price column used for the STC calculation.
+    fast:
+        Fast EMA span used in the EMA oscillator.
+    slow:
+        Slow EMA span used in the EMA oscillator. Must be greater than fast.
+    cycle:
+        Rolling stochastic normalization window.
+    smooth:
+        EMA smoothing span applied during the STC construction.
+    long_cross_level:
+        Lower STC threshold used for bullish cross-up detection.
+    short_cross_level:
+        Upper STC threshold used for bearish cross-down detection.
+    stc_col:
+        Output column for the Schaff Trend Cycle value.
+    stc_signal_col:
+        Output column for the smoothed STC signal line.
+    cross_up_col:
+        Output boolean column that is true when STC crosses above long_cross_level.
+    cross_down_col:
+        Output boolean column that is true when STC crosses below short_cross_level.
+    rising_col:
+        Output boolean column that is true when STC is rising versus the previous bar.
+    falling_col:
+        Output boolean column that is true when STC is falling versus the previous bar.
+    inplace:
+        If true, add the columns directly to the input DataFrame.
+        If false, return a copied DataFrame with the new columns.
     """
+
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame")
     _validate_params(

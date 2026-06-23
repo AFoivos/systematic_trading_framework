@@ -28,8 +28,44 @@ def add_rolling_r2_trend_quality(
 
         features:
           - step: rolling_r2_trend_quality
-            params: {}
+            params:
+              price_col: close
+              window: 96
+              output_col: rolling_r2_trend_quality_96
+              slope_col: rolling_r2_slope_96
+              intercept_col: rolling_r2_intercept_96
+              rising_col: rolling_r2_trend_quality_96_rising
+              trend_quality_col: rolling_r2_trend_quality_96_ok
+              trend_quality_threshold: 0.60
+            output_cols:
+              - rolling_r2_trend_quality_96
+              - rolling_r2_slope_96
+              - rolling_r2_intercept_96
+              - rolling_r2_trend_quality_96_rising
+              - rolling_r2_trend_quality_96_ok
+
+    Parameters
+    ----------
+    price_col:
+        Input price column used for the rolling linear regression.
+    window:
+        Trailing rolling window length used to fit the linear trend.
+    output_col:
+        Output column for the rolling R^2 trend-quality value.
+    slope_col:
+        Output column for the fitted rolling linear-regression slope.
+    intercept_col:
+        Output column for the fitted rolling linear-regression intercept.
+    rising_col:
+        Output binary column that is 1 when rolling R^2 is rising versus
+        the previous bar, otherwise 0.
+    trend_quality_col:
+        Output binary column that is 1 when rolling R^2 is greater than or
+        equal to trend_quality_threshold, otherwise 0.
+    trend_quality_threshold:
+        Minimum R^2 value required to mark the trend-quality column as 1.
     """
+
     _validate_columns(df, [price_col])
     _validate_window(window)
     threshold = _validate_probability(trend_quality_threshold, field="trend_quality_threshold")

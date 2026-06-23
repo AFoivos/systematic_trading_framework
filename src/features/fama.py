@@ -15,12 +15,34 @@ def add_fama(
     """
     Add John Ehlers' causal Following Adaptive Moving Average.
 
+    FAMA is the slower companion line of MAMA. It adapts to market phase
+    changes using the same MESA components and is commonly used together
+    with MAMA for adaptive trend/crossover logic.
+
     YAML declaration::
 
         features:
           - step: fama
-            params: {}
+            params:
+              price_col: close
+              fast_limit: 0.5
+              slow_limit: 0.05
+              output_col: fama
+            output_cols:
+              - fama
+
+    Parameters
+    ----------
+    price_col:
+        Input price column used for the FAMA calculation.
+    fast_limit:
+        Maximum adaptive smoothing limit used by the MESA calculation.
+    slow_limit:
+        Minimum adaptive smoothing limit used by the MESA calculation.
+    output_col:
+        Output column for the Following Adaptive Moving Average.
     """
+
     require_columns(df, [price_col], feature="FAMA")
     validate_mama_limits(fast_limit, slow_limit)
     col = resolve_output_col(output_col, "fama")
