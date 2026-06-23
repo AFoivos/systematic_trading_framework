@@ -1,0 +1,9 @@
+autocorrelation_periodogram_10_48
+autocorrelation_periodogram_10_48_power
+autocorrelation_periodogram_10_48__standard_deviation
+roofing_filter_48_10
+rolling r2 96 ok
+rolling r2 SLOPE 
+decycler_oscillator_30_60
+
+
