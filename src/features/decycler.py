@@ -14,12 +14,30 @@ def add_decycler(
     """
     Add Ehlers' causal decycler trend filter.
 
+    The decycler removes short-term cyclic components from price and keeps the
+    smoother trend component. It is useful as a causal trend/regime filter.
+
     YAML declaration::
 
         features:
           - step: decycler
-            params: {}
+            params:
+              price_col: close
+              period: 60
+              output_col: decycler_60
+            output_cols:
+              - decycler_60
+
+    Parameters
+    ----------
+    price_col:
+        Input price column used for the decycler calculation.
+    period:
+        Decycler period. Higher values produce a smoother trend filter.
+    output_col:
+        Output column for the decycler trend filter.
     """
+
     require_columns(df, [price_col], feature="Decycler")
     resolved_period = validate_int(period, name="period", minimum=3)
     col = resolve_output_col(output_col, f"decycler_{resolved_period}")
