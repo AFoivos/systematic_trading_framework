@@ -120,11 +120,223 @@ def build_directional_triple_barrier_target(
     """
     Build a directional, ATR/price-unit triple-barrier meta target.
 
-    Labels are evaluated only on non-zero candidate directions:
-    - 1.0 when the directional profit barrier is touched first
-    - 0.0 when the directional stop barrier is touched first
-    - configurable handling for vertical-barrier-only events
+    This target evaluates only rows where a non-zero direction exists. The
+    direction column defines the trade side: positive values mean long
+    candidates, negative values mean short candidates. The target then checks
+    whether the directional profit barrier or the directional stop barrier is
+    touched first within the vertical barrier window.
+
+    Labels:
+    - 1.0 when the directional profit barrier is touched first.
+    - 0.0 when the directional stop barrier is touched first.
+    - NaN for neutral vertical-barrier-only events when ``neutral_label: drop``.
+
+    YAML declaration::
+
+        targets:
+          - step: directional_triple_barrier
+            params:
+              price_col: close
+              open_col: open
+              high_col: high
+              low_col: low
+              direction_col: cycle_signal
+              candidate_col: null
+              volatility_col: atr_14
+
+              outputs:
+                label_col: label
+                event_ret_col: dtb_event_ret
+                fwd_col: dtb_event_ret
+                candidate_out_col: label_candidate
+                hit_step_col: label_hit_step
+                hit_type_col: label_hit_type
+                upper_barrier_col: label_upper_barrier
+                lower_barrier_col: label_lower_barrier
+                meta_side_col: label_meta_side
+                oriented_ret_col: label_oriented_ret
+                r_col: dtb_event_r
+                oriented_r_col: dtb_oriented_r
+
+              profit_barrier_r: 1.4
+              stop_barrier_r: 1.0
+              vertical_barrier_bars: 4
+              min_vol: 1.0e-12
+
+              neutral_label: drop
+              tie_break: closest_to_open
+              entry_price_mode: next_open
+
+              add_r_multiple: false
+              r_clip: null
+            output_cols:
+              - label
+              - dtb_event_ret
+              - label_candidate
+              - label_hit_step
+              - label_hit_type
+              - label_upper_barrier
+              - label_lower_barrier
+              - label_meta_side
+              - label_oriented_ret
+
+    YAML declaration with R-multiple outputs::
+
+        targets:
+          - step: directional_triple_barrier
+            params:
+              price_col: close
+              open_col: open
+              high_col: high
+              low_col: low
+              direction_col: cycle_signal
+              candidate_col: null
+              volatility_col: atr_14
+
+              outputs:
+                label_col: label
+                event_ret_col: dtb_event_ret
+                fwd_col: dtb_event_ret
+                candidate_out_col: label_candidate
+                hit_step_col: label_hit_step
+                hit_type_col: label_hit_type
+                upper_barrier_col: label_upper_barrier
+                lower_barrier_col: label_lower_barrier
+                meta_side_col: label_meta_side
+                oriented_ret_col: label_oriented_ret
+                r_col: dtb_event_r
+                oriented_r_col: dtb_oriented_r
+
+              profit_barrier_r: 1.4
+              stop_barrier_r: 1.0
+              vertical_barrier_bars: 4
+              min_vol: 1.0e-12
+
+              neutral_label: drop
+              tie_break: closest_to_open
+              entry_price_mode: current_close
+
+              add_r_multiple: true
+              r_clip: [-5.0, 5.0]
+            output_cols:
+              - label
+              - dtb_event_ret
+              - label_candidate
+              - label_hit_step
+              - label_hit_type
+              - label_upper_barrier
+              - label_lower_barrier
+              - label_meta_side
+              - label_oriented_ret
+              - dtb_event_r
+              - dtb_oriented_r
+
+    Output aliases
+    --------------
+    Output column names can be declared under ``outputs``. These aliases are
+    expanded into the target configuration by ``apply_target_output_aliases``.
+    If the same output key is also provided directly at the top level of
+    ``params``, the direct top-level value takes precedence.
+
+    Supported output aliases used by this target:
+    - label_col
+    - fwd_col
+    - event_ret_col
+    - candidate_out_col
+    - r_col
+    - oriented_r_col
+    - hit_step_col
+    - hit_type_col
+    - upper_barrier_col
+    - lower_barrier_col
+    - meta_side_col
+    - oriented_ret_col
+
+    Parameters
+    ----------
+    price_col:
+        Input close/price column used as the entry price when
+        ``entry_price_mode`` is ``current_close``.
+    open_col:
+        Input open column. Used for ``next_open`` entry mode and double-touch
+        tie-break resolution.
+    high_col:
+        Input high column used to detect profit/stop barrier touches.
+    low_col:
+        Input low column used to detect profit/stop barrier touches.
+    direction_col:
+        Input side/direction column. Positive values create long candidates,
+        negative values create short candidates, and zero values are ignored.
+    candidate_col:
+        Optional extra candidate filter column. When provided, rows are
+        evaluated only when both ``direction_col`` is non-zero and
+        ``candidate_col`` is non-zero.
+    volatility_col:
+        Input volatility/risk-distance column, usually ATR.
+
+    outputs:
+        Optional mapping of output alias keys to output column names. This is
+        the preferred way to declare target output columns in YAML.
+
+    label_col:
+        Output binary label column.
+    event_ret_col:
+        Output raw event return column.
+    fwd_col:
+        Forward-return column returned to the model pipeline. By default this
+        is the same as ``event_ret_col``.
+    candidate_out_col:
+        Output column marking which rows were valid directional candidates.
+    hit_step_col:
+        Output column showing after how many bars the event ended.
+    hit_type_col:
+        Output column containing ``profit``, ``stop``, or ``neutral``.
+    upper_barrier_col:
+        Output column for the upper price barrier.
+    lower_barrier_col:
+        Output column for the lower price barrier.
+    meta_side_col:
+        Output column containing the normalized meta-labeling side.
+    oriented_ret_col:
+        Output return column after orienting return by trade direction.
+    r_col:
+        Output column for event R-multiple. Used only when
+        ``add_r_multiple`` is true.
+    oriented_r_col:
+        Output column for oriented R-multiple. Used only when
+        ``add_r_multiple`` is true.
+
+    profit_barrier_r:
+        Profit barrier distance in volatility/R units.
+    stop_barrier_r:
+        Stop barrier distance in volatility/R units.
+    vertical_barrier_bars:
+        Maximum number of future bars used to evaluate the event.
+    min_vol:
+        Minimum volatility floor used to avoid zero or invalid risk distance.
+    neutral_label:
+        Handling for events where neither profit nor stop is touched before the
+        vertical barrier. Allowed values are ``drop``, ``profit``, and ``stop``.
+    tie_break:
+        Rule used when profit and stop are touched in the same bar. Allowed
+        values are ``closest_to_open``, ``profit``, and ``stop``.
+    entry_price_mode:
+        Entry price assumption. Allowed values are ``current_close`` and
+        ``next_open``.
+    add_r_multiple:
+        If true, also writes ``r_col`` and ``oriented_r_col``.
+    r_clip:
+        Optional R-multiple clipping. Can be null, a scalar bound, or a
+        two-value list such as ``[-5.0, 5.0]``.
+
+    Returns
+    -------
+    tuple[pd.DataFrame, str, str, dict[str, Any]]
+        Output DataFrame, label column name, forward-return column name, and
+        target metadata.
     """
+
+
     cfg = apply_target_output_aliases(target_cfg)
     price_col = _as_col(cfg.get("price_col"), "close", field="price_col")
     open_col = _as_col(cfg.get("open_col"), "open", field="open_col")

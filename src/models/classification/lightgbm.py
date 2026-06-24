@@ -13,6 +13,102 @@ def train_lightgbm_classifier(
     model_cfg: dict[str, Any],
     returns_col: str | None = None,
 ) -> tuple[pd.DataFrame, object, dict[str, Any]]:
+    """
+    Train a LightGBM forward classifier through the shared classification
+    training pipeline.
+
+    This function is a thin wrapper around ``train_forward_classifier``. It
+    checks that LightGBM is available, creates an ``LGBMClassifier`` from the
+    estimator parameters, and delegates target creation, feature selection,
+    anti-leakage time splits, training, prediction generation, and metadata
+    reporting to the shared classifier pipeline.
+
+    YAML declaration::
+
+        models:
+          - kind: lightgbm_clf
+            params:
+              target:
+                horizon: 1
+                threshold: 0.0
+                label_col: label
+                fwd_col: fwd_return
+
+              feature_cols: null
+              feature_selectors: null
+
+              split:
+                method: time
+                train_size: 0.70
+                test_size: 0.30
+
+              preprocessing:
+                scaler: none
+
+              calibration:
+                method: none
+                fraction: 0.20
+                min_rows: 200
+
+              pred_prob_col: pred_prob
+              pred_raw_prob_col: null
+              pred_is_oos_col: pred_is_oos
+
+              params:
+                n_estimators: 300
+                learning_rate: 0.05
+                num_leaves: 31
+                max_depth: -1
+                subsample: 1.0
+                colsample_bytree: 1.0
+                random_state: 42
+            output_cols:
+              - pred_prob
+              - pred_is_oos
+
+    Optional calibrated-probability YAML::
+
+        models:
+          - kind: lightgbm_clf
+            params:
+              calibration:
+                method: sigmoid
+                fraction: 0.20
+                min_rows: 200
+              pred_prob_col: pred_prob
+              pred_raw_prob_col: pred_prob_raw
+              pred_is_oos_col: pred_is_oos
+              params:
+                n_estimators: 300
+                learning_rate: 0.05
+                num_leaves: 31
+                random_state: 42
+            output_cols:
+              - pred_prob
+              - pred_prob_raw
+              - pred_is_oos
+
+    Parameters
+    ----------
+    df:
+        Input DataFrame containing the feature columns and the source columns
+        required to build the classifier target.
+    model_cfg:
+        Model configuration mapping consumed by the shared classifier pipeline.
+        It may contain target settings, feature columns or selectors, split
+        settings, preprocessing settings, calibration settings, prediction
+        output-column names, and LightGBM estimator parameters.
+    returns_col:
+        Optional returns column passed to overlays such as GARCH.
+
+    Returns
+    -------
+    tuple[pd.DataFrame, object, dict[str, Any]]
+        Output DataFrame with prediction columns, fitted LightGBM classifier,
+        and metadata from the shared classifier pipeline.
+    """
+
+
     ensure_lightgbm_runtime_available()
     try:
         from lightgbm import LGBMClassifier
