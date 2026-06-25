@@ -638,6 +638,40 @@ def train_tsfresh_extrema_feature_discovery(
     model_cfg: dict[str, Any],
     returns_col: str | None = None,
 ) -> tuple[pd.DataFrame, None, dict[str, Any]]:
+    """
+    Train the registered ``tsfresh_extrema_feature_discovery`` model component.
+    
+    YAML declaration::
+    
+        model:
+          kind: tsfresh_extrema_feature_discovery
+          params: {}
+    
+    Required input columns
+    ----------------------
+    anchor_timestamp:
+        Required dataframe column read directly by this component.
+    calculate_relevance_table:
+        Required dataframe column read directly by this component.
+    extract_features:
+        Required dataframe column read directly by this component.
+    feature:
+        Required dataframe column read directly by this component.
+    select_features:
+        Required dataframe column read directly by this component.
+    test_start:
+        Required dataframe column read directly by this component.
+    returns_col:
+        Optional input column configured by ``returns_col``; used when a value is provided.
+    
+    Parameters
+    ----------
+    model_cfg:
+        Configuration mapping, usually resolved from YAML before this
+        registered component is called.
+    returns_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    """
     del returns_col
     if not isinstance(df, pd.DataFrame):
         raise TypeError("df must be a pandas DataFrame.")

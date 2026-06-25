@@ -84,10 +84,28 @@ def build_future_return_regression_target(
 ) -> tuple[pd.DataFrame, str, str, dict[str, Any]]:
     """
     Build a dense all-bar continuous future-return target for regression forecasters.
-
+    
     The target intentionally uses future bars only in the target column. Feature selection later
     excludes every emitted target column, so the model can learn from current/past features while
     being evaluated against the configured forward horizon.
+    
+    YAML declaration::
+    
+        target:
+          kind: future_return_regression
+          params: {}
+    
+    Required input columns
+    ----------------------
+    None fixed by signature:
+        Required dataframe columns are resolved from configuration or from
+        upstream feature/target/signal stages at runtime.
+    
+    Parameters
+    ----------
+    target_cfg:
+        Configuration mapping, usually resolved from YAML before this
+        registered component is called.
     """
     cfg = apply_target_output_aliases(target_cfg)
     price_col = str(cfg.get("price_col", "close"))

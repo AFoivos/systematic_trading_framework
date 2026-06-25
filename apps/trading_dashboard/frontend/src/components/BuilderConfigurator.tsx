@@ -565,8 +565,6 @@ function deriveFeatureOutputColumns(stepName: string, params: Record<string, unk
       return [outputOrParam(params, "output_col", `hurst_${asInteger(params.window, 128)}`)];
     case "fractal_dimension":
       return [outputOrParam(params, "output_col", `fractal_dimension_${asInteger(params.window, 128)}`)];
-    case "rate_of_change":
-      return [outputOrParam(params, "output_col", `roc_${asInteger(params.window, 10)}`)];
     case "zscore_momentum":
       return [outputOrParam(params, "output_col", `zscore_momentum_${window}`)];
     case "rolling_r2_trend_quality": {

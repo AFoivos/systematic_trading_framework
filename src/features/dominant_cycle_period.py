@@ -12,12 +12,26 @@ def add_dominant_cycle_period(
 ) -> pd.DataFrame:
     """
     Add Ehlers' causal dominant cycle period estimate.
-
+    
     YAML declaration::
-
+    
         features:
           - step: dominant_cycle_period
             params: {}
+    
+    Required input columns
+    ----------------------
+    smooth_period:
+        Required dataframe column read directly by this component.
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    
+    Parameters
+    ----------
+    price_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    output_col:
+        Output column name emitted by the component. Default: ``None``.
     """
     require_columns(df, [price_col], feature="dominant cycle period")
     col = resolve_output_col(output_col, "dominant_cycle_period")

@@ -289,17 +289,79 @@ def add_multi_timeframe_features(
 ) -> pd.DataFrame:
     """
     Build 1h/4h features from 30m OHLCV and align them back point-in-time.
-
+    
     `shift_to_last_closed=True` is the only supported production mode. The function labels
     resampled HTF bars at their close and asof-merges backward, so a base row cannot receive
     a higher-timeframe feature whose close time is after the row timestamp. Use
     `timestamp_convention="bar_start"` for feeds whose timestamps are bar opens.
-
+    
     YAML declaration::
-
+    
         features:
           - step: multi_timeframe
             params: {}
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    high_col:
+        Input column configured by ``high_col``. Default: ``high``.
+    low_col:
+        Input column configured by ``low_col``. Default: ``low``.
+    open_col:
+        Input column configured by ``open_col``. Default: ``open``.
+    volume_col:
+        Input column configured by ``volume_col``. Default: ``volume``.
+    returns_col:
+        Input column configured by ``returns_col``. Default: ``close_logret``.
+    timestamp_col:
+        Input column configured by ``timestamp_col``. Default: ``timestamp``.
+    asset_col:
+        Input column configured by ``asset_col``. Default: ``asset``.
+    
+    Parameters
+    ----------
+    base_interval_minutes:
+        Configuration value used by the registered component. Default: ``30``.
+    timeframes:
+        Configuration value used by the registered component. Default: ``('1h', '4h')``.
+    price_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    high_col:
+        Input dataframe column name consumed by the component. Default: ``high``.
+    low_col:
+        Input dataframe column name consumed by the component. Default: ``low``.
+    open_col:
+        Input dataframe column name consumed by the component. Default: ``open``.
+    volume_col:
+        Input dataframe column name consumed by the component. Default: ``volume``.
+    returns_col:
+        Input dataframe column name consumed by the component. Default: ``close_logret``.
+    timezone:
+        Configuration value used by the registered component. Default: ``UTC``.
+    shift_to_last_closed:
+        Configuration value used by the registered component. Default: ``True``.
+    timestamp_convention:
+        Configuration value used by the registered component. Default: ``bar_close``.
+    timestamp_col:
+        Input dataframe column name consumed by the component. Default: ``timestamp``.
+    asset_col:
+        Input dataframe column name consumed by the component. Default: ``asset``.
+    volatility_window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``12``.
+    trend_ema_span:
+        Configuration value used by the registered component. Default: ``8``.
+    trend_sma_window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``20``.
+    atr_window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``14``.
+    adx_window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``14``.
+    regime_short_window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``12``.
+    regime_long_window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``48``.
     """
     if not shift_to_last_closed:
         raise ValueError("multi_timeframe currently supports only shift_to_last_closed=true.")

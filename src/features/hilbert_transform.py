@@ -28,17 +28,49 @@ def add_hilbert_transform(
 ) -> pd.DataFrame:
     """
     Add rolling endpoint Hilbert transform features.
-
+    
     This is a trailing-window FFT Hilbert approximation. It is causal because
     each row uses only the trailing window ending at that row, but endpoint
     phase/frequency estimates can have window-edge artifacts and should not be
     treated as full-sample analytic-signal values.
-
+    
     YAML declaration::
-
+    
         features:
           - step: hilbert_transform
             params: {}
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    
+    Parameters
+    ----------
+    price_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``64``.
+    amplitude_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    phase_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    instantaneous_frequency_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    dominant_cycle_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    cycle_ok_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    amplitude_rising_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    min_cycle:
+        Configuration value used by the registered component. Default: ``10``.
+    max_cycle:
+        Configuration value used by the registered component. Default: ``48``.
+    amplitude_slope_bars:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``3``.
+    add_derived:
+        Configuration value used by the registered component. Default: ``True``.
     """
     _validate_columns(df, [price_col])
     _validate_window(window)

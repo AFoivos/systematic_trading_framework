@@ -25,12 +25,50 @@ def probability_vol_adjusted_signal(
 ) -> pd.Series:
     """
     Apply the registered ``probability_vol_adjusted`` signal transformation.
-
+    
     YAML declaration::
-
+    
         signals:
           kind: probability_vol_adjusted
           params: {}
+    
+    Required input columns
+    ----------------------
+    prob_col:
+        Input column configured by ``prob_col``. Default: ``pred_prob``.
+    vol_col:
+        Input column configured by ``vol_col``. Default: ``pred_vol``.
+    
+    Parameters
+    ----------
+    prob_col:
+        Input dataframe column name consumed by the component. Default: ``pred_prob``.
+    vol_col:
+        Input dataframe column name consumed by the component. Default: ``pred_vol``.
+    signal_col:
+        Output column name emitted by the component. Default: ``None``.
+    prob_center:
+        Configuration value used by the registered component. Default: ``0.5``.
+    upper:
+        Configuration value used by the registered component. Default: ``None``.
+    lower:
+        Configuration value used by the registered component. Default: ``None``.
+    vol_target:
+        Configuration value used by the registered component. Default: ``0.001``.
+    clip:
+        Configuration value used by the registered component. Default: ``1.0``.
+    vol_floor:
+        Configuration value used by the registered component. Default: ``1e-06``.
+    min_signal_abs:
+        Configuration value used by the registered component. Default: ``0.0``.
+    activation_filters:
+        Configuration value used by the registered component. Default: ``None``.
+    top_quantile:
+        Configuration value used by the registered component. Default: ``None``.
+    top_quantile_window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``None``.
+    max_trade_rate:
+        Configuration value used by the registered component. Default: ``None``.
     """
     output_col = resolve_signal_output_name(
         signal_col=signal_col,

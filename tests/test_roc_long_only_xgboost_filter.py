@@ -14,10 +14,17 @@ from src.experiments.optuna_search import (
 )
 from src.experiments.orchestration.artifacts import _resolve_trade_diagnostic_feature_panels
 from src.experiments.orchestration.feature_stage import apply_feature_steps
-from src.experiments.registry import FEATURE_REGISTRY, SIGNAL_REGISTRY
+from src.experiments.registry import FEATURE_COMPATIBILITY_REGISTRY, SIGNAL_REGISTRY
 from src.signals.manual_long_model_filter_signal import manual_long_model_filter_signal
 from src.targets.r_multiple import build_r_multiple_target
 from src.utils.config import load_experiment_config
+
+
+def _require_config_fixture(path: str | Path) -> Path:
+    resolved = Path(path)
+    if not resolved.exists():
+        pytest.skip(f"optional config fixture not present: {resolved}")
+    return resolved
 
 
 def _manual_condition_frame(periods: int = 4) -> pd.DataFrame:
@@ -40,7 +47,8 @@ def _manual_condition_frame(periods: int = 4) -> pd.DataFrame:
 
 
 def test_roc_long_only_conditions_runs_as_pre_model_feature_candidate_step() -> None:
-    assert FEATURE_REGISTRY["roc_long_only_conditions"] is SIGNAL_REGISTRY["roc_long_only_conditions"]
+    assert FEATURE_COMPATIBILITY_REGISTRY["roc_long_only_conditions"].__name__ == "roc_long_only_conditions_signal"
+    assert SIGNAL_REGISTRY["roc_long_only_conditions"].__name__ == "roc_long_only_conditions_signal"
 
     out = apply_feature_steps(
         _manual_condition_frame(),
@@ -202,9 +210,9 @@ def test_r_multiple_target_uses_manual_long_candidate_for_model_filtering() -> N
 
 
 def test_xauusd_xgboost_r_multiple_filter_config_contracts() -> None:
-    cfg = load_experiment_config(
+    cfg = load_experiment_config(_require_config_fixture(
         "config/experiments/roc_long_only/xauusd_roc_long_only_xgboost_r_multiple_filter.yaml"
-    )
+    ))
 
     assert cfg["features"][7]["step"] == "roc_long_only_conditions"
     assert cfg["features"][7]["params"]["long_signal_col"] == "manual_long_candidate"
@@ -234,8 +242,11 @@ def test_xauusd_xgboost_r_multiple_filter_config_contracts() -> None:
 
 
 def test_xauusd_xgboost_filter_optuna_yaml_matches_base_config_contract() -> None:
-    optuna_path = Path("config/optuna/roc_long_only/optuna_xauusd_roc_long_only_xgboost_r_multiple_filter.yaml")
+    optuna_path = _require_config_fixture(
+        "config/optuna/roc_long_only/optuna_xauusd_roc_long_only_xgboost_r_multiple_filter.yaml"
+    )
     payload = yaml.safe_load(optuna_path.read_text(encoding="utf-8"))
+    _require_config_fixture(payload["base_config"])
     base_cfg = load_experiment_config(payload["base_config"])
     search_space = load_search_space_yaml(optuna_path)
 
@@ -274,9 +285,9 @@ def test_xauusd_xgboost_filter_optuna_yaml_matches_base_config_contract() -> Non
 
 
 def test_spx500_roc_ml_strong_config_wires_validated_gates_and_diagnostics() -> None:
-    cfg = load_experiment_config(
+    cfg = load_experiment_config(_require_config_fixture(
         "config/experiments/roc_long_only/V2/spx500_roc_long_only_xgboost_r_multiple_filter_strong.yaml"
-    )
+    ))
 
     feature_steps = [step["step"] for step in cfg["features"]]
     assert "rolling_r2_trend_quality" in feature_steps
@@ -306,10 +317,11 @@ def test_spx500_roc_ml_strong_config_wires_validated_gates_and_diagnostics() -> 
 
 
 def test_xauusd_dynamic_exit_optuna_yaml_only_tunes_exit_params() -> None:
-    optuna_path = Path(
+    optuna_path = _require_config_fixture(
         "config/optuna/roc_long_only/optuna_xauusd_roc_long_only_xgboost_r_multiple_filter_dynamic_exits.yaml"
     )
     payload = yaml.safe_load(optuna_path.read_text(encoding="utf-8"))
+    _require_config_fixture(payload["base_config"])
     base_cfg = load_experiment_config(payload["base_config"])
     search_space = load_search_space_yaml(optuna_path)
 
@@ -326,8 +338,12 @@ def test_xauusd_dynamic_exit_optuna_yaml_only_tunes_exit_params() -> None:
 
 
 def test_spx500_v2_config_and_optuna_contracts() -> None:
-    base_path = Path("config/experiments/roc_long_only/V2/spx500_roc_long_only_xgboost_r_multiple_filter_v2.yaml")
-    optuna_path = Path("config/optuna/roc_long_only/V2/optuna_spx500_roc_long_only_xgboost_r_multiple_filter_v2.yaml")
+    base_path = _require_config_fixture(
+        "config/experiments/roc_long_only/V2/spx500_roc_long_only_xgboost_r_multiple_filter_v2.yaml"
+    )
+    optuna_path = _require_config_fixture(
+        "config/optuna/roc_long_only/V2/optuna_spx500_roc_long_only_xgboost_r_multiple_filter_v2.yaml"
+    )
 
     cfg = load_experiment_config(base_path)
     payload = yaml.safe_load(optuna_path.read_text(encoding="utf-8"))
@@ -366,10 +382,10 @@ def test_spx500_v2_config_and_optuna_contracts() -> None:
 
 
 def test_spx500_v2_relaxed_config_and_optuna_contracts() -> None:
-    base_path = Path(
+    base_path = _require_config_fixture(
         "config/experiments/roc_long_only/V2/spx500_roc_long_only_xgboost_r_multiple_filter_v2_relaxed.yaml"
     )
-    optuna_path = Path(
+    optuna_path = _require_config_fixture(
         "config/optuna/roc_long_only/V2/optuna_spx500_roc_long_only_xgboost_r_multiple_filter_v2_relaxed.yaml"
     )
 

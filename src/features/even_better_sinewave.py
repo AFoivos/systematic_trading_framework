@@ -16,12 +16,30 @@ def add_even_better_sinewave(
 ) -> pd.DataFrame:
     """
     Add Ehlers' causal Even Better Sinewave oscillator.
-
+    
     YAML declaration::
-
+    
         features:
           - step: even_better_sinewave
             params: {}
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    
+    Parameters
+    ----------
+    price_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    duration:
+        Configuration value used by the registered component. Default: ``40``.
+    smoothing_period:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``10``.
+    power_window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``3``.
+    output_col:
+        Output column name emitted by the component. Default: ``None``.
     """
     require_columns(df, [price_col], feature="Even Better Sinewave")
     resolved_duration = validate_int(duration, name="duration", minimum=4)

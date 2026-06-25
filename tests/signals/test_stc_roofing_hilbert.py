@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from src.backtesting.manual_barrier import run_manual_barrier_backtest
 from src.experiments.orchestration.feature_stage import apply_feature_steps, apply_signal_step
@@ -17,6 +18,13 @@ from src.utils.config import load_experiment_config
 
 
 CONFIG_PATH = Path("config/experiments/stc_roofing_hilbert_30m_v1.yaml")
+
+
+def _require_config_fixture(path: str | Path) -> Path:
+    resolved = Path(path)
+    if not resolved.exists():
+        pytest.skip(f"optional config fixture not present: {resolved}")
+    return resolved
 
 
 def _synthetic_ohlcv(periods: int = 320) -> pd.DataFrame:
@@ -56,7 +64,7 @@ def _signal_frame() -> pd.DataFrame:
 
 
 def test_stc_roofing_config_loads_and_resolves_registered_steps() -> None:
-    cfg = load_experiment_config(CONFIG_PATH)
+    cfg = load_experiment_config(_require_config_fixture(CONFIG_PATH))
 
     assert cfg["strategy"]["name"] == "stc_roofing_ema_30m_v1"
     assert cfg["data"]["interval"] == "30m"
@@ -117,7 +125,7 @@ def test_stc_roofing_entry_delay_shifts_signal() -> None:
 
 
 def test_stc_roofing_feature_signal_pipeline_aligns_on_synthetic_data() -> None:
-    cfg = load_experiment_config(CONFIG_PATH)
+    cfg = load_experiment_config(_require_config_fixture(CONFIG_PATH))
     features = apply_feature_steps(_synthetic_ohlcv(), cfg["features"], asset="SPX500")
     signaled = apply_signal_step(features, cfg["signals"], asset="SPX500")
 

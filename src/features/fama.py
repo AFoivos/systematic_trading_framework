@@ -14,13 +14,13 @@ def add_fama(
 ) -> pd.DataFrame:
     """
     Add John Ehlers' causal Following Adaptive Moving Average.
-
+    
     FAMA is the slower companion line of MAMA. It adapts to market phase
     changes using the same MESA components and is commonly used together
     with MAMA for adaptive trend/crossover logic.
-
+    
     YAML declaration::
-
+    
         features:
           - step: fama
             params:
@@ -30,7 +30,14 @@ def add_fama(
               output_col: fama
             output_cols:
               - fama
-
+    
+    Required input columns
+    ----------------------
+    fama:
+        Required dataframe column read directly by this component.
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    
     Parameters
     ----------
     price_col:

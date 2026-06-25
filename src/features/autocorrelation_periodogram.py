@@ -27,14 +27,14 @@ def add_autocorrelation_periodogram(
 ) -> pd.DataFrame:
     """
     Add a causal autocorrelation periodogram dominant-period estimate.
-
+    
     The indicator estimates the dominant cycle period by computing
     lagged autocorrelations over a rolling causal window. Positive
     autocorrelations are squared and used as power weights across
     candidate periods.
-
+    
     YAML declaration::
-
+    
         features:
           - step: autocorrelation_periodogram
             params:
@@ -48,7 +48,12 @@ def add_autocorrelation_periodogram(
             output_cols:
               - autocorrelation_periodogram_10_48
               - autocorrelation_periodogram_10_48_power
-
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    
     Parameters
     ----------
     price_col:

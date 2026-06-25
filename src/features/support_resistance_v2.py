@@ -40,15 +40,47 @@ def add_support_resistance_v2_features(
 ) -> pd.DataFrame:
     """
     Add PIT-safe pivot-based support and resistance context.
-
+    
     A pivot is confirmed only after `pivot_confirm_bars` future bars have elapsed, so all
     emitted levels are available without lookahead at the current timestamp.
-
+    
     YAML declaration::
-
+    
         features:
           - step: support_resistance_v2
             params: {}
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    high_col:
+        Input column configured by ``high_col``. Default: ``high``.
+    low_col:
+        Input column configured by ``low_col``. Default: ``low``.
+    
+    Parameters
+    ----------
+    price_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    high_col:
+        Input dataframe column name consumed by the component. Default: ``high``.
+    low_col:
+        Input dataframe column name consumed by the component. Default: ``low``.
+    atr_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    atr_window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``24``.
+    pivot_left_window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``24``.
+    pivot_confirm_bars:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``6``.
+    touch_tolerance_atr:
+        Configuration value used by the registered component. Default: ``0.25``.
+    breakout_tolerance_atr:
+        Configuration value used by the registered component. Default: ``0.05``.
+    inplace:
+        Configuration value used by the registered component. Default: ``False``.
     """
     missing = [col for col in (price_col, high_col, low_col) if col not in df.columns]
     if missing:

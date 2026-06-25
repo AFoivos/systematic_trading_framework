@@ -20,17 +20,45 @@ def add_volatility_regime(
 ) -> pd.DataFrame:
     """
     Add a causal volatility regime feature.
-
+    
     ``method='ratio'`` emits ``vol / trailing_mean(vol)``. ``method='percentile'``
     emits ``0, 1, 2`` based on trailing rolling quantiles of the volatility
     series. If ``vol_col`` is not provided, trailing return volatility is
     computed from ``returns_col`` or ``price_col``.
-
+    
     YAML declaration::
-
+    
         features:
           - step: volatility_regime
             params: {}
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    returns_col:
+        Optional input column configured by ``returns_col``; used when a value is provided.
+    
+    Parameters
+    ----------
+    vol_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    price_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    returns_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    vol_window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``20``.
+    regime_window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``100``.
+    method:
+        Mode selector that controls the registered component behavior. Default: ``ratio``.
+    lower_quantile:
+        Configuration value used by the registered component. Default: ``0.33``.
+    upper_quantile:
+        Configuration value used by the registered component. Default: ``0.67``.
+    output_col:
+        Output column name emitted by the component. Default: ``None``.
     """
     _validate_window(vol_window, name="vol_window")
     _validate_window(regime_window, name="regime_window")

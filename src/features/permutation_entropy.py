@@ -18,15 +18,35 @@ def add_permutation_entropy(
 ) -> pd.DataFrame:
     """
     Add causal rolling permutation entropy.
-
+    
     Ties are resolved deterministically by NumPy's stable order; no future
     samples are used.
-
+    
     YAML declaration::
-
+    
         features:
           - step: permutation_entropy
             params: {}
+    
+    Required input columns
+    ----------------------
+    source_col:
+        Input column configured by ``source_col``. Default: ``close``.
+    
+    Parameters
+    ----------
+    source_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``64``.
+    order:
+        Configuration value used by the registered component. Default: ``3``.
+    delay:
+        Configuration value used by the registered component. Default: ``1``.
+    normalize:
+        Configuration value used by the registered component. Default: ``True``.
+    output_col:
+        Output column name emitted by the component. Default: ``None``.
     """
     _validate_columns(df, [source_col])
     _validate_positive_int(window, name="window")

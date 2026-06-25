@@ -24,12 +24,30 @@ def add_cyber_cycle(
 ) -> pd.DataFrame:
     """
     Add Ehlers' causal Cyber Cycle oscillator and optional trigger.
-
+    
     YAML declaration::
-
+    
         features:
           - step: cyber_cycle
             params: {}
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    
+    Parameters
+    ----------
+    price_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    alpha:
+        Configuration value used by the registered component. Default: ``0.07``.
+    output_col:
+        Output column name emitted by the component. Default: ``None``.
+    trigger_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    add_trigger:
+        Configuration value used by the registered component. Default: ``True``.
     """
     require_columns(df, [price_col], feature="Cyber Cycle")
     a = validate_float(alpha, name="alpha", minimum=0.0, maximum=1.0)

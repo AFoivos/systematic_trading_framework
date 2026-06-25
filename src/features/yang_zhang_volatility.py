@@ -23,15 +23,53 @@ def add_yang_zhang_volatility(
 ) -> pd.DataFrame:
     """
     Add causal rolling Yang-Zhang volatility from OHLC prices.
-
+    
     Overnight, open-close, and Rogers-Satchell components are estimated over
     trailing windows. The overnight return uses ``close.shift(1)`` only.
-
+    
     YAML declaration::
-
+    
         features:
           - step: yang_zhang_volatility
             params: {}
+    
+    Required input columns
+    ----------------------
+    open_col:
+        Input column configured by ``open_col``. Default: ``open``.
+    high_col:
+        Input column configured by ``high_col``. Default: ``high``.
+    low_col:
+        Input column configured by ``low_col``. Default: ``low``.
+    close_col:
+        Input column configured by ``close_col``. Default: ``close``.
+    
+    Parameters
+    ----------
+    open_col:
+        Input dataframe column name consumed by the component. Default: ``open``.
+    high_col:
+        Input dataframe column name consumed by the component. Default: ``high``.
+    low_col:
+        Input dataframe column name consumed by the component. Default: ``low``.
+    close_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``20``.
+    regime_window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``None``.
+    high_vol_mult:
+        Configuration value used by the registered component. Default: ``1.0``.
+    output_col:
+        Output column name emitted by the component. Default: ``None``.
+    rolling_mean_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    ratio_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    rising_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    high_vol_regime_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
     """
     _validate_columns(df, [open_col, high_col, low_col, close_col])
     _validate_window(window)

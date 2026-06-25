@@ -23,12 +23,30 @@ def add_sinewave_indicator(
 ) -> pd.DataFrame:
     """
     Add Ehlers' causal sinewave and lead sine cycle indicators.
-
+    
     YAML declaration::
-
+    
         features:
           - step: sinewave_indicator
             params: {}
+    
+    Required input columns
+    ----------------------
+    phase:
+        Required dataframe column read directly by this component.
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    
+    Parameters
+    ----------
+    price_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    lead_degrees:
+        Configuration value used by the registered component. Default: ``45.0``.
+    output_col:
+        Output column name emitted by the component. Default: ``None``.
+    lead_output_col:
+        Output column name emitted by the component. Default: ``None``.
     """
     require_columns(df, [price_col], feature="sinewave indicator")
     lead = validate_float(lead_degrees, name="lead_degrees")

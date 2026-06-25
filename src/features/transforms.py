@@ -411,20 +411,31 @@ def add_feature_transforms(
 ) -> pd.DataFrame:
     """
     Add causal post-feature transforms declared from YAML.
-
+    
     Supported transform kinds:
     - rolling_clip
     - ratio
     - rolling_stat
     - rolling_zscore
     - tsfresh_rolling
-
+    
     YAML declaration::
-
+    
         features:
           - step: feature_transforms
             params:
               transforms: [{kind: rolling_zscore, source_col: close, output_col: close_z}]
+    
+    Required input columns
+    ----------------------
+    None fixed by signature:
+        Required dataframe columns are resolved from configuration or from
+        upstream feature/target/signal stages at runtime.
+    
+    Parameters
+    ----------
+    transforms:
+        Configuration value used by the registered component.
     """
     if not isinstance(transforms, Sequence) or isinstance(transforms, (str, bytes)):
         raise TypeError("transforms must be a sequence of transform mappings.")

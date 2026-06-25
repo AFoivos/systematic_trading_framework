@@ -250,12 +250,23 @@ def build_ema_rms_ppo_vwap_signal(
 def ema_rms_ppo_vwap_signal(df: pd.DataFrame, **params: Any) -> pd.DataFrame:
     """
     Apply the registered ``ema_rms_ppo_vwap`` signal transformation.
-
+    
     YAML declaration::
-
+    
         signals:
           kind: ema_rms_ppo_vwap
           params: {}
+    
+    Required input columns
+    ----------------------
+    None fixed by signature:
+        Required dataframe columns are resolved from configuration or from
+        upstream feature/target/signal stages at runtime.
+    
+    Parameters
+    ----------
+    params:
+        Additional keyword parameters accepted from YAML ``params``.
     """
     out, _ = build_ema_rms_ppo_vwap_signal(df, params)
     return out

@@ -12,7 +12,12 @@ from src.experiments.models import (
     train_sarimax_forecaster,
     train_xgboost_classifier,
 )
-from src.experiments.registry import FEATURE_REGISTRY, MODEL_REGISTRY, SIGNAL_REGISTRY
+from src.experiments.registry import (
+    FEATURE_COMPATIBILITY_REGISTRY,
+    FEATURE_REGISTRY,
+    MODEL_REGISTRY,
+    SIGNAL_REGISTRY,
+)
 from src.features import (
     ROLLING_STAT_MODES,
     TSFRESH_ROLLING_CALCULATORS,
@@ -71,7 +76,8 @@ def test_registry_contains_phase12_extensions() -> None:
     assert "price_momentum" in FEATURE_REGISTRY
     assert "return_momentum" in FEATURE_REGISTRY
     assert "vol_normalized_momentum" in FEATURE_REGISTRY
-    assert "vwap_rms_ema_cross_long" in FEATURE_REGISTRY
+    assert "vwap_rms_ema_cross_long" not in FEATURE_REGISTRY
+    assert "vwap_rms_ema_cross_long" in FEATURE_COMPATIBILITY_REGISTRY
     assert "elastic_net_clf" in MODEL_REGISTRY
     assert "xgboost_clf" in MODEL_REGISTRY
     assert "event_transformer_encoder" in MODEL_REGISTRY

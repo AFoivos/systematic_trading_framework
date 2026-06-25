@@ -16,12 +16,32 @@ def forecast_vol_adjusted_signal(
 ) -> pd.Series:
     """
     Apply the registered ``forecast_vol_adjusted`` signal transformation.
-
+    
     YAML declaration::
-
+    
         signals:
           kind: forecast_vol_adjusted
           params: {}
+    
+    Required input columns
+    ----------------------
+    forecast_col:
+        Input column configured by ``forecast_col``. Default: ``pred_ret``.
+    vol_col:
+        Input column configured by ``vol_col``. Default: ``pred_vol``.
+    
+    Parameters
+    ----------
+    forecast_col:
+        Input dataframe column name consumed by the component. Default: ``pred_ret``.
+    vol_col:
+        Input dataframe column name consumed by the component. Default: ``pred_vol``.
+    signal_col:
+        Output column name emitted by the component. Default: ``None``.
+    clip:
+        Configuration value used by the registered component. Default: ``1.0``.
+    vol_floor:
+        Configuration value used by the registered component. Default: ``1e-06``.
     """
     output_col = resolve_signal_output_name(
         signal_col=signal_col,

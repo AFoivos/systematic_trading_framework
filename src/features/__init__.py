@@ -74,7 +74,6 @@ from .mama import add_mama
 from .order_flow_imbalance import add_order_flow_imbalance
 from .parkinson_volatility import add_parkinson_volatility
 from .permutation_entropy import add_permutation_entropy
-from .rate_of_change import add_rate_of_change
 from .roofing_filter import add_roofing_filter
 from .rolling_r2_trend_quality import add_rolling_r2_trend_quality
 from .shannon_entropy import add_shannon_entropy
@@ -159,7 +158,6 @@ __all__ = [
     "add_order_flow_imbalance",
     "add_parkinson_volatility",
     "add_permutation_entropy",
-    "add_rate_of_change",
     "add_roofing_filter",
     "add_rolling_r2_trend_quality",
     "add_shannon_entropy",

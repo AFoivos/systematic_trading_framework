@@ -21,12 +21,40 @@ def add_stochastic_rsi_features(
 ) -> pd.DataFrame:
     """
     Apply the registered ``stochastic_rsi`` feature transformation.
-
+    
     YAML declaration::
-
+    
         features:
           - step: stochastic_rsi
             params: {}
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    
+    Parameters
+    ----------
+    price_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    rsi_period:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``14``.
+    stoch_period:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``14``.
+    k_period:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``3``.
+    d_period:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``3``.
+    oversold:
+        Configuration value used by the registered component. Default: ``0.2``.
+    overbought:
+        Configuration value used by the registered component. Default: ``0.8``.
+    prefix:
+        Configuration value used by the registered component. Default: ``stoch_rsi``.
+    method:
+        Mode selector that controls the registered component behavior. Default: ``wilder``.
+    inplace:
+        Configuration value used by the registered component. Default: ``False``.
     """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame")

@@ -15,15 +15,33 @@ def add_parkinson_volatility(
 ) -> pd.DataFrame:
     """
     Add causal rolling Parkinson volatility from high/low prices.
-
+    
     The estimator uses only the current and trailing ``window - 1`` bars:
     ``sqrt(mean(log(high / low)^2) / (4 * log(2)))``.
-
+    
     YAML declaration::
-
+    
         features:
           - step: parkinson_volatility
             params: {}
+    
+    Required input columns
+    ----------------------
+    high_col:
+        Input column configured by ``high_col``. Default: ``high``.
+    low_col:
+        Input column configured by ``low_col``. Default: ``low``.
+    
+    Parameters
+    ----------
+    high_col:
+        Input dataframe column name consumed by the component. Default: ``high``.
+    low_col:
+        Input dataframe column name consumed by the component. Default: ``low``.
+    window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``20``.
+    output_col:
+        Output column name emitted by the component. Default: ``None``.
     """
     _validate_columns(df, [high_col, low_col])
     _validate_window(window)

@@ -25,16 +25,52 @@ def meta_probability_side_signal(
 ) -> pd.Series:
     """
     Convert a meta-label success probability into same-side-only execution.
-
+    
     pred_prob is interpreted as P(candidate succeeds), not P(price goes up). A high probability
     activates the configured side; a low probability stays flat and never flips to the opposite
     direction.
-
+    
     YAML declaration::
-
+    
         signals:
           kind: meta_probability_side
           params: {}
+    
+    Required input columns
+    ----------------------
+    prob_col:
+        Input column configured by ``prob_col``. Default: ``pred_prob``.
+    side_col:
+        Input column configured by ``side_col``. Default: ``primary_side``.
+    candidate_col:
+        Optional input column configured by ``candidate_col``; used when a value is provided.
+    
+    Parameters
+    ----------
+    prob_col:
+        Input dataframe column name consumed by the component. Default: ``pred_prob``.
+    side_col:
+        Input dataframe column name consumed by the component. Default: ``primary_side``.
+    candidate_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    expected_value_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    signal_col:
+        Output column name emitted by the component. Default: ``None``.
+    threshold:
+        Numeric threshold controlling the component decision rule. Default: ``None``.
+    upper:
+        Configuration value used by the registered component. Default: ``None``.
+    min_expected_value_r:
+        Configuration value used by the registered component. Default: ``None``.
+    profit_barrier_r:
+        Configuration value used by the registered component. Default: ``1.0``.
+    stop_barrier_r:
+        Configuration value used by the registered component. Default: ``1.0``.
+    clip:
+        Configuration value used by the registered component. Default: ``1.0``.
+    mode:
+        Mode selector that controls the registered component behavior. Default: ``long_short``.
     """
     if prob_col not in df.columns:
         raise KeyError(f"prob_col '{prob_col}' not found in DataFrame")

@@ -24,12 +24,30 @@ def add_instantaneous_trendline(
 ) -> pd.DataFrame:
     """
     Add Ehlers' causal instantaneous trendline and optional trigger.
-
+    
     YAML declaration::
-
+    
         features:
           - step: instantaneous_trendline
             params: {}
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    
+    Parameters
+    ----------
+    price_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    alpha:
+        Configuration value used by the registered component. Default: ``0.07``.
+    output_col:
+        Output column name emitted by the component. Default: ``None``.
+    trigger_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    add_trigger:
+        Configuration value used by the registered component. Default: ``True``.
     """
     require_columns(df, [price_col], feature="instantaneous trendline")
     a = validate_float(alpha, name="alpha", minimum=0.0, maximum=1.0)

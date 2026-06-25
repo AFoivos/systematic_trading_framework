@@ -1,10 +1,10 @@
 execution:
   mode: demo_mt5
   mt5:
-    login_env: MT5_LOGIN
-    password_env: MT5_PASSWORD
-    server_env: MT5_SERVER
-    terminal_path: null
+    login: 1513809047
+    password: "Q6g$*@h?"
+    server: FTMO-Demo
+    terminal_path: "C:\\Program Files\\MetaTrader 5\\terminal64.exe"
   timeframe: M30
   lookback_bars: 1000
   poll_seconds: 30

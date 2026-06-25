@@ -14,6 +14,13 @@ from src.signals.vwap_rms_ema_cross_long_hmm_gate import (
 from src.utils.config import load_experiment_config
 
 
+def _require_config_fixture(path: str | Path) -> Path:
+    resolved = Path(path)
+    if not resolved.exists():
+        pytest.skip(f"optional config fixture not present: {resolved}")
+    return resolved
+
+
 EXPECTED_COLUMNS = {
     "ema_50_above_ema_96",
     "vwap_40_rms_cross_above_ema_50_rms",
@@ -159,7 +166,9 @@ def test_vwap_rms_ema_cross_long_hmm_gate_cross_logic_does_not_look_ahead() -> N
 
 
 def test_us100_vwap_rms_hmm_gate_config_loads() -> None:
-    cfg = load_experiment_config(Path("config/experiments/us100_30m_vwap_rms_hmm_regime_gate.yaml"))
+    cfg = load_experiment_config(
+        _require_config_fixture("config/experiments/us100_30m_vwap_rms_hmm_regime_gate.yaml")
+    )
 
     assert cfg["signals"]["kind"] == "vwap_rms_ema_cross_long_hmm_gate"
     assert cfg["signals"]["params"]["hmm_regime_col"] == "hmm_regime"

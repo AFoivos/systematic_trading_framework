@@ -237,6 +237,28 @@ def train_ppo_agent(
     model_cfg: dict[str, Any],
     returns_col: str | None = None,
 ) -> tuple[pd.DataFrame, object, dict[str, Any]]:
+    """
+    Train the registered ``ppo_agent`` model component.
+    
+    YAML declaration::
+    
+        model:
+          kind: ppo_agent
+          params: {}
+    
+    Required input columns
+    ----------------------
+    returns_col:
+        Optional input column configured by ``returns_col``; used when a value is provided.
+    
+    Parameters
+    ----------
+    model_cfg:
+        Configuration mapping, usually resolved from YAML before this
+        registered component is called.
+    returns_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    """
     return _train_single_asset_rl(
         df,
         model_cfg,
@@ -251,6 +273,28 @@ def train_dqn_agent(
     model_cfg: dict[str, Any],
     returns_col: str | None = None,
 ) -> tuple[pd.DataFrame, object, dict[str, Any]]:
+    """
+    Train the registered ``dqn_agent`` model component.
+    
+    YAML declaration::
+    
+        model:
+          kind: dqn_agent
+          params: {}
+    
+    Required input columns
+    ----------------------
+    returns_col:
+        Optional input column configured by ``returns_col``; used when a value is provided.
+    
+    Parameters
+    ----------
+    model_cfg:
+        Configuration mapping, usually resolved from YAML before this
+        registered component is called.
+    returns_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    """
     return _train_single_asset_rl(
         df,
         model_cfg,

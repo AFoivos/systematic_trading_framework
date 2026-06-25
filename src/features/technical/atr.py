@@ -22,12 +22,44 @@ def add_atr_features(
 ) -> pd.DataFrame:
     """
     Apply the registered ``atr`` feature transformation.
-
+    
     YAML declaration::
-
+    
         features:
           - step: atr
             params: {}
+    
+    Required input columns
+    ----------------------
+    high_col:
+        Input column configured by ``high_col``. Default: ``high``.
+    low_col:
+        Input column configured by ``low_col``. Default: ``low``.
+    close_col:
+        Input column configured by ``close_col``. Default: ``close``.
+    
+    Parameters
+    ----------
+    high_col:
+        Input dataframe column name consumed by the component. Default: ``high``.
+    low_col:
+        Input dataframe column name consumed by the component. Default: ``low``.
+    close_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``14``.
+    windows:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``None``.
+    method:
+        Mode selector that controls the registered component behavior. Default: ``wilder``.
+    add_over_price:
+        Configuration value used by the registered component. Default: ``True``.
+    atr_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    over_price_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    inplace:
+        Configuration value used by the registered component. Default: ``False``.
     """
     missing = [c for c in (high_col, low_col, close_col) if c not in df.columns]
     if missing:

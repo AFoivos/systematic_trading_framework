@@ -28,12 +28,32 @@ def add_fisher_transform(
 ) -> pd.DataFrame:
     """
     Add Ehlers' causal Fisher Transform over a trailing price range.
-
+    
     YAML declaration::
-
+    
         features:
           - step: fisher_transform
             params: {}
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    
+    Parameters
+    ----------
+    price_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``10``.
+    clip:
+        Configuration value used by the registered component. Default: ``0.999``.
+    output_col:
+        Output column name emitted by the component. Default: ``None``.
+    signal_col:
+        Output column name emitted by the component. Default: ``None``.
+    add_signal:
+        Configuration value used by the registered component. Default: ``True``.
     """
     require_columns(df, [price_col], feature="Fisher Transform")
     resolved_window = validate_int(window, name="window", minimum=2)

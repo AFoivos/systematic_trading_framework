@@ -62,20 +62,108 @@ def roc_long_only_conditions_signal(
 ) -> pd.DataFrame:
     """
     Build a causal manual ROC long-only signal from already-computed market conditions.
-
+    
     The function does not fit or predict a model. It only combines condition columns that are
     available at the current bar close. Backtesting remains responsible for shifting execution
     to the next bar/open.
-
+    
     YAML declaration::
-
-        features:
-          - step: roc_long_only_conditions
-            params: {}
-
+    
         signals:
           kind: roc_long_only_conditions
           params: {}
+    
+    Required input columns
+    ----------------------
+    cond_macro_not_bearish:
+        Required dataframe column read directly by this component.
+    cond_not_weekend:
+        Required dataframe column read directly by this component.
+    close_z_col:
+        Input column configured by ``close_z_col``. Default: ``close_z``.
+    close_open_ratio_col:
+        Input column configured by ``close_open_ratio_col``. Default: ``close_open_ratio``.
+    mtf_1h_col:
+        Input column configured by ``mtf_1h_col``. Default: ``mtf_1h_trend_score``.
+    mtf_4h_col:
+        Input column configured by ``mtf_4h_col``. Default: ``mtf_4h_trend_score``.
+    is_weekend_col:
+        Input column configured by ``is_weekend_col``. Default: ``is_weekend``.
+    score_col:
+        Input column configured by ``score_col``. Default: ``manual_conviction_score``.
+    all_conditions_col:
+        Input column configured by ``all_conditions_col``. Default: ``manual_all_conditions_signal``.
+    vol_adjusted_col:
+        Input column configured by ``vol_adjusted_col``. Default: ``manual_vol_adjusted_signal``.
+    
+    Parameters
+    ----------
+    roc_window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``12``.
+    roc_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    roc_min:
+        Configuration value used by the registered component. Default: ``0.0015``.
+    vol_short_window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``24``.
+    vol_long_window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``168``.
+    regime_vol_ratio_z_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    vol_z_min:
+        Configuration value used by the registered component. Default: ``-1.5``.
+    vol_z_max:
+        Configuration value used by the registered component. Default: ``1.75``.
+    close_z_col:
+        Input dataframe column name consumed by the component. Default: ``close_z``.
+    close_z_min:
+        Configuration value used by the registered component. Default: ``-0.25``.
+    close_z_max:
+        Configuration value used by the registered component. Default: ``2.25``.
+    close_open_ratio_col:
+        Input dataframe column name consumed by the component. Default: ``close_open_ratio``.
+    close_open_ratio_min:
+        Configuration value used by the registered component. Default: ``0.0002``.
+    mtf_1h_col:
+        Input dataframe column name consumed by the component. Default: ``mtf_1h_trend_score``.
+    mtf_1h_min:
+        Configuration value used by the registered component. Default: ``-0.001``.
+    mtf_4h_col:
+        Input dataframe column name consumed by the component. Default: ``mtf_4h_trend_score``.
+    mtf_4h_min:
+        Configuration value used by the registered component. Default: ``-0.002``.
+    is_weekend_col:
+        Input dataframe column name consumed by the component. Default: ``is_weekend``.
+    macro_condition_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    min_score_required:
+        Configuration value used by the registered component. Default: ``5``.
+    require_all_conditions:
+        Configuration value used by the registered component. Default: ``False``.
+    require_bullish_candle:
+        Configuration value used by the registered component. Default: ``False``.
+    required_condition_names:
+        Configuration value used by the registered component. Default: ``None``.
+    vol_adjustment_strength:
+        Configuration value used by the registered component. Default: ``0.9``.
+    min_exposure:
+        Configuration value used by the registered component. Default: ``0.1``.
+    max_exposure:
+        Configuration value used by the registered component. Default: ``1.0``.
+    signal_col:
+        Output column name emitted by the component. Default: ``None``.
+    long_signal_col:
+        Output column name emitted by the component. Default: ``manual_long_signal``.
+    score_col:
+        Input dataframe column name consumed by the component. Default: ``manual_conviction_score``.
+    all_conditions_col:
+        Input dataframe column name consumed by the component. Default: ``manual_all_conditions_signal``.
+    vol_adjusted_col:
+        Input dataframe column name consumed by the component. Default: ``manual_vol_adjusted_signal``.
+    short_signal_col:
+        Output column name emitted by the component. Default: ``short_signal``.
+    combined_signal_col:
+        Output column name emitted by the component. Default: ``combined_signal``.
     """
     if int(roc_window) <= 0:
         raise ValueError("roc_window must be positive.")

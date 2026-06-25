@@ -32,11 +32,7 @@ from src.evaluation.model_metrics import (
 )
 from src.models.common.overlay import resolve_garch_overlay
 from src.models.common.runtime import describe_feature_set, infer_feature_columns, resolve_runtime_for_model
-from src.targets import (
-    build_forward_return_target,
-    build_future_return_regression_target,
-    build_triple_barrier_target,
-)
+from src.targets.registry import build_target
 from src.models.types import ForecasterFoldPredictor
 from src.models.forecasting.garch import make_garch_fold_predictor
 from src.models.forecasting.lightgbm import make_lightgbm_regressor_fold_predictor
@@ -73,15 +69,11 @@ def prepare_forecaster_inputs(
     )
     target_cfg = dict(model_cfg.get("target", {}) or {})
     target_kind = target_cfg.get("kind", "forward_return")
-    if target_kind == "forward_return":
-        out, label_col, fwd_col, target_meta = build_forward_return_target(df=df, target_cfg=target_cfg)
-    elif target_kind == "future_return_regression":
-        out, label_col, fwd_col, target_meta = build_future_return_regression_target(
-            df=df,
-            target_cfg=target_cfg,
-        )
-    elif target_kind == "triple_barrier":
-        out, label_col, event_col, target_meta = build_triple_barrier_target(df=df, target_cfg=target_cfg)
+    if target_kind not in {"forward_return", "future_return_regression", "triple_barrier"}:
+        raise ValueError(f"Unsupported target.kind: {target_kind}")
+    out, label_col, fwd_col, target_meta = build_target(df=df, target_cfg=target_cfg)
+    if target_kind == "triple_barrier":
+        event_col = fwd_col
         regression_target_col = str(
             target_cfg.get("target_col")
             or target_cfg.get("regression_target_col")
@@ -96,8 +88,6 @@ def prepare_forecaster_inputs(
         fwd_col = regression_target_col
         target_meta = dict(target_meta)
         target_meta["regression_target_col"] = regression_target_col
-    else:
-        raise ValueError(f"Unsupported target.kind: {target_kind}")
     split_cfg = dict(model_cfg.get("split", {}) or {})
     split_method = split_cfg.get("method", "time")
     if split_method not in {"time", "walk_forward", "purged"}:
@@ -550,6 +540,28 @@ def train_sarimax_forecaster(
     model_cfg: dict[str, Any],
     returns_col: str | None = None,
 ) -> tuple[pd.DataFrame, object, dict[str, Any]]:
+    """
+    Train the registered ``sarimax_forecaster`` model component.
+    
+    YAML declaration::
+    
+        model:
+          kind: sarimax_forecaster
+          params: {}
+    
+    Required input columns
+    ----------------------
+    returns_col:
+        Optional input column configured by ``returns_col``; used when a value is provided.
+    
+    Parameters
+    ----------
+    model_cfg:
+        Configuration mapping, usually resolved from YAML before this
+        registered component is called.
+    returns_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    """
     return train_forward_forecaster(
         df=df,
         model_cfg=model_cfg,
@@ -566,6 +578,28 @@ def train_garch_forecaster(
     model_cfg: dict[str, Any],
     returns_col: str | None = None,
 ) -> tuple[pd.DataFrame, object, dict[str, Any]]:
+    """
+    Train the registered ``garch_forecaster`` model component.
+    
+    YAML declaration::
+    
+        model:
+          kind: garch_forecaster
+          params: {}
+    
+    Required input columns
+    ----------------------
+    returns_col:
+        Optional input column configured by ``returns_col``; used when a value is provided.
+    
+    Parameters
+    ----------
+    model_cfg:
+        Configuration mapping, usually resolved from YAML before this
+        registered component is called.
+    returns_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    """
     cfg = dict(model_cfg or {})
     target_cfg = dict(cfg.get("target", {}) or {})
     params = dict(cfg.get("params", {}) or {})
@@ -601,6 +635,28 @@ def train_lightgbm_regressor(
     model_cfg: dict[str, Any],
     returns_col: str | None = None,
 ) -> tuple[pd.DataFrame, object, dict[str, Any]]:
+    """
+    Train the registered ``lightgbm_regressor`` model component.
+    
+    YAML declaration::
+    
+        model:
+          kind: lightgbm_regressor
+          params: {}
+    
+    Required input columns
+    ----------------------
+    returns_col:
+        Optional input column configured by ``returns_col``; used when a value is provided.
+    
+    Parameters
+    ----------
+    model_cfg:
+        Configuration mapping, usually resolved from YAML before this
+        registered component is called.
+    returns_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    """
     return train_forward_forecaster(
         df=df,
         model_cfg=model_cfg,
@@ -617,6 +673,28 @@ def train_tft_forecaster(
     model_cfg: dict[str, Any],
     returns_col: str | None = None,
 ) -> tuple[pd.DataFrame, object, dict[str, Any]]:
+    """
+    Train the registered ``tft_forecaster`` model component.
+    
+    YAML declaration::
+    
+        model:
+          kind: tft_forecaster
+          params: {}
+    
+    Required input columns
+    ----------------------
+    returns_col:
+        Optional input column configured by ``returns_col``; used when a value is provided.
+    
+    Parameters
+    ----------
+    model_cfg:
+        Configuration mapping, usually resolved from YAML before this
+        registered component is called.
+    returns_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    """
     return train_forward_forecaster(
         df=df,
         model_cfg=model_cfg,
@@ -633,6 +711,28 @@ def train_lstm_forecaster(
     model_cfg: dict[str, Any],
     returns_col: str | None = None,
 ) -> tuple[pd.DataFrame, object, dict[str, Any]]:
+    """
+    Train the registered ``lstm_forecaster`` model component.
+    
+    YAML declaration::
+    
+        model:
+          kind: lstm_forecaster
+          params: {}
+    
+    Required input columns
+    ----------------------
+    returns_col:
+        Optional input column configured by ``returns_col``; used when a value is provided.
+    
+    Parameters
+    ----------
+    model_cfg:
+        Configuration mapping, usually resolved from YAML before this
+        registered component is called.
+    returns_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    """
     return train_forward_forecaster(
         df,
         model_cfg,
@@ -649,6 +749,28 @@ def train_patchtst_forecaster(
     model_cfg: dict[str, Any],
     returns_col: str | None = None,
 ) -> tuple[pd.DataFrame, object, dict[str, Any]]:
+    """
+    Train the registered ``patchtst_forecaster`` model component.
+    
+    YAML declaration::
+    
+        model:
+          kind: patchtst_forecaster
+          params: {}
+    
+    Required input columns
+    ----------------------
+    returns_col:
+        Optional input column configured by ``returns_col``; used when a value is provided.
+    
+    Parameters
+    ----------
+    model_cfg:
+        Configuration mapping, usually resolved from YAML before this
+        registered component is called.
+    returns_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    """
     return train_forward_forecaster(
         df,
         model_cfg,

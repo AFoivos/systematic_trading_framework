@@ -38,6 +38,19 @@ def add_close_returns(
     col_name: str | None = None,
 ) -> pd.DataFrame:
     """
+    Apply the registered ``returns`` feature component.
+    
+    YAML declaration::
+    
+        features:
+          - step: returns
+            params: {}
+    
+    Required input columns
+    ----------------------
+    close:
+        Required dataframe column read directly by this component.
+    
     Parameters
     ----------
     df : pd.DataFrame
@@ -46,17 +59,6 @@ def add_close_returns(
         If True -> log-returns, else returns.
     col_name : str | None
         Name of the returns column to add. If None, uses "close_logret" or "close_ret".
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame with added returns column.
-
-    YAML declaration::
-
-        features:
-          - step: returns
-            params: {}
     """
     if "close" not in df.columns:
         raise ValueError("Expected column 'close' in df.")

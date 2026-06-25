@@ -65,6 +65,30 @@ def train_event_transformer_encoder(
     model_cfg: dict[str, Any],
     returns_col: str | None = None,
 ) -> tuple[pd.DataFrame, object, dict[str, Any]]:
+    """
+    Train the registered ``event_transformer_encoder`` model component.
+    
+    YAML declaration::
+    
+        model:
+          kind: event_transformer_encoder
+          params: {}
+    
+    Required input columns
+    ----------------------
+    horizon:
+        Required dataframe column read directly by this component.
+    returns_col:
+        Optional input column configured by ``returns_col``; used when a value is provided.
+    
+    Parameters
+    ----------
+    model_cfg:
+        Configuration mapping, usually resolved from YAML before this
+        registered component is called.
+    returns_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    """
     try:
         import torch
         import torch.nn as nn

@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 from src.backtesting.engine import BacktestResult
-from src.backtesting.trade_path import (
+from src.utils.trade_path import (
     normalize_dynamic_exit_config,
     simulate_long_trade_path,
     simulate_short_trade_path,

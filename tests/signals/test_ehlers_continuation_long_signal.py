@@ -26,6 +26,13 @@ ABLATION_CONFIGS = [
 ]
 
 
+def _require_config_fixture(path: str | Path) -> Path:
+    resolved = Path(path)
+    if not resolved.exists():
+        pytest.skip(f"optional config fixture not present: {resolved}")
+    return resolved
+
+
 def _signal_frame() -> pd.DataFrame:
     idx = pd.date_range("2024-01-01", periods=7, freq="30min", tz="UTC")
     return pd.DataFrame(
@@ -43,7 +50,7 @@ def _signal_frame() -> pd.DataFrame:
 
 
 def test_ehlers_continuation_config_loads_and_resolves_registered_steps() -> None:
-    cfg = load_experiment_config(CONFIG_PATH)
+    cfg = load_experiment_config(_require_config_fixture(CONFIG_PATH))
 
     assert cfg["strategy"]["name"] == "ehlers_continuation_long_v1"
     assert cfg["data"]["interval"] == "30m"
@@ -195,7 +202,7 @@ def test_ehlers_continuation_diagnostics_return_expected_keys() -> None:
 
 @pytest.mark.parametrize("path", ABLATION_CONFIGS)
 def test_ehlers_continuation_ablation_configs_load(path: Path) -> None:
-    cfg = load_experiment_config(path)
+    cfg = load_experiment_config(_require_config_fixture(path))
 
     assert cfg["signals"]["kind"] == "ehlers_continuation_long"
     assert cfg["signals"]["params"]["long_only"] is True
@@ -204,6 +211,9 @@ def test_ehlers_continuation_ablation_configs_load(path: Path) -> None:
 
 
 def test_ehlers_continuation_ablation_config_params_match_intent() -> None:
+    for path in ABLATION_CONFIGS:
+        _require_config_fixture(path)
+
     assert load_experiment_config(ABLATION_CONFIGS[0])["signals"]["params"]["use_mama_fama"] is False
     assert load_experiment_config(ABLATION_CONFIGS[1])["signals"]["params"]["use_decycler"] is False
     assert load_experiment_config(ABLATION_CONFIGS[2])["signals"]["params"]["use_ema_regime"] is False
@@ -214,7 +224,7 @@ def test_ehlers_continuation_ablation_config_params_match_intent() -> None:
 
 def test_ehlers_continuation_robustness_configs_load_if_supported() -> None:
     for path in [CONFIG_PATH, ABLATION_CONFIGS[4], ABLATION_CONFIGS[5]]:
-        cfg = load_experiment_config(path)
+        cfg = load_experiment_config(_require_config_fixture(path))
         robustness = cfg["diagnostics"]["robustness"]
 
         assert robustness["enabled"] is True

@@ -217,13 +217,24 @@ def build_ehlers_continuation_long_signal(
 def ehlers_continuation_long_signal(df: pd.DataFrame, **params: Any) -> pd.DataFrame:
     """
     Apply the registered ``ehlers_continuation_long`` signal transformation.
-
+    
     YAML declaration::
-
+    
         signals:
           kind: ehlers_continuation_long
           params: {}
         # Legacy kind alias: ehlers_continuation_long_signal
+    
+    Required input columns
+    ----------------------
+    None fixed by signature:
+        Required dataframe columns are resolved from configuration or from
+        upstream feature/target/signal stages at runtime.
+    
+    Parameters
+    ----------
+    params:
+        Additional keyword parameters accepted from YAML ``params``.
     """
     out, _ = build_ehlers_continuation_long_signal(df, params)
     return out

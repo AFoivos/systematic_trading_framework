@@ -68,7 +68,6 @@ from src.features import (  # noqa: E402
     add_permutation_entropy,
     add_ppo_features,
     add_price_momentum_features,
-    add_rate_of_change,
     add_regime_context_features,
     add_return_momentum_features,
     add_roofing_filter,
@@ -98,7 +97,7 @@ from src.features import (  # noqa: E402
     swing_extrema_context,
 )
 from src.features.technical.trend import add_trend_features, add_trend_regime_features  # noqa: E402
-from src.experiments.registry import SIGNAL_REGISTRY as EXPERIMENT_SIGNAL_REGISTRY  # noqa: E402
+from src.signals.registry import SIGNAL_REGISTRY as EXPERIMENT_SIGNAL_REGISTRY  # noqa: E402
 from src.signals import (  # noqa: E402
     ehlers_semiscalp_long_feature,
     ema_stoch_rsi_pullback_signal,
@@ -178,7 +177,6 @@ FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
     "yang_zhang_volatility": add_yang_zhang_volatility,
     "hurst_exponent": add_hurst_exponent,
     "fractal_dimension": add_fractal_dimension,
-    "rate_of_change": add_rate_of_change,
     "zscore_momentum": add_zscore_momentum,
     "rolling_r2_trend_quality": add_rolling_r2_trend_quality,
     "trend_slope_volatility": add_trend_slope_volatility,

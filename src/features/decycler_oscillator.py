@@ -15,14 +15,14 @@ def add_decycler_oscillator(
 ) -> pd.DataFrame:
     """
     Add a causal Ehlers decycler oscillator from fast and slow decyclers.
-
+    
     The oscillator compares a fast decycler with a slow decycler and normalizes
     their difference by price. Positive values indicate that the faster
     decycled trend is above the slower decycled trend, while negative values
     indicate the opposite.
-
+    
     YAML declaration::
-
+    
         features:
           - step: decycler_oscillator
             params:
@@ -32,7 +32,12 @@ def add_decycler_oscillator(
               output_col: decycler_oscillator_30_60
             output_cols:
               - decycler_oscillator_30_60
-
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    
     Parameters
     ----------
     price_col:

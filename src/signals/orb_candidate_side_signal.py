@@ -16,15 +16,33 @@ def orb_candidate_side_signal(
 ) -> pd.Series:
     """
     Diagnostic ORB baseline: trade every nonzero candidate on its emitted side.
-
+    
     This intentionally does not apply model probabilities, thresholds, or side flipping. It is
     useful as a raw candidate-side comparator against `meta_probability_side`.
-
+    
     YAML declaration::
-
+    
         signals:
           kind: orb_candidate_side
           params: {}
+    
+    Required input columns
+    ----------------------
+    candidate_col:
+        Input column configured by ``candidate_col``. Default: ``orb_candidate``.
+    side_col:
+        Input column configured by ``side_col``. Default: ``orb_side``.
+    
+    Parameters
+    ----------
+    candidate_col:
+        Input dataframe column name consumed by the component. Default: ``orb_candidate``.
+    side_col:
+        Input dataframe column name consumed by the component. Default: ``orb_side``.
+    signal_col:
+        Output column name emitted by the component. Default: ``signal_orb_side``.
+    mode:
+        Mode selector that controls the registered component behavior. Default: ``long_short``.
     """
     if candidate_col not in df.columns:
         raise KeyError(f"candidate_col '{candidate_col}' not found in DataFrame")

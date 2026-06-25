@@ -138,19 +138,67 @@ def add_shock_context_features(
 ) -> pd.DataFrame:
     """
     Build point-in-time safe shock/reversion context columns from already-available market data.
-
+    
     The emitted columns are intended for two complementary use-cases:
     - rule-based contrarian baselines via `shock_side_contrarian`
     - meta-label classifiers via `triple_barrier.side_col` + `candidate_col`
-
+    
     Candidate shocks are event columns, not persistent regimes: they are active only on the bar
     where the shock rule is satisfied.
-
+    
     YAML declaration::
-
+    
         features:
           - step: shock_context
             params: {}
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    high_col:
+        Input column configured by ``high_col``. Default: ``high``.
+    low_col:
+        Input column configured by ``low_col``. Default: ``low``.
+    returns_col:
+        Input column configured by ``returns_col``. Default: ``close_logret``.
+    
+    Parameters
+    ----------
+    price_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    high_col:
+        Input dataframe column name consumed by the component. Default: ``high``.
+    low_col:
+        Input dataframe column name consumed by the component. Default: ``low``.
+    returns_col:
+        Input dataframe column name consumed by the component. Default: ``close_logret``.
+    ema_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    ema_window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``24``.
+    atr_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    atr_window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``24``.
+    short_horizon:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``1``.
+    medium_horizon:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``4``.
+    vol_window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``24``.
+    ret_z_threshold:
+        Numeric threshold controlling the component decision rule. Default: ``2.0``.
+    atr_mult_threshold:
+        Numeric threshold controlling the component decision rule. Default: ``1.5``.
+    distance_from_mean_threshold:
+        Numeric threshold controlling the component decision rule. Default: ``1.0``.
+    post_shock_active_bars:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``1``.
+    use_log_returns:
+        Configuration value used by the registered component. Default: ``True``.
+    inplace:
+        Configuration value used by the registered component. Default: ``False``.
     """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame.")

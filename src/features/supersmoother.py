@@ -14,15 +14,29 @@ def add_supersmoother(
 ) -> pd.DataFrame:
     """
     Add John Ehlers' causal two-pole SuperSmoother filter.
-
+    
     The filter is low lag relative to a same-period SMA and only uses current
     and prior observations.
-
+    
     YAML declaration::
-
+    
         features:
           - step: supersmoother
             params: {}
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    
+    Parameters
+    ----------
+    price_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    period:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``10``.
+    output_col:
+        Output column name emitted by the component. Default: ``None``.
     """
     _validate_columns(df, [price_col])
     _validate_period(period)

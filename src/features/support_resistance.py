@@ -23,16 +23,46 @@ def add_support_resistance_features(
 ) -> pd.DataFrame:
     """
     Add point-in-time safe rolling support and resistance levels.
-
+    
     Support is defined as the rolling minimum of `low_col` over each window.
     Resistance is defined as the rolling maximum of `high_col` over each window.
     Distances are computed relative to the current `price_col` and optionally normalized by ATR.
-
+    
     YAML declaration::
-
+    
         features:
           - step: support_resistance
             params: {}
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    high_col:
+        Input column configured by ``high_col``. Default: ``high``.
+    low_col:
+        Input column configured by ``low_col``. Default: ``low``.
+    
+    Parameters
+    ----------
+    price_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    high_col:
+        Input dataframe column name consumed by the component. Default: ``high``.
+    low_col:
+        Input dataframe column name consumed by the component. Default: ``low``.
+    windows:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``(24, 72, 168)``.
+    atr_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    atr_window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``24``.
+    include_pct_distance:
+        Configuration value used by the registered component. Default: ``True``.
+    include_atr_distance:
+        Configuration value used by the registered component. Default: ``True``.
+    inplace:
+        Configuration value used by the registered component. Default: ``False``.
     """
     missing = [col for col in (price_col, high_col, low_col) if col not in df.columns]
     if missing:

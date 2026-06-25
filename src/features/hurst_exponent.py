@@ -16,16 +16,34 @@ def add_hurst_exponent(
 ) -> pd.DataFrame:
     """
     Add a causal rolling Hurst exponent estimate.
-
+    
     The estimator regresses ``log(std(x[t] - x[t-lag]))`` on ``log(lag)`` over
     trailing windows only. Estimates are clipped to ``[0, 1]`` to reduce
     numerical instability in short or nearly flat samples.
-
+    
     YAML declaration::
-
+    
         features:
           - step: hurst_exponent
             params: {}
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    
+    Parameters
+    ----------
+    price_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``128``.
+    min_lag:
+        Configuration value used by the registered component. Default: ``2``.
+    max_lag:
+        Configuration value used by the registered component. Default: ``None``.
+    output_col:
+        Output column name emitted by the component. Default: ``None``.
     """
     _validate_columns(df, [price_col])
     _validate_window(window, name="window")

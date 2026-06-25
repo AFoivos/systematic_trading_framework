@@ -14,13 +14,27 @@ def trend_state_signal(
 ) -> pd.Series:
     """
     Apply the registered ``trend_state`` signal transformation.
-
+    
     YAML declaration::
-
+    
         signals:
           kind: trend_state
           params:
             state_col: trend_regime
+    
+    Required input columns
+    ----------------------
+    state_col:
+        Optional input column configured by ``state_col``; used when a value is provided.
+    
+    Parameters
+    ----------
+    state_col:
+        Input dataframe column name consumed by the component.
+    signal_col:
+        Output column name emitted by the component. Default: ``None``.
+    mode:
+        Mode selector that controls the registered component behavior. Default: ``long_short_hold``.
     """
     output_col = resolve_signal_output_name(
         signal_col=signal_col,

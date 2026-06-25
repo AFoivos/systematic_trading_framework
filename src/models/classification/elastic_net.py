@@ -13,6 +13,28 @@ def train_elastic_net_classifier(
     model_cfg: dict[str, Any],
     returns_col: str | None = None,
 ) -> tuple[pd.DataFrame, object, dict[str, Any]]:
+    """
+    Train the registered ``elastic_net_clf`` model component.
+    
+    YAML declaration::
+    
+        model:
+          kind: elastic_net_clf
+          params: {}
+    
+    Required input columns
+    ----------------------
+    returns_col:
+        Optional input column configured by ``returns_col``; used when a value is provided.
+    
+    Parameters
+    ----------
+    model_cfg:
+        Configuration mapping, usually resolved from YAML before this
+        registered component is called.
+    returns_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    """
     cfg = dict(model_cfg or {})
     params = dict(cfg.get("params", {}) or {})
 

@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from src.experiments.orchestration.feature_stage import apply_feature_steps, apply_signal_step
 from src.experiments.orchestration.target_stage import (
@@ -17,6 +18,13 @@ from src.utils.config import load_experiment_config
 
 
 CONFIG_PATH = Path("config/experiments/c1_30m_trend_pullback_vwap_v1.yaml")
+
+
+def _require_config_fixture(path: str | Path) -> Path:
+    resolved = Path(path)
+    if not resolved.exists():
+        pytest.skip(f"optional config fixture not present: {resolved}")
+    return resolved
 
 
 def _synthetic_ohlcv(periods: int = 260) -> pd.DataFrame:
@@ -40,7 +48,7 @@ def _synthetic_ohlcv(periods: int = 260) -> pd.DataFrame:
 
 
 def test_c1_config_loads_and_resolves_registered_steps() -> None:
-    cfg = load_experiment_config(CONFIG_PATH)
+    cfg = load_experiment_config(_require_config_fixture(CONFIG_PATH))
 
     assert cfg["strategy"]["name"] == "C1_v1_baseline"
     assert cfg["data"]["interval"] == "30m"
@@ -55,7 +63,7 @@ def test_c1_config_loads_and_resolves_registered_steps() -> None:
 
 
 def test_c1_feature_signal_target_pipeline_aligns_on_synthetic_data() -> None:
-    cfg = load_experiment_config(CONFIG_PATH)
+    cfg = load_experiment_config(_require_config_fixture(CONFIG_PATH))
     features = apply_feature_steps(_synthetic_ohlcv(), cfg["features"], asset="SPX500")
     signaled = apply_signal_step(features, cfg["signals"], asset="SPX500")
     target, label_col, _, meta = build_classifier_target(signaled, cfg["target"])

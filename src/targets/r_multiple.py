@@ -5,7 +5,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from src.backtesting.trade_path import simulate_long_trade_path
+from src.utils.trade_path import simulate_long_trade_path
 from src.targets.output_aliases import apply_target_output_aliases
 
 
@@ -150,50 +150,50 @@ def build_r_multiple_target(
     """
     Build a long-only R-multiple meta-label target for already-emitted strategy
     candidates.
-
+    
     This target evaluates only rows where ``candidate_col`` is positive. For
     each candidate row, it simulates a realistic long trade path using entry
     price, stop loss, take profit, and maximum holding period. The resulting
     trade is converted into R-multiple units and labeled according to whether
     the trade achieved at least ``target_r_min`` R.
-
+    
     Labels:
     - 1.0 when the simulated trade reaches ``target_r_min`` or more.
     - 0.0 when the simulated trade produces less than ``target_r_min``.
     - NaN when the row is not a candidate or cannot be evaluated.
-
+    
     This is mainly used for meta-labeling: the manual/rule-based strategy
     creates trade candidates, and the ML model learns which candidates are
     worth keeping.
-
+    
     YAML declaration inside model config::
-
+    
         model:
           kind: lightgbm_clf
           target:
             kind: r_multiple
-
+    
             candidate_col: signal_candidate
-
+    
             price_col: close
             open_col: open
             high_col: high
             low_col: low
-
+    
             volatility_col: atr_over_price_14
             stop_mode: volatility_stop
-
+    
             entry_price_mode: next_open
             side: long_only
-
+    
             target_r_min: 1.0
             take_profit_r: 2.0
             stop_loss_r: 1.0
             max_holding_bars: 16
-
+    
             tie_break: conservative
             allow_partial_horizon: false
-
+    
             outputs:
               label_col: label
               fwd_col: r_target_event_ret
@@ -208,9 +208,9 @@ def build_r_multiple_target(
               bars_held_col: r_target_bars_held
               hit_type_col: r_target_hit_type
               hit_step_col: r_target_hit_step
-
+    
             diagnostic_feature_cols: null
-
+    
           output_cols:
             - label
             - r_target_event_ret
@@ -225,34 +225,34 @@ def build_r_multiple_target(
             - r_target_bars_held
             - r_target_hit_type
             - r_target_hit_step
-
+    
     YAML declaration with fixed-return stop mode::
-
+    
         model:
           kind: lightgbm_clf
           target:
             kind: r_multiple
-
+    
             candidate_col: signal_candidate
-
+    
             price_col: close
             open_col: open
             high_col: high
             low_col: low
-
+    
             stop_mode: fixed_return
             stop_loss_return: 0.005
             take_profit_return: 0.010
-
+    
             entry_price_mode: next_open
             side: long_only
-
+    
             target_r_min: 1.0
             max_holding_bars: 16
-
+    
             tie_break: conservative
             allow_partial_horizon: false
-
+    
             outputs:
               label_col: label
               fwd_col: r_target_event_ret
@@ -267,7 +267,7 @@ def build_r_multiple_target(
               bars_held_col: r_target_bars_held
               hit_type_col: r_target_hit_type
               hit_step_col: r_target_hit_step
-
+    
           output_cols:
             - label
             - r_target_event_ret
@@ -282,7 +282,24 @@ def build_r_multiple_target(
             - r_target_bars_held
             - r_target_hit_type
             - r_target_hit_step
-
+    
+    YAML declaration::
+    
+        target:
+          kind: r_multiple
+          params: {}
+    
+    Required input columns
+    ----------------------
+    bars_held:
+        Required dataframe column read directly by this component.
+    exit_idx:
+        Required dataframe column read directly by this component.
+    exit_reason:
+        Required dataframe column read directly by this component.
+    raw_exit_price:
+        Required dataframe column read directly by this component.
+    
     Parameters
     ----------
     candidate_col:
@@ -319,7 +336,7 @@ def build_r_multiple_target(
         Output column mirroring the exit reason.
     hit_step_col:
         Output column with the number of bars from entry until exit.
-
+    
     price_col:
         Input close/price column. Used for current-close entry mode and as the
         close path during trade simulation.
@@ -339,7 +356,7 @@ def build_r_multiple_target(
         ``current_close``.
     side:
         Trade side. Current implementation supports only ``long_only``.
-
+    
     target_r_min:
         Minimum realized R-multiple required for label 1.
     take_profit_r:
@@ -367,16 +384,10 @@ def build_r_multiple_target(
         If false, candidates near the end of the dataset are marked unavailable
         when the full max-holding horizon is not available. If true, the target
         allows a shortened final horizon.
-
+    
     diagnostic_feature_cols:
         Optional list of feature columns used only for winner/loser diagnostic
         summaries in metadata.
-
-    Returns
-    -------
-    tuple[pd.DataFrame, str, str, dict[str, Any]]
-        Output DataFrame, label column name, forward-return column name, and
-        target metadata.
     """
 
     cfg = apply_target_output_aliases(_flatten_cfg(target_cfg))

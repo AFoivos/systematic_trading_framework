@@ -17,15 +17,41 @@ def add_garman_klass_volatility(
 ) -> pd.DataFrame:
     """
     Add causal rolling Garman-Klass volatility from OHLC prices.
-
+    
     The calculation uses the trailing ``window`` bars and never references
     future observations.
-
+    
     YAML declaration::
-
+    
         features:
           - step: garman_klass_volatility
             params: {}
+    
+    Required input columns
+    ----------------------
+    open_col:
+        Input column configured by ``open_col``. Default: ``open``.
+    high_col:
+        Input column configured by ``high_col``. Default: ``high``.
+    low_col:
+        Input column configured by ``low_col``. Default: ``low``.
+    close_col:
+        Input column configured by ``close_col``. Default: ``close``.
+    
+    Parameters
+    ----------
+    open_col:
+        Input dataframe column name consumed by the component. Default: ``open``.
+    high_col:
+        Input dataframe column name consumed by the component. Default: ``high``.
+    low_col:
+        Input dataframe column name consumed by the component. Default: ``low``.
+    close_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``20``.
+    output_col:
+        Output column name emitted by the component. Default: ``None``.
     """
     _validate_columns(df, [open_col, high_col, low_col, close_col])
     _validate_window(window)

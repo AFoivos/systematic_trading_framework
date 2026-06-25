@@ -23,17 +23,51 @@ def add_trend_slope_volatility(
 ) -> pd.DataFrame:
     """
     Add a causal trend-slope divided by volatility feature.
-
+    
     A positive ratio means the rolling trend slope is positive relative to the
     volatility used. A large absolute ratio means the trend is cleaner or
     stronger relative to noise. ``price_col`` is used as provided, so callers
     may pass raw price or a precomputed log-price column.
-
+    
     YAML declaration::
-
+    
         features:
           - step: trend_slope_volatility
             params: {}
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    volatility_col:
+        Optional input column configured by ``volatility_col``; used when a value is provided.
+    
+    Parameters
+    ----------
+    price_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    volatility_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``96``.
+    annualize:
+        Configuration value used by the registered component. Default: ``False``.
+    periods_per_year:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``None``.
+    slope_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    volatility_used_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    slope_vol_ratio_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    positive_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    rising_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    strong_trend_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    strong_threshold:
+        Numeric threshold controlling the component decision rule. Default: ``1.0``.
     """
     _validate_columns(df, [price_col], feature="trend slope volatility")
     if volatility_col is not None:

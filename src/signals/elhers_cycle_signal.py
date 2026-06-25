@@ -151,38 +151,29 @@ def build_ehlers_cycle_long_signal(
     YAML declaration::
 
         signals:
-        - step: ehlers_cycle_long
-            params:
-                entry_delay_bars: 0
-                mode: long_only
-                entry_mode: state
-                
-                acp_col: autocorrelation_periodogram_10_48
-                acp_power_col: autocorrelation_periodogram_10_48_power
-                acp_sdv_col: autocorrelation_periodogram_10_48__standard_deviation
-                
-                roofing_filter_col: roofing_filter_48_10
-                roofing_filter_slope_col: roofing_filter_48_10_slope
-                
-                decycler_osc_col: decycler_oscillator_30_60
-                
-                rolling_r2_col: rolling_r2_96
-                rolling_r2_slope_col: rolling_r2_slope_96
-                
-                signal_col: cycle_signal
-                
-                rolling_r2_threshold: 0.0
-                rolling_r2_slope_threshold: 0.0
-                
-                acp_threshold: 30.0
-                acp_power_threshold: 50.0
-                acp_sdv_threshold: 5.0
-                acp_ratio_threshold: 0.15
-                
-                roofing_filter_threshold: 0.0
-                
-                decycler_osc_threshold: 0.0
-            output_cols:
+          kind: ehlers_cycle_long
+          params:
+            entry_delay_bars: 0
+            mode: long_only
+            entry_mode: state
+            acp_col: autocorrelation_periodogram_10_48
+            acp_power_col: autocorrelation_periodogram_10_48_power
+            acp_sdv_col: autocorrelation_periodogram_10_48__standard_deviation
+            roofing_filter_col: roofing_filter_48_10
+            roofing_filter_slope_col: roofing_filter_48_10_slope
+            decycler_osc_col: decycler_oscillator_30_60
+            rolling_r2_col: rolling_r2_96
+            rolling_r2_slope_col: rolling_r2_slope_96
+            signal_col: cycle_signal
+            rolling_r2_threshold: 0.0
+            rolling_r2_slope_threshold: 0.0
+            acp_threshold: 30.0
+            acp_power_threshold: 50.0
+            acp_sdv_threshold: 5.0
+            acp_ratio_threshold: 0.15
+            roofing_filter_threshold: 0.0
+            decycler_osc_threshold: 0.0
+          output_cols:
             - cycle_signal
 
     Required input columns
@@ -250,7 +241,7 @@ def build_ehlers_cycle_long_signal(
         Minimum roofing filter value required.
     decycler_osc_threshold:
         Minimum decycler oscillator value required.
-    """ 
+    """
     
     if not isinstance(df, pd.DataFrame):
         raise TypeError("df must be a pandas DataFrame.")
@@ -359,6 +350,43 @@ def ehlers_cycle_long_signal(df: pd.DataFrame, **params: Any) -> pd.DataFrame:
     """
     Apply the registered ``ehlers_cycle_long`` signal transformation.
 
+    This wrapper returns only the transformed dataframe. Use
+    ``build_ehlers_cycle_long_signal`` when metadata is also needed.
+
+    YAML declaration::
+
+        signals:
+          kind: ehlers_cycle_long
+          params:
+            signal_col: cycle_signal
+          output_cols:
+            - cycle_signal
+
+    Required input columns
+    ----------------------
+    acp_col:
+        Dominant cycle period column, usually produced by
+        ``autocorrelation_periodogram``.
+    acp_power_col:
+        Autocorrelation periodogram power column.
+    acp_sdv_col:
+        Rolling standard deviation or dispersion column of the ACP value.
+    roofing_filter_col:
+        Roofing filter value column.
+    roofing_filter_slope_col:
+        Roofing filter slope column.
+    decycler_osc_col:
+        Decycler oscillator column.
+    rolling_r2_col:
+        Rolling R2 trend-quality column.
+    rolling_r2_slope_col:
+        Rolling R2 slope column.
+
+    Parameters
+    ----------
+    **params:
+        Additional keyword parameters accepted from YAML ``signals.params`` and
+        forwarded to ``build_ehlers_cycle_long_signal``.
     """
     out, _ = build_ehlers_cycle_long_signal(df, params)
     return out

@@ -13,13 +13,27 @@ def conviction_sizing_signal(
 ) -> pd.Series:
     """
     Linear map prob in [0, 1] to exposure in [-clip, clip].
-
+    
     YAML declaration::
-
+    
         signals:
           kind: probability_conviction
           params:
             prob_col: pred_prob
+    
+    Required input columns
+    ----------------------
+    prob_col:
+        Optional input column configured by ``prob_col``; used when a value is provided.
+    
+    Parameters
+    ----------
+    prob_col:
+        Input dataframe column name consumed by the component.
+    signal_col:
+        Output column name emitted by the component. Default: ``None``.
+    clip:
+        Configuration value used by the registered component. Default: ``1.0``.
     """
     if prob_col not in df.columns:
         raise KeyError(f"prob_col '{prob_col}' not found in DataFrame")

@@ -15,12 +15,36 @@ def add_stochastic_features(
 ) -> pd.DataFrame:
     """
     Apply the registered ``stochastic`` feature transformation.
-
+    
     YAML declaration::
-
+    
         features:
           - step: stochastic
             params: {}
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    high_col:
+        Input column configured by ``high_col``. Default: ``high``.
+    low_col:
+        Input column configured by ``low_col``. Default: ``low``.
+    
+    Parameters
+    ----------
+    price_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    high_col:
+        Input dataframe column name consumed by the component. Default: ``high``.
+    low_col:
+        Input dataframe column name consumed by the component. Default: ``low``.
+    window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``14``.
+    smooth:
+        Configuration value used by the registered component. Default: ``3``.
+    inplace:
+        Configuration value used by the registered component. Default: ``False``.
     """
     missing = [c for c in (price_col, high_col, low_col) if c not in df.columns]
     if missing:

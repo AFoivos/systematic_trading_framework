@@ -308,16 +308,23 @@ def ema_stoch_rsi_pullback_signal(
 ) -> pd.DataFrame:
     """
     Registry-compatible wrapper returning only the transformed DataFrame.
-
+    
     YAML declaration::
-
-        features:
-          - step: ema_stoch_rsi_pullback
-            params: {}
-
+    
         signals:
           kind: ema_stoch_rsi_pullback
           params: {}
+    
+    Required input columns
+    ----------------------
+    None fixed by signature:
+        Required dataframe columns are resolved from configuration or from
+        upstream feature/target/signal stages at runtime.
+    
+    Parameters
+    ----------
+    params:
+        Additional keyword parameters accepted from YAML ``params``.
     """
     out, _ = build_ema_stoch_rsi_signal(df, params)
     return out

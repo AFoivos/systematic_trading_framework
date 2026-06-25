@@ -21,12 +21,46 @@ def add_vwap_features(
 ) -> pd.DataFrame:
     """
     Apply the registered ``vwap`` feature transformation.
-
+    
     YAML declaration::
-
+    
         features:
           - step: vwap
             params: {}
+    
+    Required input columns
+    ----------------------
+    high_col:
+        Input column configured by ``high_col``. Default: ``high``.
+    low_col:
+        Input column configured by ``low_col``. Default: ``low``.
+    close_col:
+        Input column configured by ``close_col``. Default: ``close``.
+    volume_col:
+        Input column configured by ``volume_col``. Default: ``volume``.
+    
+    Parameters
+    ----------
+    high_col:
+        Input dataframe column name consumed by the component. Default: ``high``.
+    low_col:
+        Input dataframe column name consumed by the component. Default: ``low``.
+    close_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    volume_col:
+        Input dataframe column name consumed by the component. Default: ``volume``.
+    window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``20``.
+    windows:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``None``.
+    add_distance:
+        Configuration value used by the registered component. Default: ``True``.
+    vwap_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    distance_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    inplace:
+        Configuration value used by the registered component. Default: ``False``.
     """
     missing = [c for c in (high_col, low_col, close_col, volume_col) if c not in df.columns]
     if missing:

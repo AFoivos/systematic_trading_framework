@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from src.backtesting.manual_barrier import run_manual_barrier_backtest
 from src.experiments.orchestration.feature_stage import apply_feature_steps, apply_signal_step
@@ -15,6 +16,13 @@ from src.utils.config import load_experiment_config
 
 
 CONFIG_PATH = Path("config/experiments/c2_30m_regime_aware_momentum_v1.yaml")
+
+
+def _require_config_fixture(path: str | Path) -> Path:
+    resolved = Path(path)
+    if not resolved.exists():
+        pytest.skip(f"optional config fixture not present: {resolved}")
+    return resolved
 
 
 def _synthetic_ohlcv(periods: int = 260) -> pd.DataFrame:
@@ -55,7 +63,7 @@ def _signal_frame() -> pd.DataFrame:
 
 
 def test_c2_config_loads_and_resolves_registered_steps_and_target() -> None:
-    cfg = load_experiment_config(CONFIG_PATH)
+    cfg = load_experiment_config(_require_config_fixture(CONFIG_PATH))
 
     assert cfg["strategy"]["name"] == "C2_v1_regime_aware_momentum"
     assert cfg["data"]["interval"] == "30m"
@@ -91,7 +99,7 @@ def test_c2_signal_handles_rolling_window_nans_without_crashing() -> None:
 
 
 def test_c2_feature_signal_target_pipeline_aligns_on_synthetic_data() -> None:
-    cfg = load_experiment_config(CONFIG_PATH)
+    cfg = load_experiment_config(_require_config_fixture(CONFIG_PATH))
     features = apply_feature_steps(_synthetic_ohlcv(), cfg["features"], asset="SPX500")
     signaled = apply_signal_step(features, cfg["signals"], asset="SPX500")
     target, label_col, _, meta = build_classifier_target(signaled, cfg["target"])

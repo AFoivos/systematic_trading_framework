@@ -27,13 +27,13 @@ def add_schaff_trend_cycle_features(
 ) -> pd.DataFrame:
     """
     Add a causal Schaff Trend Cycle feature set.
-
+    
     The implementation follows the common STC construction: EMA fast/slow
     oscillator, trailing stochastic normalization, and two causal EMA smoothing
     passes. All rolling windows are trailing windows.
-
+    
     YAML declaration::
-
+    
         features:
           - step: schaff_trend_cycle
             params:
@@ -58,7 +58,22 @@ def add_schaff_trend_cycle_features(
               - stc_cross_down_75
               - stc_rising
               - stc_falling
-
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    stc_col:
+        Input column configured by ``stc_col``. Default: ``stc``.
+    cross_up_col:
+        Input column configured by ``cross_up_col``. Default: ``stc_cross_up_25``.
+    cross_down_col:
+        Input column configured by ``cross_down_col``. Default: ``stc_cross_down_75``.
+    rising_col:
+        Input column configured by ``rising_col``. Default: ``stc_rising``.
+    falling_col:
+        Input column configured by ``falling_col``. Default: ``stc_falling``.
+    
     Parameters
     ----------
     price_col:

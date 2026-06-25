@@ -49,13 +49,84 @@ def ehlers_ml_long_candidate_feature(
     candidate_col: str = "ehlers_ml_candidate",
     side_col: str = "signal_side",
 ) -> pd.DataFrame:
-    """Add causal derived Ehlers features and long-only candidate columns.
-
+    """
+    Add causal derived Ehlers features and long-only candidate columns.
+    
     YAML declaration::
-
+    
         features:
           - step: ehlers_ml_long_candidate
             params: {}
+    
+    Required input columns
+    ----------------------
+    amplitude_col:
+        Input column configured by ``amplitude_col``. Default: ``hilbert_amplitude``.
+    cycle_period_col:
+        Input column configured by ``cycle_period_col``. Default: ``dominant_cycle_period``.
+    roofing_col:
+        Input column configured by ``roofing_col``. Default: ``roofing_filter``.
+    mama_col:
+        Input column configured by ``mama_col``. Default: ``mama``.
+    fama_col:
+        Input column configured by ``fama_col``. Default: ``fama``.
+    close_col:
+        Input column configured by ``close_col``. Default: ``close``.
+    decycler_col:
+        Input column configured by ``decycler_col``. Default: ``decycler``.
+    instantaneous_trendline_col:
+        Input column configured by ``instantaneous_trendline_col``. Default: ``instantaneous_trendline``.
+    frama_col:
+        Input column configured by ``frama_col``. Default: ``frama``.
+    supersmoother_col:
+        Input column configured by ``supersmoother_col``. Default: ``supersmoother``.
+    dominant_cycle_phase_col:
+        Input column configured by ``dominant_cycle_phase_col``. Default: ``dominant_cycle_phase``.
+    candidate_col:
+        Input column configured by ``candidate_col``. Default: ``ehlers_ml_candidate``.
+    side_col:
+        Input column configured by ``side_col``. Default: ``signal_side``.
+    
+    Parameters
+    ----------
+    amplitude_col:
+        Input dataframe column name consumed by the component. Default: ``hilbert_amplitude``.
+    cycle_period_col:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``dominant_cycle_period``.
+    roofing_col:
+        Input dataframe column name consumed by the component. Default: ``roofing_filter``.
+    mama_col:
+        Input dataframe column name consumed by the component. Default: ``mama``.
+    fama_col:
+        Input dataframe column name consumed by the component. Default: ``fama``.
+    close_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    decycler_col:
+        Input dataframe column name consumed by the component. Default: ``decycler``.
+    instantaneous_trendline_col:
+        Input dataframe column name consumed by the component. Default: ``instantaneous_trendline``.
+    frama_col:
+        Input dataframe column name consumed by the component. Default: ``frama``.
+    supersmoother_col:
+        Input dataframe column name consumed by the component. Default: ``supersmoother``.
+    dominant_cycle_phase_col:
+        Input dataframe column name consumed by the component. Default: ``dominant_cycle_phase``.
+    atr_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    amplitude_lookback:
+        Configuration value used by the registered component. Default: ``128``.
+    amplitude_min_quantile:
+        Configuration value used by the registered component. Default: ``0.5``.
+    min_cycle_period:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``8.0``.
+    max_cycle_period:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``60.0``.
+    slope_bars:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``1``.
+    candidate_col:
+        Input dataframe column name consumed by the component. Default: ``ehlers_ml_candidate``.
+    side_col:
+        Input dataframe column name consumed by the component. Default: ``signal_side``.
     """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("df must be a pandas DataFrame.")

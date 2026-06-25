@@ -13,12 +13,12 @@ def add_decycler(
 ) -> pd.DataFrame:
     """
     Add Ehlers' causal decycler trend filter.
-
+    
     The decycler removes short-term cyclic components from price and keeps the
     smoother trend component. It is useful as a causal trend/regime filter.
-
+    
     YAML declaration::
-
+    
         features:
           - step: decycler
             params:
@@ -27,7 +27,12 @@ def add_decycler(
               output_col: decycler_60
             output_cols:
               - decycler_60
-
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    
     Parameters
     ----------
     price_col:

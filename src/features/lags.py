@@ -13,7 +13,20 @@ def add_lagged_features(
 ) -> pd.DataFrame:
     """
     Add lagged versions of specified columns.
-
+    
+    YAML declaration::
+    
+        features:
+          - step: lags
+            params:
+              cols: [close]
+    
+    Required input columns
+    ----------------------
+    None fixed by signature:
+        Required dataframe columns are resolved from configuration or from
+        upstream feature/target/signal stages at runtime.
+    
     Parameters
     ----------
     df : pd.DataFrame
@@ -24,13 +37,6 @@ def add_lagged_features(
         Lags in periods.
     prefix : str
         Prefix for new lag columns.
-
-    YAML declaration::
-
-        features:
-          - step: lags
-            params:
-              cols: [close]
     """
 
     out = df.copy()

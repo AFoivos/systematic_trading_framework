@@ -54,7 +54,7 @@ This MVP is intentionally additive and local-first. It does not import, modify, 
 
 ## Parameterized Builders
 
-- The dashboard exposes existing builders from `src.experiments.registry.FEATURE_REGISTRY` and `SIGNAL_REGISTRY`.
+- The dashboard should resolve builders through the category registries (`src.features.registry`, `src.signals.registry`, `src.targets.registry`, `src.models.registry`). `src.experiments.registry` remains only as a compatibility facade.
 - Target builders are exposed from `src.targets` as `forward_return`, `triple_barrier`, `r_multiple`, and `classifier`.
 - Parameterized builder execution is a read-only preview path. It applies selected builders to an in-memory copy of the selected dataset and returns chartable numeric output columns.
 - The dashboard does not persist computed feature/signal/target columns back into datasets, configs, or experiment artifacts.

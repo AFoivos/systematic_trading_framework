@@ -314,6 +314,30 @@ def train_ppo_portfolio_agent(
     model_cfg: dict[str, Any],
     returns_col: str | None = None,
 ) -> tuple[dict[str, pd.DataFrame], object, dict[str, Any]]:
+    """
+    Train the registered ``ppo_portfolio_agent`` model component.
+    
+    YAML declaration::
+    
+        model:
+          kind: ppo_portfolio_agent
+          params: {}
+    
+    Required input columns
+    ----------------------
+    returns_col:
+        Optional input column configured by ``returns_col``; used when a value is provided.
+    
+    Parameters
+    ----------
+    asset_frames:
+        Configuration value used by the registered component.
+    model_cfg:
+        Configuration mapping, usually resolved from YAML before this
+        registered component is called.
+    returns_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    """
     return _train_portfolio_rl(
         asset_frames,
         model_cfg,
@@ -328,6 +352,30 @@ def train_dqn_portfolio_agent(
     model_cfg: dict[str, Any],
     returns_col: str | None = None,
 ) -> tuple[dict[str, pd.DataFrame], object, dict[str, Any]]:
+    """
+    Train the registered ``dqn_portfolio_agent`` model component.
+    
+    YAML declaration::
+    
+        model:
+          kind: dqn_portfolio_agent
+          params: {}
+    
+    Required input columns
+    ----------------------
+    returns_col:
+        Optional input column configured by ``returns_col``; used when a value is provided.
+    
+    Parameters
+    ----------
+    asset_frames:
+        Configuration value used by the registered component.
+    model_cfg:
+        Configuration mapping, usually resolved from YAML before this
+        registered component is called.
+    returns_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    """
     return _train_portfolio_rl(
         asset_frames,
         model_cfg,

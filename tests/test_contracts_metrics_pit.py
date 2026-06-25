@@ -183,6 +183,7 @@ def test_stochastic_rsi_features_emit_expected_columns_and_values() -> None:
         "stoch_rsi_overbought",
         "stoch_rsi_slope",
         "stoch_rsi_recover_from_oversold",
+        "stoch_rsi_fall_from_overbought",
     ]
     assert out.columns[-len(expected) :].tolist() == expected
     assert out["stoch_rsi_k"].dropna().between(0.0, 1.0).all()
@@ -194,6 +195,7 @@ def test_stochastic_rsi_features_emit_expected_columns_and_values() -> None:
         "stoch_rsi_oversold",
         "stoch_rsi_overbought",
         "stoch_rsi_recover_from_oversold",
+        "stoch_rsi_fall_from_overbought",
     ]:
         assert set(out[column].dropna().unique()).issubset({0, 1})
 
@@ -553,7 +555,7 @@ backtest:
     child_cfg = tmp_path / "child.yaml"
     child_cfg.write_text(
         f"""
-extends: "{parent_cfg}"
+extends: "{parent_cfg.as_posix()}"
 data:
   symbol: "QQQ"
 backtest:

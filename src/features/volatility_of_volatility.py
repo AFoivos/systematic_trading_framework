@@ -20,16 +20,42 @@ def add_volatility_of_volatility(
 ) -> pd.DataFrame:
     """
     Add causal volatility-of-volatility diagnostics.
-
+    
     Volatility of volatility measures how unstable the volatility series itself
     is. High vol-of-vol points to an unstable or risky volatility regime.
-
+    
     YAML declaration::
-
+    
         features:
           - step: volatility_of_volatility
             params:
               volatility_col: vol_rolling_20
+    
+    Required input columns
+    ----------------------
+    volatility_col:
+        Optional input column configured by ``volatility_col``; used when a value is provided.
+    
+    Parameters
+    ----------
+    volatility_col:
+        Input dataframe column name consumed by the component.
+    window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``96``.
+    mean_window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``None``.
+    output_col:
+        Output column name emitted by the component. Default: ``None``.
+    mean_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    ratio_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    rising_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    high_vov_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    high_vov_mult:
+        Configuration value used by the registered component. Default: ``1.0``.
     """
     _validate_columns(df, [volatility_col])
     _validate_window(window, field="window")

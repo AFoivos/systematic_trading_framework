@@ -16,12 +16,30 @@ def add_shannon_entropy(
 ) -> pd.DataFrame:
     """
     Add causal rolling Shannon entropy over discretized values.
-
+    
     YAML declaration::
-
+    
         features:
           - step: shannon_entropy
             params: {}
+    
+    Required input columns
+    ----------------------
+    source_col:
+        Input column configured by ``source_col``. Default: ``close``.
+    
+    Parameters
+    ----------
+    source_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``64``.
+    bins:
+        Configuration value used by the registered component. Default: ``10``.
+    normalize:
+        Configuration value used by the registered component. Default: ``True``.
+    output_col:
+        Output column name emitted by the component. Default: ``None``.
     """
     _validate_columns(df, [source_col])
     _validate_window(window, name="window")

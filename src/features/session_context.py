@@ -35,12 +35,30 @@ def add_session_context_features(
 ) -> pd.DataFrame:
     """
     Apply the registered ``session_context`` feature transformation.
-
+    
     YAML declaration::
-
+    
         features:
           - step: session_context
             params: {}
+    
+    Required input columns
+    ----------------------
+    session_europe:
+        Required dataframe column read directly by this component.
+    session_us:
+        Required dataframe column read directly by this component.
+    
+    Parameters
+    ----------
+    timezone:
+        Configuration value used by the registered component. Default: ``UTC``.
+    add_cyclical_time:
+        Configuration value used by the registered component. Default: ``True``.
+    include_weekend_flag:
+        Configuration value used by the registered component. Default: ``True``.
+    sessions:
+        Configuration value used by the registered component. Default: ``None``.
     """
     out = df.copy()
     local_idx = index_in_timezone(out.index, timezone)

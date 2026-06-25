@@ -19,13 +19,37 @@ def probabilistic_signal(
 ) -> pd.Series:
     """
     Map probability forecasts to {-1,0,1} signal with dead-zone.
-
+    
     YAML declaration::
-
+    
         signals:
           kind: probability_threshold
           params:
             prob_col: pred_prob
+    
+    Required input columns
+    ----------------------
+    prob_col:
+        Optional input column configured by ``prob_col``; used when a value is provided.
+    
+    Parameters
+    ----------
+    prob_col:
+        Input dataframe column name consumed by the component.
+    signal_col:
+        Output column name emitted by the component. Default: ``None``.
+    upper:
+        Configuration value used by the registered component. Default: ``0.55``.
+    lower:
+        Configuration value used by the registered component. Default: ``0.45``.
+    upper_exit:
+        Configuration value used by the registered component. Default: ``None``.
+    lower_exit:
+        Configuration value used by the registered component. Default: ``None``.
+    mode:
+        Mode selector that controls the registered component behavior. Default: ``long_short_hold``.
+    base_signal_col:
+        Output column name emitted by the component. Default: ``None``.
     """
     if prob_col not in df.columns:
         raise KeyError(f"prob_col '{prob_col}' not found in DataFrame")

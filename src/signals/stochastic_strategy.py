@@ -16,13 +16,32 @@ def stochastic_strategy(
 ) -> pd.Series:
     """
     Apply the registered ``stochastic`` signal transformation.
-
+    
     YAML declaration::
-
+    
         signals:
           kind: stochastic
           params:
             k_col: stoch_k_14
+    
+    Required input columns
+    ----------------------
+    None fixed by signature:
+        Required dataframe columns are resolved from configuration or from
+        upstream feature/target/signal stages at runtime.
+    
+    Parameters
+    ----------
+    k_col:
+        Input dataframe column name consumed by the component.
+    buy_level:
+        Configuration value used by the registered component. Default: ``20.0``.
+    sell_level:
+        Configuration value used by the registered component. Default: ``80.0``.
+    signal_col:
+        Output column name emitted by the component. Default: ``None``.
+    mode:
+        Mode selector that controls the registered component behavior. Default: ``long_short_hold``.
     """
     output_col = resolve_signal_output_name(
         signal_col=signal_col,

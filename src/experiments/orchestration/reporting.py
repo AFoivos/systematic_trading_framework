@@ -457,7 +457,9 @@ def _build_pipeline_trace_markdown(
     )
     from src.experiments.orchestration.model_stage import apply_model_pipeline_to_assets, apply_model_step, apply_model_to_assets
     from src.experiments.orchestration.pipeline import run_experiment_pipeline
-    from src.experiments.registry import get_feature_fn, get_model_fn, get_signal_fn
+    from src.features.registry import get_feature_fn
+    from src.models.registry import get_model_fn
+    from src.signals.registry import get_signal_fn
     from src.experiments.runner import _load_asset_frames, run_experiment
     from src.experiments.schemas import EvaluationPayload, ExecutionPayload, MonitoringPayload, StorageContext
     from src.models.rl.envs import PortfolioTradingEnv, RLExecutionConfig, RLRewardConfig, SingleAssetTradingEnv

@@ -20,12 +20,32 @@ def add_trend_features(
 ) -> pd.DataFrame:
     """
     Apply the registered ``trend`` feature transformation.
-
+    
     YAML declaration::
-
+    
         features:
           - step: trend
             params: {}
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    
+    Parameters
+    ----------
+    price_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    sma_windows:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``(20, 50, 200)``.
+    ema_spans:
+        Configuration value used by the registered component. Default: ``(20, 50)``.
+    sma_col_template:
+        Configuration value used by the registered component. Default: ``None``.
+    ema_col_template:
+        Configuration value used by the registered component. Default: ``None``.
+    inplace:
+        Configuration value used by the registered component. Default: ``False``.
     """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame")

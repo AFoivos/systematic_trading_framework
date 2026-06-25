@@ -11,6 +11,7 @@ from src.utils.config_kinds import (
     PORTFOLIO_MODEL_KINDS,
     RL_MODEL_KINDS,
     SIGNAL_KINDS,
+    TARGET_KINDS,
 )
 from src.utils.repro import RuntimeConfigError, validate_runtime_config
 
@@ -1847,16 +1848,10 @@ def validate_model_block(model: dict[str, Any]) -> None:
                 allowed_keys=_TARGET_OUTPUT_KEYS,
             )
             target_kind = target.get("kind", "forward_return")
-            if target_kind not in {
-                "forward_return",
-                "future_return_regression",
-                "triple_barrier",
-                "directional_triple_barrier",
-                "r_multiple",
-            }:
+            if target_kind not in TARGET_KINDS:
+                allowed_targets = "', '".join(sorted(TARGET_KINDS))
                 raise ConfigValidationError(
-                    "model.target.kind must be 'forward_return', 'future_return_regression', "
-                    "'triple_barrier', 'directional_triple_barrier', or 'r_multiple'."
+                    f"model.target.kind must be one of: '{allowed_targets}'."
                 )
             if target_kind == "r_multiple":
                 if model["kind"] not in _CLASSIFIER_MODEL_KINDS:
@@ -2419,16 +2414,10 @@ def validate_standalone_target_block(target: Any) -> None:
         allowed_keys=_TARGET_OUTPUT_KEYS,
     )
     target_kind = target_cfg.get("kind", "forward_return")
-    if target_kind not in {
-        "forward_return",
-        "future_return_regression",
-        "triple_barrier",
-        "directional_triple_barrier",
-        "r_multiple",
-    }:
+    if target_kind not in TARGET_KINDS:
+        allowed_targets = "', '".join(sorted(TARGET_KINDS))
         raise ConfigValidationError(
-            "target.kind must be 'forward_return', 'future_return_regression', "
-            "'triple_barrier', 'directional_triple_barrier', or 'r_multiple'."
+            f"target.kind must be one of: '{allowed_targets}'."
         )
     validate_model_block(
         {

@@ -17,12 +17,42 @@ def add_volume_features(
 ) -> pd.DataFrame:
     """
     Apply the registered ``volume_features`` feature transformation.
-
+    
     YAML declaration::
-
+    
         features:
           - step: volume_features
             params: {}
+    
+    Required input columns
+    ----------------------
+    volume_col:
+        Input column configured by ``volume_col``. Default: ``volume``.
+    high_col:
+        Input column configured by ``high_col``. Default: ``high``.
+    low_col:
+        Input column configured by ``low_col``. Default: ``low``.
+    close_col:
+        Input column configured by ``close_col``. Default: ``close``.
+    
+    Parameters
+    ----------
+    volume_col:
+        Input dataframe column name consumed by the component. Default: ``volume``.
+    atr_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    high_col:
+        Input dataframe column name consumed by the component. Default: ``high``.
+    low_col:
+        Input dataframe column name consumed by the component. Default: ``low``.
+    close_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    atr_window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``14``.
+    vol_z_window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``20``.
+    inplace:
+        Configuration value used by the registered component. Default: ``False``.
     """
     if volume_col not in df.columns:
         raise KeyError(f"volume_col '{volume_col}' not found in DataFrame")

@@ -15,12 +15,26 @@ def add_return_momentum_features(
 ) -> pd.DataFrame:
     """
     Apply the registered ``return_momentum`` feature transformation.
-
+    
     YAML declaration::
-
+    
         features:
           - step: return_momentum
             params: {}
+    
+    Required input columns
+    ----------------------
+    returns_col:
+        Input column configured by ``returns_col``. Default: ``close_logret``.
+    
+    Parameters
+    ----------
+    returns_col:
+        Input dataframe column name consumed by the component. Default: ``close_logret``.
+    windows:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``(5, 20, 60)``.
+    inplace:
+        Configuration value used by the registered component. Default: ``False``.
     """
     out = df if inplace else df.copy()
     out = ensure_close_based_returns(out, returns_col=returns_col)

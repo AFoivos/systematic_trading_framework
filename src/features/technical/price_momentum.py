@@ -13,12 +13,26 @@ def add_price_momentum_features(
 ) -> pd.DataFrame:
     """
     Apply the registered ``price_momentum`` feature transformation.
-
+    
     YAML declaration::
-
+    
         features:
           - step: price_momentum
             params: {}
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    
+    Parameters
+    ----------
+    price_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    windows:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``(5, 20, 60)``.
+    inplace:
+        Configuration value used by the registered component. Default: ``False``.
     """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame")

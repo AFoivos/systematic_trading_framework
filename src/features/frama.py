@@ -30,12 +30,44 @@ def add_frama(
 ) -> pd.DataFrame:
     """
     Add Ehlers' causal Fractal Adaptive Moving Average.
-
+    
     YAML declaration::
-
+    
         features:
           - step: frama
             params: {}
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    high_col:
+        Input column configured by ``high_col``. Default: ``high``.
+    low_col:
+        Input column configured by ``low_col``. Default: ``low``.
+    
+    Parameters
+    ----------
+    price_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    high_col:
+        Input dataframe column name consumed by the component. Default: ``high``.
+    low_col:
+        Input dataframe column name consumed by the component. Default: ``low``.
+    window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``16``.
+    fast_period:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``4``.
+    slow_period:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``300``.
+    output_col:
+        Output column name emitted by the component. Default: ``None``.
+    alpha_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    fractal_dimension_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    add_diagnostics:
+        Configuration value used by the registered component. Default: ``False``.
     """
     require_columns(df, [price_col, high_col, low_col], feature="FRAMA")
     resolved_window = validate_int(window, name="window", minimum=4)

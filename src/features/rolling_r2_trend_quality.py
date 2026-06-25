@@ -19,13 +19,13 @@ def add_rolling_r2_trend_quality(
 ) -> pd.DataFrame:
     """
     Add causal rolling linear-trend quality diagnostics.
-
+    
     Each trailing window fits ``price = a + b * t`` without sklearn. R^2 close
     to 1 means the path is well explained by a clean linear trend; R^2 close to
     0 means the path is noisy or choppy relative to a straight-line trend.
-
+    
     YAML declaration::
-
+    
         features:
           - step: rolling_r2_trend_quality
             params:
@@ -43,7 +43,12 @@ def add_rolling_r2_trend_quality(
               - rolling_r2_intercept_96
               - rolling_r2_trend_quality_96_rising
               - rolling_r2_trend_quality_96_ok
-
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    
     Parameters
     ----------
     price_col:

@@ -13,12 +13,30 @@ def add_macd_features(
 ) -> pd.DataFrame:
     """
     Apply the registered ``macd`` feature transformation.
-
+    
     YAML declaration::
-
+    
         features:
           - step: macd
             params: {}
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    
+    Parameters
+    ----------
+    price_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    fast:
+        Configuration value used by the registered component. Default: ``12``.
+    slow:
+        Configuration value used by the registered component. Default: ``26``.
+    signal:
+        Configuration value used by the registered component. Default: ``9``.
+    inplace:
+        Configuration value used by the registered component. Default: ``False``.
     """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame")

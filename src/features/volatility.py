@@ -69,16 +69,34 @@ def add_volatility_features(
     """
     Assumes:
     - df[returns_col] 
-
+    
     Adds volatility features to DataFrame:
     - vol_rolling_{w}
     - vol_ewma_{span}
-
+    
     YAML declaration::
-
+    
         features:
           - step: volatility
             params: {}
+    
+    Required input columns
+    ----------------------
+    returns_col:
+        Input column configured by ``returns_col``. Default: ``close_logret``.
+    
+    Parameters
+    ----------
+    returns_col:
+        Input dataframe column name consumed by the component. Default: ``close_logret``.
+    rolling_windows:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``(10, 20, 60)``.
+    ewma_spans:
+        Configuration value used by the registered component. Default: ``(10, 20)``.
+    annualization_factor:
+        Configuration value used by the registered component. Default: ``252.0``.
+    inplace:
+        Configuration value used by the registered component. Default: ``False``.
     """
     out = df if inplace else df.copy()
     out = ensure_close_based_returns(out, returns_col=returns_col)

@@ -5,27 +5,14 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from .forward_return import build_forward_return_target
-from .directional_triple_barrier import build_directional_triple_barrier_target
-from .r_multiple import build_r_multiple_target
-from .triple_barrier import build_triple_barrier_target
+from .registry import build_target
 
 
 def build_classifier_target(
     df: pd.DataFrame,
     target_cfg: dict[str, Any] | None,
 ) -> tuple[pd.DataFrame, str, str, dict[str, Any]]:
-    cfg = dict(target_cfg or {})
-    kind = str(cfg.get("kind", "forward_return"))
-    if kind == "forward_return":
-        return build_forward_return_target(df=df, target_cfg=cfg)
-    if kind == "triple_barrier":
-        return build_triple_barrier_target(df=df, target_cfg=cfg)
-    if kind == "directional_triple_barrier":
-        return build_directional_triple_barrier_target(df=df, target_cfg=cfg)
-    if kind == "r_multiple":
-        return build_r_multiple_target(df=df, target_cfg=cfg)
-    raise ValueError(f"Unsupported target.kind: {kind}")
+    return build_target(df=df, target_cfg=target_cfg)
 
 
 def assign_quantile_labels(

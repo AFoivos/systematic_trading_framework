@@ -14,12 +14,26 @@ def add_center_of_gravity(
 ) -> pd.DataFrame:
     """
     Add Ehlers' causal Center of Gravity oscillator.
-
+    
     YAML declaration::
-
+    
         features:
           - step: center_of_gravity
             params: {}
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    
+    Parameters
+    ----------
+    price_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``10``.
+    output_col:
+        Output column name emitted by the component. Default: ``None``.
     """
     require_columns(df, [price_col], feature="Center of Gravity")
     resolved_window = validate_int(window, name="window", minimum=2)

@@ -23,16 +23,58 @@ def dense_return_forecast_signal(
 ) -> pd.DataFrame:
     """
     Convert dense return forecasts into signed after-cost opportunity scores.
-
+    
     The output is intentionally continuous. It is not a candidate filter and it does not apply
     independent asset thresholds. Portfolio ranking/hysteresis decides whether the score is
     worth allocating capital to.
-
+    
     YAML declaration::
-
+    
         signals:
           kind: dense_return_forecast
           params: {}
+    
+    Required input columns
+    ----------------------
+    forecast_col:
+        Input column configured by ``forecast_col``. Default: ``pred_ret``.
+    expected_net_return_col:
+        Input column configured by ``expected_net_return_col``. Default: ``expected_net_return``.
+    estimated_cost_col:
+        Input column configured by ``estimated_cost_col``. Default: ``estimated_round_trip_cost``.
+    volatility_col:
+        Input column configured by ``volatility_col``. Default: ``atr_14``.
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    
+    Parameters
+    ----------
+    forecast_col:
+        Input dataframe column name consumed by the component. Default: ``pred_ret``.
+    signal_col:
+        Output column name emitted by the component. Default: ``expected_net_return``.
+    expected_net_return_col:
+        Input dataframe column name consumed by the component. Default: ``expected_net_return``.
+    estimated_cost_col:
+        Input dataframe column name consumed by the component. Default: ``estimated_round_trip_cost``.
+    cost_per_turnover:
+        Configuration value used by the registered component. Default: ``0.0``.
+    slippage_per_turnover:
+        Configuration value used by the registered component. Default: ``0.0``.
+    cost_round_trip_mult:
+        Configuration value used by the registered component. Default: ``2.0``.
+    forecast_is_vol_normalized:
+        Configuration value used by the registered component. Default: ``False``.
+    volatility_col:
+        Input dataframe column name consumed by the component. Default: ``atr_14``.
+    price_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    volatility_floor:
+        Configuration value used by the registered component. Default: ``1e-12``.
+    signed_cost_adjustment:
+        Configuration value used by the registered component. Default: ``True``.
+    clip:
+        Configuration value used by the registered component. Default: ``None``.
     """
     if forecast_col not in df.columns:
         raise KeyError(f"forecast_col '{forecast_col}' not found in DataFrame")

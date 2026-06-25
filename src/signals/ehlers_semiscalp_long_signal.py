@@ -215,7 +215,26 @@ def ehlers_semiscalp_long_feature(df: pd.DataFrame, **params: Any) -> pd.DataFra
 
 
 def ehlers_semiscalp_long_signal(df: pd.DataFrame, **params: Any) -> pd.DataFrame:
-    """Apply ``signals.kind: ehlers_semiscalp_long`` from YAML."""
+    """
+    Apply ``signals.kind: ehlers_semiscalp_long`` from YAML.
+    
+    YAML declaration::
+    
+        signals:
+          kind: ehlers_semiscalp_long
+          params: {}
+    
+    Required input columns
+    ----------------------
+    None fixed by signature:
+        Required dataframe columns are resolved from configuration or from
+        upstream feature/target/signal stages at runtime.
+    
+    Parameters
+    ----------
+    params:
+        Additional keyword parameters accepted from YAML ``params``.
+    """
     out, _ = build_ehlers_semiscalp_long_signal(df, params)
     return out
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -61,6 +62,13 @@ EXPECTED_MODEL_FEATURES = {
 }
 
 
+def _require_config_fixture(path: str | Path) -> Path:
+    resolved = Path(path)
+    if not resolved.exists():
+        pytest.skip(f"optional config fixture not present: {resolved}")
+    return resolved
+
+
 def _candidate_input(n: int = 900) -> pd.DataFrame:
     index = pd.date_range("2024-01-01", periods=n, freq="30min", tz="UTC")
     x = np.arange(n, dtype=float)
@@ -90,7 +98,7 @@ def _candidate_input(n: int = 900) -> pd.DataFrame:
 
 
 def test_experiment_config_is_isolated_and_complete() -> None:
-    cfg = load_experiment_config(EXPERIMENT)
+    cfg = load_experiment_config(_require_config_fixture(EXPERIMENT))
 
     assert cfg["strategy"]["assets"] == ["SPX500", "US100", "GER40", "XAUUSD", "EURUSD"]
     assert set(cfg["model"]["feature_cols"]) == EXPECTED_MODEL_FEATURES
@@ -104,7 +112,7 @@ def test_experiment_config_is_isolated_and_complete() -> None:
 
 
 def test_v2_enables_all_seven_improvement_contracts() -> None:
-    cfg = load_experiment_config(EXPERIMENT_V2)
+    cfg = load_experiment_config(_require_config_fixture(EXPERIMENT_V2))
 
     assert cfg["model"]["split"]["synchronize_assets"] is True
     assert cfg["model"]["split"]["max_folds"] is None
@@ -117,6 +125,7 @@ def test_v2_enables_all_seven_improvement_contracts() -> None:
 
 
 def test_v2_ablation_variants_are_standalone_and_comparable() -> None:
+    _require_config_fixture(EXPERIMENT_V2)
     variants = build_ehlers_ml_ablation_configs(EXPERIMENT_V2)
 
     assert set(variants) == {"full_normalized", "indices_normalized", "full_raw"}
@@ -171,7 +180,7 @@ def test_asset_synchronization_uses_common_timestamps() -> None:
 
 
 def test_purged_walk_forward_has_no_forward_label_leakage() -> None:
-    cfg = load_experiment_config(EXPERIMENT)
+    cfg = load_experiment_config(_require_config_fixture(EXPERIMENT))
     split_cfg = cfg["model"]["split"]
     horizon = int(cfg["model"]["target"]["max_holding"])
     splits = build_time_splits(
@@ -285,7 +294,7 @@ def test_lightgbm_emits_oos_probability_only_for_candidates() -> None:
 
 
 def test_probability_threshold_signal_is_long_only() -> None:
-    cfg = load_experiment_config(EXPERIMENT)
+    cfg = load_experiment_config(_require_config_fixture(EXPERIMENT))
     frame = ehlers_ml_long_candidate_feature(_candidate_input(300), amplitude_lookback=32)
     frame["ehlers_long_probability"] = np.where(frame["ehlers_ml_candidate"].eq(1), 0.60, 0.90)
     out = apply_signal_step(frame, cfg["signals"])
@@ -348,6 +357,8 @@ def test_summary_metric_paths_match_artifact_namespace() -> None:
 
 
 def test_smoke_optuna_executes_at_least_two_trials(monkeypatch: pytest.MonkeyPatch) -> None:
+    _require_config_fixture(EXPERIMENT)
+    _require_config_fixture(SMOKE_OPTUNA)
     from src.experiments import optuna_search as optuna_mod
 
     class Trial:

@@ -414,16 +414,23 @@ def indicator_model_adaptive_pullback_signal(
 ) -> pd.DataFrame:
     """
     Registry-compatible wrapper returning only the transformed DataFrame.
-
+    
     YAML declaration::
-
-        features:
-          - step: indicator_model_adaptive_pullback
-            params: {}
-
+    
         signals:
           kind: indicator_model_adaptive_pullback
           params: {}
+    
+    Required input columns
+    ----------------------
+    None fixed by signature:
+        Required dataframe columns are resolved from configuration or from
+        upstream feature/target/signal stages at runtime.
+    
+    Parameters
+    ----------
+    params:
+        Additional keyword parameters accepted from YAML ``params``.
     """
     out, _ = build_indicator_model_adaptive_pullback_signal(df, params)
     return out

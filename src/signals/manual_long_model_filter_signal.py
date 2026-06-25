@@ -42,15 +42,57 @@ def manual_long_model_filter_signal(
 ) -> pd.Series:
     """
     Filter manual long candidates with an out-of-sample model probability.
-
+    
     The model is only a long-entry filter. It cannot create trades without a manual candidate,
     cannot flip direction, and cannot emit short exposure.
-
+    
     YAML declaration::
-
+    
         signals:
           kind: manual_long_model_filter
           params: {}
+    
+    Required input columns
+    ----------------------
+    prob_col:
+        Input column configured by ``prob_col``. Default: ``pred_prob``.
+    candidate_col:
+        Input column configured by ``candidate_col``. Default: ``manual_long_candidate``.
+    volatility_col:
+        Optional input column configured by ``volatility_col``; used when a value is provided.
+    
+    Parameters
+    ----------
+    prob_col:
+        Input dataframe column name consumed by the component. Default: ``pred_prob``.
+    candidate_col:
+        Input dataframe column name consumed by the component. Default: ``manual_long_candidate``.
+    base_signal_col:
+        Output column name emitted by the component. Default: ``manual_vol_adjusted_candidate``.
+    threshold:
+        Numeric threshold controlling the component decision rule. Default: ``0.55``.
+    gate_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    gate_cols_any:
+        Configuration value used by the registered component. Default: ``None``.
+    min_signal_abs:
+        Configuration value used by the registered component. Default: ``0.0``.
+    expected_value_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    min_expected_value_r:
+        Configuration value used by the registered component. Default: ``None``.
+    profit_barrier_r:
+        Configuration value used by the registered component. Default: ``1.0``.
+    stop_barrier_r:
+        Configuration value used by the registered component. Default: ``1.0``.
+    volatility_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    round_trip_cost_return:
+        Configuration value used by the registered component. Default: ``0.0``.
+    cost_buffer_r:
+        Configuration value used by the registered component. Default: ``0.0``.
+    signal_col:
+        Output column name emitted by the component. Default: ``None``.
     """
     output_col = str(signal_col or "model_filtered_long_signal")
     threshold_value = float(threshold)

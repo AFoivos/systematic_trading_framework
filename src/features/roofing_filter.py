@@ -24,15 +24,63 @@ def add_roofing_filter(
 ) -> pd.DataFrame:
     """
     Add a causal Ehlers-style roofing filter.
-
+    
     The implementation applies a two-pole high-pass filter followed by a
     SuperSmoother low-pass filter, using only current and prior samples.
-
+    
     YAML declaration::
-
+    
         features:
           - step: roofing_filter
             params: {}
+    
+    Required input columns
+    ----------------------
+    cross_down_zero_col:
+        Required dataframe column read directly by this component.
+    cross_up_zero_col:
+        Required dataframe column read directly by this component.
+    negative_col:
+        Required dataframe column read directly by this component.
+    positive_col:
+        Required dataframe column read directly by this component.
+    slope_col:
+        Required dataframe column read directly by this component.
+    slope_negative_col:
+        Required dataframe column read directly by this component.
+    slope_positive_col:
+        Required dataframe column read directly by this component.
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    
+    Parameters
+    ----------
+    price_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    high_pass_period:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``48``.
+    low_pass_period:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``10``.
+    slope_bars:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``3``.
+    output_col:
+        Output column name emitted by the component. Default: ``None``.
+    slope_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    positive_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    negative_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    slope_positive_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    slope_negative_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    cross_up_zero_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    cross_down_zero_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    add_derived:
+        Configuration value used by the registered component. Default: ``True``.
     """
     _validate_columns(df, [price_col])
     _validate_period(high_pass_period, name="high_pass_period")

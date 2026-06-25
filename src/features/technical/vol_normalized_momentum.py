@@ -56,12 +56,34 @@ def add_vol_normalized_momentum_features(
 ) -> pd.DataFrame:
     """
     Apply the registered ``vol_normalized_momentum`` feature transformation.
-
+    
     YAML declaration::
-
+    
         features:
           - step: vol_normalized_momentum
             params: {}
+    
+    Required input columns
+    ----------------------
+    returns_col:
+        Input column configured by ``returns_col``. Default: ``close_logret``.
+    vol_col:
+        Input column configured by ``vol_col``. Default: ``vol_rolling_20``.
+    
+    Parameters
+    ----------
+    returns_col:
+        Input dataframe column name consumed by the component. Default: ``close_logret``.
+    vol_col:
+        Input dataframe column name consumed by the component. Default: ``vol_rolling_20``.
+    vol_window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``None``.
+    windows:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``(5, 20, 60)``.
+    eps:
+        Configuration value used by the registered component. Default: ``1e-08``.
+    inplace:
+        Configuration value used by the registered component. Default: ``False``.
     """
     if vol_window is not None and (
         isinstance(vol_window, bool) or not isinstance(vol_window, int) or vol_window <= 0

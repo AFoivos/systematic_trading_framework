@@ -14,6 +14,24 @@ def build_forward_return_target(
 ) -> tuple[pd.DataFrame, str, str, dict[str, Any]]:
     """
     Build the canonical forward-return target and optional binary label columns.
+    
+    YAML declaration::
+    
+        target:
+          kind: forward_return
+          params: {}
+    
+    Required input columns
+    ----------------------
+    None fixed by signature:
+        Required dataframe columns are resolved from configuration or from
+        upstream feature/target/signal stages at runtime.
+    
+    Parameters
+    ----------
+    target_cfg:
+        Configuration mapping, usually resolved from YAML before this
+        registered component is called.
     """
     cfg = apply_target_output_aliases(target_cfg)
     price_col = cfg.get("price_col", "close")

@@ -12,12 +12,28 @@ def add_bollinger_features(
 ) -> pd.DataFrame:
     """
     Apply the registered ``bollinger`` feature transformation.
-
+    
     YAML declaration::
-
+    
         features:
           - step: bollinger
             params: {}
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    
+    Parameters
+    ----------
+    price_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``20``.
+    n_std:
+        Configuration value used by the registered component. Default: ``2.0``.
+    inplace:
+        Configuration value used by the registered component. Default: ``False``.
     """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame")

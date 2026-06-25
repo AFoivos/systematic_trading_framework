@@ -68,7 +68,9 @@ def _relative_source_path(fn: Callable[..., Any], *, project_root: Path) -> str:
 
 
 def _selected_modules(cfg: dict[str, Any], *, project_root: Path) -> list[AuditModule]:
-    from src.experiments.registry import get_feature_fn, get_model_fn, get_signal_fn
+    from src.features.registry import get_feature_fn
+    from src.models.registry import get_model_fn
+    from src.signals.registry import get_signal_fn
 
     modules = [
         AuditModule(relative_path=relative_path, stage=stage, reason=reason)

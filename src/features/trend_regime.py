@@ -22,16 +22,42 @@ def add_trend_regime(
 ) -> pd.DataFrame:
     """
     Add a causal trend regime feature.
-
+    
     ``method='ema'`` compares fast and slow EMAs and emits ``1, 0, -1``. The
     legacy ``method='sma_legacy'`` path preserves the existing project
     ``trend_regime`` YAML contract based on SMA columns.
-
+    
     YAML declaration::
-
+    
         features:
           - step: trend_regime
             params: {}
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    
+    Parameters
+    ----------
+    price_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    fast_span:
+        Configuration value used by the registered component. Default: ``20``.
+    slow_span:
+        Configuration value used by the registered component. Default: ``50``.
+    neutral_threshold:
+        Numeric threshold controlling the component decision rule. Default: ``0.0``.
+    output_col:
+        Output column name emitted by the component. Default: ``None``.
+    method:
+        Mode selector that controls the registered component behavior. Default: ``ema``.
+    base_sma_for_sign:
+        Configuration value used by the registered component. Default: ``None``.
+    short_sma:
+        Configuration value used by the registered component. Default: ``None``.
+    long_sma:
+        Configuration value used by the registered component. Default: ``None``.
     """
     if method == "ema" and any(value is not None for value in (base_sma_for_sign, short_sma, long_sma)):
         method = "sma_legacy"

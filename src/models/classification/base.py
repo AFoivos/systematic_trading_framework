@@ -36,7 +36,8 @@ from src.models.common.runtime import (
     infer_feature_columns,
     resolve_runtime_for_model,
 )
-from src.targets import assign_quantile_labels, build_classifier_target
+from src.targets import assign_quantile_labels
+from src.targets.registry import build_target
 from src.models.types import EstimatorFactory
 
 
@@ -171,7 +172,7 @@ def train_forward_classifier(
     )
     pred_raw_prob_col = str(model_cfg.get("pred_raw_prob_col") or f"{pred_prob_col}_raw")
     target_cfg = model_cfg.get("target", {}) or {}
-    out, label_col, fwd_col, target_meta = build_classifier_target(df=work_df, target_cfg=target_cfg)
+    out, label_col, fwd_col, target_meta = build_target(df=work_df, target_cfg=target_cfg)
 
     contract_df = out
     contract_target_col = label_col

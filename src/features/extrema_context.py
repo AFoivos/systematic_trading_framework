@@ -31,15 +31,55 @@ def swing_extrema_context(
 ) -> pd.DataFrame:
     """
     Add live-safe swing/extrema context features from confirmed local highs/lows.
-
+    
     Raw local extrema are also emitted for diagnostics, but they are future-looking and should be
     excluded from model feature columns.
-
+    
     YAML declaration::
-
+    
         features:
           - step: swing_extrema_context
             params: {}
+    
+    Required input columns
+    ----------------------
+    high_col:
+        Input column configured by ``high_col``. Default: ``high``.
+    low_col:
+        Input column configured by ``low_col``. Default: ``low``.
+    close_col:
+        Input column configured by ``close_col``. Default: ``close``.
+    normalizer_col:
+        Input column configured by ``normalizer_col``. Default: ``mtf_1h_atr``.
+    
+    Parameters
+    ----------
+    high_col:
+        Input dataframe column name consumed by the component. Default: ``high``.
+    low_col:
+        Input dataframe column name consumed by the component. Default: ``low``.
+    close_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    normalizer_col:
+        Input dataframe column name consumed by the component. Default: ``mtf_1h_atr``.
+    normalizer_mode:
+        Configuration value used by the registered component. Default: ``price``.
+    left_bars:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``3``.
+    right_bars:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``3``.
+    near_high_threshold_atr:
+        Numeric threshold controlling the component decision rule. Default: ``0.25``.
+    near_low_threshold_atr:
+        Numeric threshold controlling the component decision rule. Default: ``0.25``.
+    overextended_long_threshold_atr:
+        Numeric threshold controlling the component decision rule. Default: ``2.0``.
+    include_research_labels:
+        Configuration value used by the registered component. Default: ``False``.
+    research_label_lead_bars:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``3``.
+    prefix:
+        Configuration value used by the registered component. Default: ``swing``.
     """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("df must be a pandas DataFrame.")

@@ -5,7 +5,8 @@ from typing import Any
 
 import pandas as pd
 
-from src.experiments.registry import get_feature_fn, get_signal_fn
+from src.features.registry import get_feature_fn
+from src.signals.registry import get_signal_fn
 
 
 def _apply_output_mapping(

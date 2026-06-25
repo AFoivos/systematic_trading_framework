@@ -9,8 +9,12 @@ from typing import Callable
 import pytest
 import yaml
 
-from src.experiments.registry import FEATURE_REGISTRY, SIGNAL_REGISTRY
-from src.signals import regime_filtered_signal
+from src.experiments.registry import (
+    DEPRECATED_SIGNAL_ALIASES,
+    FEATURE_REGISTRY,
+    SIGNAL_REGISTRY,
+    get_signal_fn,
+)
 from src.utils.config_kinds import SIGNAL_KINDS
 
 
@@ -30,10 +34,23 @@ def _yaml_declaration(fn: Callable[..., object]) -> dict[str, object]:
     assert docstring is not None, f"{fn.__name__} must define a docstring."
     marker = "YAML declaration::"
     assert marker in docstring, f"{fn.__name__} must document its YAML declaration."
-    declaration = textwrap.dedent(docstring.split(marker, maxsplit=1)[1]).strip()
+    declaration = _extract_yaml_block(docstring.split(marker, maxsplit=1)[1])
     parsed = yaml.safe_load(declaration)
     assert isinstance(parsed, dict), f"{fn.__name__} must contain a valid YAML mapping."
     return parsed
+
+
+def _extract_yaml_block(raw: str) -> str:
+    lines = textwrap.dedent(raw).strip("\n").splitlines()
+    block: list[str] = []
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if block and stripped in {"Required input columns", "Parameters", "Returns", "Notes", "Examples"}:
+            break
+        if block and index + 1 < len(lines) and stripped and set(lines[index + 1].strip()) <= {"-"}:
+            break
+        block.append(line)
+    return "\n".join(block).strip()
 
 
 @pytest.mark.parametrize(
@@ -72,12 +89,10 @@ def _yaml_declaration(fn: Callable[..., object]) -> dict[str, object]:
 )
 def test_signal_modules_export_expected_symbol(module_name: str, symbol: str) -> None:
     package = importlib.import_module("src.signals")
-    api = importlib.import_module("src.signals.api")
     module = importlib.import_module(f"src.signals.{module_name}")
 
     exported = getattr(module, symbol)
     assert getattr(package, symbol) is exported
-    assert getattr(api, symbol) is exported
 
 
 def test_all_registered_features_document_their_yaml_declaration() -> None:
@@ -97,10 +112,9 @@ def test_all_registered_signals_document_their_yaml_declaration() -> None:
 
 
 def test_all_yaml_signal_kinds_are_named_in_a_signal_docstring() -> None:
-    standalone = {"regime_filtered": regime_filtered_signal}
     for name in SIGNAL_KINDS:
-        fn = SIGNAL_REGISTRY.get(name, standalone.get(name))
-        assert fn is not None
+        fn = get_signal_fn(name)
         docstring = inspect.getdoc(fn) or ""
         assert "YAML declaration::" in docstring
-        assert name in docstring
+        if name not in DEPRECATED_SIGNAL_ALIASES:
+            assert name in docstring

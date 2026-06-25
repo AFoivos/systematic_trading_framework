@@ -4,7 +4,7 @@ from typing import Any
 
 import pandas as pd
 
-from src.targets import build_classifier_target
+from src.targets.registry import build_target
 
 
 def _flatten_target_cfg(target_cfg: dict[str, Any]) -> dict[str, Any]:
@@ -194,7 +194,7 @@ def apply_post_signal_target_to_assets(
     out: dict[str, pd.DataFrame] = {}
     per_asset_meta: dict[str, dict[str, Any]] = {}
     for asset, frame in sorted(asset_frames.items()):
-        target_frame, _, _, target_meta = build_classifier_target(frame, target_cfg)
+        target_frame, _, _, target_meta = build_target(frame, target_cfg)
         out[asset] = target_frame
         per_asset_meta[str(asset)] = target_meta
 

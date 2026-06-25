@@ -10,7 +10,7 @@ from src.experiments.support.diagnostics import (
     aggregate_label_distributions,
     summarize_feature_importance_stability,
 )
-from src.experiments.registry import get_model_fn, is_portfolio_model_kind
+from src.models.registry import get_model_fn, is_portfolio_model_kind
 
 
 def synchronize_asset_frames_for_model(

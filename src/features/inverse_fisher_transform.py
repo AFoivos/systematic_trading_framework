@@ -25,12 +25,30 @@ def add_inverse_fisher_transform(
 ) -> pd.DataFrame:
     """
     Add a causal inverse Fisher transform bounded between -1 and 1.
-
+    
     YAML declaration::
-
+    
         features:
           - step: inverse_fisher_transform
             params: {}
+    
+    Required input columns
+    ----------------------
+    input_col:
+        Input column configured by ``input_col``. Default: ``close``.
+    
+    Parameters
+    ----------
+    input_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    window:
+        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``10``.
+    scale:
+        Configuration value used by the registered component. Default: ``1.0``.
+    normalize:
+        Configuration value used by the registered component. Default: ``True``.
+    output_col:
+        Output column name emitted by the component. Default: ``None``.
     """
     require_columns(df, [input_col], feature="inverse Fisher Transform")
     resolved_window = validate_int(window, name="window", minimum=2)

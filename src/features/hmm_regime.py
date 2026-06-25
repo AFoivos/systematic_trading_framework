@@ -28,18 +28,60 @@ def add_hmm_regime(
 ) -> pd.DataFrame:
     """
     Add Hidden Markov Model regimes without full-sample fitting.
-
+    
     ``mode='expanding'`` fits on observations strictly before the row being
     scored. ``mode='static_train'`` fits once on the first ``train_size`` valid
     observations and only scores later rows. If ``standardize=True``,
     normalization statistics are estimated from the HMM training window only.
     The ``hmmlearn`` package is required at runtime.
-
+    
     YAML declaration::
-
+    
         features:
           - step: hmm_regime
             params: {}
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input column configured by ``price_col``. Default: ``close``.
+    returns_col:
+        Optional input column configured by ``returns_col``; used when a value is provided.
+    
+    Parameters
+    ----------
+    feature_cols:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    price_col:
+        Input dataframe column name consumed by the component. Default: ``close``.
+    returns_col:
+        Input dataframe column name consumed by the component. Default: ``None``.
+    n_states:
+        Configuration value used by the registered component. Default: ``2``.
+    mode:
+        Mode selector that controls the registered component behavior. Default: ``expanding``.
+    train_size:
+        Configuration value used by the registered component. Default: ``None``.
+    min_train_size:
+        Configuration value used by the registered component. Default: ``None``.
+    refit_interval:
+        Configuration value used by the registered component. Default: ``1``.
+    covariance_type:
+        Configuration value used by the registered component. Default: ``diag``.
+    n_iter:
+        Configuration value used by the registered component. Default: ``100``.
+    random_state:
+        Configuration value used by the registered component. Default: ``0``.
+    output_col:
+        Output column name emitted by the component. Default: ``None``.
+    include_probabilities:
+        Configuration value used by the registered component. Default: ``False``.
+    probability_prefix:
+        Configuration value used by the registered component. Default: ``hmm_regime_prob``.
+    standardize:
+        Configuration value used by the registered component. Default: ``False``.
+    standardize_eps:
+        Configuration value used by the registered component. Default: ``1e-12``.
     """
     _validate_positive_int(n_states, name="n_states")
     if n_states < 2:

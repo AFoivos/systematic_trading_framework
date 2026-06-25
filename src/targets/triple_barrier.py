@@ -59,11 +59,29 @@ def build_triple_barrier_target(
 ) -> tuple[pd.DataFrame, str, str, dict[str, Any]]:
     """
     Build a binary triple-barrier target.
-
+    
     Labels:
     - 1.0 when the upper barrier is touched first
     - 0.0 when the lower barrier is touched first
     - NaN (default) when neither barrier is touched before the vertical barrier
+    
+    YAML declaration::
+    
+        target:
+          kind: triple_barrier
+          params: {}
+    
+    Required input columns
+    ----------------------
+    None fixed by signature:
+        Required dataframe columns are resolved from configuration or from
+        upstream feature/target/signal stages at runtime.
+    
+    Parameters
+    ----------
+    target_cfg:
+        Configuration mapping, usually resolved from YAML before this
+        registered component is called.
     """
     cfg = apply_target_output_aliases(target_cfg)
     price_col = str(cfg.get("price_col", "close"))
