@@ -21,7 +21,6 @@ pytorch-lightning
 gymnasium
 stable-baselines3
 
-# Utilities / plotting
 pyyaml
 tqdm
 matplotlib
@@ -32,14 +31,11 @@ optuna
 yfinance
 requests
 
-# Optional MT5 execution dependency. The PyPI wheel is Windows-only; Linux Docker builds skip it.
 metatrader5; platform_system == "Windows"
 
-# Notebooks
 jupyterlab
 notebook
 ipykernel
 ipywidgets
 
-# Testing
 pytest
