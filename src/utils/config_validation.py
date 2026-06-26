@@ -1039,6 +1039,23 @@ def _validate_ehlers_semiscalp_long_params(params: dict[str, Any], *, field_pref
         raise ConfigValidationError(f"{field_prefix}.min_cycle_period must be <= max_cycle_period.")
 
 
+def _validate_ehlers_decycler_continuation_params(params: dict[str, Any], *, field_prefix: str) -> None:
+    string_keys = {
+        "decycler_osc_col",
+        "decycler_ratio_col",
+        "signal_col",
+        "candidate_col",
+    }
+    for key in string_keys:
+        if key in params and (not isinstance(params[key], str) or not params[key].strip()):
+            raise ConfigValidationError(f"{field_prefix}.{key} must be a non-empty string.")
+    if "entry_mode" in params and params["entry_mode"] not in {"state", "transition"}:
+        raise ConfigValidationError(f"{field_prefix}.entry_mode must be one of: state, transition.")
+    for key in ("decycler_osc_min", "decycler_ratio_max"):
+        if key in params:
+            _finite_number(params[key], field=f"{field_prefix}.{key}")
+
+
 def _validate_ehlers_ml_long_candidate_params(params: dict[str, Any], *, field_prefix: str) -> None:
     string_keys = {
         "amplitude_col",
@@ -1139,6 +1156,11 @@ def validate_features_block(features: Any) -> None:
             _validate_roc_long_only_conditions_params(step.get("params") or {}, field_prefix="features[].params")
         if step["step"] == "ehlers_semiscalp_long":
             _validate_ehlers_semiscalp_long_params(
+                step.get("params") or {},
+                field_prefix="features[].params",
+            )
+        if step["step"] == "ehlers_decycler_continuation":
+            _validate_ehlers_decycler_continuation_params(
                 step.get("params") or {},
                 field_prefix="features[].params",
             )
@@ -2891,6 +2913,8 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
         _validate_ehlers_continuation_long_params(params, field_prefix="signals.params")
     if signals["kind"] == "ehlers_semiscalp_long":
         _validate_ehlers_semiscalp_long_params(params, field_prefix="signals.params")
+    if signals["kind"] == "ehlers_decycler_continuation":
+        _validate_ehlers_decycler_continuation_params(params, field_prefix="signals.params")
     if signals["kind"] in {"ehlers_continuation_short", "ehlers_continuation_short_signal"}:
         _validate_ehlers_continuation_short_params(params, field_prefix="signals.params")
     if signals["kind"] == "ema_rms_ppo_vwap":

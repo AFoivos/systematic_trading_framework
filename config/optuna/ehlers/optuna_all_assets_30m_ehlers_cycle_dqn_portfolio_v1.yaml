@@ -1,0 +1,59 @@
+base_config: config/experiments/ehlers/all_assets_30m_ehlers_cycle_dqn_portfolio_v1.yaml
+
+study:
+  study_name: optuna_all_assets_30m_ehlers_cycle_dqn_portfolio_v1
+  storage: null
+  load_if_exists: false
+  sampler: tpe
+  seed: 7
+  n_trials: 120
+  timeout: null
+  n_jobs: 1
+  logging_enabled: true
+  catch_exceptions: true
+
+report:
+  enabled: true
+  output_dir: logs/experiments
+  run_name: optuna_all_assets_30m_ehlers_cycle_dqn_portfolio_v1
+
+objective:
+  metric_path: evaluation.primary_summary.sharpe
+  direction: maximize
+  failure_score: -1000000000000.0
+  base_metric_weight: 1.0
+  stability_weight: 0.25
+  stability_metric_path: metrics.sharpe
+  stability_std_penalty: 1.0
+  fold_summary_path: evaluation.fold_backtest_summaries
+  constraints:
+    - {metric_path: evaluation.primary_summary.cumulative_return, op: le, threshold: 0.0, penalty: 30.0, missing_penalty: 30.0}
+    - {metric_path: evaluation.primary_summary.max_drawdown, op: lt, threshold: -0.20, penalty: 20.0, missing_penalty: 20.0}
+    - {metric_path: evaluation.primary_summary.profit_factor, op: lt, threshold: 1.0, penalty: 8.0, missing_penalty: 8.0}
+    - {metric_path: derived.entry_count, op: lt, threshold: 100.0, penalty: 8.0, missing_penalty: 8.0}
+
+pruning:
+  enabled: false
+  metric_path: policy_metrics.mean_reward
+  direction: maximize
+  stage_filter: [dqn_portfolio_agent]
+  pruner: none
+  n_startup_trials: 10
+  n_warmup_steps: 1
+  interval_steps: 1
+
+search_space:
+  - {name: dqn_window_size, path: model.env.window_size, kind: categorical, choices: [16, 32, 48, 64]}
+  - {name: dqn_total_timesteps, path: model.params.total_timesteps, kind: categorical, choices: [10000, 25000, 50000]}
+  - {name: dqn_learning_starts, path: model.params.learning_starts, kind: categorical, choices: [500, 1000, 2500]}
+  - {name: dqn_buffer_size, path: model.params.buffer_size, kind: categorical, choices: [50000, 100000, 200000]}
+  - {name: dqn_batch_size, path: model.params.batch_size, kind: categorical, choices: [128, 256, 512]}
+  - {name: dqn_train_freq, path: model.params.train_freq, kind: categorical, choices: [1, 4, 8]}
+  - {name: dqn_gradient_steps, path: model.params.gradient_steps, kind: categorical, choices: [1, 2, 4]}
+  - {name: dqn_target_update_interval, path: model.params.target_update_interval, kind: categorical, choices: [500, 1000, 2000]}
+  - {name: dqn_learning_rate, path: model.params.learning_rate, kind: float, low: 0.00005, high: 0.003, log: true}
+  - {name: dqn_gamma, path: model.params.gamma, kind: float, low: 0.95, high: 0.999, step: 0.001}
+  - {name: extractor_features_dim, path: model.params.extractor.features_dim, kind: categorical, choices: [64, 128, 256]}
+  - {name: inventory_penalty, path: model.env.reward.inventory_penalty, kind: float, low: 0.0, high: 0.00010, step: 0.00001}
+  - {name: switching_penalty, path: model.env.reward.switching_penalty, kind: float, low: 0.0, high: 0.00020, step: 0.00001}
+  - {name: portfolio_gross_target, path: portfolio.gross_target, paths: [risk.max_leverage, portfolio.constraints.max_gross_leverage], kind: float, low: 0.50, high: 1.50, step: 0.25}

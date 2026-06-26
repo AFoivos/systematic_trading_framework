@@ -1,0 +1,197 @@
+strategy:
+  name: us100_30m_ehlers_decycler_continuation_xgboost_meta_v1
+  timeframe: 30m
+  assets: [US100]
+  description: US100 Ehlers decycler continuation candidates filtered by purged walk-forward XGBoost directional triple-barrier meta labels.
+
+data:
+  source: dukascopy_csv
+  interval: 30m
+  start: null
+  end: null
+  alignment: inner
+  symbol: US100
+  storage:
+    mode: cached_only
+    dataset_id: us100_30m_ehlers_decycler_continuation_xgboost_meta_v1
+    save_raw: false
+    save_processed: true
+    load_path: data/raw/dukascopy_30m_clean/us100_30m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed
+
+features:
+  - step: returns
+    params: {log: false, col_name: close_ret}
+  - step: supersmoother
+    params: {price_col: close, period: 10, output_col: ehlers_supersmoother_10}
+  - step: roofing_filter
+    params: {price_col: close, high_pass_period: 48, low_pass_period: 10, slope_bars: 1, output_col: ehlers_roofing_48_10, slope_col: ehlers_roofing_48_10_slope, cross_up_zero_col: ehlers_roofing_48_10_cross_up, cross_down_zero_col: ehlers_roofing_48_10_cross_down, add_derived: true}
+  - step: hilbert_transform
+    params: {price_col: close, window: 64, amplitude_col: ehlers_hilbert_amplitude_64, phase_col: ehlers_hilbert_phase_64, instantaneous_frequency_col: ehlers_hilbert_frequency_64, add_derived: false}
+  - step: dominant_cycle_period
+    params: {price_col: close, output_col: dominant_cycle_period}
+  - step: dominant_cycle_phase
+    params: {price_col: close, output_col: dominant_cycle_phase}
+  - step: decycler
+    params: {price_col: close, period: 60, output_col: decycler}
+  - step: decycler_oscillator
+    params: {price_col: close, fast_period: 30, slow_period: 60, output_col: decycler_oscillator_30_60}
+  - step: laguerre_rsi
+    params: {price_col: close, gamma: 0.5, output_col: laguerre_rsi, as_percent: false}
+  - step: fisher_transform
+    params: {price_col: close, window: 10, output_col: fisher_transform, add_signal: false}
+  - step: autocorrelation_periodogram
+    params: {price_col: close, min_period: 10, max_period: 48, window: 96, output_col: autocorrelation_periodogram_10_48, power_col: autocorrelation_periodogram_10_48_power, add_power: true}
+  - step: rolling_r2_trend_quality
+    params: {price_col: close, window: 96, output_col: rolling_r2_96, slope_col: rolling_r2_slope_96}
+  - step: atr
+    params: {high_col: high, low_col: low, close_col: close, window: 14, windows: [14], method: wilder, add_over_price: true, atr_col: atr_14, over_price_col: atr_over_price_14}
+  - step: feature_transforms
+    params:
+      transforms:
+        - {kind: rolling_stat, source_col: ehlers_supersmoother_10, mode: slope, window: 2, shift: 0, output_col: ehlers_supersmoother_10_slope}
+        - {kind: ratio, numerator_col: ehlers_supersmoother_10_slope, denominator_col: atr_14, output_col: ehlers_supersmoother_slope_atr}
+        - {kind: ratio, numerator_col: ehlers_roofing_48_10, denominator_col: atr_14, output_col: ehlers_roofing_atr}
+        - {kind: ratio, numerator_col: ehlers_roofing_48_10_slope, denominator_col: atr_14, output_col: ehlers_roofing_slope_atr}
+        - {kind: ratio, numerator_col: ehlers_hilbert_amplitude_64, denominator_col: atr_14, output_col: ehlers_hilbert_amplitude_atr}
+        - {kind: ratio, numerator_col: decycler, denominator_col: close, output_col: ehlers_decycler_over_close}
+        - {kind: rolling_zscore, source_col: ehlers_hilbert_amplitude_64, window: 252, shift: 1, output_col: ehlers_hilbert_amplitude_z_252}
+        - {kind: rolling_zscore, source_col: atr_over_price_14, window: 252, shift: 1, output_col: atr_over_price_z_252}
+  - step: ehlers_decycler_continuation
+    params:
+      decycler_osc_col: decycler_oscillator_30_60
+      decycler_ratio_col: ehlers_decycler_over_close
+      decycler_osc_min: 0.45
+      decycler_ratio_max: 0.9940
+      entry_mode: state
+      signal_col: signal_side
+      candidate_col: signal_candidate
+
+model:
+  kind: xgboost_clf
+  pred_prob_col: pred_prob
+  pred_is_oos_col: pred_is_oos
+  preprocessing: {scaler: standard}
+  target:
+    kind: directional_triple_barrier
+    price_col: close
+    open_col: open
+    high_col: high
+    low_col: low
+    volatility_col: atr_14
+    direction_col: signal_side
+    side_col: signal_side
+    candidate_col: signal_candidate
+    candidate_out_col: dtb_candidate
+    label_col: label
+    event_ret_col: dtb_event_ret
+    fwd_col: dtb_event_ret
+    add_r_multiple: true
+    r_col: dtb_event_r
+    oriented_r_col: dtb_oriented_r
+    profit_barrier_r: 3.0
+    stop_barrier_r: 2.0
+    vertical_barrier_bars: 16
+    entry_price_mode: next_open
+    neutral_label: drop
+    tie_break: stop
+    r_clip: [-5.0, 5.0]
+  split: {method: purged, train_size: 36000, test_size: 6000, step_size: 6000, expanding: true, max_folds: 4, purge_bars: 16, embargo_bars: 16, synchronize_assets: false}
+  feature_cols:
+    - ehlers_supersmoother_slope_atr
+    - ehlers_roofing_atr
+    - ehlers_roofing_slope_atr
+    - ehlers_hilbert_amplitude_atr
+    - ehlers_hilbert_amplitude_z_252
+    - ehlers_hilbert_phase_64
+    - ehlers_hilbert_frequency_64
+    - dominant_cycle_period
+    - dominant_cycle_phase
+    - ehlers_decycler_over_close
+    - decycler_oscillator_30_60
+    - laguerre_rsi
+    - fisher_transform
+    - autocorrelation_periodogram_10_48
+    - autocorrelation_periodogram_10_48_power
+    - rolling_r2_96
+    - rolling_r2_slope_96
+    - atr_over_price_14
+    - atr_over_price_z_252
+  params:
+    n_estimators: 400
+    learning_rate: 0.03
+    max_depth: 3
+    min_child_weight: 5.0
+    subsample: 0.80
+    colsample_bytree: 0.80
+    reg_lambda: 5.0
+    reg_alpha: 0.10
+    scale_pos_weight: 1.0
+    objective: binary:logistic
+    eval_metric: logloss
+    tree_method: hist
+    random_state: 7
+    n_jobs: 1
+
+signals:
+  kind: manual_long_model_filter
+  params:
+    prob_col: pred_prob
+    candidate_col: signal_candidate
+    base_signal_col: signal_side
+    threshold: 0.54
+    min_signal_abs: 0.0
+    profit_barrier_r: 3.0
+    stop_barrier_r: 2.0
+    signal_col: model_filtered_long_signal
+
+target: {}
+runtime: {seed: 7, repro_mode: strict, deterministic: true, threads: 1, seed_torch: false}
+risk:
+  cost_per_turnover: 0.00015
+  slippage_per_turnover: 0.00010
+  target_vol: null
+  max_leverage: 1.0
+  sizing: {}
+  dd_guard: {enabled: false, max_drawdown: 0.08, rearm_drawdown: 0.04, cooloff_bars: 48}
+  portfolio_guard: {}
+  drawdown_sizing: {}
+  vol_col: null
+backtest:
+  engine: manual_barrier
+  signal_col: model_filtered_long_signal
+  returns_col: close_ret
+  returns_type: simple
+  subset: full
+  periods_per_year: 12096
+  missing_return_policy: raise_if_exposed
+  allow_short: false
+  long_only: true
+  stop_mode: volatility_stop
+  vol_col: atr_over_price_14
+  open_col: open
+  high_col: high
+  low_col: low
+  close_col: close
+  take_profit_r: 3.0
+  stop_loss_r: 2.0
+  risk_per_trade: 0.003
+  max_holding_bars: 16
+  dynamic_exits: {}
+portfolio:
+  enabled: false
+  construction: signal_weights
+  long_short: false
+  gross_target: 1.0
+monitoring: {enabled: true, psi_threshold: 0.2, n_bins: 10}
+diagnostics:
+  enabled: true
+  robustness: {enabled: true, cost_multipliers: [2.0, 3.0, 5.0], entry_delay_bars: [1, 2], walk_forward_frequency: YE}
+execution: {enabled: false, mode: paper, capital: 100000.0, price_col: close}
+logging:
+  enabled: true
+  run_name: us100_30m_ehlers_decycler_continuation_xgboost_meta_v1
+  output_dir: logs/experiments
+  stage_tails: {enabled: false}
+  execution_source_audit: {enabled: true}

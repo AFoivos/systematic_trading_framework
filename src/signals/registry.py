@@ -13,6 +13,7 @@ from .conviction_sizing_signal import conviction_sizing_signal
 from .dense_return_forecast_signal import dense_return_forecast_signal
 from .ehlers_continuation_long_signal import ehlers_continuation_long_signal
 from .ehlers_continuation_short_signal import ehlers_continuation_short_signal
+from .ehlers_decycler_continuation_signal import ehlers_decycler_continuation_signal
 from .ehlers_semiscalp_long_signal import ehlers_semiscalp_long_signal
 from .ema_rms_ppo_vwap_signal import ema_rms_ppo_vwap_signal
 from .ema_stoch_rsi_pullback_signal import ema_stoch_rsi_pullback_signal
@@ -45,6 +46,7 @@ _SIGNAL_COMPONENTS: tuple[tuple[str, SignalFn], ...] = (
     ("c2_regime_aware_momentum", c2_regime_aware_momentum_signal),
     ("ehlers_continuation_long", ehlers_continuation_long_signal),
     ("ehlers_continuation_short", ehlers_continuation_short_signal),
+    ("ehlers_decycler_continuation", ehlers_decycler_continuation_signal),
     ("ehlers_semiscalp_long", ehlers_semiscalp_long_signal),
     ("trend_state", trend_state_signal),
     ("ema_rms_ppo_vwap", ema_rms_ppo_vwap_signal),

@@ -25,6 +25,11 @@ from .ehlers_continuation_short_signal import (
     build_ehlers_continuation_short_signal,
     ehlers_continuation_short_signal,
 )
+from .ehlers_decycler_continuation_signal import (
+    build_ehlers_decycler_continuation_signal,
+    ehlers_decycler_continuation_feature,
+    ehlers_decycler_continuation_signal,
+)
 from .ehlers_semiscalp_long_signal import (
     build_ehlers_semiscalp_long_signal,
     ehlers_semiscalp_long_feature,
@@ -89,6 +94,7 @@ __all__ = [
     "build_ema_stoch_rsi_signal",
     "build_ehlers_continuation_long_signal",
     "build_ehlers_continuation_short_signal",
+    "build_ehlers_decycler_continuation_signal",
     "build_ehlers_semiscalp_long_signal",
     "c1_trend_pullback_vwap_signal",
     "c2_regime_aware_momentum_signal",
@@ -96,6 +102,8 @@ __all__ = [
     "dense_return_forecast_signal",
     "ehlers_continuation_long_signal",
     "ehlers_continuation_short_signal",
+    "ehlers_decycler_continuation_feature",
+    "ehlers_decycler_continuation_signal",
     "ehlers_semiscalp_long_feature",
     "ehlers_semiscalp_long_signal",
     "ema_rms_ppo_vwap_signal",

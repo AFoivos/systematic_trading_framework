@@ -60,6 +60,7 @@ def _extract_yaml_block(raw: str) -> str:
         ("conviction_sizing_signal", "conviction_sizing_signal"),
         ("ehlers_continuation_long_signal", "ehlers_continuation_long_signal"),
         ("ehlers_continuation_short_signal", "ehlers_continuation_short_signal"),
+        ("ehlers_decycler_continuation_signal", "ehlers_decycler_continuation_signal"),
         ("ema_rms_ppo_vwap_signal", "ema_rms_ppo_vwap_signal"),
         ("ema_stoch_rsi_pullback_signal", "ema_stoch_rsi_pullback_signal"),
         ("forecast_threshold_signal", "forecast_threshold_signal"),

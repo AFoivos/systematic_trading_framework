@@ -158,6 +158,7 @@ def _legacy_signal_feature_steps() -> Mapping[str, FeatureFn]:
         "legacy feature-compatible signal step",
         (
             ("ehlers_semiscalp_long", lazy_callable("src.signals.ehlers_semiscalp_long_signal", "ehlers_semiscalp_long_feature")),
+            ("ehlers_decycler_continuation", lazy_callable("src.signals.ehlers_decycler_continuation_signal", "ehlers_decycler_continuation_feature")),
             ("ema_stoch_rsi_pullback", lazy_callable("src.signals.ema_stoch_rsi_pullback_signal", "ema_stoch_rsi_pullback_signal")),
             ("indicator_model_adaptive_pullback", lazy_callable("src.signals.indicator_model_adaptive_pullback", "indicator_model_adaptive_pullback_signal")),
             ("roc_long_only_conditions", lazy_callable("src.signals.roc_long_only_conditions_signal", "roc_long_only_conditions_signal")),
