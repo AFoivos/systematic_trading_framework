@@ -175,6 +175,22 @@ def test_standard_scaler_uses_train_only_statistics() -> None:
     assert float(X_test_scaled[0, 0]) > 50.0
 
 
+def test_robust_scaler_uses_train_only_statistics() -> None:
+    X_train = pd.DataFrame({"feat_1": [1.0, 2.0, 3.0, 4.0]})
+    X_test = pd.DataFrame({"feat_1": [100.0]})
+
+    X_train_scaled, X_test_scaled, meta = _apply_fold_feature_preprocessing(
+        X_train,
+        X_test,
+        preprocessing_cfg={"scaler": "robust"},
+    )
+
+    assert meta["scaler"] == "robust"
+    assert meta["train_only"] is True
+    assert float(np.median(X_train_scaled[:, 0])) == 0.0
+    assert float(X_test_scaled[0, 0]) > 60.0
+
+
 def test_standard_scaler_accepts_empty_test_fold() -> None:
     X_train = pd.DataFrame({"feat_1": [1.0, 2.0, 3.0, 4.0]})
     X_test = pd.DataFrame({"feat_1": pd.Series(dtype=float)})

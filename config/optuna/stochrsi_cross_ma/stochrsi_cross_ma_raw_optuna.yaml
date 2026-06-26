@@ -99,3 +99,4 @@ search_space:
     path: backtest.min_holding_bars
     kind: categorical
     choices: [0, 1, 2, 4, 6, 8, 12]
+

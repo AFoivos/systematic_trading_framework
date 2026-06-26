@@ -134,6 +134,8 @@ docs/*
 !docs/trading_dashboard_assumptions.md
 !docs/execution_source_audit.md
 !docs/architecture.md
+!docs/yaml_experiments_guide_gr.md
+!docs/yaml_experiments_guide_gr.pdf
 !docs/experiments/
 !docs/experiments/c1_30m_trend_pullback_vwap.md
 notebooks/

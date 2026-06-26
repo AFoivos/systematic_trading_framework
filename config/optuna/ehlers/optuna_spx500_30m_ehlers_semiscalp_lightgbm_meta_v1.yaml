@@ -56,3 +56,4 @@ search_space:
   - {name: lgbm_reg_alpha, path: model.params.reg_alpha, kind: categorical, choices: [0.0, 0.05, 0.10, 0.50]}
   - {name: lgbm_class_weight, path: model.params.class_weight, kind: categorical, choices: [null, balanced]}
 
+

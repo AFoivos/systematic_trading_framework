@@ -57,3 +57,4 @@ search_space:
   - {name: inventory_penalty, path: model.env.reward.inventory_penalty, kind: float, low: 0.0, high: 0.00010, step: 0.00001}
   - {name: switching_penalty, path: model.env.reward.switching_penalty, kind: float, low: 0.0, high: 0.00020, step: 0.00001}
   - {name: portfolio_gross_target, path: portfolio.gross_target, paths: [risk.max_leverage, portfolio.constraints.max_gross_leverage], kind: float, low: 0.50, high: 1.50, step: 0.25}
+

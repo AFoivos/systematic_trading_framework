@@ -169,3 +169,4 @@ search_space:
     path: backtest.max_holding_bars
     kind: categorical
     choices: [12, 24, 48, 96, 192, null]
+

@@ -1,9 +1,10 @@
 strategy:
   name: spx500_30m_ehlers_semiscalp_lightgbm_meta_v1
   timeframe: 30m
-  assets: [SPX500]
-  description: Ehlers semi-scalp candidates filtered by a purged walk-forward LightGBM meta-model.
-
+  assets:
+  - SPX500
+  description: Ehlers semi-scalp candidates filtered by a purged walk-forward LightGBM
+    meta-model.
 data:
   source: dukascopy_csv
   interval: 30m
@@ -19,83 +20,121 @@ data:
     load_path: data/raw/dukascopy_30m_clean/spx500_30m.csv
     raw_dir: data/raw
     processed_dir: data/processed
-
 features:
-  - step: returns
-    params: {log: false, col_name: close_ret}
-  - step: supersmoother
-    params: {price_col: close, period: 10, output_col: ehlers_supersmoother_10}
-  - step: feature_transforms
-    params:
-      transforms:
-        - {kind: rolling_stat, source_col: ehlers_supersmoother_10, mode: slope, window: 2, shift: 0, output_col: ehlers_supersmoother_10_slope}
-  - step: roofing_filter
-    params:
-      price_col: close
-      high_pass_period: 48
-      low_pass_period: 10
-      slope_bars: 1
-      output_col: ehlers_roofing_48_10
-      slope_col: ehlers_roofing_48_10_slope
-      cross_up_zero_col: ehlers_roofing_48_10_cross_up
-      cross_down_zero_col: ehlers_roofing_48_10_cross_down
-      add_derived: true
-  - step: hilbert_transform
-    params:
-      price_col: close
-      window: 64
-      amplitude_col: ehlers_hilbert_amplitude_64
-      phase_col: ehlers_hilbert_phase_64
-      instantaneous_frequency_col: ehlers_hilbert_frequency_64
-      add_derived: false
-  - step: dominant_cycle_period
-    params: {price_col: close, output_col: dominant_cycle_period}
-  - step: dominant_cycle_phase
-    params: {price_col: close, output_col: dominant_cycle_phase}
-  - step: atr
-    params:
-      high_col: high
-      low_col: low
-      close_col: close
-      window: 14
-      windows: [14]
-      method: wilder
-      add_over_price: true
-      atr_col: atr_14
-      over_price_col: atr_over_price_14
-  - step: feature_transforms
-    params:
-      transforms:
-        - {kind: ratio, numerator_col: ehlers_supersmoother_10_slope, denominator_col: atr_14, output_col: ehlers_supersmoother_slope_atr}
-        - {kind: ratio, numerator_col: ehlers_roofing_48_10, denominator_col: atr_14, output_col: ehlers_roofing_atr}
-        - {kind: ratio, numerator_col: ehlers_roofing_48_10_slope, denominator_col: atr_14, output_col: ehlers_roofing_slope_atr}
-        - {kind: ratio, numerator_col: ehlers_hilbert_amplitude_64, denominator_col: atr_14, output_col: ehlers_hilbert_amplitude_atr}
-        - {kind: rolling_zscore, source_col: ehlers_hilbert_amplitude_64, window: 252, shift: 1, output_col: ehlers_hilbert_amplitude_z_252}
-        - {kind: rolling_zscore, source_col: atr_over_price_14, window: 252, shift: 1, output_col: atr_over_price_z_252}
-  - step: lags
-    params: {cols: [close_ret], lags: [1, 2, 4]}
-  - step: ehlers_semiscalp_long
-    params:
-      entry_mode: transition
-      price_col: close
-      supersmoother_col: ehlers_supersmoother_10
-      supersmoother_slope_col: ehlers_supersmoother_10_slope
-      roofing_col: ehlers_roofing_48_10
-      roofing_slope_col: ehlers_roofing_48_10_slope
-      roofing_cross_up_col: ehlers_roofing_48_10_cross_up
-      roofing_cross_down_col: ehlers_roofing_48_10_cross_down
-      hilbert_amplitude_col: ehlers_hilbert_amplitude_64
-      dominant_cycle_period_col: dominant_cycle_period
-      atr_col: atr_over_price_14
-      min_cycle_period: 10.0
-      max_cycle_period: 48.0
-      amplitude_quantile_lookback: 252
-      amplitude_min_quantile: 0.30
-      atr_quantile_lookback: 252
-      atr_min_quantile: 0.30
-      signal_col: signal_side
-      candidate_col: signal_candidate
-
+- step: returns
+  params:
+    log: false
+    col_name: close_ret
+- step: supersmoother
+  params:
+    price_col: close
+    period: 10
+    output_col: ehlers_supersmoother_10
+  transforms:
+    slope:
+      enabled: true
+      items:
+      - source_col: ehlers_supersmoother_10
+        window: 2
+        shift: 0
+        output_col: ehlers_supersmoother_10_slope
+- step: roofing_filter
+  params:
+    price_col: close
+    high_pass_period: 48
+    low_pass_period: 10
+    slope_bars: 1
+    output_col: ehlers_roofing_48_10
+    slope_col: ehlers_roofing_48_10_slope
+    cross_up_zero_col: ehlers_roofing_48_10_cross_up
+    cross_down_zero_col: ehlers_roofing_48_10_cross_down
+    add_derived: true
+- step: hilbert_transform
+  params:
+    price_col: close
+    window: 64
+    amplitude_col: ehlers_hilbert_amplitude_64
+    phase_col: ehlers_hilbert_phase_64
+    instantaneous_frequency_col: ehlers_hilbert_frequency_64
+    add_derived: false
+- step: dominant_cycle_period
+  params:
+    price_col: close
+    output_col: dominant_cycle_period
+- step: dominant_cycle_phase
+  params:
+    price_col: close
+    output_col: dominant_cycle_phase
+- step: atr
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    window: 14
+    windows:
+    - 14
+    method: wilder
+    add_over_price: false
+    atr_col: atr_14
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: atr_14
+        denominator_col: close
+        output_col: atr_over_price_14
+      - numerator_col: ehlers_supersmoother_10_slope
+        denominator_col: atr_14
+        output_col: ehlers_supersmoother_slope_atr
+      - numerator_col: ehlers_roofing_48_10
+        denominator_col: atr_14
+        output_col: ehlers_roofing_atr
+      - numerator_col: ehlers_roofing_48_10_slope
+        denominator_col: atr_14
+        output_col: ehlers_roofing_slope_atr
+      - numerator_col: ehlers_hilbert_amplitude_64
+        denominator_col: atr_14
+        output_col: ehlers_hilbert_amplitude_atr
+    rolling_zscore:
+      enabled: true
+      items:
+      - source_col: ehlers_hilbert_amplitude_64
+        window: 252
+        shift: 1
+        output_col: ehlers_hilbert_amplitude_z_252
+      - source_col: atr_over_price_14
+        window: 252
+        shift: 1
+        output_col: atr_over_price_z_252
+- step: lags
+  params:
+    cols:
+    - close_ret
+    lags:
+    - 1
+    - 2
+    - 4
+- step: ehlers_semiscalp_long
+  params:
+    entry_mode: transition
+    price_col: close
+    supersmoother_col: ehlers_supersmoother_10
+    supersmoother_slope_col: ehlers_supersmoother_10_slope
+    roofing_col: ehlers_roofing_48_10
+    roofing_slope_col: ehlers_roofing_48_10_slope
+    roofing_cross_up_col: ehlers_roofing_48_10_cross_up
+    roofing_cross_down_col: ehlers_roofing_48_10_cross_down
+    hilbert_amplitude_col: ehlers_hilbert_amplitude_64
+    dominant_cycle_period_col: dominant_cycle_period
+    atr_col: atr_over_price_14
+    min_cycle_period: 10.0
+    max_cycle_period: 48.0
+    amplitude_quantile_lookback: 252
+    amplitude_min_quantile: 0.3
+    atr_quantile_lookback: 252
+    atr_min_quantile: 0.3
+    signal_col: signal_side
+    candidate_col: signal_candidate
 model:
   kind: lightgbm_clf
   pred_prob_col: pred_prob
@@ -112,9 +151,9 @@ model:
     low_col: low
     volatility_col: atr_over_price_14
     entry_price_mode: next_open
-    target_r_min: 0.10
-    take_profit_r: 1.50
-    stop_loss_r: 1.00
+    target_r_min: 0.1
+    take_profit_r: 1.5
+    stop_loss_r: 1.0
     max_holding_bars: 6
     stop_mode: volatility_stop
     tie_break: conservative
@@ -129,35 +168,34 @@ model:
     purge_bars: 6
     embargo_bars: 6
   feature_cols:
-    - close_ret
-    - lag_close_ret_1
-    - lag_close_ret_2
-    - lag_close_ret_4
-    - ehlers_supersmoother_slope_atr
-    - ehlers_roofing_atr
-    - ehlers_roofing_slope_atr
-    - ehlers_hilbert_amplitude_atr
-    - ehlers_hilbert_amplitude_z_252
-    - dominant_cycle_period
-    - dominant_cycle_phase
-    - atr_over_price_14
-    - atr_over_price_z_252
+  - close_ret
+  - lag_close_ret_1
+  - lag_close_ret_2
+  - lag_close_ret_4
+  - ehlers_supersmoother_slope_atr
+  - ehlers_roofing_atr
+  - ehlers_roofing_slope_atr
+  - ehlers_hilbert_amplitude_atr
+  - ehlers_hilbert_amplitude_z_252
+  - dominant_cycle_period
+  - dominant_cycle_phase
+  - atr_over_price_14
+  - atr_over_price_z_252
   params:
     n_estimators: 300
     learning_rate: 0.03
     num_leaves: 15
     max_depth: -1
     min_child_samples: 40
-    subsample: 0.80
+    subsample: 0.8
     subsample_freq: 1
-    colsample_bytree: 0.80
+    colsample_bytree: 0.8
     reg_lambda: 5.0
-    reg_alpha: 0.10
+    reg_alpha: 0.1
     class_weight: balanced
     random_state: 7
     n_jobs: 1
     verbosity: -1
-
 signals:
   kind: manual_long_model_filter
   params:
@@ -166,19 +204,27 @@ signals:
     base_signal_col: signal_side
     threshold: 0.55
     min_signal_abs: 0.0
-    profit_barrier_r: 1.50
-    stop_barrier_r: 1.00
+    profit_barrier_r: 1.5
+    stop_barrier_r: 1.0
     signal_col: model_filtered_long_signal
-
 target: {}
-runtime: {seed: 7, repro_mode: strict, deterministic: true, threads: 1, seed_torch: false}
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
 risk:
   cost_per_turnover: 0.00015
-  slippage_per_turnover: 0.00010
+  slippage_per_turnover: 0.0001
   target_vol: null
   max_leverage: 1.0
   sizing: {}
-  dd_guard: {enabled: false, max_drawdown: 0.08, rearm_drawdown: 0.04, cooloff_bars: 48}
+  dd_guard:
+    enabled: false
+    max_drawdown: 0.08
+    rearm_drawdown: 0.04
+    cooloff_bars: 48
   portfolio_guard: {}
   drawdown_sizing: {}
   vol_col: null
@@ -198,20 +244,42 @@ backtest:
   high_col: high
   low_col: low
   close_col: close
-  take_profit_r: 1.50
-  stop_loss_r: 1.00
+  take_profit_r: 1.5
+  stop_loss_r: 1.0
   risk_per_trade: 0.003
   max_holding_bars: 6
   dynamic_exits: {}
-portfolio: {enabled: false, construction: signal_weights, long_short: false, gross_target: 1.0}
-monitoring: {enabled: true, psi_threshold: 0.2, n_bins: 10}
+portfolio:
+  enabled: false
+  construction: signal_weights
+  long_short: false
+  gross_target: 1.0
+monitoring:
+  enabled: true
+  psi_threshold: 0.2
+  n_bins: 10
 diagnostics:
   enabled: true
-  robustness: {enabled: true, cost_multipliers: [2.0, 3.0, 5.0], entry_delay_bars: [1, 2], walk_forward_frequency: YE}
-execution: {enabled: false, mode: paper, capital: 100000.0, price_col: close}
+  robustness:
+    enabled: true
+    cost_multipliers:
+    - 2.0
+    - 3.0
+    - 5.0
+    entry_delay_bars:
+    - 1
+    - 2
+    walk_forward_frequency: YE
+execution:
+  enabled: false
+  mode: paper
+  capital: 100000.0
+  price_col: close
 logging:
   enabled: true
   run_name: spx500_30m_ehlers_semiscalp_lightgbm_meta_v1
   output_dir: logs/experiments
-  stage_tails: {enabled: false}
-  execution_source_audit: {enabled: true}
+  stage_tails:
+    enabled: false
+  execution_source_audit:
+    enabled: true

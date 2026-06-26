@@ -351,9 +351,8 @@ def test_spx500_v2_config_and_optuna_contracts() -> None:
 
     assert payload["base_config"] == str(base_path)
     assert cfg["features"][6]["step"] == "swing_extrema_context"
-    assert cfg["features"][7]["step"] == "feature_transforms"
-    assert cfg["features"][8]["step"] == "roc_long_only_conditions"
-    assert cfg["features"][8]["params"]["require_bullish_candle"] is True
+    assert cfg["features"][7]["step"] == "roc_long_only_conditions"
+    assert cfg["features"][7]["params"]["require_bullish_candle"] is True
     assert cfg["model"]["split"]["test_size"] == 5600
     assert cfg["model"]["split"]["max_folds"] == 8
     assert cfg["backtest"]["dynamic_exits"]["enabled"] is True
@@ -364,8 +363,8 @@ def test_spx500_v2_config_and_optuna_contracts() -> None:
     validate_search_space_feature_contract(cfg, search_space)
     paths = {dimension.path for dimension in search_space}
     assert "features.6.params.overextended_long_threshold_atr" in paths
-    assert "features.8.params.roc_min" in paths
-    assert "features.8.params.require_bullish_candle" in paths
+    assert "features.7.params.roc_min" in paths
+    assert "features.7.params.require_bullish_candle" in paths
     assert "signals.params.threshold" in paths
     assert "backtest.dynamic_exits.breakeven.trigger_r" in paths
     assert "backtest.dynamic_exits.profit_lock.lock_r" in paths

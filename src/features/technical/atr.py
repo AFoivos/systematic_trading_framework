@@ -15,7 +15,7 @@ def add_atr_features(
     window: int = 14,
     windows: Sequence[int] | None = None,
     method: str = "wilder",
-    add_over_price: bool = True,
+    add_over_price: bool = False,
     atr_col: str | None = None,
     over_price_col: str | None = None,
     inplace: bool = False,
@@ -53,7 +53,9 @@ def add_atr_features(
     method:
         Mode selector that controls the registered component behavior. Default: ``wilder``.
     add_over_price:
-        Configuration value used by the registered component. Default: ``True``.
+        No longer supported. Derived price-normalized ATR output must be
+        declared with a nested normalization/transform helper. Default:
+        ``False``.
     atr_col:
         Input dataframe column name consumed by the component. Default: ``None``.
     over_price_col:
@@ -78,8 +80,6 @@ def add_atr_features(
     for resolved_window in resolved_windows:
         atr = compute_atr(high, low, close, window=resolved_window, method=method)
         out[atr_col or f"atr_{resolved_window}"] = atr
-        if add_over_price:
-            out[over_price_col or f"atr_over_price_{resolved_window}"] = atr / close
     return out
 
 
@@ -95,10 +95,10 @@ def _validate_stable_output_cols(
             raise ValueError(f"{field_name} must be a non-empty string when provided.")
     if atr_col is not None and atr_col == over_price_col:
         raise ValueError("ATR output columns must be unique.")
-    if len(resolved_windows) != 1 and (atr_col is not None or over_price_col is not None):
+    if len(resolved_windows) != 1 and atr_col is not None:
         raise ValueError("Stable ATR output columns require exactly one resolved window.")
-    if over_price_col is not None and not add_over_price:
-        raise ValueError("over_price_col requires add_over_price=True.")
+    if add_over_price or over_price_col is not None:
+        raise ValueError("ATR over-price outputs are no longer supported; use transforms.ratio helpers.")
 
 
 def _resolve_windows(*, window: int, windows: Sequence[int] | None) -> list[int]:

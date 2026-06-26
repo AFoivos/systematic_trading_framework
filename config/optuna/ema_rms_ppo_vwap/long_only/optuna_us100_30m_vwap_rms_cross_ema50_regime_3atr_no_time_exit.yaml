@@ -81,9 +81,9 @@ search_space:
   value_templates:
   - path: features.2.params.ema_col_template
     template: ema_{ema_mid_span}
-  - path: features.7.params.transforms.0.source_col
+  - path: features.6.transforms.rms.items.0.source_col
     template: ema_{ema_mid_span}
-  - path: features.7.params.transforms.0.output_prefix
+  - path: features.6.transforms.rms.items.0.output_prefix
     template: ema_{ema_mid_span}
   - path: signals.params.ema_mid_col
     template: ema_{ema_mid_span}
@@ -97,6 +97,8 @@ search_space:
     template: ema_{ema_mid_span}__root_mean_square
   - path: target.diagnostic_feature_cols.6
     template: ema_{ema_mid_span}_above_ema_{ema_slow_span}
+  - path: features.2.transforms.ratio.items.0.denominator_col
+    template: ema_{ema_mid_span}
 - name: ema_slow_span
   path: features.3.params.ema_spans.0
   kind: categorical
@@ -111,13 +113,15 @@ search_space:
   value_templates:
   - path: features.3.params.ema_col_template
     template: ema_{ema_slow_span}
-  - path: features.7.params.transforms.2.source_col
+  - path: features.6.transforms.rms.items.2.source_col
     template: ema_{ema_slow_span}
-  - path: features.7.params.transforms.2.output_prefix
+  - path: features.6.transforms.rms.items.2.output_prefix
     template: ema_{ema_slow_span}
   - path: signals.params.ema_slow_col
     template: ema_{ema_slow_span}
   - path: target.diagnostic_feature_cols.2
+    template: ema_{ema_slow_span}
+  - path: features.3.transforms.ratio.items.0.denominator_col
     template: ema_{ema_slow_span}
 - name: vwap_window
   path: features.4.params.window
@@ -137,11 +141,11 @@ search_space:
   value_templates:
   - path: features.4.params.vwap_col
     template: vwap_{vwap_window}
-  - path: features.4.params.distance_col
+  - path: features.4.transforms.ratio.items.0.output_col
     template: close_over_vwap_{vwap_window}
-  - path: features.7.params.transforms.1.source_col
+  - path: features.6.transforms.rms.items.1.source_col
     template: vwap_{vwap_window}
-  - path: features.7.params.transforms.1.output_prefix
+  - path: features.6.transforms.rms.items.1.output_prefix
     template: vwap_{vwap_window}
   - path: signals.params.vwap_rms_col
     template: vwap_{vwap_window}__root_mean_square
@@ -157,6 +161,8 @@ search_space:
     template: vwap_{vwap_window}_rms_cross_above_ema_{ema_mid_span}_rms
   - path: target.diagnostic_feature_cols.13
     template: vwap_{vwap_window}_rms_ema_{ema_mid_span}_cross_long_setup
+  - path: features.4.transforms.ratio.items.0.denominator_col
+    template: vwap_{vwap_window}
 - name: ppo_fast_span
   path: features.5.params.fast
   kind: categorical
@@ -229,12 +235,14 @@ search_space:
   value_templates:
   - path: features.6.params.atr_col
     template: atr_{atr_window}
-  - path: features.6.params.over_price_col
+  - path: features.6.transforms.ratio.items.0.output_col
     template: atr_over_price_{atr_window}
   - path: target.volatility_col
     template: atr_over_price_{atr_window}
   - path: backtest.vol_col
     template: atr_over_price_{atr_window}
+  - path: features.6.transforms.ratio.items.0.numerator_col
+    template: atr_{atr_window}
 - name: atr_method
   path: features.6.params.method
   kind: categorical
@@ -242,7 +250,7 @@ search_space:
   - wilder
   - simple
 - name: ema_mid_rms_window
-  path: features.7.params.transforms.0.window
+  path: features.6.transforms.rms.items.0.window
   kind: categorical
   choices:
   - 12
@@ -255,7 +263,7 @@ search_space:
   - 144
   - 192
 - name: vwap_rms_window
-  path: features.7.params.transforms.1.window
+  path: features.6.transforms.rms.items.1.window
   kind: categorical
   choices:
   - 12
@@ -268,7 +276,7 @@ search_space:
   - 144
   - 192
 - name: ema_slow_rms_window
-  path: features.7.params.transforms.2.window
+  path: features.6.transforms.rms.items.2.window
   kind: categorical
   choices:
   - 12
@@ -281,10 +289,10 @@ search_space:
   - 144
   - 192
 - name: rms_shift
-  path: features.7.params.transforms.0.shift
+  path: features.6.transforms.rms.items.0.shift
   paths:
-  - features.7.params.transforms.1.shift
-  - features.7.params.transforms.2.shift
+  - features.6.transforms.rms.items.1.shift
+  - features.6.transforms.rms.items.2.shift
   kind: categorical
   choices:
   - 0
@@ -302,3 +310,4 @@ search_space:
   low: 1.0
   high: 3.0
   step: 0.25
+

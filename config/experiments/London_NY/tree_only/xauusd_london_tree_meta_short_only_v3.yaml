@@ -58,6 +58,47 @@ features:
     - 24
     - 48
     - 96
+    add_ratios: false
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: close
+        denominator_col: close_sma_24
+        output_col: close_over_sma_24
+        subtract: 1.0
+      - numerator_col: close
+        denominator_col: close_sma_48
+        output_col: close_over_sma_48
+        subtract: 1.0
+      - numerator_col: close
+        denominator_col: close_sma_96
+        output_col: close_over_sma_96
+        subtract: 1.0
+      - numerator_col: close
+        denominator_col: close_sma_192
+        output_col: close_over_sma_192
+        subtract: 1.0
+      - numerator_col: close
+        denominator_col: close_ema_8
+        output_col: close_over_ema_8
+        subtract: 1.0
+      - numerator_col: close
+        denominator_col: close_ema_12
+        output_col: close_over_ema_12
+        subtract: 1.0
+      - numerator_col: close
+        denominator_col: close_ema_24
+        output_col: close_over_ema_24
+        subtract: 1.0
+      - numerator_col: close
+        denominator_col: close_ema_48
+        output_col: close_over_ema_48
+        subtract: 1.0
+      - numerator_col: close
+        denominator_col: close_ema_96
+        output_col: close_over_ema_96
+        subtract: 1.0
 - step: trend_regime
   params:
     price_col: close
@@ -110,7 +151,17 @@ features:
     - 14
     - 24
     method: wilder
-    add_over_price: true
+    add_over_price: false
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: atr_14
+        denominator_col: close
+        output_col: atr_over_price_14
+      - numerator_col: atr_24
+        denominator_col: close
+        output_col: atr_over_price_24
 - step: adx
   params:
     high_col: high

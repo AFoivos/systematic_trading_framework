@@ -2,23 +2,22 @@ strategy:
   name: ftmo_fx_swing_panel_4pair_lightgbm_alpha_meta_v1
   timeframe: 1h
   assets:
-    - EURUSD
-    - GBPUSD
-    - AUDUSD
-    - USDJPY
+  - EURUSD
+  - GBPUSD
+  - AUDUSD
+  - USDJPY
   account_profile: FTMO 2-Step Swing
-
 data:
   source: dukascopy_csv
   interval: 1h
-  start: "2018-01-01 00:00:00"
+  start: '2018-01-01 00:00:00'
   end: null
   alignment: inner
   symbols:
-    - EURUSD
-    - GBPUSD
-    - AUDUSD
-    - USDJPY
+  - EURUSD
+  - GBPUSD
+  - AUDUSD
+  - USDJPY
   pit:
     timestamp_alignment:
       source_timezone: UTC
@@ -42,570 +41,638 @@ data:
       USDJPY: data/raw/dukas_copy_bank/usdjpy_h1.csv
     raw_dir: data/raw
     processed_dir: data/processed
-
 features:
-  - step: returns
-    outputs:
-      close_ret: close_ret
-    params:
-      log: false
-      col_name: close_ret
-  - step: volatility
-    outputs:
-      vol_rolling_24: vol_rolling_24
-      vol_rolling_72: vol_rolling_72
-      vol_ewma_24: vol_ewma_24
-      vol_ewma_72: vol_ewma_72
-    params:
-      returns_col: close_ret
-      rolling_windows: [24, 72]
-      ewma_spans: [24, 72]
-      annualization_factor: null
-  - step: trend
-    outputs:
-      close_ema_20: ema_20
-      close_ema_50: ema_50
-      close_ema_100: ema_100
-    params:
-      price_col: close
-      sma_windows: []
-      ema_spans: [20, 50, 100]
-  - step: adx
-    outputs:
-      plus_di_14: plus_di_14
-      minus_di_14: minus_di_14
-      adx_14: adx_14
-    params:
-      high_col: high
-      low_col: low
-      close_col: close
-      window: 14
-      windows: [14]
-  - step: macd
-    outputs:
-      macd_12_26: macd
-      macd_signal_9: macd_signal
-      macd_hist_12_26_9: macd_hist
-    params:
-      price_col: close
-      fast: 12
-      slow: 26
-      signal: 9
-  - step: rsi
-    outputs:
-      close_rsi_14: rsi_14
-    params:
-      price_col: close
-      windows: [14]
-      method: wilder
-  - step: stochastic_rsi
-    outputs:
-      stoch_rsi_k: stoch_rsi_k
-      stoch_rsi_d: stoch_rsi_d
-      stoch_rsi_k_minus_d: stoch_rsi_k_minus_d
-      stoch_rsi_cross_up: stoch_rsi_cross_up
-      stoch_rsi_cross_down: stoch_rsi_cross_down
-      stoch_rsi_oversold: stoch_rsi_oversold
-      stoch_rsi_overbought: stoch_rsi_overbought
-      stoch_rsi_slope: stoch_rsi_slope
-      stoch_rsi_recover_from_oversold: stoch_rsi_recover_from_oversold
-      stoch_rsi_fall_from_overbought: stoch_rsi_fall_from_overbought
-    params:
-      price_col: close
-      rsi_period: 14
-      stoch_period: 14
-      k_period: 3
-      d_period: 3
-      oversold: 0.20
-      overbought: 0.80
-      prefix: stoch_rsi
-  - step: atr
-    outputs:
-      atr_14: atr_14
-      atr_over_price_14: atr_pct
-    params:
-      high_col: high
-      low_col: low
-      close_col: close
-      window: 14
-      windows: [14]
-      method: wilder
-      add_over_price: true
-  - step: volume_features
-    outputs:
-      volume_z_20: volume_z_20
-      volume_over_atr_14: volume_over_atr_14
-    params:
-      volume_col: volume
-      atr_col: atr_14
-      atr_window: 14
-      vol_z_window: 20
-  - step: bollinger
-    outputs:
-      bb_ma_20: bollinger_mid_20
-      bb_upper_20_2.0: bollinger_upper_20
-      bb_lower_20_2.0: bollinger_lower_20
-      bb_width_20_2.0: bollinger_bandwidth
-      bb_percent_b_20_2.0: bollinger_percent_b
-    params:
-      price_col: close
-      window: 20
-      n_std: 2.0
-  - step: roc
-    outputs:
-      roc_3: roc_3
-      roc_6: roc_6
-      roc_12: roc_12
-    params:
-      price_col: close
-      windows: [3, 6, 12]
-  - step: return_momentum
-    outputs:
-      close_ret_mom_6: close_ret_mom_6
-      close_ret_mom_12: close_ret_mom_12
-      close_ret_mom_24: close_ret_mom_24
-    params:
-      returns_col: close_ret
-      windows: [6, 12, 24]
-  - step: lags
-    outputs:
-      lag_close_ret_1: lag_close_ret_1
-      lag_close_ret_2: lag_close_ret_2
-      lag_close_ret_4: lag_close_ret_4
-      lag_close_ret_8: lag_close_ret_8
-      lag_close_ret_12: lag_close_ret_12
-      lag_close_ret_24: lag_close_ret_24
-    params:
-      cols: [close_ret]
-      lags: [1, 2, 4, 8, 12, 24]
-  - step: session_context
-    outputs:
-      hour_sin_24: hour_sin_24
-      hour_cos_24: hour_cos_24
-      day_of_week_sin_7: day_of_week_sin_7
-      day_of_week_cos_7: day_of_week_cos_7
-      session_asia: session_asia
-      session_europe: session_europe
-      session_us: session_us
-      session_europe_us_overlap: session_europe_us_overlap
-      is_weekend: is_weekend
-    params:
-      timezone: UTC
-      include_weekend_flag: true
-  - step: regime_context
-    outputs:
-      regime_vol_ratio_24_168: regime_vol_ratio_24_168
-      regime_high_vol_state_24_168: regime_high_vol_state_24_168
-      regime_low_vol_state_24_168: regime_low_vol_state_24_168
-      regime_vol_ratio_z_24_168: regime_vol_ratio_z_24_168
-      regime_absret_z_24_168: regime_absret_z_24_168
-      regime_trend_ratio_24_72: regime_trend_ratio_24_72
-      regime_trend_state_24_72: regime_trend_state_24_72
-    params:
-      price_col: close
-      returns_col: close_ret
-      vol_short_window: 24
-      vol_long_window: 168
-      vol_window_pairs:
-        - [24, 168]
-      trend_fast_span: 24
-      trend_slow_span: 72
-      vol_ratio_high_threshold: 1.20
-      vol_ratio_low_threshold: 0.85
-  - step: multi_timeframe
-    params:
-      base_interval_minutes: 60
-      timeframes: ["4h", "1d"]
-      open_col: open
-      high_col: high
-      low_col: low
-      price_col: close
-      volume_col: volume
-      returns_col: close_ret
-      timezone: UTC
-      volatility_window: 20
-      trend_ema_span: 12
-      trend_sma_window: 24
-      atr_window: 14
-      adx_window: 14
-      regime_short_window: 6
-      regime_long_window: 24
-      timestamp_convention: bar_start
-  - step: swing_extrema_context
-    params:
-      high_col: high
-      low_col: low
-      close_col: close
-      normalizer_col: atr_14
-      normalizer_mode: price
-      left_bars: 3
-      right_bars: 3
-      include_research_labels: false
-      prefix: swing
-  - step: indicator_pullback
-    params:
-      asset_vocab: [EURUSD, GBPUSD, AUDUSD, USDJPY]
-      open_col: open
-      high_col: high
-      low_col: low
-      close_col: close
-      ema_fast_period: 20
-      ema_mid_period: 50
-      ema_slow_period: 100
-      atr_period: 14
-      atr_pct_rank_window: 100
-      macd_hist_col: macd_hist
-      rsi_period: 14
-      stoch_k_col: stoch_rsi_k
-      stoch_d_col: stoch_rsi_d
-      bollinger_bandwidth_col: bollinger_bandwidth
-      bollinger_percent_b_col: bollinger_percent_b
-      bb_bandwidth_rank_window: 100
-      realized_vol_windows: [24, 72]
-      return_windows: [1, 2, 3, 6, 12]
-      rolling_return_windows: [6, 12, 24]
-  - step: indicator_model_adaptive_pullback
-    params:
-      ema_fast: 20
-      ema_mid: 50
-      ema_slow: 100
-      min_adx: 12.0
-      max_adx: 55.0
-      rsi_long_min: 45.0
-      rsi_long_max: 68.0
-      rsi_short_min: 32.0
-      rsi_short_max: 55.0
-      stoch_long_max: 70.0
-      stoch_short_min: 30.0
-      min_atr_pct_rank: 0.05
-      max_atr_pct_rank: 0.95
-      min_bb_bandwidth_rank: 0.05
-      max_distance_from_ema_atr: 1.0
-      require_macd_confirmation: false
-      candidate_long_col: candidate_long
-      candidate_short_col: candidate_short
-      direction_col: primary_side
-      signal_col: primary_signal
-      candidate_col: trade_candidate
-      signal_name_col: signal_name
-      score_col: signal_score
-      signal_name: ftmo_fx_swing_candidate
-
+- step: returns
+  outputs:
+    close_ret: close_ret
+  params:
+    log: false
+    col_name: close_ret
+- step: volatility
+  outputs:
+    vol_rolling_24: vol_rolling_24
+    vol_rolling_72: vol_rolling_72
+    vol_ewma_24: vol_ewma_24
+    vol_ewma_72: vol_ewma_72
+  params:
+    returns_col: close_ret
+    rolling_windows:
+    - 24
+    - 72
+    ewma_spans:
+    - 24
+    - 72
+    annualization_factor: null
+- step: trend
+  outputs:
+    close_ema_20: ema_20
+    close_ema_50: ema_50
+    close_ema_100: ema_100
+  params:
+    price_col: close
+    sma_windows: []
+    ema_spans:
+    - 20
+    - 50
+    - 100
+    add_ratios: false
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: close
+        denominator_col: close_ema_20
+        output_col: close_over_ema_20
+        subtract: 1.0
+      - numerator_col: close
+        denominator_col: close_ema_50
+        output_col: close_over_ema_50
+        subtract: 1.0
+      - numerator_col: close
+        denominator_col: close_ema_100
+        output_col: close_over_ema_100
+        subtract: 1.0
+- step: adx
+  outputs:
+    plus_di_14: plus_di_14
+    minus_di_14: minus_di_14
+    adx_14: adx_14
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    window: 14
+    windows:
+    - 14
+- step: macd
+  outputs:
+    macd_12_26: macd
+    macd_signal_9: macd_signal
+    macd_hist_12_26_9: macd_hist
+  params:
+    price_col: close
+    fast: 12
+    slow: 26
+    signal: 9
+- step: rsi
+  outputs:
+    close_rsi_14: rsi_14
+  params:
+    price_col: close
+    windows:
+    - 14
+    method: wilder
+- step: stochastic_rsi
+  outputs:
+    stoch_rsi_k: stoch_rsi_k
+    stoch_rsi_d: stoch_rsi_d
+    stoch_rsi_k_minus_d: stoch_rsi_k_minus_d
+    stoch_rsi_cross_up: stoch_rsi_cross_up
+    stoch_rsi_cross_down: stoch_rsi_cross_down
+    stoch_rsi_oversold: stoch_rsi_oversold
+    stoch_rsi_overbought: stoch_rsi_overbought
+    stoch_rsi_slope: stoch_rsi_slope
+    stoch_rsi_recover_from_oversold: stoch_rsi_recover_from_oversold
+    stoch_rsi_fall_from_overbought: stoch_rsi_fall_from_overbought
+  params:
+    price_col: close
+    rsi_period: 14
+    stoch_period: 14
+    k_period: 3
+    d_period: 3
+    oversold: 0.2
+    overbought: 0.8
+    prefix: stoch_rsi
+- step: atr
+  outputs:
+    atr_14: atr_14
+    atr_over_price_14: atr_pct
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    window: 14
+    windows:
+    - 14
+    method: wilder
+    add_over_price: false
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: atr_14
+        denominator_col: close
+        output_col: atr_over_price_14
+- step: volume_features
+  outputs:
+    volume_z_20: volume_z_20
+    volume_over_atr_14: volume_over_atr_14
+  params:
+    volume_col: volume
+    atr_col: atr_14
+    atr_window: 14
+    vol_z_window: 20
+- step: bollinger
+  outputs:
+    bb_ma_20: bollinger_mid_20
+    bb_upper_20_2.0: bollinger_upper_20
+    bb_lower_20_2.0: bollinger_lower_20
+    bb_width_20_2.0: bollinger_bandwidth
+    bb_percent_b_20_2.0: bollinger_percent_b
+  params:
+    price_col: close
+    window: 20
+    n_std: 2.0
+- step: roc
+  outputs:
+    roc_3: roc_3
+    roc_6: roc_6
+    roc_12: roc_12
+  params:
+    price_col: close
+    windows:
+    - 3
+    - 6
+    - 12
+- step: return_momentum
+  outputs:
+    close_ret_mom_6: close_ret_mom_6
+    close_ret_mom_12: close_ret_mom_12
+    close_ret_mom_24: close_ret_mom_24
+  params:
+    returns_col: close_ret
+    windows:
+    - 6
+    - 12
+    - 24
+- step: lags
+  outputs:
+    lag_close_ret_1: lag_close_ret_1
+    lag_close_ret_2: lag_close_ret_2
+    lag_close_ret_4: lag_close_ret_4
+    lag_close_ret_8: lag_close_ret_8
+    lag_close_ret_12: lag_close_ret_12
+    lag_close_ret_24: lag_close_ret_24
+  params:
+    cols:
+    - close_ret
+    lags:
+    - 1
+    - 2
+    - 4
+    - 8
+    - 12
+    - 24
+- step: session_context
+  outputs:
+    hour_sin_24: hour_sin_24
+    hour_cos_24: hour_cos_24
+    day_of_week_sin_7: day_of_week_sin_7
+    day_of_week_cos_7: day_of_week_cos_7
+    session_asia: session_asia
+    session_europe: session_europe
+    session_us: session_us
+    session_europe_us_overlap: session_europe_us_overlap
+    is_weekend: is_weekend
+  params:
+    timezone: UTC
+    include_weekend_flag: true
+- step: regime_context
+  outputs:
+    regime_vol_ratio_24_168: regime_vol_ratio_24_168
+    regime_high_vol_state_24_168: regime_high_vol_state_24_168
+    regime_low_vol_state_24_168: regime_low_vol_state_24_168
+    regime_vol_ratio_z_24_168: regime_vol_ratio_z_24_168
+    regime_absret_z_24_168: regime_absret_z_24_168
+    regime_trend_ratio_24_72: regime_trend_ratio_24_72
+    regime_trend_state_24_72: regime_trend_state_24_72
+  params:
+    price_col: close
+    returns_col: close_ret
+    vol_short_window: 24
+    vol_long_window: 168
+    vol_window_pairs:
+    - - 24
+      - 168
+    trend_fast_span: 24
+    trend_slow_span: 72
+    vol_ratio_high_threshold: 1.2
+    vol_ratio_low_threshold: 0.85
+- step: multi_timeframe
+  params:
+    base_interval_minutes: 60
+    timeframes:
+    - 4h
+    - 1d
+    open_col: open
+    high_col: high
+    low_col: low
+    price_col: close
+    volume_col: volume
+    returns_col: close_ret
+    timezone: UTC
+    volatility_window: 20
+    trend_ema_span: 12
+    trend_sma_window: 24
+    atr_window: 14
+    adx_window: 14
+    regime_short_window: 6
+    regime_long_window: 24
+    timestamp_convention: bar_start
+- step: swing_extrema_context
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    normalizer_col: atr_14
+    normalizer_mode: price
+    left_bars: 3
+    right_bars: 3
+    include_research_labels: false
+    prefix: swing
+- step: indicator_pullback
+  params:
+    asset_vocab:
+    - EURUSD
+    - GBPUSD
+    - AUDUSD
+    - USDJPY
+    open_col: open
+    high_col: high
+    low_col: low
+    close_col: close
+    ema_fast_period: 20
+    ema_mid_period: 50
+    ema_slow_period: 100
+    atr_period: 14
+    atr_pct_rank_window: 100
+    macd_hist_col: macd_hist
+    rsi_period: 14
+    stoch_k_col: stoch_rsi_k
+    stoch_d_col: stoch_rsi_d
+    bollinger_bandwidth_col: bollinger_bandwidth
+    bollinger_percent_b_col: bollinger_percent_b
+    bb_bandwidth_rank_window: 100
+    realized_vol_windows:
+    - 24
+    - 72
+    return_windows:
+    - 1
+    - 2
+    - 3
+    - 6
+    - 12
+    rolling_return_windows:
+    - 6
+    - 12
+    - 24
+- step: indicator_model_adaptive_pullback
+  params:
+    ema_fast: 20
+    ema_mid: 50
+    ema_slow: 100
+    min_adx: 12.0
+    max_adx: 55.0
+    rsi_long_min: 45.0
+    rsi_long_max: 68.0
+    rsi_short_min: 32.0
+    rsi_short_max: 55.0
+    stoch_long_max: 70.0
+    stoch_short_min: 30.0
+    min_atr_pct_rank: 0.05
+    max_atr_pct_rank: 0.95
+    min_bb_bandwidth_rank: 0.05
+    max_distance_from_ema_atr: 1.0
+    require_macd_confirmation: false
+    candidate_long_col: candidate_long
+    candidate_short_col: candidate_short
+    direction_col: primary_side
+    signal_col: primary_signal
+    candidate_col: trade_candidate
+    signal_name_col: signal_name
+    score_col: signal_score
+    signal_name: ftmo_fx_swing_candidate
 model_stages:
-  - name: alpha_regressor
-    stage: 1
-    kind: lightgbm_regressor
-    outputs:
-      pred_ret_col: alpha_pred_ret
-      pred_prob_col: alpha_pred_prob
-      pred_is_oos_col: alpha_pred_is_oos
-    target:
-      kind: future_return_regression
-      price_col: close
-      returns_col: close_ret
-      returns_type: simple
-      horizon_bars: 24
-      normalize_by_volatility: true
-      volatility_col: atr_14
-      normalizer_col: alpha_vol_norm
-      target_col: alpha_future_r
-      label_col: alpha_future_r
-      raw_fwd_col: alpha_future_raw
-      clip: [-3.0, 3.0]
-    split:
-      method: purged
-      train_size: 4000
-      test_size: 720
-      step_size: 720
-      expanding: true
-      max_folds: 20
-      purge_bars: 24
-      embargo_bars: 24
-    feature_selectors:
-      profile: ftmo_fx_intraday_balanced_v1
-      exact:
-        - asset_id
-        - ema_slope_20
-        - ema_slope_50
-        - macd_hist_slope
-        - atr_pct_rank_100
-        - distance_from_ema20_atr
-        - body_ratio
-        - upper_wick_ratio
-        - lower_wick_ratio
-        - close_location
-        - range_to_atr
-        - return_1
-        - return_2
-        - return_3
-        - return_6
-        - return_12
-        - rolling_return_6
-        - rolling_return_12
-        - rolling_return_24
-        - volume_z_20
-        - volume_over_atr_14
-        - swing_last_high
-        - swing_last_low
-        - swing_last_high_age
-        - swing_last_low_age
-        - swing_dist_to_last_high_atr
-        - swing_dist_from_last_low_atr
-        - swing_range_atr
-        - swing_position_in_range
-        - swing_higher_high
-        - swing_higher_low
-        - swing_lower_high
-        - swing_lower_low
-        - swing_structure_score
-        - swing_bars_since_high_breakout
-        - swing_bars_since_low_breakdown
-        - swing_near_last_high
-        - swing_near_last_low
-        - swing_overextended_long
-      include:
-        - startswith: [mtf_]
-      exclude:
-        - exact:
-            - primary_side
-            - primary_signal
-            - trade_candidate
-            - candidate_long
-            - candidate_short
-            - signal_name
-            - signal_score
-            - alpha_pred_is_oos
-      strict:
-        min_count: 30
-    params:
-      n_estimators: 250
-      learning_rate: 0.03
-      max_depth: 5
-      num_leaves: 31
-      subsample: 0.8
-      colsample_bytree: 0.8
-      reg_lambda: 1.0
-      random_state: 7
-      n_jobs: 1
-
-  - name: meta_logreg_baseline
-    stage: 2
-    kind: logistic_regression_clf
-    outputs:
-      pred_prob_col: baseline_meta_prob
-      pred_is_oos_col: baseline_meta_is_oos
-      label_col: baseline_label
-      candidate_out_col: baseline_label_candidate
-      event_ret_col: baseline_dtb_event_ret
-      fwd_col: baseline_dtb_event_ret
-      r_col: baseline_dtb_event_r
-      oriented_r_col: baseline_dtb_oriented_r
-      meta_side_col: baseline_label_meta_side
-      oriented_ret_col: baseline_label_oriented_ret
-    target:
-      kind: directional_triple_barrier
-      price_col: close
-      open_col: open
-      high_col: high
-      low_col: low
-      direction_col: primary_side
-      candidate_col: trade_candidate
-      volatility_col: atr_14
-      profit_barrier_r: 1.8
-      stop_barrier_r: 1.0
-      vertical_barrier_bars: 24
-      entry_price_mode: next_open
-      neutral_label: stop
-      tie_break: closest_to_open
-      add_r_multiple: true
-      r_clip: [-3.0, 3.0]
-    split:
-      method: purged
-      train_size: 16000
-      test_size: 720
-      step_size: 720
-      expanding: true
-      max_folds: 8
-      purge_bars: 24
-      embargo_bars: 24
-    feature_selectors:
-      profile: ftmo_fx_intraday_balanced_v1
-      exact:
-        - primary_side
-        - signal_score
-        - alpha_pred_ret
-        - alpha_pred_prob
-        - asset_id
-        - ema_slope_20
-        - ema_slope_50
-        - macd_hist_slope
-        - atr_pct_rank_100
-        - distance_from_ema20_atr
-        - body_ratio
-        - upper_wick_ratio
-        - lower_wick_ratio
-        - close_location
-        - range_to_atr
-        - return_1
-        - return_2
-        - return_3
-        - return_6
-        - return_12
-        - rolling_return_6
-        - rolling_return_12
-        - rolling_return_24
-        - volume_z_20
-        - volume_over_atr_14
-        - swing_last_high
-        - swing_last_low
-        - swing_last_high_age
-        - swing_last_low_age
-        - swing_dist_to_last_high_atr
-        - swing_dist_from_last_low_atr
-        - swing_range_atr
-        - swing_position_in_range
-        - swing_higher_high
-        - swing_higher_low
-        - swing_lower_high
-        - swing_lower_low
-        - swing_structure_score
-        - swing_bars_since_high_breakout
-        - swing_bars_since_low_breakdown
-        - swing_near_last_high
-        - swing_near_last_low
-        - swing_overextended_long
-      include:
-        - startswith: [mtf_]
-      exclude:
-        - exact:
-            - primary_signal
-            - trade_candidate
-            - candidate_long
-            - candidate_short
-            - signal_name
-            - alpha_pred_is_oos
-            - baseline_meta_is_oos
-      strict:
-        min_count: 32
-    preprocessing:
-      scaler: standard
-    params:
-      solver: lbfgs
-      max_iter: 1000
-      class_weight: balanced
-      C: 1.0
-
-  - name: meta_lightgbm_main
-    stage: 3
-    kind: lightgbm_clf
-    outputs:
-      pred_prob_col: pred_prob
-      pred_is_oos_col: pred_is_oos
-      label_col: label
-      candidate_out_col: label_candidate
-      event_ret_col: dtb_event_ret
-      fwd_col: dtb_event_ret
-      r_col: dtb_event_r
-      oriented_r_col: dtb_oriented_r
-      meta_side_col: label_meta_side
-      oriented_ret_col: label_oriented_ret
-    target:
-      kind: directional_triple_barrier
-      price_col: close
-      open_col: open
-      high_col: high
-      low_col: low
-      direction_col: primary_side
-      candidate_col: trade_candidate
-      volatility_col: atr_14
-      profit_barrier_r: 1.8
-      stop_barrier_r: 1.0
-      vertical_barrier_bars: 24
-      entry_price_mode: next_open
-      neutral_label: stop
-      tie_break: closest_to_open
-      add_r_multiple: true
-      r_clip: [-3.0, 3.0]
-    split:
-      method: purged
-      train_size: 16000
-      test_size: 720
-      step_size: 720
-      expanding: true
-      max_folds: 8
-      purge_bars: 24
-      embargo_bars: 24
-    feature_selectors:
-      profile: ftmo_fx_intraday_balanced_v1
-      exact:
-        - primary_side
-        - signal_score
-        - alpha_pred_ret
-        - alpha_pred_prob
-        - asset_id
-        - ema_slope_20
-        - ema_slope_50
-        - macd_hist_slope
-        - atr_pct_rank_100
-        - distance_from_ema20_atr
-        - body_ratio
-        - upper_wick_ratio
-        - lower_wick_ratio
-        - close_location
-        - range_to_atr
-        - return_1
-        - return_2
-        - return_3
-        - return_6
-        - return_12
-        - rolling_return_6
-        - rolling_return_12
-        - rolling_return_24
-        - volume_z_20
-        - volume_over_atr_14
-        - swing_last_high
-        - swing_last_low
-        - swing_last_high_age
-        - swing_last_low_age
-        - swing_dist_to_last_high_atr
-        - swing_dist_from_last_low_atr
-        - swing_range_atr
-        - swing_position_in_range
-        - swing_higher_high
-        - swing_higher_low
-        - swing_lower_high
-        - swing_lower_low
-        - swing_structure_score
-        - swing_bars_since_high_breakout
-        - swing_bars_since_low_breakdown
-        - swing_near_last_high
-        - swing_near_last_low
-        - swing_overextended_long
-      include:
-        - startswith: [mtf_]
-      exclude:
-        - exact:
-            - primary_signal
-            - trade_candidate
-            - candidate_long
-            - candidate_short
-            - signal_name
-            - alpha_pred_is_oos
-            - baseline_meta_is_oos
-      strict:
-        min_count: 32
-    params:
-      n_estimators: 300
-      learning_rate: 0.03
-      max_depth: 5
-      num_leaves: 31
-      min_child_samples: 40
-      subsample: 0.8
-      colsample_bytree: 0.8
-      reg_lambda: 1.0
-      random_state: 7
-      n_jobs: 1
-
+- name: alpha_regressor
+  stage: 1
+  kind: lightgbm_regressor
+  outputs:
+    pred_ret_col: alpha_pred_ret
+    pred_prob_col: alpha_pred_prob
+    pred_is_oos_col: alpha_pred_is_oos
+  target:
+    kind: future_return_regression
+    price_col: close
+    returns_col: close_ret
+    returns_type: simple
+    horizon_bars: 24
+    normalize_by_volatility: true
+    volatility_col: atr_14
+    normalizer_col: alpha_vol_norm
+    target_col: alpha_future_r
+    label_col: alpha_future_r
+    raw_fwd_col: alpha_future_raw
+    clip:
+    - -3.0
+    - 3.0
+  split:
+    method: purged
+    train_size: 4000
+    test_size: 720
+    step_size: 720
+    expanding: true
+    max_folds: 20
+    purge_bars: 24
+    embargo_bars: 24
+  feature_selectors:
+    profile: ftmo_fx_intraday_balanced_v1
+    exact:
+    - asset_id
+    - ema_slope_20
+    - ema_slope_50
+    - macd_hist_slope
+    - atr_pct_rank_100
+    - distance_from_ema20_atr
+    - body_ratio
+    - upper_wick_ratio
+    - lower_wick_ratio
+    - close_location
+    - range_to_atr
+    - return_1
+    - return_2
+    - return_3
+    - return_6
+    - return_12
+    - rolling_return_6
+    - rolling_return_12
+    - rolling_return_24
+    - volume_z_20
+    - volume_over_atr_14
+    - swing_last_high
+    - swing_last_low
+    - swing_last_high_age
+    - swing_last_low_age
+    - swing_dist_to_last_high_atr
+    - swing_dist_from_last_low_atr
+    - swing_range_atr
+    - swing_position_in_range
+    - swing_higher_high
+    - swing_higher_low
+    - swing_lower_high
+    - swing_lower_low
+    - swing_structure_score
+    - swing_bars_since_high_breakout
+    - swing_bars_since_low_breakdown
+    - swing_near_last_high
+    - swing_near_last_low
+    - swing_overextended_long
+    include:
+    - startswith:
+      - mtf_
+    exclude:
+    - exact:
+      - primary_side
+      - primary_signal
+      - trade_candidate
+      - candidate_long
+      - candidate_short
+      - signal_name
+      - signal_score
+      - alpha_pred_is_oos
+    strict:
+      min_count: 30
+  params:
+    n_estimators: 250
+    learning_rate: 0.03
+    max_depth: 5
+    num_leaves: 31
+    subsample: 0.8
+    colsample_bytree: 0.8
+    reg_lambda: 1.0
+    random_state: 7
+    n_jobs: 1
+- name: meta_logreg_baseline
+  stage: 2
+  kind: logistic_regression_clf
+  outputs:
+    pred_prob_col: baseline_meta_prob
+    pred_is_oos_col: baseline_meta_is_oos
+    label_col: baseline_label
+    candidate_out_col: baseline_label_candidate
+    event_ret_col: baseline_dtb_event_ret
+    fwd_col: baseline_dtb_event_ret
+    r_col: baseline_dtb_event_r
+    oriented_r_col: baseline_dtb_oriented_r
+    meta_side_col: baseline_label_meta_side
+    oriented_ret_col: baseline_label_oriented_ret
+  target:
+    kind: directional_triple_barrier
+    price_col: close
+    open_col: open
+    high_col: high
+    low_col: low
+    direction_col: primary_side
+    candidate_col: trade_candidate
+    volatility_col: atr_14
+    profit_barrier_r: 1.8
+    stop_barrier_r: 1.0
+    vertical_barrier_bars: 24
+    entry_price_mode: next_open
+    neutral_label: stop
+    tie_break: closest_to_open
+    add_r_multiple: true
+    r_clip:
+    - -3.0
+    - 3.0
+  split:
+    method: purged
+    train_size: 16000
+    test_size: 720
+    step_size: 720
+    expanding: true
+    max_folds: 8
+    purge_bars: 24
+    embargo_bars: 24
+  feature_selectors:
+    profile: ftmo_fx_intraday_balanced_v1
+    exact:
+    - primary_side
+    - signal_score
+    - alpha_pred_ret
+    - alpha_pred_prob
+    - asset_id
+    - ema_slope_20
+    - ema_slope_50
+    - macd_hist_slope
+    - atr_pct_rank_100
+    - distance_from_ema20_atr
+    - body_ratio
+    - upper_wick_ratio
+    - lower_wick_ratio
+    - close_location
+    - range_to_atr
+    - return_1
+    - return_2
+    - return_3
+    - return_6
+    - return_12
+    - rolling_return_6
+    - rolling_return_12
+    - rolling_return_24
+    - volume_z_20
+    - volume_over_atr_14
+    - swing_last_high
+    - swing_last_low
+    - swing_last_high_age
+    - swing_last_low_age
+    - swing_dist_to_last_high_atr
+    - swing_dist_from_last_low_atr
+    - swing_range_atr
+    - swing_position_in_range
+    - swing_higher_high
+    - swing_higher_low
+    - swing_lower_high
+    - swing_lower_low
+    - swing_structure_score
+    - swing_bars_since_high_breakout
+    - swing_bars_since_low_breakdown
+    - swing_near_last_high
+    - swing_near_last_low
+    - swing_overextended_long
+    include:
+    - startswith:
+      - mtf_
+    exclude:
+    - exact:
+      - primary_signal
+      - trade_candidate
+      - candidate_long
+      - candidate_short
+      - signal_name
+      - alpha_pred_is_oos
+      - baseline_meta_is_oos
+    strict:
+      min_count: 32
+  preprocessing:
+    scaler: standard
+  params:
+    solver: lbfgs
+    max_iter: 1000
+    class_weight: balanced
+    C: 1.0
+- name: meta_lightgbm_main
+  stage: 3
+  kind: lightgbm_clf
+  outputs:
+    pred_prob_col: pred_prob
+    pred_is_oos_col: pred_is_oos
+    label_col: label
+    candidate_out_col: label_candidate
+    event_ret_col: dtb_event_ret
+    fwd_col: dtb_event_ret
+    r_col: dtb_event_r
+    oriented_r_col: dtb_oriented_r
+    meta_side_col: label_meta_side
+    oriented_ret_col: label_oriented_ret
+  target:
+    kind: directional_triple_barrier
+    price_col: close
+    open_col: open
+    high_col: high
+    low_col: low
+    direction_col: primary_side
+    candidate_col: trade_candidate
+    volatility_col: atr_14
+    profit_barrier_r: 1.8
+    stop_barrier_r: 1.0
+    vertical_barrier_bars: 24
+    entry_price_mode: next_open
+    neutral_label: stop
+    tie_break: closest_to_open
+    add_r_multiple: true
+    r_clip:
+    - -3.0
+    - 3.0
+  split:
+    method: purged
+    train_size: 16000
+    test_size: 720
+    step_size: 720
+    expanding: true
+    max_folds: 8
+    purge_bars: 24
+    embargo_bars: 24
+  feature_selectors:
+    profile: ftmo_fx_intraday_balanced_v1
+    exact:
+    - primary_side
+    - signal_score
+    - alpha_pred_ret
+    - alpha_pred_prob
+    - asset_id
+    - ema_slope_20
+    - ema_slope_50
+    - macd_hist_slope
+    - atr_pct_rank_100
+    - distance_from_ema20_atr
+    - body_ratio
+    - upper_wick_ratio
+    - lower_wick_ratio
+    - close_location
+    - range_to_atr
+    - return_1
+    - return_2
+    - return_3
+    - return_6
+    - return_12
+    - rolling_return_6
+    - rolling_return_12
+    - rolling_return_24
+    - volume_z_20
+    - volume_over_atr_14
+    - swing_last_high
+    - swing_last_low
+    - swing_last_high_age
+    - swing_last_low_age
+    - swing_dist_to_last_high_atr
+    - swing_dist_from_last_low_atr
+    - swing_range_atr
+    - swing_position_in_range
+    - swing_higher_high
+    - swing_higher_low
+    - swing_lower_high
+    - swing_lower_low
+    - swing_structure_score
+    - swing_bars_since_high_breakout
+    - swing_bars_since_low_breakdown
+    - swing_near_last_high
+    - swing_near_last_low
+    - swing_overextended_long
+    include:
+    - startswith:
+      - mtf_
+    exclude:
+    - exact:
+      - primary_signal
+      - trade_candidate
+      - candidate_long
+      - candidate_short
+      - signal_name
+      - alpha_pred_is_oos
+      - baseline_meta_is_oos
+    strict:
+      min_count: 32
+  params:
+    n_estimators: 300
+    learning_rate: 0.03
+    max_depth: 5
+    num_leaves: 31
+    min_child_samples: 40
+    subsample: 0.8
+    colsample_bytree: 0.8
+    reg_lambda: 1.0
+    random_state: 7
+    n_jobs: 1
 signals:
   kind: meta_probability_side
   outputs:
@@ -620,17 +687,15 @@ signals:
     stop_barrier_r: 1.0
     clip: 1.0
     mode: long_short
-
 runtime:
   seed: 7
   repro_mode: strict
   deterministic: true
   threads: 1
   seed_torch: false
-
 risk:
-  cost_per_turnover: 0.00006
-  slippage_per_turnover: 0.00002
+  cost_per_turnover: 6.0e-05
+  slippage_per_turnover: 2.0e-05
   target_vol: null
   max_leverage: 1.0
   sizing:
@@ -669,14 +734,13 @@ risk:
   drawdown_sizing:
     enabled: true
     levels:
-      - max_dd: 0.01
-        multiplier: 1.0
-      - max_dd: 0.02
-        multiplier: 0.5
-      - max_dd: 0.03
-        multiplier: 0.25
+    - max_dd: 0.01
+      multiplier: 1.0
+    - max_dd: 0.02
+      multiplier: 0.5
+    - max_dd: 0.03
+      multiplier: 0.25
   vol_col: atr_pct
-
 backtest:
   engine: vectorized
   signal_col: signal_meta_side
@@ -686,31 +750,28 @@ backtest:
   min_holding_bars: 12
   periods_per_year: 6048
   missing_return_policy: raise_if_exposed
-
 portfolio:
   enabled: true
   construction: signal_weights
   long_short: true
   gross_target: 1.0
   constraints:
-    max_gross_leverage: 0.60
-    max_weight: 0.20
-    min_weight: -0.20
+    max_gross_leverage: 0.6
+    max_weight: 0.2
+    min_weight: -0.2
     target_net_exposure: 0.0
     enforce_target_net_exposure: false
     group_max_exposure:
-      usd_majors: 0.50
+      usd_majors: 0.5
   asset_groups:
     EURUSD: usd_majors
     GBPUSD: usd_majors
     AUDUSD: usd_majors
     USDJPY: usd_majors
-
 monitoring:
   enabled: true
   psi_threshold: 0.15
   n_bins: 10
-
 execution:
   enabled: false
   mode: paper
@@ -719,7 +780,6 @@ execution:
   min_trade_notional: 0.0
   current_weights: {}
   current_prices: {}
-
 logging:
   enabled: true
   run_name: ftmo_fx_swing_panel_4pair_lightgbm_alpha_meta_v1

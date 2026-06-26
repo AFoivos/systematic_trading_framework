@@ -24,383 +24,424 @@ data:
     load_path: data/raw/dukascopy_30m_clean/xauusd_30m.csv
     raw_dir: data/raw
     processed_dir: data/processed
-
 features:
-  - step: returns
-    enabled: true
-    params:
-      log: true
-      col_name: close_ret
-
-  - step: volatility
-    enabled: true
-    params:
-      returns_col: close_ret
-      rolling_windows: [20]
-      ewma_spans: [20]
-      annualization_factor: null
-
-  - step: stochastic_rsi
-    enabled: true
-    params:
-      price_col: close
-      rsi_period: 14
-      stoch_period: 14
-      k_period: 3
-      d_period: 3
-      oversold: 0.20
-      overbought: 0.80
-      prefix: stoch_rsi
-
-  - step: trend
-    enabled: true
-    params:
-      price_col: close
-      sma_windows: [50,150,200]
-      ema_spans: [50,150,200]
-
-  - step: trend_regime
-    enabled: true
-    params:
-      price_col: close
-      base_sma_for_sign: 50
-      short_sma: 50
-      long_sma: 150
-
-  - step: lags
-    enabled: false
-    params:
-      cols: [close_ret]
-      lags: [1, 2, 5, 10]
-      prefix: lag
-
-  - step: bollinger
-    enabled: false
-    params:
-      price_col: close
-      window: 20
-      n_std: 2.0
-
-  - step: macd
-    enabled: true
-    params:
-      price_col: close
-      fast: 6
-      slow: 13
-      signal: 9
-
-  - step: ppo
-    enabled: true
-    params:
-      price_col: close
-      fast: 6
-      slow: 13
-      signal: 4
-
-  - step: roc
-    enabled: false
-    params:
-      price_col: close
-      windows: [12, 24]
-
-  - step: atr
-    enabled: true
-    params:
-      high_col: high
-      low_col: low
-      close_col: close
-      window: 6
-      windows: [14]
-      method: wilder
-      add_over_price: false
-
-  - step: adx
-    enabled: false
-    params:
-      high_col: high
-      low_col: low
-      close_col: close
-      window: 14
-      windows: [14]
-
-  - step: volume_features
-    enabled: false
-    params:
-      volume_col: volume
-      atr_col: null
-      high_col: high
-      low_col: low
-      close_col: close
-      atr_window: 6
-      vol_z_window: 20
-
-  - step: mfi
-    enabled: false
-    params:
-      high_col: high
-      low_col: low
-      close_col: close
-      volume_col: volume
-      window: 14
-
-  - step: rsi
-    enabled: false
-    params:
-      price_col: close
-      windows: [14]
-      method: wilder
-
-  - step: stochastic
-    enabled: false
-    params:
-      price_col: close
-      high_col: high
-      low_col: low
-      window: 14
-      smooth: 3
-
-  - step: price_momentum
-    enabled: false
-    params:
-      price_col: close
-      windows: [5]
-
-  - step: return_momentum
-    enabled: false
-    params:
-      returns_col: close_ret
-      windows: [5, 20, 60]
-
-  - step: vol_normalized_momentum
-    enabled: false
-    params:
-      returns_col: close_ret
-      vol_col: vol_rolling_6
-      vol_window: null
-      windows: [5, 20, 60]
-      eps: 1.0e-8
-
-  - step: session_context
-    enabled: false
-    params:
-      timezone: UTC
-      add_cyclical_time: false
-      include_weekend_flag: false
-      sessions:
-        asia: [0, 8]
-        europe: [7, 16]
-        us: [13, 21]
-        weak_late_us: [18, 20]
-
-  - step: regime_context
-    enabled: false
-    params:
-      price_col: close
-      returns_col: close_ret
-      vol_short_window: 24
-      vol_long_window: 168
-      vol_window_pairs:
-        - [24, 168]
-      trend_fast_span: 24
-      trend_slow_span: 72
-      vol_ratio_high_threshold: 1.25
-      vol_ratio_low_threshold: 0.85
-
-  - step: shock_context
-    enabled: false
-    params:
-      price_col: close
-      high_col: high
-      low_col: low
-      returns_col: close_ret
-      ema_col: null
-      ema_window: 6
-      atr_col: null
-      atr_window: 6
-      short_horizon: 1
-      medium_horizon: 4
-      vol_window: 6
-      ret_z_threshold: 2.0
-      atr_mult_threshold: 1.5
-      distance_from_mean_threshold: 1.0
-      post_shock_active_bars: 1
-      use_log_returns: true
-
-  - step: support_resistance
-    enabled: false
-    params:
-      price_col: close
-      high_col: high
-      low_col: low
-      windows: [24, 72, 168]
-      atr_col: null
-      atr_window: 24
-      include_pct_distance: false
-      include_atr_distance: false
-
-  - step: support_resistance_v2
-    enabled: false
-    params:
-      price_col: close
-      high_col: high
-      low_col: low
-      atr_col: null
-      atr_window: 24
-      pivot_left_window: 24
-      pivot_confirm_bars: 6
-      touch_tolerance_atr: 0.25
-      breakout_tolerance_atr: 0.05
-
-  - step: macro_context
-    enabled: false
-    params:
-      columns: [macro_example]
-      availability_lag: 1
-      lags: [1, 24]
-      pct_change_periods: [1, 24]
-      zscore_window: 168
-      ema_spans: []
-      allow_missing: false
-
-  - step: multi_timeframe
-    enabled: false
-    params:
-      base_interval_minutes: 30
-      timeframes: [1h, 2h]
-      price_col: close
-      high_col: high
-      low_col: low
-      open_col: open
-      volume_col: volume
-      returns_col: close_ret
-      timezone: UTC
-      shift_to_last_closed: true
-      timestamp_convention: bar_start
-      timestamp_col: timestamp
-      asset_col: asset
-      volatility_window: 12
-      trend_ema_span: 8
-      trend_sma_window: 20
-      atr_window: 14
-      adx_window: 14
-      regime_short_window: 12
-      regime_long_window: 48
-
-  - step: swing_extrema_context
-    enabled: false
-    params:
-      high_col: high
-      low_col: low
-      close_col: close
-      normalizer_col: mtf_1h_atr
-      normalizer_mode: price
-      left_bars: 3
-      right_bars: 3
-      near_high_threshold_atr: 0.25
-      near_low_threshold_atr: 0.25
-      overextended_long_threshold_atr: 2.0
-      include_research_labels: false
-      research_label_lead_bars: 3
-      prefix: swing
-
-  - step: opening_range_breakout
-    enabled: false
-    params:
-      sessions:
-        - name: london
-          timezone: Europe/London
-          session_open_time: "08:00"
-          trade_until_time: "11:00"
-          extended_trade_until_time: "13:00"
-          opening_range_bars: 1
-      enabled_sessions: [london]
-      asset_session_map: null
-      asset_alias_map: null
-      timestamp_col: timestamp
-      timezone_input: UTC
-      price_col: close
-      open_col: open
-      high_col: high
-      low_col: low
-      close_col: close
-      atr_col: atr_24
-      volatility_col: vol_rolling_24
-      min_range_atr: 0.4
-      max_range_atr: 2.5
-      breakout_buffer_atr: 0.1
-      post_breakout_active_bars: 3
-      max_breakouts_per_session: 1
-      use_close_breakout: false
-      allow_reversal_same_session: false
+- step: returns
+  enabled: true
+  params:
+    log: true
+    col_name: close_ret
+- step: volatility
+  enabled: true
+  params:
+    returns_col: close_ret
+    rolling_windows:
+    - 20
+    ewma_spans:
+    - 20
+    annualization_factor: null
+- step: stochastic_rsi
+  enabled: true
+  params:
+    price_col: close
+    rsi_period: 14
+    stoch_period: 14
+    k_period: 3
+    d_period: 3
+    oversold: 0.2
+    overbought: 0.8
+    prefix: stoch_rsi
+- step: trend
+  enabled: true
+  params:
+    price_col: close
+    sma_windows:
+    - 50
+    - 150
+    - 200
+    ema_spans:
+    - 50
+    - 150
+    - 200
+    add_ratios: false
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: close
+        denominator_col: close_sma_50
+        output_col: close_over_sma_50
+        subtract: 1.0
+      - numerator_col: close
+        denominator_col: close_sma_150
+        output_col: close_over_sma_150
+        subtract: 1.0
+      - numerator_col: close
+        denominator_col: close_sma_200
+        output_col: close_over_sma_200
+        subtract: 1.0
+      - numerator_col: close
+        denominator_col: close_ema_50
+        output_col: close_over_ema_50
+        subtract: 1.0
+      - numerator_col: close
+        denominator_col: close_ema_150
+        output_col: close_over_ema_150
+        subtract: 1.0
+      - numerator_col: close
+        denominator_col: close_ema_200
+        output_col: close_over_ema_200
+        subtract: 1.0
+- step: trend_regime
+  enabled: true
+  params:
+    price_col: close
+    base_sma_for_sign: 50
+    short_sma: 50
+    long_sma: 150
+- step: lags
+  enabled: false
+  params:
+    cols:
+    - close_ret
+    lags:
+    - 1
+    - 2
+    - 5
+    - 10
+    prefix: lag
+- step: bollinger
+  enabled: false
+  params:
+    price_col: close
+    window: 20
+    n_std: 2.0
+- step: macd
+  enabled: true
+  params:
+    price_col: close
+    fast: 6
+    slow: 13
+    signal: 9
+- step: ppo
+  enabled: true
+  params:
+    price_col: close
+    fast: 6
+    slow: 13
+    signal: 4
+- step: roc
+  enabled: false
+  params:
+    price_col: close
+    windows:
+    - 12
+    - 24
+- step: atr
+  enabled: true
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    window: 6
+    windows:
+    - 14
+    method: wilder
+    add_over_price: false
+- step: adx
+  enabled: false
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    window: 14
+    windows:
+    - 14
+- step: volume_features
+  enabled: false
+  params:
+    volume_col: volume
+    atr_col: null
+    high_col: high
+    low_col: low
+    close_col: close
+    atr_window: 6
+    vol_z_window: 20
+- step: mfi
+  enabled: false
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    volume_col: volume
+    window: 14
+- step: rsi
+  enabled: false
+  params:
+    price_col: close
+    windows:
+    - 14
+    method: wilder
+- step: stochastic
+  enabled: false
+  params:
+    price_col: close
+    high_col: high
+    low_col: low
+    window: 14
+    smooth: 3
+- step: price_momentum
+  enabled: false
+  params:
+    price_col: close
+    windows:
+    - 5
+- step: return_momentum
+  enabled: false
+  params:
+    returns_col: close_ret
+    windows:
+    - 5
+    - 20
+    - 60
+- step: vol_normalized_momentum
+  enabled: false
+  params:
+    returns_col: close_ret
+    vol_col: vol_rolling_6
+    vol_window: null
+    windows:
+    - 5
+    - 20
+    - 60
+    eps: 1.0e-08
+- step: session_context
+  enabled: false
+  params:
+    timezone: UTC
+    add_cyclical_time: false
+    include_weekend_flag: false
+    sessions:
+      asia:
+      - 0
+      - 8
+      europe:
+      - 7
+      - 16
+      us:
+      - 13
+      - 21
+      weak_late_us:
+      - 18
+      - 20
+- step: regime_context
+  enabled: false
+  params:
+    price_col: close
+    returns_col: close_ret
+    vol_short_window: 24
+    vol_long_window: 168
+    vol_window_pairs:
+    - - 24
+      - 168
+    trend_fast_span: 24
+    trend_slow_span: 72
+    vol_ratio_high_threshold: 1.25
+    vol_ratio_low_threshold: 0.85
+- step: shock_context
+  enabled: false
+  params:
+    price_col: close
+    high_col: high
+    low_col: low
+    returns_col: close_ret
+    ema_col: null
+    ema_window: 6
+    atr_col: null
+    atr_window: 6
+    short_horizon: 1
+    medium_horizon: 4
+    vol_window: 6
+    ret_z_threshold: 2.0
+    atr_mult_threshold: 1.5
+    distance_from_mean_threshold: 1.0
+    post_shock_active_bars: 1
+    use_log_returns: true
+- step: support_resistance
+  enabled: false
+  params:
+    price_col: close
+    high_col: high
+    low_col: low
+    windows:
+    - 24
+    - 72
+    - 168
+    atr_col: null
+    atr_window: 24
+    include_pct_distance: false
+    include_atr_distance: false
+- step: support_resistance_v2
+  enabled: false
+  params:
+    price_col: close
+    high_col: high
+    low_col: low
+    atr_col: null
+    atr_window: 24
+    pivot_left_window: 24
+    pivot_confirm_bars: 6
+    touch_tolerance_atr: 0.25
+    breakout_tolerance_atr: 0.05
+- step: macro_context
+  enabled: false
+  params:
+    columns:
+    - macro_example
+    availability_lag: 1
+    lags:
+    - 1
+    - 24
+    pct_change_periods:
+    - 1
+    - 24
+    zscore_window: 168
+    ema_spans: []
+    allow_missing: false
+- step: multi_timeframe
+  enabled: false
+  params:
+    base_interval_minutes: 30
+    timeframes:
+    - 1h
+    - 2h
+    price_col: close
+    high_col: high
+    low_col: low
+    open_col: open
+    volume_col: volume
+    returns_col: close_ret
+    timezone: UTC
+    shift_to_last_closed: true
+    timestamp_convention: bar_start
+    timestamp_col: timestamp
+    asset_col: asset
+    volatility_window: 12
+    trend_ema_span: 8
+    trend_sma_window: 20
+    atr_window: 14
+    adx_window: 14
+    regime_short_window: 12
+    regime_long_window: 48
+- step: swing_extrema_context
+  enabled: false
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    normalizer_col: mtf_1h_atr
+    normalizer_mode: price
+    left_bars: 3
+    right_bars: 3
+    near_high_threshold_atr: 0.25
+    near_low_threshold_atr: 0.25
+    overextended_long_threshold_atr: 2.0
+    include_research_labels: false
+    research_label_lead_bars: 3
+    prefix: swing
+- step: opening_range_breakout
+  enabled: false
+  params:
+    sessions:
+    - name: london
+      timezone: Europe/London
+      session_open_time: 08:00
+      trade_until_time: '11:00'
+      extended_trade_until_time: '13:00'
       opening_range_bars: 1
-      use_extended_trade_until: false
-      asset_col: asset
-
-  - step: feature_transforms
-    enabled: false
-    params:
-      transforms:
-        - kind: rolling_zscore
-          source_col: close
-          output_col: close_z
-          window: 252
-          shift: 1
-        - kind: ratio
-          numerator_col: mtf_1h_atr
-          denominator_col: close
-          output_col: mtf_1h_atr_to_close
-        - kind: ratio
-          numerator_col: mtf_4h_atr
-          denominator_col: close
-          output_col: mtf_4h_atr_to_close
-        - kind: rolling_zscore
-          source_col: mtf_1h_atr
-          output_col: mtf_1h_atr_z_252
-          window: 252
-          shift: 1
-        - kind: rolling_zscore
-          source_col: mtf_4h_atr
-          output_col: mtf_4h_atr_z_252
-          window: 252
-          shift: 1
-
-  - step: roc_long_only_conditions
-    enabled: false
-    params:
-      roc_window: 12
-      roc_col: null
-      roc_min: 0.0035
-      vol_short_window: 24
-      vol_long_window: 168
-      regime_vol_ratio_z_col: null
-      vol_z_min: -1.6
-      vol_z_max: 1.1
-      close_z_col: close_z
-      close_z_min: 0.6
-      close_z_max: 1.0
-      close_open_ratio_col: close_open_ratio
-      close_open_ratio_min: 0.00125
-      mtf_1h_col: mtf_1h_trend_score
-      mtf_1h_min: 0.003
-      mtf_4h_col: mtf_4h_trend_score
-      mtf_4h_min: -0.004
-      is_weekend_col: is_weekend
-      macro_condition_col: null
-      min_score_required: 7
-      require_all_conditions: false
-      require_bullish_candle: false
-      required_condition_names: null
-      vol_adjustment_strength: 0.3
-      min_exposure: 0.10
-      max_exposure: 1.0
-      signal_col: null
-      long_signal_col: manual_long_candidate
-      vol_adjusted_col: manual_vol_adjusted_candidate
-      score_col: manual_conviction_score
-      all_conditions_col: manual_all_conditions_signal
-      short_signal_col: short_signal
-      combined_signal_col: combined_signal
-
+    enabled_sessions:
+    - london
+    asset_session_map: null
+    asset_alias_map: null
+    timestamp_col: timestamp
+    timezone_input: UTC
+    price_col: close
+    open_col: open
+    high_col: high
+    low_col: low
+    close_col: close
+    atr_col: atr_24
+    volatility_col: vol_rolling_24
+    min_range_atr: 0.4
+    max_range_atr: 2.5
+    breakout_buffer_atr: 0.1
+    post_breakout_active_bars: 3
+    max_breakouts_per_session: 1
+    use_close_breakout: false
+    allow_reversal_same_session: false
+    opening_range_bars: 1
+    use_extended_trade_until: false
+    asset_col: asset
+  transforms:
+    rolling_zscore:
+      enabled: true
+      items:
+      - source_col: close
+        output_col: close_z
+        window: 252
+        shift: 1
+      - source_col: mtf_1h_atr
+        output_col: mtf_1h_atr_z_252
+        window: 252
+        shift: 1
+      - source_col: mtf_4h_atr
+        output_col: mtf_4h_atr_z_252
+        window: 252
+        shift: 1
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: mtf_1h_atr
+        denominator_col: close
+        output_col: mtf_1h_atr_to_close
+      - numerator_col: mtf_4h_atr
+        denominator_col: close
+        output_col: mtf_4h_atr_to_close
+- step: roc_long_only_conditions
+  enabled: false
+  params:
+    roc_window: 12
+    roc_col: null
+    roc_min: 0.0035
+    vol_short_window: 24
+    vol_long_window: 168
+    regime_vol_ratio_z_col: null
+    vol_z_min: -1.6
+    vol_z_max: 1.1
+    close_z_col: close_z
+    close_z_min: 0.6
+    close_z_max: 1.0
+    close_open_ratio_col: close_open_ratio
+    close_open_ratio_min: 0.00125
+    mtf_1h_col: mtf_1h_trend_score
+    mtf_1h_min: 0.003
+    mtf_4h_col: mtf_4h_trend_score
+    mtf_4h_min: -0.004
+    is_weekend_col: is_weekend
+    macro_condition_col: null
+    min_score_required: 7
+    require_all_conditions: false
+    require_bullish_candle: false
+    required_condition_names: null
+    vol_adjustment_strength: 0.3
+    min_exposure: 0.1
+    max_exposure: 1.0
+    signal_col: null
+    long_signal_col: manual_long_candidate
+    vol_adjusted_col: manual_vol_adjusted_candidate
+    score_col: manual_conviction_score
+    all_conditions_col: manual_all_conditions_signal
+    short_signal_col: short_signal
+    combined_signal_col: combined_signal
 targets_catalog:
   forward_return:
     enabled: false
@@ -412,7 +453,6 @@ targets_catalog:
     label_col: label
     threshold: 0.0
     quantiles: null
-
   triple_barrier:
     enabled: true
     price_col: close
@@ -433,7 +473,6 @@ targets_catalog:
     r_col: tb_event_r
     add_r_multiple: false
     r_clip: 5.0
-
   r_multiple:
     enabled: false
     candidate_col: manual_long_candidate
@@ -452,32 +491,29 @@ targets_catalog:
     max_holding_bars: 18
     stop_mode: volatility_stop
     stop_loss_return: 0.005
-    take_profit_return: 0.010
+    take_profit_return: 0.01
     tie_break: conservative
     allow_partial_horizon: false
     diagnostic_feature_cols:
-      - roc_12
-      - close_z
-      - close_open_ratio
-      - manual_conviction_score
-      - mtf_1h_trend_score
-      - mtf_4h_trend_score
-      - mtf_1h_atr_to_close
-      - mtf_4h_atr_to_close
-
+    - roc_12
+    - close_z
+    - close_open_ratio
+    - manual_conviction_score
+    - mtf_1h_trend_score
+    - mtf_4h_trend_score
+    - mtf_1h_atr_to_close
+    - mtf_4h_atr_to_close
 signals_catalog:
   none:
     enabled: false
     params:
       signal_col: eda_flat_signal
-
   trend_state:
     enabled: false
     params:
       state_col: trend_regime
       signal_col: signal_trend_state
       mode: long_short_hold
-
   probability_threshold:
     enabled: false
     params:
@@ -489,14 +525,12 @@ signals_catalog:
       lower_exit: null
       mode: long_short_hold
       base_signal_col: null
-
   probability_conviction:
     enabled: false
     params:
       prob_col: pred_prob
       signal_col: signal_probability_conviction
       clip: 1.0
-
   probability_vol_adjusted:
     enabled: false
     params:
@@ -508,13 +542,12 @@ signals_catalog:
       lower: null
       vol_target: 0.001
       clip: 1.0
-      vol_floor: 1.0e-6
+      vol_floor: 1.0e-06
       min_signal_abs: 0.0
       activation_filters: null
       top_quantile: null
       top_quantile_window: null
       max_trade_rate: null
-
   meta_probability_side:
     enabled: false
     params:
@@ -526,7 +559,6 @@ signals_catalog:
       upper: null
       clip: 1.0
       mode: long_only
-
   orb_candidate_side:
     enabled: false
     params:
@@ -534,7 +566,6 @@ signals_catalog:
       side_col: orb_side
       signal_col: signal_orb_side
       mode: long_short
-
   roc_long_only_conditions:
     enabled: false
     params:
@@ -562,7 +593,7 @@ signals_catalog:
       require_bullish_candle: false
       required_condition_names: null
       vol_adjustment_strength: 0.3
-      min_exposure: 0.10
+      min_exposure: 0.1
       max_exposure: 1.0
       signal_col: null
       long_signal_col: manual_long_candidate
@@ -571,7 +602,6 @@ signals_catalog:
       all_conditions_col: manual_all_conditions_signal
       short_signal_col: short_signal
       combined_signal_col: combined_signal
-
   manual_long_model_filter:
     enabled: false
     params:
@@ -580,7 +610,6 @@ signals_catalog:
       base_signal_col: manual_vol_adjusted_candidate
       threshold: 0.42
       signal_col: model_filtered_long_signal
-
   forecast_threshold:
     enabled: false
     params:
@@ -589,7 +618,6 @@ signals_catalog:
       upper: 0.0
       lower: null
       mode: long_short_hold
-
   forecast_vol_adjusted:
     enabled: false
     params:
@@ -597,8 +625,7 @@ signals_catalog:
       vol_col: pred_vol
       signal_col: signal_forecast_vol_adjusted
       clip: 1.0
-      vol_floor: 1.0e-6
-
+      vol_floor: 1.0e-06
   rsi:
     enabled: false
     params:
@@ -607,7 +634,6 @@ signals_catalog:
       sell_level: 70.0
       signal_col: signal_rsi
       mode: long_short_hold
-
   momentum:
     enabled: false
     params:
@@ -616,7 +642,6 @@ signals_catalog:
       short_threshold: null
       signal_col: signal_momentum
       mode: long_short_hold
-
   stochastic:
     enabled: false
     params:
@@ -625,7 +650,6 @@ signals_catalog:
       sell_level: 80.0
       signal_col: signal_stochastic
       mode: long_short_hold
-
   volatility_regime:
     enabled: false
     params:
@@ -633,17 +657,15 @@ signals_catalog:
       quantile: 0.5
       signal_col: signal_volatility_regime
       mode: long_short_hold
-
 runtime:
   seed: 7
   repro_mode: strict
   deterministic: false
   threads: 1
   seed_torch: false
-
 risk:
   cost_per_turnover: 0.00015
-  slippage_per_turnover: 0.00010
+  slippage_per_turnover: 0.0001
   target_vol: null
   max_leverage: 1.0
   sizing: {}
@@ -655,7 +677,6 @@ risk:
   portfolio_guard: {}
   drawdown_sizing: {}
   vol_col: null
-
 backtest:
   engine: manual_barrier
   signal_col: eda_flat_signal
@@ -693,7 +714,6 @@ backtest:
       bars: 10
       min_favorable_r: 0.0
       exit_price: close
-
 portfolio:
   enabled: false
   construction: signal_weights
@@ -711,12 +731,10 @@ portfolio:
     target_net_exposure: 0.0
     enforce_target_net_exposure: false
   asset_groups: {}
-
 monitoring:
   enabled: false
   psi_threshold: 0.15
   n_bins: 10
-
 execution:
   enabled: false
   mode: paper
@@ -725,7 +743,6 @@ execution:
   min_trade_notional: 0.0
   current_weights: {}
   current_prices: {}
-
 logging:
   enabled: true
   run_name: feature_signal_target_lab

@@ -4,7 +4,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import RobustScaler, StandardScaler
 from sklearn.linear_model import LogisticRegression
 
 from src.evaluation.time_splits import (
@@ -51,10 +51,13 @@ def _apply_fold_feature_preprocessing(
     scaler_kind = str(cfg.get("scaler", "none") or "none").strip().lower()
     if scaler_kind in {"", "none"}:
         return X_train, X_test, {"scaler": "none", "train_only": True}
-    if scaler_kind != "standard":
+    if scaler_kind not in {"standard", "robust"}:
         raise ValueError(f"Unsupported model.preprocessing.scaler: {scaler_kind}")
 
-    scaler = StandardScaler()
+    if scaler_kind == "standard":
+        scaler = StandardScaler()
+    else:
+        scaler = RobustScaler()
     X_train_scaled = scaler.fit_transform(X_train.to_numpy(dtype=float, copy=False))
     X_test_values = X_test.to_numpy(dtype=float, copy=False)
     if X_test_values.shape[0] == 0:
@@ -65,7 +68,7 @@ def _apply_fold_feature_preprocessing(
         X_train_scaled,
         X_test_scaled,
         {
-            "scaler": "standard",
+            "scaler": scaler_kind,
             "train_only": True,
             "feature_count": int(X_train.shape[1]),
         },

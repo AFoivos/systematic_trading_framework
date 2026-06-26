@@ -159,3 +159,4 @@ search_space:
     path: model.params.scale_pos_weight
     kind: categorical
     choices: [1.0, 1.5, 2.0, 3.0]
+

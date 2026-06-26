@@ -38,8 +38,17 @@ features:
     ema_spans:
     - 20
     ema_col_template: ema_20
+    add_ratios: false
   outputs: {}
   enabled: true
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: close
+        denominator_col: ema_20
+        output_col: close_over_ema_20
+        subtract: 1.0
 - step: trend
   params:
     price_col: close
@@ -47,8 +56,17 @@ features:
     ema_spans:
     - 50
     ema_col_template: ema_50
+    add_ratios: false
   outputs: {}
   enabled: true
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: close
+        denominator_col: ema_50
+        output_col: close_over_ema_50
+        subtract: 1.0
 - step: trend
   params:
     price_col: close
@@ -56,8 +74,17 @@ features:
     ema_spans:
     - 100
     ema_col_template: ema_100
+    add_ratios: false
   outputs: {}
   enabled: true
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: close
+        denominator_col: ema_100
+        output_col: close_over_ema_100
+        subtract: 1.0
 - step: vwap
   params:
     high_col: high
@@ -67,11 +94,18 @@ features:
     window: 20
     windows:
     - 20
-    add_distance: true
+    add_distance: false
     vwap_col: vwap_20
-    distance_col: close_over_vwap_20
   outputs: {}
   enabled: true
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: close
+        denominator_col: vwap_20
+        output_col: close_over_vwap_20
+        subtract: 1.0
 - step: ppo
   params:
     price_col: close
@@ -92,37 +126,32 @@ features:
     windows:
     - 14
     method: wilder
-    add_over_price: true
+    add_over_price: false
     atr_col: atr_14
-    over_price_col: atr_over_price_14
   outputs: {}
   enabled: true
-- step: feature_transforms
-  params:
-    transforms:
-    - kind: tsfresh_rolling
-      source_col: ema_50
-      output_prefix: ema_50
-      calculators:
-      - root_mean_square
-      window: 48
-      shift: 0
-    - kind: tsfresh_rolling
-      source_col: vwap_20
-      output_prefix: vwap_20
-      calculators:
-      - root_mean_square
-      window: 48
-      shift: 0
-    - kind: tsfresh_rolling
-      source_col: ema_100
-      output_prefix: ema_100
-      calculators:
-      - root_mean_square
-      window: 48
-      shift: 0
-  outputs: {}
-  enabled: true
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: atr_14
+        denominator_col: close
+        output_col: atr_over_price_14
+    rms:
+      enabled: true
+      items:
+      - source_col: ema_50
+        output_prefix: ema_50
+        window: 48
+        shift: 0
+      - source_col: vwap_20
+        output_prefix: vwap_20
+        window: 48
+        shift: 0
+      - source_col: ema_100
+        output_prefix: ema_100
+        window: 48
+        shift: 0
 model:
   kind: none
 signals:

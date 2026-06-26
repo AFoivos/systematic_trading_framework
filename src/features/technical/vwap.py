@@ -14,7 +14,7 @@ def add_vwap_features(
     volume_col: str = "volume",
     window: int = 20,
     windows: Sequence[int] | None = None,
-    add_distance: bool = True,
+    add_distance: bool = False,
     vwap_col: str | None = None,
     distance_col: str | None = None,
     inplace: bool = False,
@@ -54,7 +54,8 @@ def add_vwap_features(
     windows:
         Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``None``.
     add_distance:
-        Configuration value used by the registered component. Default: ``True``.
+        No longer supported. Derived distance output must be declared with a
+        nested ``transforms.ratio`` helper. Default: ``False``.
     vwap_col:
         Input dataframe column name consumed by the component. Default: ``None``.
     distance_col:
@@ -84,8 +85,6 @@ def add_vwap_features(
     for resolved_window in resolved_windows:
         vwap = compute_vwap(typical_price, volume, window=resolved_window)
         out[vwap_col or f"vwap_{resolved_window}"] = vwap
-        if add_distance:
-            out[distance_col or f"{close_col}_over_vwap_{resolved_window}"] = close / vwap - 1.0
     return out
 
 
@@ -101,10 +100,10 @@ def _validate_stable_output_cols(
             raise ValueError(f"{field_name} must be a non-empty string when provided.")
     if vwap_col is not None and vwap_col == distance_col:
         raise ValueError("VWAP output columns must be unique.")
-    if len(resolved_windows) != 1 and (vwap_col is not None or distance_col is not None):
+    if len(resolved_windows) != 1 and vwap_col is not None:
         raise ValueError("Stable VWAP output columns require exactly one resolved window.")
-    if distance_col is not None and not add_distance:
-        raise ValueError("distance_col requires add_distance=True.")
+    if add_distance or distance_col is not None:
+        raise ValueError("VWAP distance outputs are no longer supported; use transforms.ratio helpers.")
 
 
 def _resolve_windows(*, window: int, windows: Sequence[int] | None) -> list[int]:

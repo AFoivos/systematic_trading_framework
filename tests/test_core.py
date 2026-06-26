@@ -50,8 +50,11 @@ def test_add_trend_features_columns() -> None:
 
     assert "close_sma_2" in out.columns
     assert "close_ema_2" in out.columns
-    assert "close_over_sma_2" in out.columns
-    assert "close_over_ema_2" in out.columns
+    assert "close_over_sma_2" not in out.columns
+    assert "close_over_ema_2" not in out.columns
+
+    with pytest.raises(ValueError, match="transforms.ratio"):
+        add_trend_features(df, sma_windows=(2,), ema_spans=(2,), add_ratios=True)
 
 
 def _vwap_ohlcv_frame() -> pd.DataFrame:
@@ -89,6 +92,25 @@ def test_vwap_feature_step_emits_vwap_and_close_distance() -> None:
             "volume_col": "volume",
             "windows": [2, 3],
         },
+        "transforms": {
+            "ratio": {
+                "enabled": True,
+                "items": [
+                    {
+                        "numerator_col": "close",
+                        "denominator_col": "vwap_2",
+                        "output_col": "close_over_vwap_2",
+                        "subtract": 1.0,
+                    },
+                    {
+                        "numerator_col": "close",
+                        "denominator_col": "vwap_3",
+                        "output_col": "close_over_vwap_3",
+                        "subtract": 1.0,
+                    },
+                ],
+            }
+        },
     }
 
     validate_features_block([step])
@@ -98,6 +120,72 @@ def test_vwap_feature_step_emits_vwap_and_close_distance() -> None:
     expected_vwap_2 = (11.0 * 3.0 + 13.0 * 5.0) / 8.0
     assert out["vwap_2"].iloc[2] == pytest.approx(expected_vwap_2)
     assert out["close_over_vwap_2"].iloc[2] == pytest.approx(13.0 / expected_vwap_2 - 1.0)
+
+
+def test_apply_feature_steps_merges_asset_transform_overrides() -> None:
+    df = pd.DataFrame({"close": [10.0, 11.0, 12.0, 13.0, 14.0]})
+    steps = [
+        {
+            "step": "trend",
+            "params": {
+                "price_col": "close",
+                "sma_windows": [],
+                "ema_spans": [2],
+                "ema_col_template": "ema_base",
+                "add_ratios": False,
+            },
+            "params_by_asset": {
+                "AAA": {
+                    "ema_spans": [3],
+                    "ema_col_template": "ema_asset",
+                }
+            },
+            "transforms": {
+                "ratio": {
+                    "enabled": True,
+                    "items": [
+                        {
+                            "numerator_col": "close",
+                            "denominator_col": "ema_base",
+                            "output_col": "close_over_ema_base",
+                            "subtract": 1.0,
+                        }
+                    ],
+                },
+                "rolling_zscore": {
+                    "enabled": True,
+                    "params": {
+                        "source_col": "close",
+                        "output_col": "close_z_2",
+                        "window": 2,
+                        "shift": 1,
+                    },
+                },
+            },
+            "transforms_by_asset": {
+                "AAA": {
+                    "ratio": {
+                        "enabled": True,
+                        "items": [
+                            {
+                                "numerator_col": "close",
+                                "denominator_col": "ema_asset",
+                                "output_col": "close_over_ema_asset",
+                                "subtract": 1.0,
+                            }
+                        ],
+                    }
+                }
+            },
+        }
+    ]
+
+    out = apply_feature_steps(df, steps, asset="AAA")
+
+    assert "ema_asset" in out.columns
+    assert "close_over_ema_asset" in out.columns
+    assert "close_z_2" in out.columns
+    assert "close_over_ema_base" not in out.columns
 
 
 def test_vwap_feature_is_point_in_time_safe_when_future_changes() -> None:
@@ -116,10 +204,7 @@ def test_vwap_feature_is_point_in_time_safe_when_future_changes() -> None:
         baseline["vwap_3"].iloc[:4],
         changed["vwap_3"].iloc[:4],
     )
-    pd.testing.assert_series_equal(
-        baseline["close_over_vwap_3"].iloc[:4],
-        changed["close_over_vwap_3"].iloc[:4],
-    )
+    assert "close_over_vwap_3" not in baseline.columns
 
 
 def test_vwap_feature_supports_stable_output_columns_for_single_window() -> None:
@@ -127,12 +212,19 @@ def test_vwap_feature_supports_stable_output_columns_for_single_window() -> None
         _vwap_ohlcv_frame(),
         windows=[3],
         vwap_col="selected_vwap",
-        distance_col="selected_vwap_distance",
     )
 
-    assert {"selected_vwap", "selected_vwap_distance"}.issubset(out.columns)
+    assert "selected_vwap" in out.columns
     assert "vwap_3" not in out.columns
     assert "close_over_vwap_3" not in out.columns
+
+
+def test_vwap_feature_rejects_derived_distance_outputs() -> None:
+    with pytest.raises(ValueError, match="transforms.ratio"):
+        add_vwap_features(_vwap_ohlcv_frame(), windows=[3], add_distance=True)
+
+    with pytest.raises(ValueError, match="transforms.ratio"):
+        add_vwap_features(_vwap_ohlcv_frame(), windows=[3], distance_col="selected_vwap_distance")
 
 
 def test_vwap_feature_rejects_stable_output_columns_for_multiple_windows() -> None:
@@ -436,7 +528,9 @@ def test_range_features_support_superset_windows() -> None:
     out = add_atr_features(df, windows=[2, 3])
     out = add_adx_features(out, windows=[2, 3])
 
-    assert {"atr_2", "atr_over_price_2", "atr_3", "atr_over_price_3"}.issubset(out.columns)
+    assert {"atr_2", "atr_3"}.issubset(out.columns)
+    assert "atr_over_price_2" not in out.columns
+    assert "atr_over_price_3" not in out.columns
     assert {"adx_2", "plus_di_2", "minus_di_2", "adx_3", "plus_di_3", "minus_di_3"}.issubset(out.columns)
 
 
@@ -453,12 +547,27 @@ def test_atr_feature_supports_stable_output_columns_for_single_window() -> None:
         df,
         windows=[2],
         atr_col="selected_atr",
-        over_price_col="selected_atr_over_price",
     )
 
-    assert {"selected_atr", "selected_atr_over_price"}.issubset(out.columns)
+    assert "selected_atr" in out.columns
     assert "atr_2" not in out.columns
     assert "atr_over_price_2" not in out.columns
+
+
+def test_atr_feature_rejects_derived_over_price_outputs() -> None:
+    df = pd.DataFrame(
+        {
+            "high": [2.0, 2.2, 2.4, 2.8],
+            "low": [1.0, 1.1, 1.3, 1.7],
+            "close": [1.5, 1.8, 2.0, 2.4],
+        }
+    )
+
+    with pytest.raises(ValueError, match="transforms.ratio"):
+        add_atr_features(df, windows=[2], add_over_price=True)
+
+    with pytest.raises(ValueError, match="transforms.ratio"):
+        add_atr_features(df, windows=[2], over_price_col="selected_atr_over_price")
 
 
 def test_atr_feature_rejects_stable_output_columns_for_multiple_windows() -> None:

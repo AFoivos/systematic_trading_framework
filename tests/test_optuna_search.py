@@ -145,7 +145,19 @@ def test_prepare_trial_config_applies_value_templates_after_sampling() -> None:
                     "window": 20,
                     "windows": [20],
                     "vwap_col": "vwap_20",
-                    "distance_col": "close_over_vwap_20",
+                },
+                "transforms": {
+                    "ratio": {
+                        "enabled": True,
+                        "items": [
+                            {
+                                "numerator_col": "close",
+                                "denominator_col": "vwap_20",
+                                "output_col": "close_over_vwap_20",
+                                "subtract": 1.0,
+                            }
+                        ],
+                    }
                 },
             }
         ],
@@ -166,7 +178,11 @@ def test_prepare_trial_config_applies_value_templates_after_sampling() -> None:
             value_templates=[
                 {"path": "features.0.params.vwap_col", "template": "vwap_{vwap_window}"},
                 {
-                    "path": "features.0.params.distance_col",
+                    "path": "features.0.transforms.ratio.items.0.denominator_col",
+                    "template": "vwap_{vwap_window}",
+                },
+                {
+                    "path": "features.0.transforms.ratio.items.0.output_col",
                     "template": "close_over_vwap_{vwap_window}",
                 },
                 {
@@ -187,7 +203,9 @@ def test_prepare_trial_config_applies_value_templates_after_sampling() -> None:
     assert trial_cfg["features"][0]["params"]["window"] == 32
     assert trial_cfg["features"][0]["params"]["windows"] == [32]
     assert trial_cfg["features"][0]["params"]["vwap_col"] == "vwap_32"
-    assert trial_cfg["features"][0]["params"]["distance_col"] == "close_over_vwap_32"
+    ratio_item = trial_cfg["features"][0]["transforms"]["ratio"]["items"][0]
+    assert ratio_item["denominator_col"] == "vwap_32"
+    assert ratio_item["output_col"] == "close_over_vwap_32"
     assert trial_cfg["signals"]["params"]["vwap_rms_col"] == "vwap_32__root_mean_square"
 
 

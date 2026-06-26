@@ -887,103 +887,143 @@ def test_validate_model_stages_block_rejects_all_disabled_stages() -> None:
         )
 
 
-def test_validate_features_block_accepts_feature_transforms_step() -> None:
+def test_validate_features_block_accepts_nested_feature_helpers() -> None:
     validate_features_block(
         [
-            {"step": "bollinger", "enabled": True, "params": {"window": 24}},
             {
-                "step": "feature_transforms",
-                "params": {
-                    "transforms": [
-                        {
+                "step": "bollinger",
+                "enabled": True,
+                "params": {"window": 24},
+                "transforms": {
+                    "rolling_clip": {
+                        "enabled": True,
+                        "params": {
                             "source_col": "volume_over_atr_24",
-                            "kind": "rolling_clip",
                             "output_col": "volume_over_atr_24_rollclip_2520_q01_q99",
                             "window": 2520,
                             "lower_q": 0.01,
                             "upper_q": 0.99,
                             "shift": 1,
                         },
-                        {
+                    },
+                    "ratio": {
+                        "enabled": True,
+                        "params": {
                             "numerator_col": "lag_close_logret_1",
                             "denominator_col": "vol_rolling_24",
-                            "kind": "ratio",
                             "output_col": "lag_close_logret_1_over_vol_rolling_24",
                         },
-                        {
+                    },
+                    "rolling_zscore": {
+                        "enabled": True,
+                        "params": {
                             "source_col": "lag_close_logret_1",
-                            "kind": "rolling_zscore",
                             "output_col": "lag_close_logret_1_z_24",
                             "window": 24,
                             "shift": 0,
-                        }
-                    ]
+                        },
+                    },
                 },
             },
         ]
+    )
+
+
+def test_validate_features_block_accepts_selector_based_feature_helpers() -> None:
+    validate_features_block(
+        [
+            {
+                "step": "returns",
+                "params": {"log": True, "col_name": "close_logret"},
+                "transforms": {
+                    "rolling_clip": {
+                        "enabled": True,
+                        "params": {
+                            "source_selector": {"regex": "^volume_over_atr_[0-9]+$"},
+                            "output_col": "volume_over_atr_rollclip",
+                        },
+                    },
+                    "ratio": {
+                        "enabled": True,
+                        "params": {
+                            "numerator_selector": {"exact": "lag_close_logret_1"},
+                            "denominator_selector": {"regex": "^vol_rolling_[0-9]+$"},
+                            "output_col": "lag_close_logret_1_over_selected_vol",
+                        },
+                    },
+                },
+            },
+        ]
+    )
+
+
+def test_validate_features_block_accepts_asset_specific_feature_helpers() -> None:
+    validate_features_block(
+        [
+            {
+                "step": "returns",
+                "params": {"log": False, "col_name": "close_ret"},
+                "transforms_by_asset": {
+                    "AAA": {
+                        "ratio": {
+                            "enabled": True,
+                            "params": {
+                                "numerator_col": "close",
+                                "denominator_col": "ema_asset",
+                                "output_col": "close_over_ema_asset",
+                                "subtract": 1.0,
+                            },
+                        }
+                    }
+                },
+                "normalizations_by_asset": {
+                    "AAA": {
+                        "returns": {
+                            "enabled": True,
+                            "params": {
+                                "close_col": "close",
+                                "windows": [1, 4],
+                                "log_returns": True,
+                            },
+                        }
+                    }
+                },
+            },
+        ]
+    )
+
+
+def test_validate_features_block_rejects_tsfresh_rolling_helper() -> None:
+    with pytest.raises(ConfigValidationError, match="unsupported helpers"):
+        validate_features_block(
+            [
+                {
+                    "step": "returns",
+                    "transforms": {
+                        "tsfresh_rolling": {
+                            "enabled": True,
+                            "params": {"source_col": "close_logret", "window": 48},
+                        }
+                    },
+                },
+            ]
         )
 
 
-def test_validate_features_block_accepts_selector_based_feature_transforms() -> None:
+def test_validate_features_block_accepts_rms_helper() -> None:
     validate_features_block(
         [
             {
-                "step": "feature_transforms",
-                "params": {
-                    "transforms": [
-                        {
-                            "source_selector": {"regex": "^volume_over_atr_[0-9]+$"},
-                            "kind": "rolling_clip",
-                            "output_col": "volume_over_atr_rollclip",
-                        },
-                        {
-                            "numerator_selector": {"exact": "lag_close_logret_1"},
-                            "denominator_selector": {"regex": "^vol_rolling_[0-9]+$"},
-                            "kind": "ratio",
-                            "output_col": "lag_close_logret_1_over_selected_vol",
-                        },
-                    ]
-                },
-            },
-        ]
-    )
-
-
-def test_validate_features_block_accepts_tsfresh_rolling_transform() -> None:
-    validate_features_block(
-        [
-            {
-                "step": "feature_transforms",
-                "params": {
-                    "transforms": [
-                        {
+                "step": "returns",
+                "transforms": {
+                    "rms": {
+                        "enabled": True,
+                        "params": {
                             "source_col": "close_logret",
-                            "kind": "tsfresh_rolling",
-                            "window": 48,
-                            "calculators": ["mean", "standard_deviation", "absolute_maximum"],
-                        }
-                    ]
-                },
-            },
-        ]
-    )
-
-
-def test_validate_features_block_accepts_rolling_stat_transform() -> None:
-    validate_features_block(
-        [
-            {
-                "step": "feature_transforms",
-                "params": {
-                    "transforms": [
-                        {
-                            "source_col": "close_logret",
-                            "kind": "rolling_stat",
-                            "mode": "root_mean_square",
                             "window": 48,
                             "shift": 0,
-                        }
-                    ]
+                        },
+                    }
                 },
             },
         ]
@@ -998,7 +1038,6 @@ def test_validate_features_block_accepts_stable_indicator_output_columns() -> No
                 "params": {
                     "windows": [20],
                     "vwap_col": "selected_vwap",
-                    "distance_col": "selected_vwap_distance",
                 },
             },
             {
@@ -1017,11 +1056,27 @@ def test_validate_features_block_accepts_stable_indicator_output_columns() -> No
                 "params": {
                     "windows": [14],
                     "atr_col": "selected_atr",
-                    "over_price_col": "selected_atr_over_price",
                 },
             },
         ]
     )
+
+
+def test_validate_features_block_rejects_legacy_derived_feature_outputs() -> None:
+    with pytest.raises(ConfigValidationError, match="add_distance"):
+        validate_features_block([{"step": "vwap", "params": {"add_distance": True}}])
+
+    with pytest.raises(ConfigValidationError, match="distance_col"):
+        validate_features_block([{"step": "vwap", "params": {"distance_col": "close_over_vwap_20"}}])
+
+    with pytest.raises(ConfigValidationError, match="add_over_price"):
+        validate_features_block([{"step": "atr", "params": {"add_over_price": True}}])
+
+    with pytest.raises(ConfigValidationError, match="over_price_col"):
+        validate_features_block([{"step": "atr", "params": {"over_price_col": "atr_over_price_14"}}])
+
+    with pytest.raises(ConfigValidationError, match="add_ratios"):
+        validate_features_block([{"step": "trend", "params": {"add_ratios": True}}])
 
 
 def test_validate_features_block_rejects_stable_vwap_output_columns_for_multiple_windows() -> None:
@@ -1048,40 +1103,34 @@ def test_validate_features_block_rejects_stable_atr_output_columns_for_multiple_
         )
 
 
-def test_validate_features_block_rejects_unknown_tsfresh_rolling_calculator() -> None:
-    with pytest.raises(ConfigValidationError, match="calculators\\[0\\]"):
+def test_validate_features_block_rejects_unknown_helper_name() -> None:
+    with pytest.raises(ConfigValidationError, match="unsupported helpers"):
         validate_features_block(
             [
                 {
-                    "step": "feature_transforms",
-                    "params": {
-                        "transforms": [
-                            {
-                                "source_col": "close_logret",
-                                "kind": "tsfresh_rolling",
-                                "calculators": ["not_a_tsfresh_calculator"],
-                            }
-                        ]
+                    "step": "returns",
+                    "transforms": {
+                        "not_a_helper": {
+                            "enabled": True,
+                            "params": {"source_col": "close_logret"},
+                        }
                     },
                 },
             ]
         )
 
 
-def test_validate_features_block_rejects_unknown_rolling_stat_mode() -> None:
-    with pytest.raises(ConfigValidationError, match="mode"):
+def test_validate_features_block_rejects_legacy_rolling_stat_helper() -> None:
+    with pytest.raises(ConfigValidationError, match="unsupported helpers"):
         validate_features_block(
             [
                 {
-                    "step": "feature_transforms",
-                    "params": {
-                        "transforms": [
-                            {
-                                "source_col": "close_logret",
-                                "kind": "rolling_stat",
-                                "mode": "future_peek",
-                            }
-                        ]
+                    "step": "returns",
+                    "transforms": {
+                        "rolling_stat": {
+                            "enabled": True,
+                            "params": {"source_col": "close_logret", "mode": "future_peek"},
+                        }
                     },
                 },
             ]
@@ -1093,16 +1142,16 @@ def test_validate_features_block_rejects_ambiguous_feature_transform_selector() 
         validate_features_block(
             [
                 {
-                    "step": "feature_transforms",
-                    "params": {
-                        "transforms": [
-                            {
+                    "step": "returns",
+                    "transforms": {
+                        "rolling_clip": {
+                            "enabled": True,
+                            "params": {
                                 "source_col": "volume_over_atr_24",
                                 "source_selector": {"startswith": "volume_over_atr_"},
-                                "kind": "rolling_clip",
                                 "output_col": "volume_over_atr_clip",
-                            }
-                        ]
+                            },
+                        }
                     },
                 }
             ]
@@ -1127,20 +1176,20 @@ def test_validate_features_block_rejects_non_boolean_enabled_flag() -> None:
         )
 
 
-def test_validate_features_block_rejects_invalid_feature_transform_kind() -> None:
-    with pytest.raises(ConfigValidationError, match="rolling_clip, ratio, rolling_stat, rolling_zscore"):
+def test_validate_features_block_rejects_invalid_feature_helper_kind() -> None:
+    with pytest.raises(ConfigValidationError, match="unsupported helpers"):
         validate_features_block(
             [
                 {
-                    "step": "feature_transforms",
-                    "params": {
-                        "transforms": [
-                            {
+                    "step": "returns",
+                    "transforms": {
+                        "bad_kind": {
+                            "enabled": True,
+                            "params": {
                                 "source_col": "volume_over_atr_24",
-                                "kind": "bad_kind",
                                 "output_col": "volume_over_atr_24_clip",
-                            }
-                        ]
+                            },
+                        }
                     },
                 }
             ]
@@ -1152,17 +1201,17 @@ def test_validate_features_block_rejects_invalid_ratio_transform_eps() -> None:
         validate_features_block(
             [
                 {
-                    "step": "feature_transforms",
-                    "params": {
-                        "transforms": [
-                            {
+                    "step": "returns",
+                    "transforms": {
+                        "ratio": {
+                            "enabled": True,
+                            "params": {
                                 "numerator_col": "lag_close_logret_1",
                                 "denominator_col": "vol_rolling_24",
-                                "kind": "ratio",
                                 "output_col": "lag_close_logret_1_over_vol_rolling_24",
                                 "eps": -1.0,
-                            }
-                        ]
+                            },
+                        }
                     },
                 }
             ]
@@ -1174,17 +1223,17 @@ def test_validate_features_block_rejects_invalid_feature_transform_quantiles() -
         validate_features_block(
             [
                 {
-                    "step": "feature_transforms",
-                    "params": {
-                        "transforms": [
-                            {
+                    "step": "returns",
+                    "transforms": {
+                        "rolling_clip": {
+                            "enabled": True,
+                            "params": {
                                 "source_col": "volume_over_atr_24",
-                                "kind": "rolling_clip",
                                 "output_col": "volume_over_atr_24_clip",
                                 "lower_q": 0.99,
                                 "upper_q": 0.01,
-                            }
-                        ]
+                            },
+                        }
                     },
                 }
             ]
@@ -1475,13 +1524,25 @@ def test_validate_model_block_accepts_standard_preprocessing_scaler() -> None:
     validate_model_block(model)
 
 
-def test_validate_model_block_rejects_unknown_preprocessing_scaler() -> None:
+def test_validate_model_block_accepts_robust_preprocessing_scaler() -> None:
     model = {
         "kind": "logistic_regression_clf",
         "feature_cols": ["feat_1"],
         "target": {"kind": "forward_return", "price_col": "close", "horizon": 1},
         "split": {"method": "walk_forward", "train_size": 100, "test_size": 20},
         "preprocessing": {"scaler": "robust"},
+    }
+
+    validate_model_block(model)
+
+
+def test_validate_model_block_rejects_unknown_preprocessing_scaler() -> None:
+    model = {
+        "kind": "logistic_regression_clf",
+        "feature_cols": ["feat_1"],
+        "target": {"kind": "forward_return", "price_col": "close", "horizon": 1},
+        "split": {"method": "walk_forward", "train_size": 100, "test_size": 20},
+        "preprocessing": {"scaler": "minmax"},
     }
 
     with pytest.raises(ConfigValidationError, match="model.preprocessing.scaler"):

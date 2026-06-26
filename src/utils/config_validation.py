@@ -72,41 +72,8 @@ _FEATURE_SELECTOR_PROFILES = {
     "ftmo_fx_intraday_regime_v1",
     "ftmo_fx_intraday_momentum_v1",
 }
-_TSFRESH_ROLLING_CALCULATORS = {
-    "sum_values",
-    "median",
-    "mean",
-    "length",
-    "standard_deviation",
-    "variance",
-    "root_mean_square",
-    "maximum",
-    "absolute_maximum",
-    "minimum",
-}
-_ROLLING_STAT_MODES = {
-    "sum",
-    "sum_values",
-    "median",
-    "mean",
-    "std",
-    "standard_deviation",
-    "var",
-    "variance",
-    "rms",
-    "root_mean_square",
-    "maximum",
-    "max",
-    "absolute_maximum",
-    "abs_max",
-    "minimum",
-    "min",
-    "mad",
-    "iqr",
-    "skew",
-    "kurtosis",
-    "slope",
-}
+_FEATURE_TRANSFORM_HELPERS = {"ratio", "rolling_clip", "rolling_zscore", "rms", "slope"}
+_FEATURE_NORMALIZATION_HELPERS = {"returns", "atr_distances", "volatility", "rolling_zscores"}
 _TARGET_OUTPUT_KEYS = {
     "label_col",
     "fwd_col",
@@ -1129,6 +1096,255 @@ def _validate_ehlers_continuation_short_params(params: dict[str, Any], *, field_
         _non_negative_int(params["entry_delay_bars"], field=f"{field_prefix}.entry_delay_bars")
 
 
+def _validate_optional_string(value: Any, *, field: str) -> None:
+    if value is not None and (not isinstance(value, str) or not value.strip()):
+        raise ConfigValidationError(f"{field} must be a non-empty string when provided.")
+
+
+def _validate_bool(value: Any, *, field: str) -> None:
+    if not isinstance(value, bool):
+        raise ConfigValidationError(f"{field} must be boolean.")
+
+
+def _helper_param_sets(raw_block: Any, *, field: str) -> list[dict[str, Any]]:
+    if raw_block in (None, False):
+        return []
+    if not isinstance(raw_block, dict):
+        raise ConfigValidationError(f"{field} must be a mapping.")
+    if "enabled" in raw_block and not isinstance(raw_block["enabled"], bool):
+        raise ConfigValidationError(f"{field}.enabled must be boolean.")
+    if raw_block.get("enabled", True) is False:
+        return []
+    params = raw_block.get("params", {}) or {}
+    if not isinstance(params, dict):
+        raise ConfigValidationError(f"{field}.params must be a mapping when provided.")
+    direct = {key: value for key, value in raw_block.items() if key not in {"enabled", "params", "items"}}
+    items = raw_block.get("items")
+    if items is None:
+        return [{**direct, **params}]
+    if not isinstance(items, list) or not items:
+        raise ConfigValidationError(f"{field}.items must be a non-empty list of mappings.")
+    out: list[dict[str, Any]] = []
+    for idx, item in enumerate(items):
+        if not isinstance(item, dict):
+            raise ConfigValidationError(f"{field}.items[{idx}] must be a mapping.")
+        out.append({**direct, **params, **item})
+    return out
+
+
+def _validate_feature_transform_params(kind: str, params: dict[str, Any], *, field: str) -> None:
+    if kind in {"rms", "slope", "rolling_clip", "rolling_zscore"}:
+        _validate_column_ref_or_selector(
+            params,
+            col_key="source_col",
+            selector_key="source_selector",
+            field=field,
+        )
+        _validate_optional_string(params.get("output_col"), field=f"{field}.output_col")
+        if "window" in params:
+            _positive_int(params["window"], field=f"{field}.window")
+            if kind in {"rolling_clip", "rolling_zscore"} and int(params["window"]) <= 1:
+                raise ConfigValidationError(f"{field}.window must be > 1.")
+        if "shift" in params:
+            _non_negative_int(params["shift"], field=f"{field}.shift")
+    if kind == "rms":
+        _validate_optional_string(params.get("output_prefix"), field=f"{field}.output_prefix")
+    if kind == "rolling_clip":
+        lower_q = _finite_number(params.get("lower_q", 0.01), field=f"{field}.lower_q")
+        upper_q = _finite_number(params.get("upper_q", 0.99), field=f"{field}.upper_q")
+        if not 0.0 <= lower_q <= 1.0:
+            raise ConfigValidationError(f"{field}.lower_q must be in [0, 1].")
+        if not 0.0 <= upper_q <= 1.0:
+            raise ConfigValidationError(f"{field}.upper_q must be in [0, 1].")
+        if not lower_q < upper_q:
+            raise ConfigValidationError(f"{field}.lower_q must be strictly less than {field}.upper_q.")
+    if kind == "rolling_zscore" and "ddof" in params:
+        _non_negative_int(params["ddof"], field=f"{field}.ddof")
+    if kind == "ratio":
+        _validate_column_ref_or_selector(
+            params,
+            col_key="numerator_col",
+            selector_key="numerator_selector",
+            field=field,
+        )
+        _validate_column_ref_or_selector(
+            params,
+            col_key="denominator_col",
+            selector_key="denominator_selector",
+            field=field,
+        )
+        _validate_optional_string(params.get("output_col"), field=f"{field}.output_col")
+        eps = _finite_number(params.get("eps", 1e-8), field=f"{field}.eps")
+        if eps < 0.0:
+            raise ConfigValidationError(f"{field}.eps must be >= 0.")
+        if "subtract" in params:
+            _finite_number(params["subtract"], field=f"{field}.subtract")
+
+
+def _validate_pairs(value: Any, *, field: str) -> None:
+    if not isinstance(value, list):
+        raise ConfigValidationError(f"{field} must be a list of mappings.")
+    for idx, pair in enumerate(value):
+        pair_field = f"{field}[{idx}]"
+        if not isinstance(pair, dict):
+            raise ConfigValidationError(f"{pair_field} must be a mapping.")
+        for key in ("name", "base_col", "ref_col"):
+            if not isinstance(pair.get(key), str) or not pair.get(key, "").strip():
+                raise ConfigValidationError(f"{pair_field}.{key} must be a non-empty string.")
+
+
+def _validate_feature_normalization_params(kind: str, params: dict[str, Any], *, field: str) -> None:
+    if kind == "returns":
+        _validate_optional_string(params.get("close_col"), field=f"{field}.close_col")
+        windows = params.get("windows", [1, 4, 8, 20, 48])
+        if not isinstance(windows, (list, tuple)) or not windows:
+            raise ConfigValidationError(f"{field}.windows must be a non-empty list of positive integers.")
+        for idx, window in enumerate(windows):
+            _positive_int(window, field=f"{field}.windows[{idx}]")
+        if "log_returns" in params:
+            _validate_bool(params["log_returns"], field=f"{field}.log_returns")
+    elif kind == "atr_distances":
+        _validate_optional_string(params.get("atr_col"), field=f"{field}.atr_col")
+        _validate_pairs(params.get("pairs", []), field=f"{field}.pairs")
+    elif kind == "volatility":
+        for key in ("close_col", "atr_col"):
+            _validate_optional_string(params.get(key), field=f"{field}.{key}")
+        for key in ("add_atr_pct", "add_atr_percentile"):
+            if key in params:
+                _validate_bool(params[key], field=f"{field}.{key}")
+        if "percentile_window" in params:
+            _positive_int(params["percentile_window"], field=f"{field}.percentile_window")
+            if int(params["percentile_window"]) <= 1:
+                raise ConfigValidationError(f"{field}.percentile_window must be > 1.")
+    elif kind == "rolling_zscores":
+        columns = params.get("columns")
+        if not isinstance(columns, list) or not columns:
+            raise ConfigValidationError(f"{field}.columns must be a non-empty list[str].")
+        for idx, column in enumerate(columns):
+            if not isinstance(column, str) or not column.strip():
+                raise ConfigValidationError(f"{field}.columns[{idx}] must be a non-empty string.")
+        _positive_int(params.get("window", 96), field=f"{field}.window")
+        if int(params.get("window", 96)) <= 1:
+            raise ConfigValidationError(f"{field}.window must be > 1.")
+        if params.get("min_periods") is not None:
+            _positive_int(params["min_periods"], field=f"{field}.min_periods")
+        if "shift_stats" in params:
+            _validate_bool(params["shift_stats"], field=f"{field}.shift_stats")
+
+
+def _validate_feature_helper_section(
+    section: Any,
+    *,
+    field: str,
+    allowed: set[str],
+    validator: Any,
+) -> None:
+    if section in (None, {}):
+        return
+    if not isinstance(section, dict):
+        raise ConfigValidationError(f"{field} must be a mapping when provided.")
+    unknown = sorted(set(section) - allowed)
+    if unknown:
+        allowed_display = ", ".join(sorted(allowed))
+        raise ConfigValidationError(f"{field} has unsupported helpers: {unknown}. Allowed: {allowed_display}.")
+    for helper_name, raw_block in section.items():
+        helper_field = f"{field}.{helper_name}"
+        for idx, params in enumerate(_helper_param_sets(raw_block, field=helper_field)):
+            validator(str(helper_name), params, field=f"{helper_field}.items[{idx}]")
+
+
+def _validate_feature_helper_sections_by_asset(
+    section_by_asset: Any,
+    *,
+    field: str,
+    allowed: set[str],
+    validator: Any,
+) -> None:
+    if section_by_asset in (None, {}):
+        return
+    if not isinstance(section_by_asset, dict):
+        raise ConfigValidationError(f"{field} must be a mapping when provided.")
+    for asset, section in section_by_asset.items():
+        if not isinstance(asset, str) or not asset.strip():
+            raise ConfigValidationError(f"{field} keys must be non-empty strings.")
+        _validate_feature_helper_section(
+            section,
+            field=f"{field}.{asset}",
+            allowed=allowed,
+            validator=validator,
+        )
+
+
+def _validate_feature_helper_blocks(step: dict[str, Any]) -> None:
+    _validate_feature_helper_section(
+        step.get("transforms"),
+        field="features[].transforms",
+        allowed=_FEATURE_TRANSFORM_HELPERS,
+        validator=_validate_feature_transform_params,
+    )
+    _validate_feature_helper_section(
+        step.get("normalizations"),
+        field="features[].normalizations",
+        allowed=_FEATURE_NORMALIZATION_HELPERS,
+        validator=_validate_feature_normalization_params,
+    )
+    _validate_feature_helper_sections_by_asset(
+        step.get("transforms_by_asset"),
+        field="features[].transforms_by_asset",
+        allowed=_FEATURE_TRANSFORM_HELPERS,
+        validator=_validate_feature_transform_params,
+    )
+    _validate_feature_helper_sections_by_asset(
+        step.get("normalizations_by_asset"),
+        field="features[].normalizations_by_asset",
+        allowed=_FEATURE_NORMALIZATION_HELPERS,
+        validator=_validate_feature_normalization_params,
+    )
+    for asset, asset_params in dict(step.get("params_by_asset", {}) or {}).items():
+        if not isinstance(asset_params, dict):
+            continue
+        _validate_feature_helper_section(
+            asset_params.get("transforms"),
+            field=f"features[].params_by_asset.{asset}.transforms",
+            allowed=_FEATURE_TRANSFORM_HELPERS,
+            validator=_validate_feature_transform_params,
+        )
+        _validate_feature_helper_section(
+            asset_params.get("normalizations"),
+            field=f"features[].params_by_asset.{asset}.normalizations",
+            allowed=_FEATURE_NORMALIZATION_HELPERS,
+            validator=_validate_feature_normalization_params,
+        )
+
+
+def _iter_feature_param_blocks(step: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    blocks: list[tuple[str, dict[str, Any]]] = []
+    params = step.get("params") or {}
+    if isinstance(params, dict):
+        blocks.append(("features[].params", params))
+    for asset, asset_params in dict(step.get("params_by_asset", {}) or {}).items():
+        if isinstance(asset_params, dict):
+            blocks.append((f"features[].params_by_asset.{asset}", asset_params))
+    return blocks
+
+
+def _reject_derived_feature_param(
+    params: dict[str, Any],
+    *,
+    field_prefix: str,
+    flag_key: str,
+    output_key: str,
+    helper: str,
+) -> None:
+    if flag_key in params:
+        if not isinstance(params[flag_key], bool):
+            raise ConfigValidationError(f"{field_prefix}.{flag_key} must be boolean.")
+        if params[flag_key] is True:
+            raise ConfigValidationError(f"{field_prefix}.{flag_key} is no longer supported; use {helper}.")
+    if params.get(output_key) is not None:
+        raise ConfigValidationError(f"{field_prefix}.{output_key} is no longer supported; use {helper}.")
+
+
 def validate_features_block(features: Any) -> None:
     if not isinstance(features, list):
         raise ConfigValidationError("features must be a list of steps.")
@@ -1152,6 +1368,7 @@ def validate_features_block(features: Any) -> None:
             if not isinstance(asset_params, dict):
                 raise ConfigValidationError("features[].params_by_asset values must be mappings.")
         _validate_string_mapping(step.get("outputs"), field="features[].outputs")
+        _validate_feature_helper_blocks(step)
         if step["step"] == "roc_long_only_conditions":
             _validate_roc_long_only_conditions_params(step.get("params") or {}, field_prefix="features[].params")
         if step["step"] == "ehlers_semiscalp_long":
@@ -1262,129 +1479,6 @@ def validate_features_block(features: Any) -> None:
                         raise ConfigValidationError(f"features[].params.{key} must be in [0, 100].")
             if float(params.get("long_cross_level", 25.0)) >= float(params.get("short_cross_level", 75.0)):
                 raise ConfigValidationError("features[].params.long_cross_level must be < short_cross_level.")
-        if step["step"] == "feature_transforms":
-            params = step.get("params") or {}
-            transforms = params.get("transforms")
-            if not isinstance(transforms, list) or not transforms:
-                raise ConfigValidationError(
-                    "features[].params.transforms must be a non-empty list for step='feature_transforms'."
-                )
-            for idx, transform in enumerate(transforms):
-                field_prefix = f"features[].params.transforms[{idx}]"
-                if not isinstance(transform, dict):
-                    raise ConfigValidationError(f"{field_prefix} must be a mapping.")
-                kind = transform.get("kind")
-                allowed_transform_kinds = {"rolling_clip", "ratio", "rolling_stat", "rolling_zscore", "tsfresh_rolling"}
-                if kind not in allowed_transform_kinds:
-                    raise ConfigValidationError(
-                        f"{field_prefix}.kind must be one of: rolling_clip, ratio, rolling_stat, rolling_zscore, tsfresh_rolling."
-                    )
-                output_col = transform.get("output_col")
-                if (
-                    kind not in {"tsfresh_rolling", "rolling_stat"}
-                    and (not isinstance(output_col, str) or not output_col.strip())
-                ):
-                    raise ConfigValidationError(f"{field_prefix}.output_col must be a non-empty string.")
-                if kind == "rolling_stat" and output_col is not None and (
-                    not isinstance(output_col, str) or not output_col.strip()
-                ):
-                    raise ConfigValidationError(f"{field_prefix}.output_col must be a non-empty string when provided.")
-                if kind == "tsfresh_rolling":
-                    _validate_column_ref_or_selector(
-                        transform,
-                        col_key="source_col",
-                        selector_key="source_selector",
-                        field=field_prefix,
-                    )
-                    _positive_int(transform.get("window", 48), field=f"{field_prefix}.window")
-                    _non_negative_int(transform.get("shift", 0), field=f"{field_prefix}.shift")
-                    output_prefix = transform.get("output_prefix")
-                    if output_prefix is not None and (not isinstance(output_prefix, str) or not output_prefix.strip()):
-                        raise ConfigValidationError(f"{field_prefix}.output_prefix must be a non-empty string.")
-                    calculators = transform.get("calculators")
-                    if calculators is not None:
-                        if not isinstance(calculators, list) or not calculators:
-                            raise ConfigValidationError(f"{field_prefix}.calculators must be a non-empty list[str].")
-                        for calculator_idx, calculator in enumerate(calculators):
-                            if not isinstance(calculator, str) or not calculator.strip():
-                                raise ConfigValidationError(
-                                    f"{field_prefix}.calculators[{calculator_idx}] must be a non-empty string."
-                                )
-                            if calculator not in _TSFRESH_ROLLING_CALCULATORS:
-                                allowed = ", ".join(sorted(_TSFRESH_ROLLING_CALCULATORS))
-                                raise ConfigValidationError(
-                                    f"{field_prefix}.calculators[{calculator_idx}] must be one of: {allowed}."
-                                )
-                elif kind == "rolling_stat":
-                    _validate_column_ref_or_selector(
-                        transform,
-                        col_key="source_col",
-                        selector_key="source_selector",
-                        field=field_prefix,
-                    )
-                    mode = transform.get("mode", "root_mean_square")
-                    if not isinstance(mode, str) or not mode.strip():
-                        raise ConfigValidationError(f"{field_prefix}.mode must be a non-empty string.")
-                    if mode not in _ROLLING_STAT_MODES:
-                        allowed = ", ".join(sorted(_ROLLING_STAT_MODES))
-                        raise ConfigValidationError(f"{field_prefix}.mode must be one of: {allowed}.")
-                    _positive_int(transform.get("window", 48), field=f"{field_prefix}.window")
-                    _non_negative_int(transform.get("shift", 0), field=f"{field_prefix}.shift")
-                    _non_negative_int(transform.get("ddof", 0), field=f"{field_prefix}.ddof")
-                    lower_q = _finite_number(transform.get("lower_q", 0.25), field=f"{field_prefix}.lower_q")
-                    upper_q = _finite_number(transform.get("upper_q", 0.75), field=f"{field_prefix}.upper_q")
-                    if not 0.0 <= lower_q <= 1.0:
-                        raise ConfigValidationError(f"{field_prefix}.lower_q must be in [0, 1].")
-                    if not 0.0 <= upper_q <= 1.0:
-                        raise ConfigValidationError(f"{field_prefix}.upper_q must be in [0, 1].")
-                    if not lower_q < upper_q:
-                        raise ConfigValidationError(
-                            f"{field_prefix}.lower_q must be strictly less than {field_prefix}.upper_q."
-                        )
-                elif kind == "rolling_clip":
-                    _validate_column_ref_or_selector(
-                        transform,
-                        col_key="source_col",
-                        selector_key="source_selector",
-                        field=field_prefix,
-                    )
-                    _positive_int(transform.get("window", 2520), field=f"{field_prefix}.window")
-                    lower_q = _finite_number(transform.get("lower_q", 0.01), field=f"{field_prefix}.lower_q")
-                    upper_q = _finite_number(transform.get("upper_q", 0.99), field=f"{field_prefix}.upper_q")
-                    if not 0.0 <= lower_q <= 1.0:
-                        raise ConfigValidationError(f"{field_prefix}.lower_q must be in [0, 1].")
-                    if not 0.0 <= upper_q <= 1.0:
-                        raise ConfigValidationError(f"{field_prefix}.upper_q must be in [0, 1].")
-                    if not lower_q < upper_q:
-                        raise ConfigValidationError(
-                            f"{field_prefix}.lower_q must be strictly less than {field_prefix}.upper_q."
-                        )
-                    _non_negative_int(transform.get("shift", 1), field=f"{field_prefix}.shift")
-                elif kind == "ratio":
-                    _validate_column_ref_or_selector(
-                        transform,
-                        col_key="numerator_col",
-                        selector_key="numerator_selector",
-                        field=field_prefix,
-                    )
-                    _validate_column_ref_or_selector(
-                        transform,
-                        col_key="denominator_col",
-                        selector_key="denominator_selector",
-                        field=field_prefix,
-                    )
-                    eps = _finite_number(transform.get("eps", 1e-8), field=f"{field_prefix}.eps")
-                    if eps < 0.0:
-                        raise ConfigValidationError(f"{field_prefix}.eps must be >= 0.")
-                elif kind == "rolling_zscore":
-                    _validate_column_ref_or_selector(
-                        transform,
-                        col_key="source_col",
-                        selector_key="source_selector",
-                        field=field_prefix,
-                    )
-                    _positive_int(transform.get("window", 2520), field=f"{field_prefix}.window")
-                    _non_negative_int(transform.get("shift", 1), field=f"{field_prefix}.shift")
         if step["step"] == "vol_normalized_momentum":
             params = step.get("params") or {}
             for key in ("returns_col", "vol_col"):
@@ -1529,6 +1623,15 @@ def validate_features_block(features: Any) -> None:
             for key in ("use_close_breakout", "allow_reversal_same_session", "use_extended_trade_until"):
                 if key in params and not isinstance(params[key], bool):
                     raise ConfigValidationError(f"features[].params.{key} must be boolean.")
+        if step["step"] == "trend":
+            for field_prefix, params in _iter_feature_param_blocks(step):
+                if "add_ratios" in params:
+                    if not isinstance(params["add_ratios"], bool):
+                        raise ConfigValidationError(f"{field_prefix}.add_ratios must be boolean.")
+                    if params["add_ratios"] is True:
+                        raise ConfigValidationError(
+                            f"{field_prefix}.add_ratios is no longer supported; use transforms.ratio."
+                        )
         if step["step"] in {"atr", "adx"}:
             params = step.get("params") or {}
             if "window" in params and params["window"] is not None:
@@ -1545,18 +1648,20 @@ def validate_features_block(features: Any) -> None:
                         not isinstance(params[key], str) or not params[key].strip()
                     ):
                         raise ConfigValidationError(f"features[].params.{key} must be a non-empty string.")
-                if windows is not None and len(windows) != 1 and (
-                    params.get("atr_col") is not None or params.get("over_price_col") is not None
-                ):
+                if windows is not None and len(windows) != 1 and params.get("atr_col") is not None:
                     raise ConfigValidationError(
                         "features[].params stable ATR output columns require exactly one window."
                     )
                 if "method" in params and params["method"] not in {"wilder", "simple"}:
                     raise ConfigValidationError("features[].params.method must be one of: wilder, simple.")
-                if "add_over_price" in params and not isinstance(params["add_over_price"], bool):
-                    raise ConfigValidationError("features[].params.add_over_price must be boolean.")
-                if params.get("over_price_col") is not None and params.get("add_over_price", True) is not True:
-                    raise ConfigValidationError("features[].params.over_price_col requires add_over_price=true.")
+                for field_prefix, block in _iter_feature_param_blocks(step):
+                    _reject_derived_feature_param(
+                        block,
+                        field_prefix=field_prefix,
+                        flag_key="add_over_price",
+                        output_key="over_price_col",
+                        helper="transforms.ratio",
+                    )
                 if params.get("atr_col") is not None and params.get("atr_col") == params.get("over_price_col"):
                     raise ConfigValidationError("features[].params ATR output columns must be unique.")
         if step["step"] == "vwap":
@@ -1577,16 +1682,18 @@ def validate_features_block(features: Any) -> None:
                     raise ConfigValidationError("features[].params.windows must be a non-empty list of integers.")
                 for idx, window in enumerate(windows):
                     _positive_int(window, field=f"features[].params.windows[{idx}]")
-            if "add_distance" in params and not isinstance(params["add_distance"], bool):
-                raise ConfigValidationError("features[].params.add_distance must be boolean.")
-            if windows is not None and len(windows) != 1 and (
-                params.get("vwap_col") is not None or params.get("distance_col") is not None
-            ):
+            if windows is not None and len(windows) != 1 and params.get("vwap_col") is not None:
                 raise ConfigValidationError(
                     "features[].params stable VWAP output columns require exactly one window."
                 )
-            if params.get("distance_col") is not None and params.get("add_distance", True) is not True:
-                raise ConfigValidationError("features[].params.distance_col requires add_distance=true.")
+            for field_prefix, block in _iter_feature_param_blocks(step):
+                _reject_derived_feature_param(
+                    block,
+                    field_prefix=field_prefix,
+                    flag_key="add_distance",
+                    output_key="distance_col",
+                    helper="transforms.ratio",
+                )
             if params.get("vwap_col") is not None and params.get("vwap_col") == params.get("distance_col"):
                 raise ConfigValidationError("features[].params VWAP output columns must be unique.")
         if step["step"] == "ppo":
@@ -2103,8 +2210,8 @@ def validate_model_block(model: dict[str, Any]) -> None:
             if not isinstance(preprocessing, dict):
                 raise ConfigValidationError("model.preprocessing must be a mapping when provided.")
             scaler = str(preprocessing.get("scaler", "none"))
-            if scaler not in {"none", "standard"}:
-                raise ConfigValidationError("model.preprocessing.scaler must be 'none' or 'standard'.")
+            if scaler not in {"none", "standard", "robust"}:
+                raise ConfigValidationError("model.preprocessing.scaler must be one of: none, standard, robust.")
 
         overlay = model.get("overlay", {}) or {}
         if overlay:

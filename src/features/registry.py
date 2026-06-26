@@ -65,7 +65,6 @@ from .technical.trend import add_trend_features
 from .technical.vol_normalized_momentum import add_vol_normalized_momentum_features
 from .technical.volume_features import add_volume_features
 from .technical.vwap import add_vwap_features
-from .transforms import add_feature_transforms
 from .trend_regime import add_trend_regime
 from .trend_slope_volatility import add_trend_slope_volatility
 from .volatility import add_volatility_features
@@ -105,7 +104,6 @@ _FEATURE_COMPONENTS: tuple[tuple[str, FeatureFn], ...] = (
     ("support_resistance", add_support_resistance_features),
     ("support_resistance_v2", add_support_resistance_v2_features),
     ("macro_context", add_macro_context_features),
-    ("feature_transforms", add_feature_transforms),
     ("multi_timeframe", add_multi_timeframe_features),
     ("opening_range_breakout", add_opening_range_breakout_features),
     ("swing_extrema_context", swing_extrema_context),

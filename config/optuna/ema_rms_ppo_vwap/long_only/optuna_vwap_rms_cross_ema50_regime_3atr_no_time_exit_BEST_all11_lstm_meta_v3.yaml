@@ -123,3 +123,4 @@ search_space:
   - {name: lstm_batch_size, path: model.params.batch_size, kind: categorical, choices: [64, 128, 256, 512]}
   - {name: lstm_learning_rate, path: model.params.learning_rate, kind: float, low: 0.00005, high: 0.005, log: true}
   - {name: lstm_weight_decay, path: model.params.weight_decay, kind: float, low: 0.000001, high: 0.01, log: true}
+

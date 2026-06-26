@@ -34,7 +34,7 @@ The config uses these registered feature steps:
 - `mfi`
 - `stochastic_rsi`
 - `zscore_momentum`
-- `feature_transforms` for causal EMA/VWAP RMS columns
+- nested `transforms.rms` helpers for causal EMA/VWAP RMS columns
 - `vwap_rms_ema_cross_long` for backward-compatible long/short RMS crossover triggers
 
 ## Signal

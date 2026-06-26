@@ -24,77 +24,99 @@ data:
     load_path: data/raw/dukascopy_30m_clean/xauusd_30m.csv
     raw_dir: data/raw
     processed_dir: data/raw
-
 features:
-  - step: returns
-    outputs:
-      close_ret: close_ret
-    params:
-      log: false
-      col_name: close_ret
-  - step: trend
-    outputs:
-      close_ema_50: ema_50
-      close_ema_150: ema_150
-    params:
-      price_col: close
-      sma_windows: []
-      ema_spans: [50, 150]
-  - step: ppo
-    outputs:
-      ppo_12_26: ppo
-      ppo_signal_9: ppo_signal
-      ppo_hist_12_26_9: ppo_hist
-    params:
-      price_col: close
-      fast: 12
-      slow: 26
-      signal: 9
-  - step: adx
-    outputs:
-      plus_di_14: plus_di
-      minus_di_14: minus_di
-      adx_14: adx
-    params:
-      high_col: high
-      low_col: low
-      close_col: close
-      window: 14
-      windows: [14]
-  - step: atr
-    outputs:
-      atr_14: atr
-      atr_over_price_14: atr_over_price
-    params:
-      high_col: high
-      low_col: low
-      close_col: close
-      window: 14
-      windows: [14]
-      method: wilder
-      add_over_price: true
-  - step: stochastic_rsi
-    outputs:
-      stoch_rsi_k: stochrsi_k
-      stoch_rsi_d: stochrsi_d
-      stoch_rsi_k_minus_d: stochrsi_k_minus_d
-      stoch_rsi_cross_up: stochrsi_cross_up
-      stoch_rsi_cross_down: stochrsi_cross_down
-      stoch_rsi_oversold: stochrsi_oversold
-      stoch_rsi_overbought: stochrsi_overbought
-      stoch_rsi_slope: stochrsi_slope
-      stoch_rsi_recover_from_oversold: stochrsi_recover_from_oversold
-      stoch_rsi_fall_from_overbought: stochrsi_fall_from_overbought
-    params:
-      price_col: close
-      rsi_period: 14
-      stoch_period: 5
-      k_period: 3
-      d_period: 3
-      oversold: 0.20
-      overbought: 0.80
-      prefix: stoch_rsi
-
+- step: returns
+  outputs:
+    close_ret: close_ret
+  params:
+    log: false
+    col_name: close_ret
+- step: trend
+  outputs:
+    close_ema_50: ema_50
+    close_ema_150: ema_150
+  params:
+    price_col: close
+    sma_windows: []
+    ema_spans:
+    - 50
+    - 150
+    add_ratios: false
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: close
+        denominator_col: close_ema_50
+        output_col: close_over_ema_50
+        subtract: 1.0
+      - numerator_col: close
+        denominator_col: close_ema_150
+        output_col: close_over_ema_150
+        subtract: 1.0
+- step: ppo
+  outputs:
+    ppo_12_26: ppo
+    ppo_signal_9: ppo_signal
+    ppo_hist_12_26_9: ppo_hist
+  params:
+    price_col: close
+    fast: 12
+    slow: 26
+    signal: 9
+- step: adx
+  outputs:
+    plus_di_14: plus_di
+    minus_di_14: minus_di
+    adx_14: adx
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    window: 14
+    windows:
+    - 14
+- step: atr
+  outputs:
+    atr_14: atr
+    atr_over_price_14: atr_over_price
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    window: 14
+    windows:
+    - 14
+    method: wilder
+    add_over_price: false
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: atr_14
+        denominator_col: close
+        output_col: atr_over_price_14
+- step: stochastic_rsi
+  outputs:
+    stoch_rsi_k: stochrsi_k
+    stoch_rsi_d: stochrsi_d
+    stoch_rsi_k_minus_d: stochrsi_k_minus_d
+    stoch_rsi_cross_up: stochrsi_cross_up
+    stoch_rsi_cross_down: stochrsi_cross_down
+    stoch_rsi_oversold: stochrsi_oversold
+    stoch_rsi_overbought: stochrsi_overbought
+    stoch_rsi_slope: stochrsi_slope
+    stoch_rsi_recover_from_oversold: stochrsi_recover_from_oversold
+    stoch_rsi_fall_from_overbought: stochrsi_fall_from_overbought
+  params:
+    price_col: close
+    rsi_period: 14
+    stoch_period: 5
+    k_period: 3
+    d_period: 3
+    oversold: 0.2
+    overbought: 0.8
+    prefix: stoch_rsi
 model:
   kind: none
   split:
@@ -106,7 +128,6 @@ model:
     max_folds: 5
     purge_bars: 96
     embargo_bars: 96
-
 signals:
   kind: ppo_adx_stochrsi_trend
   params:
@@ -127,8 +148,8 @@ signals:
     require_adx: true
     adx_threshold: 20.0
     ppo_slope_threshold: 0.0
-    stoch_oversold: 0.20
-    stoch_overbought: 0.80
+    stoch_oversold: 0.2
+    stoch_overbought: 0.8
     stoch_entry_mode: reset_or_cross
     atr_stop_mult: 2.0
     atr_take_profit_mult: 2.3
@@ -140,7 +161,6 @@ signals:
     entry_short_col: entry_short
     exit_long_col: exit_long
     exit_short_col: exit_short
-
 target:
   kind: triple_barrier
   label_col: tb_label
@@ -164,47 +184,47 @@ target:
   upper_mult: 2.5
   lower_mult: 1.5
   vol_window: 96
-  min_vol: 0.00005
+  min_vol: 5.0e-05
   neutral_label: lower
   tie_break: closest_to_open
   add_r_multiple: true
-  r_clip: [-5, 5]
+  r_clip:
+  - -5
+  - 5
   diagnostic_feature_cols:
-    - ema_50
-    - ema_150
-    - ppo
-    - ppo_signal
-    - ppo_hist
-    - ppo_slope
-    - adx
-    - plus_di
-    - minus_di
-    - directional_spread
-    - atr
-    - atr_over_price
-    - stochrsi_k
-    - stochrsi_d
-    - stochrsi_k_minus_d
-    - ema_trend_state
-    - long_setup
-    - short_setup
-    - entry_long
-    - entry_short
-    - exit_long
-    - exit_short
-    - signal
-    - position
-
+  - ema_50
+  - ema_150
+  - ppo
+  - ppo_signal
+  - ppo_hist
+  - ppo_slope
+  - adx
+  - plus_di
+  - minus_di
+  - directional_spread
+  - atr
+  - atr_over_price
+  - stochrsi_k
+  - stochrsi_d
+  - stochrsi_k_minus_d
+  - ema_trend_state
+  - long_setup
+  - short_setup
+  - entry_long
+  - entry_short
+  - exit_long
+  - exit_short
+  - signal
+  - position
 runtime:
   seed: 7
   repro_mode: strict
   deterministic: true
   threads: 1
   seed_torch: false
-
 risk:
-  cost_per_turnover: 0.00004
-  slippage_per_turnover: 0.00001
+  cost_per_turnover: 4.0e-05
+  slippage_per_turnover: 1.0e-05
   target_vol: null
   max_leverage: 1.0
   sizing: {}
@@ -216,7 +236,6 @@ risk:
   portfolio_guard: {}
   drawdown_sizing: {}
   vol_col: null
-
 backtest:
   engine: manual_barrier
   signal_col: signal
@@ -260,7 +279,6 @@ backtest:
       bars: 12
       min_favorable_r: 0.25
       exit_price: close
-
 portfolio:
   enabled: false
   construction: signal_weights
@@ -278,25 +296,22 @@ portfolio:
     target_net_exposure: 0.0
     enforce_target_net_exposure: false
   asset_groups: {}
-
 evaluation:
   probability_thresholds: []
   primary_metric: sharpe
   secondary_metrics:
-    - sharpe
-    - calmar
-    - max_drawdown
-    - profit_factor
-    - hit_rate
-    - win_rate
-    - expectancy
-    - trade_count
-
+  - sharpe
+  - calmar
+  - max_drawdown
+  - profit_factor
+  - hit_rate
+  - win_rate
+  - expectancy
+  - trade_count
 monitoring:
   enabled: true
   psi_threshold: 0.15
   n_bins: 10
-
 execution:
   enabled: false
   mode: paper
@@ -305,7 +320,6 @@ execution:
   min_trade_notional: 0.0
   current_weights: {}
   current_prices: {}
-
 logging:
   enabled: true
   run_name: eurusd_m15_ppo_adx_stochrsi_trend

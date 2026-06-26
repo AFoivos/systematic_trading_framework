@@ -126,3 +126,4 @@ search_space:
   - {name: xgb_reg_lambda, path: model.params.reg_lambda, kind: float, low: 0.0001, high: 100.0, log: true}
   - {name: xgb_reg_alpha, path: model.params.reg_alpha, kind: float, low: 0.0001, high: 10.0, log: true}
   - {name: xgb_scale_pos_weight, path: model.params.scale_pos_weight, kind: categorical, choices: [0.75, 1.0, 1.5, 2.0, 3.0, 5.0]}
+

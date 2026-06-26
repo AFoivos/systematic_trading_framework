@@ -53,3 +53,4 @@ search_space:
   - {name: lgbm_reg_lambda, path: model.params.reg_lambda, kind: float, low: 0.001, high: 100.0, log: true}
   - {name: lgbm_reg_alpha, path: model.params.reg_alpha, kind: float, low: 0.001, high: 10.0, log: true}
   - {name: class_weight, path: model.params.class_weight, kind: categorical, choices: [null, balanced]}
+

@@ -1,6 +1,6 @@
 # Αρχιτεκτονική Systematic Trading Framework
 
-Τελευταία ενημέρωση: 2026-06-25
+Τελευταία ενημέρωση: 2026-06-26
 
 ## Στόχος
 
@@ -65,9 +65,20 @@ builders. Παραδείγματα:
 - `atr`
 - `adx`
 - `vwap`
-- `feature_transforms`
 - `hmm_regime`
 - `roofing_filter`
+
+Οι μετατροπές δεν είναι canonical feature steps. Δηλώνονται μέσα στο feature step
+που παράγει το raw column:
+
+- `transforms` για γενικά helpers όπως `ratio`, `rms`, `slope`, `rolling_clip`,
+  `rolling_zscore`
+- `normalizations` για trading normalizations όπως `returns`, `atr_distances`,
+  `volatility`, `rolling_zscores`
+- `transforms_by_asset` και `normalizations_by_asset` όταν ένα multi-asset config
+  χρειάζεται διαφορετικά helper columns ανά asset
+
+Τα raw feature modules δεν πρέπει να παράγουν derived helper columns by default.
 
 Τα παλιά feature-stage signal steps κρατήθηκαν χωριστά στο
 `FEATURE_COMPATIBILITY_REGISTRY`:

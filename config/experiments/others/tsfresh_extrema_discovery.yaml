@@ -2,144 +2,184 @@ data:
   source: dukascopy_csv
   symbol: SPX500
   interval: 30m
-  start: "2024-06-03"
-  end: "2024-08-30"
+  start: '2024-06-03'
+  end: '2024-08-30'
   alignment: inner
   storage:
     mode: cached_only
     load_path: data/raw/dukascopy_30m_clean/spx500_30m.csv
-
 features:
-  - step: returns
-    params:
-      log: true
-      col_name: close_logret
-  - step: volatility
-    params:
-      returns_col: close_logret
-      rolling_windows: [12, 24]
-      ewma_spans: [12]
-      annualization_factor: 12096
-  - step: atr
-    params:
-      window: 14
-      method: wilder
-      add_over_price: true
-  - step: rsi
-    params:
-      price_col: close
-      windows: [14]
-      method: wilder
-  - step: trend
-    outputs:
-      close_ema_20: ema_20
-      close_ema_50: ema_50
-      close_ema_100: ema_100
-    params:
-      price_col: close
-      sma_windows: []
-      ema_spans: [20, 50, 100]
-  - step: adx
-    outputs:
-      plus_di_14: plus_di_14
-      minus_di_14: minus_di_14
-      adx_14: adx_14
-    params:
-      high_col: high
-      low_col: low
-      close_col: close
-      window: 14
-      windows: [14]
-  - step: stochastic_rsi
-    outputs:
-      stoch_rsi_k: stoch_rsi_k
-      stoch_rsi_d: stoch_rsi_d
-      stoch_rsi_k_minus_d: stoch_rsi_k_minus_d
-      stoch_rsi_cross_up: stoch_rsi_cross_up
-      stoch_rsi_cross_down: stoch_rsi_cross_down
-      stoch_rsi_oversold: stoch_rsi_oversold
-      stoch_rsi_overbought: stoch_rsi_overbought
-      stoch_rsi_slope: stoch_rsi_slope
-      stoch_rsi_recover_from_oversold: stoch_rsi_recover_from_oversold
-      stoch_rsi_fall_from_overbought: stoch_rsi_fall_from_overbought
-    params:
-      price_col: close
-      rsi_period: 14
-      stoch_period: 14
-      k_period: 3
-      d_period: 3
-      oversold: 0.20
-      overbought: 0.80
-      prefix: stoch_rsi
-  - step: regime_context
-    outputs:
-      regime_vol_ratio_24_168: regime_vol_ratio_24_168
-      regime_high_vol_state_24_168: regime_high_vol_state_24_168
-      regime_low_vol_state_24_168: regime_low_vol_state_24_168
-      regime_vol_ratio_z_24_168: regime_vol_ratio_z_24_168
-      regime_absret_z_24_168: regime_absret_z_24_168
-      regime_trend_ratio_24_72: regime_trend_ratio_24_72
-      regime_trend_state_24_72: regime_trend_state_24_72
-    params:
-      price_col: close
-      returns_col: close_ret
-      vol_short_window: 24
-      vol_long_window: 168
-      vol_window_pairs:
-        - [24, 168]
-      trend_fast_span: 24
-      trend_slow_span: 72
-      vol_ratio_high_threshold: 1.20
-      vol_ratio_low_threshold: 0.85
-  - step: ppo
-    outputs:
-      ppo_12_26: ppo
-      ppo_signal_9: ppo_signal
-      ppo_hist_12_26_9: ppo_hist
-    params:
-      price_col: close
-      fast: 12
-      slow: 26
-      signal: 9
-  - step: vwap
-    outputs:
-      vwap_20: vwap_20
-      close_over_vwap_20: close_over_vwap_20
-    params:
-      high_col: high
-      low_col: low
-      close_col: close
-      volume_col: volume
-      windows: [20]
-      add_distance: true
-
+- step: returns
+  params:
+    log: true
+    col_name: close_logret
+- step: volatility
+  params:
+    returns_col: close_logret
+    rolling_windows:
+    - 12
+    - 24
+    ewma_spans:
+    - 12
+    annualization_factor: 12096
+- step: atr
+  params:
+    window: 14
+    method: wilder
+    add_over_price: false
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: atr_14
+        denominator_col: close
+        output_col: atr_over_price_14
+- step: rsi
+  params:
+    price_col: close
+    windows:
+    - 14
+    method: wilder
+- step: trend
+  outputs:
+    close_ema_20: ema_20
+    close_ema_50: ema_50
+    close_ema_100: ema_100
+  params:
+    price_col: close
+    sma_windows: []
+    ema_spans:
+    - 20
+    - 50
+    - 100
+    add_ratios: false
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: close
+        denominator_col: close_ema_20
+        output_col: close_over_ema_20
+        subtract: 1.0
+      - numerator_col: close
+        denominator_col: close_ema_50
+        output_col: close_over_ema_50
+        subtract: 1.0
+      - numerator_col: close
+        denominator_col: close_ema_100
+        output_col: close_over_ema_100
+        subtract: 1.0
+- step: adx
+  outputs:
+    plus_di_14: plus_di_14
+    minus_di_14: minus_di_14
+    adx_14: adx_14
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    window: 14
+    windows:
+    - 14
+- step: stochastic_rsi
+  outputs:
+    stoch_rsi_k: stoch_rsi_k
+    stoch_rsi_d: stoch_rsi_d
+    stoch_rsi_k_minus_d: stoch_rsi_k_minus_d
+    stoch_rsi_cross_up: stoch_rsi_cross_up
+    stoch_rsi_cross_down: stoch_rsi_cross_down
+    stoch_rsi_oversold: stoch_rsi_oversold
+    stoch_rsi_overbought: stoch_rsi_overbought
+    stoch_rsi_slope: stoch_rsi_slope
+    stoch_rsi_recover_from_oversold: stoch_rsi_recover_from_oversold
+    stoch_rsi_fall_from_overbought: stoch_rsi_fall_from_overbought
+  params:
+    price_col: close
+    rsi_period: 14
+    stoch_period: 14
+    k_period: 3
+    d_period: 3
+    oversold: 0.2
+    overbought: 0.8
+    prefix: stoch_rsi
+- step: regime_context
+  outputs:
+    regime_vol_ratio_24_168: regime_vol_ratio_24_168
+    regime_high_vol_state_24_168: regime_high_vol_state_24_168
+    regime_low_vol_state_24_168: regime_low_vol_state_24_168
+    regime_vol_ratio_z_24_168: regime_vol_ratio_z_24_168
+    regime_absret_z_24_168: regime_absret_z_24_168
+    regime_trend_ratio_24_72: regime_trend_ratio_24_72
+    regime_trend_state_24_72: regime_trend_state_24_72
+  params:
+    price_col: close
+    returns_col: close_ret
+    vol_short_window: 24
+    vol_long_window: 168
+    vol_window_pairs:
+    - - 24
+      - 168
+    trend_fast_span: 24
+    trend_slow_span: 72
+    vol_ratio_high_threshold: 1.2
+    vol_ratio_low_threshold: 0.85
+- step: ppo
+  outputs:
+    ppo_12_26: ppo
+    ppo_signal_9: ppo_signal
+    ppo_hist_12_26_9: ppo_hist
+  params:
+    price_col: close
+    fast: 12
+    slow: 26
+    signal: 9
+- step: vwap
+  outputs:
+    vwap_20: vwap_20
+    close_over_vwap_20: close_over_vwap_20
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    volume_col: volume
+    windows:
+    - 20
+    add_distance: false
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: close
+        denominator_col: vwap_20
+        output_col: close_over_vwap_20
+        subtract: 1.0
 model:
   kind: tsfresh_extrema_feature_discovery
   feature_cols:
-    - ppo
-    - vwap_20
-    - close_over_vwap_20
-    - ppo_signal
-    - ppo_hist
-    - close_logret
-    - vol_rolling_12
-    - vol_rolling_24
-    - vol_ewma_12
-    - atr_14
-    - atr_over_price_14
-    - close_rsi_14
-    - spread_close
-    - spread_bps
-    - ema_20
-    - ema_50
-    - ema_100
-    - plus_di_14
-    - minus_di_14
-    - adx_14
-    - stoch_rsi_k
-    - stoch_rsi_d
-    - stoch_rsi_recover_from_oversold
-    - stoch_rsi_fall_from_overbought
+  - ppo
+  - vwap_20
+  - close_over_vwap_20
+  - ppo_signal
+  - ppo_hist
+  - close_logret
+  - vol_rolling_12
+  - vol_rolling_24
+  - vol_ewma_12
+  - atr_14
+  - atr_over_price_14
+  - close_rsi_14
+  - spread_close
+  - spread_bps
+  - ema_20
+  - ema_50
+  - ema_100
+  - plus_di_14
+  - minus_di_14
+  - adx_14
+  - stoch_rsi_k
+  - stoch_rsi_d
+  - stoch_rsi_recover_from_oversold
+  - stoch_rsi_fall_from_overbought
   params:
     high_col: high
     low_col: low
@@ -174,12 +214,10 @@ model:
     step_size: 120
     expanding: true
     max_folds: 4
-
 signals:
   kind: none
   params:
     signal_col: eda_flat_signal
-
 risk:
   cost_per_turnover: 0.0
   slippage_per_turnover: 0.0
@@ -189,7 +227,6 @@ risk:
     enabled: false
     max_drawdown: 0.2
     cooloff_bars: 0
-
 backtest:
   returns_col: close_logret
   signal_col: eda_flat_signal
@@ -200,24 +237,19 @@ backtest:
   missing_return_policy: raise_if_exposed
   min_holding_bars: 0
   subset: full
-
 portfolio:
   enabled: false
-
 monitoring:
   enabled: true
   psi_threshold: 0.2
   n_bins: 10
-
 diagnostics:
   enabled: false
-
 execution:
   enabled: false
   mode: paper
   capital: 100000.0
   price_col: close
-
 logging:
   enabled: true
   run_name: tsfresh_extrema_discovery

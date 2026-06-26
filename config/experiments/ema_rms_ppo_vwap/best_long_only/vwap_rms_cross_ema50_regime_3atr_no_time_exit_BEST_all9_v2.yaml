@@ -56,8 +56,17 @@ features:
     ema_spans:
     - 20
     ema_col_template: ema_20
+    add_ratios: false
   outputs: {}
   enabled: true
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: close
+        denominator_col: ema_20
+        output_col: close_over_ema_20
+        subtract: 1.0
 - step: trend
   params:
     price_col: close
@@ -65,6 +74,7 @@ features:
     ema_spans:
     - 24
     ema_col_template: ema_50
+    add_ratios: false
   params_by_asset:
     XAUUSD:
       ema_spans:
@@ -112,6 +122,79 @@ features:
       ema_col_template: ema_32
   outputs: {}
   enabled: true
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: close
+        denominator_col: ema_50
+        output_col: close_over_ema_24
+        subtract: 1.0
+  transforms_by_asset:
+    XAUUSD:
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: close
+          denominator_col: ema_50
+          output_col: close_over_ema_50
+          subtract: 1.0
+    US100:
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: close
+          denominator_col: ema_50
+          output_col: close_over_ema_50
+          subtract: 1.0
+    GER40:
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: close
+          denominator_col: ema_60
+          output_col: close_over_ema_60
+          subtract: 1.0
+    US30:
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: close
+          denominator_col: ema_72
+          output_col: close_over_ema_72
+          subtract: 1.0
+    BRENT:
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: close
+          denominator_col: ema_60
+          output_col: close_over_ema_60
+          subtract: 1.0
+    ETHUSD:
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: close
+          denominator_col: ema_50
+          output_col: close_over_ema_50
+          subtract: 1.0
+    NIKKEI225:
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: close
+          denominator_col: ema_32
+          output_col: close_over_ema_32
+          subtract: 1.0
+    USOIL:
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: close
+          denominator_col: ema_32
+          output_col: close_over_ema_32
+          subtract: 1.0
 - step: trend
   params:
     price_col: close
@@ -119,6 +202,7 @@ features:
     ema_spans:
     - 168
     ema_col_template: ema_100
+    add_ratios: false
   params_by_asset:
     XAUUSD:
       ema_spans:
@@ -166,6 +250,79 @@ features:
       ema_col_template: ema_96
   outputs: {}
   enabled: true
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: close
+        denominator_col: ema_100
+        output_col: close_over_ema_168
+        subtract: 1.0
+  transforms_by_asset:
+    XAUUSD:
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: close
+          denominator_col: ema_100
+          output_col: close_over_ema_100
+          subtract: 1.0
+    US100:
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: close
+          denominator_col: ema_96
+          output_col: close_over_ema_96
+          subtract: 1.0
+    GER40:
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: close
+          denominator_col: ema_200
+          output_col: close_over_ema_200
+          subtract: 1.0
+    US30:
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: close
+          denominator_col: ema_200
+          output_col: close_over_ema_200
+          subtract: 1.0
+    BRENT:
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: close
+          denominator_col: ema_96
+          output_col: close_over_ema_96
+          subtract: 1.0
+    ETHUSD:
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: close
+          denominator_col: ema_100
+          output_col: close_over_ema_100
+          subtract: 1.0
+    NIKKEI225:
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: close
+          denominator_col: ema_100
+          output_col: close_over_ema_100
+          subtract: 1.0
+    USOIL:
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: close
+          denominator_col: ema_96
+          output_col: close_over_ema_96
+          subtract: 1.0
 - step: vwap
   params:
     high_col: high
@@ -175,40 +332,33 @@ features:
     window: 32
     windows:
     - 32
-    add_distance: true
     vwap_col: vwap_20
-    distance_col: close_over_vwap_20
   params_by_asset:
     XAUUSD:
       window: 20
       windows:
       - 20
       vwap_col: vwap_20
-      distance_col: close_over_vwap_20
     SPX500:
       window: 32
       windows:
       - 32
       vwap_col: vwap_20
-      distance_col: close_over_vwap_20
     US100:
       window: 40
       windows:
       - 40
       vwap_col: vwap_40
-      distance_col: close_over_vwap_40
     GER40:
       window: 32
       windows:
       - 32
       vwap_col: vwap_32
-      distance_col: close_over_vwap_32
     US30:
       window: 40
       windows:
       - 40
       vwap_col: vwap_40
-      distance_col: close_over_vwap_40
     BRENT:
       high_col: high
       low_col: low
@@ -217,9 +367,7 @@ features:
       window: 8
       windows:
       - 8
-      add_distance: true
       vwap_col: vwap_8
-      distance_col: close_over_vwap_8
     ETHUSD:
       high_col: high
       low_col: low
@@ -228,9 +376,7 @@ features:
       window: 20
       windows:
       - 20
-      add_distance: true
       vwap_col: vwap_20
-      distance_col: close_over_vwap_20
     NIKKEI225:
       high_col: high
       low_col: low
@@ -239,9 +385,7 @@ features:
       window: 24
       windows:
       - 24
-      add_distance: true
       vwap_col: vwap_24
-      distance_col: close_over_vwap_24
     USOIL:
       high_col: high
       low_col: low
@@ -250,11 +394,90 @@ features:
       window: 16
       windows:
       - 16
-      add_distance: true
       vwap_col: vwap_16
-      distance_col: close_over_vwap_16
   outputs: {}
   enabled: true
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: close
+        denominator_col: vwap_20
+        output_col: close_over_vwap_20
+        subtract: 1.0
+  transforms_by_asset:
+    XAUUSD:
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: close
+          denominator_col: vwap_20
+          output_col: close_over_vwap_20
+          subtract: 1.0
+    SPX500:
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: close
+          denominator_col: vwap_20
+          output_col: close_over_vwap_20
+          subtract: 1.0
+    US100:
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: close
+          denominator_col: vwap_40
+          output_col: close_over_vwap_40
+          subtract: 1.0
+    GER40:
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: close
+          denominator_col: vwap_32
+          output_col: close_over_vwap_32
+          subtract: 1.0
+    US30:
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: close
+          denominator_col: vwap_40
+          output_col: close_over_vwap_40
+          subtract: 1.0
+    BRENT:
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: close
+          denominator_col: vwap_8
+          output_col: close_over_vwap_8
+          subtract: 1.0
+    ETHUSD:
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: close
+          denominator_col: vwap_20
+          output_col: close_over_vwap_20
+          subtract: 1.0
+    NIKKEI225:
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: close
+          denominator_col: vwap_24
+          output_col: close_over_vwap_24
+          subtract: 1.0
+    USOIL:
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: close
+          denominator_col: vwap_16
+          output_col: close_over_vwap_16
+          subtract: 1.0
 - step: ppo
   params:
     price_col: close
@@ -343,9 +566,7 @@ features:
     windows:
     - 28
     method: wilder
-    add_over_price: true
     atr_col: atr_14
-    over_price_col: atr_over_price_14
   params_by_asset:
     XAUUSD:
       window: 36
@@ -353,35 +574,30 @@ features:
       - 36
       method: simple
       atr_col: atr_36
-      over_price_col: atr_over_price_36
     SPX500:
       window: 28
       windows:
       - 28
       method: wilder
       atr_col: atr_14
-      over_price_col: atr_over_price_14
     US100:
       window: 20
       windows:
       - 20
       method: simple
       atr_col: atr_20
-      over_price_col: atr_over_price_20
     GER40:
       window: 10
       windows:
       - 10
       method: simple
       atr_col: atr_10
-      over_price_col: atr_over_price_10
     US30:
       window: 20
       windows:
       - 20
       method: wilder
       atr_col: atr_20
-      over_price_col: atr_over_price_20
     BRENT:
       high_col: high
       low_col: low
@@ -390,9 +606,7 @@ features:
       windows:
       - 48
       method: wilder
-      add_over_price: true
       atr_col: atr_48
-      over_price_col: atr_over_price_48
     ETHUSD:
       high_col: high
       low_col: low
@@ -401,9 +615,7 @@ features:
       windows:
       - 10
       method: simple
-      add_over_price: true
       atr_col: atr_10
-      over_price_col: atr_over_price_10
     NIKKEI225:
       high_col: high
       low_col: low
@@ -412,9 +624,7 @@ features:
       windows:
       - 10
       method: simple
-      add_over_price: true
       atr_col: atr_10
-      over_price_col: atr_over_price_10
     USOIL:
       high_col: high
       low_col: low
@@ -423,239 +633,164 @@ features:
       windows:
       - 7
       method: wilder
-      add_over_price: true
       atr_col: atr_7
-      over_price_col: atr_over_price_7
   outputs: {}
   enabled: true
-- step: feature_transforms
-  params:
-    transforms:
-    - kind: tsfresh_rolling
-      source_col: ema_50
-      calculators:
-      - root_mean_square
-      window: 192
-      shift: 0
-    - kind: tsfresh_rolling
-      source_col: vwap_20
-      calculators:
-      - root_mean_square
-      window: 12
-      shift: 0
-    - kind: tsfresh_rolling
-      source_col: ema_100
-      calculators:
-      - root_mean_square
-      window: 192
-      shift: 0
-  params_by_asset:
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: atr_14
+        denominator_col: close
+        output_col: atr_over_price_14
+    rms:
+      enabled: true
+      items:
+      - source_col: ema_50
+        window: 192
+        shift: 0
+      - source_col: vwap_20
+        window: 12
+        shift: 0
+      - source_col: ema_100
+        window: 192
+        shift: 0
+  transforms_by_asset:
     XAUUSD:
-      transforms:
-      - kind: tsfresh_rolling
-        source_col: ema_50
-        output_prefix: ema_50
-        calculators:
-        - root_mean_square
-        window: 48
-        shift: 0
-      - kind: tsfresh_rolling
-        source_col: vwap_20
-        output_prefix: vwap_20
-        calculators:
-        - root_mean_square
-        window: 36
-        shift: 0
-      - kind: tsfresh_rolling
-        source_col: ema_100
-        output_prefix: ema_100
-        calculators:
-        - root_mean_square
-        window: 18
-        shift: 0
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: atr_36
+          denominator_col: close
+          output_col: atr_over_price_36
     SPX500:
-      transforms:
-      - kind: tsfresh_rolling
-        source_col: ema_50
-        calculators:
-        - root_mean_square
-        window: 192
-        shift: 0
-      - kind: tsfresh_rolling
-        source_col: vwap_20
-        calculators:
-        - root_mean_square
-        window: 12
-        shift: 0
-      - kind: tsfresh_rolling
-        source_col: ema_100
-        calculators:
-        - root_mean_square
-        window: 192
-        shift: 0
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: atr_14
+          denominator_col: close
+          output_col: atr_over_price_14
     US100:
-      transforms:
-      - kind: tsfresh_rolling
-        source_col: ema_50
-        output_prefix: ema_50
-        calculators:
-        - root_mean_square
-        window: 72
-        shift: 0
-      - kind: tsfresh_rolling
-        source_col: vwap_40
-        output_prefix: vwap_40
-        calculators:
-        - root_mean_square
-        window: 18
-        shift: 0
-      - kind: tsfresh_rolling
-        source_col: ema_96
-        output_prefix: ema_96
-        calculators:
-        - root_mean_square
-        window: 12
-        shift: 0
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: atr_20
+          denominator_col: close
+          output_col: atr_over_price_20
+      rms:
+        enabled: true
+        items:
+        - source_col: vwap_40
+          window: 12
+          shift: 0
+        - source_col: ema_96
+          window: 192
+          shift: 0
+        - source_col: ema_50
+          window: 192
+          shift: 0
     GER40:
-      transforms:
-      - kind: tsfresh_rolling
-        source_col: ema_60
-        output_prefix: ema_60
-        calculators:
-        - root_mean_square
-        window: 192
-        shift: 1
-      - kind: tsfresh_rolling
-        source_col: vwap_32
-        output_prefix: vwap_32
-        calculators:
-        - root_mean_square
-        window: 12
-        shift: 1
-      - kind: tsfresh_rolling
-        source_col: ema_200
-        output_prefix: ema_200
-        calculators:
-        - root_mean_square
-        window: 18
-        shift: 1
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: atr_10
+          denominator_col: close
+          output_col: atr_over_price_10
+      rms:
+        enabled: true
+        items:
+        - source_col: ema_60
+          window: 192
+          shift: 0
+        - source_col: vwap_32
+          window: 12
+          shift: 0
+        - source_col: ema_200
+          window: 192
+          shift: 0
     US30:
-      transforms:
-      - kind: tsfresh_rolling
-        source_col: ema_72
-        output_prefix: ema_72
-        calculators:
-        - root_mean_square
-        window: 48
-        shift: 1
-      - kind: tsfresh_rolling
-        source_col: vwap_40
-        output_prefix: vwap_40
-        calculators:
-        - root_mean_square
-        window: 18
-        shift: 1
-      - kind: tsfresh_rolling
-        source_col: ema_200
-        output_prefix: ema_200
-        calculators:
-        - root_mean_square
-        window: 48
-        shift: 1
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: atr_20
+          denominator_col: close
+          output_col: atr_over_price_20
+      rms:
+        enabled: true
+        items:
+        - source_col: ema_72
+          window: 192
+          shift: 0
+        - source_col: vwap_40
+          window: 12
+          shift: 0
+        - source_col: ema_200
+          window: 192
+          shift: 0
     BRENT:
-      transforms:
-      - kind: tsfresh_rolling
-        source_col: ema_60
-        output_prefix: ema_60
-        calculators:
-        - root_mean_square
-        window: 144
-        shift: 1
-      - kind: tsfresh_rolling
-        source_col: vwap_8
-        output_prefix: vwap_8
-        calculators:
-        - root_mean_square
-        window: 96
-        shift: 1
-      - kind: tsfresh_rolling
-        source_col: ema_96
-        output_prefix: ema_96
-        calculators:
-        - root_mean_square
-        window: 48
-        shift: 1
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: atr_48
+          denominator_col: close
+          output_col: atr_over_price_48
+      rms:
+        enabled: true
+        items:
+        - source_col: ema_60
+          window: 192
+          shift: 0
+        - source_col: vwap_8
+          window: 12
+          shift: 0
+        - source_col: ema_96
+          window: 192
+          shift: 0
     ETHUSD:
-      transforms:
-      - kind: tsfresh_rolling
-        source_col: ema_50
-        output_prefix: ema_50
-        calculators:
-        - root_mean_square
-        window: 36
-        shift: 2
-      - kind: tsfresh_rolling
-        source_col: vwap_20
-        output_prefix: vwap_20
-        calculators:
-        - root_mean_square
-        window: 24
-        shift: 2
-      - kind: tsfresh_rolling
-        source_col: ema_100
-        output_prefix: ema_100
-        calculators:
-        - root_mean_square
-        window: 36
-        shift: 2
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: atr_10
+          denominator_col: close
+          output_col: atr_over_price_10
     NIKKEI225:
-      transforms:
-      - kind: tsfresh_rolling
-        source_col: ema_32
-        output_prefix: ema_32
-        calculators:
-        - root_mean_square
-        window: 144
-        shift: 0
-      - kind: tsfresh_rolling
-        source_col: vwap_24
-        output_prefix: vwap_24
-        calculators:
-        - root_mean_square
-        window: 24
-        shift: 0
-      - kind: tsfresh_rolling
-        source_col: ema_100
-        output_prefix: ema_100
-        calculators:
-        - root_mean_square
-        window: 96
-        shift: 0
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: atr_10
+          denominator_col: close
+          output_col: atr_over_price_10
+      rms:
+        enabled: true
+        items:
+        - source_col: ema_32
+          window: 192
+          shift: 0
+        - source_col: vwap_24
+          window: 12
+          shift: 0
+        - source_col: ema_100
+          window: 192
+          shift: 0
     USOIL:
-      transforms:
-      - kind: tsfresh_rolling
-        source_col: ema_32
-        output_prefix: ema_32
-        calculators:
-        - root_mean_square
-        window: 36
-        shift: 1
-      - kind: tsfresh_rolling
-        source_col: vwap_16
-        output_prefix: vwap_16
-        calculators:
-        - root_mean_square
-        window: 24
-        shift: 1
-      - kind: tsfresh_rolling
-        source_col: ema_96
-        output_prefix: ema_96
-        calculators:
-        - root_mean_square
-        window: 72
-        shift: 1
-  outputs: {}
-  enabled: true
+      ratio:
+        enabled: true
+        items:
+        - numerator_col: atr_7
+          denominator_col: close
+          output_col: atr_over_price_7
+      rms:
+        enabled: true
+        items:
+        - source_col: ema_32
+          window: 192
+          shift: 0
+        - source_col: vwap_16
+          window: 12
+          shift: 0
+        - source_col: ema_96
+          window: 192
+          shift: 0
 model:
   kind: none
 signals:
@@ -870,7 +1005,7 @@ backtest:
   stop_barrier_r: 3.0
   vertical_barrier_bars: null
   tie_break: closest_to_open
-  max_cost_r: 0.30
+  max_cost_r: 0.3
   asset_params:
     XAUUSD:
       volatility_col: atr_36

@@ -16,6 +16,7 @@ def add_trend_features(
     ema_spans: Sequence[int] = (20, 50),
     sma_col_template: str | None = None,
     ema_col_template: str | None = None,
+    add_ratios: bool = False,
     inplace: bool = False,
 ) -> pd.DataFrame:
     """
@@ -44,11 +45,16 @@ def add_trend_features(
         Configuration value used by the registered component. Default: ``None``.
     ema_col_template:
         Configuration value used by the registered component. Default: ``None``.
+    add_ratios:
+        No longer supported. Derived price-over-moving-average ratios must be
+        declared with nested ``transforms.ratio`` helpers. Default: ``False``.
     inplace:
         Configuration value used by the registered component. Default: ``False``.
     """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame")
+    if add_ratios:
+        raise ValueError("add_ratios is no longer supported; use transforms.ratio helpers.")
 
     out = df if inplace else df.copy()
     prices = out[price_col].astype(float)
@@ -61,7 +67,6 @@ def add_trend_features(
             else f"{price_col}_sma_{window}"
         )
         out[sma_col] = sma
-        out[f"{price_col}_over_sma_{window}"] = prices / sma - 1
 
     for span in ema_spans:
         ema = compute_ema(prices, span=span)
@@ -71,7 +76,6 @@ def add_trend_features(
             else f"{price_col}_ema_{span}"
         )
         out[ema_col] = ema
-        out[f"{price_col}_over_ema_{span}"] = prices / ema - 1
 
     return out
 

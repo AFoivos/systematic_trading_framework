@@ -118,3 +118,4 @@ search_space:
     step: 0.25
   - {name: logistic_c, path: model.params.C, kind: float, low: 0.0001, high: 100.0, log: true}
   - {name: logistic_class_weight, path: model.params.class_weight, kind: categorical, choices: [null, balanced]}
+

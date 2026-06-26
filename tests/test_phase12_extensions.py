@@ -19,16 +19,14 @@ from src.experiments.registry import (
     SIGNAL_REGISTRY,
 )
 from src.features import (
-    ROLLING_STAT_MODES,
-    TSFRESH_ROLLING_CALCULATORS,
     add_close_returns,
-    add_feature_transforms,
     add_return_momentum_features,
     add_shock_context_features,
     add_support_resistance_features,
     add_support_resistance_v2_features,
     add_vol_normalized_momentum_features,
 )
+from src.features.helpers import apply_feature_helpers
 from src.features.regime_context import add_regime_context_features
 from src.features.session_context import add_session_context_features
 from src.features.technical.indicators import add_indicator_features
@@ -61,7 +59,7 @@ def test_registry_contains_phase12_extensions() -> None:
     assert "support_resistance" in FEATURE_REGISTRY
     assert "support_resistance_v2" in FEATURE_REGISTRY
     assert "swing_extrema_context" in FEATURE_REGISTRY
-    assert "feature_transforms" in FEATURE_REGISTRY
+    assert "feature_transforms" not in FEATURE_REGISTRY
     assert "bollinger" in FEATURE_REGISTRY
     assert "macd" in FEATURE_REGISTRY
     assert "ppo" in FEATURE_REGISTRY
@@ -235,19 +233,21 @@ def test_rolling_clip_transform_is_point_in_time_safe() -> None:
         index=idx,
     )
 
-    out = add_feature_transforms(
+    out = apply_feature_helpers(
         df,
-        transforms=[
-            {
-                "source_col": "volume_over_atr_24",
-                "kind": "rolling_clip",
-                "output_col": "volume_over_atr_24_rollclip_4_q10_q90",
-                "window": 4,
-                "lower_q": 0.10,
-                "upper_q": 0.90,
-                "shift": 1,
+        transforms={
+            "rolling_clip": {
+                "enabled": True,
+                "params": {
+                    "source_col": "volume_over_atr_24",
+                    "output_col": "volume_over_atr_24_rollclip_4_q10_q90",
+                    "window": 4,
+                    "lower_q": 0.10,
+                    "upper_q": 0.90,
+                    "shift": 1,
+                },
             }
-        ],
+        },
     )
 
     clipped = out["volume_over_atr_24_rollclip_4_q10_q90"]
@@ -272,16 +272,18 @@ def test_ratio_transform_emits_expected_values() -> None:
         index=idx,
     )
 
-    out = add_feature_transforms(
+    out = apply_feature_helpers(
         df,
-        transforms=[
-            {
-                "numerator_col": "lag_close_logret_1",
-                "denominator_col": "vol_rolling_24",
-                "kind": "ratio",
-                "output_col": "lag_close_logret_1_over_vol_rolling_24",
+        transforms={
+            "ratio": {
+                "enabled": True,
+                "params": {
+                    "numerator_col": "lag_close_logret_1",
+                    "denominator_col": "vol_rolling_24",
+                    "output_col": "lag_close_logret_1_over_vol_rolling_24",
+                },
             }
-        ],
+        },
     )
 
     expected = (df["lag_close_logret_1"] / df["vol_rolling_24"]).astype("float32")
@@ -292,31 +294,32 @@ def test_ratio_transform_emits_expected_values() -> None:
     )
 
 
-def test_rolling_stat_transform_supports_rms_and_slope_modes() -> None:
+def test_transform_helpers_support_rms_and_slope() -> None:
     idx = pd.date_range("2024-01-01", periods=5, freq="h")
     df = pd.DataFrame({"osc": [1.0, -3.0, 2.0, 4.0, 7.0]}, index=idx)
 
-    out = add_feature_transforms(
+    out = apply_feature_helpers(
         df,
-        transforms=[
-            {
-                "source_col": "osc",
-                "kind": "rolling_stat",
-                "mode": "rms",
-                "window": 3,
-                "output_col": "osc_rms_3",
+        transforms={
+            "rms": {
+                "enabled": True,
+                "params": {
+                    "source_col": "osc",
+                    "window": 3,
+                    "output_col": "osc_rms_3",
+                },
             },
-            {
-                "source_col": "osc",
-                "kind": "rolling_stat",
-                "mode": "slope",
-                "window": 3,
-                "output_col": "osc_slope_3",
+            "slope": {
+                "enabled": True,
+                "params": {
+                    "source_col": "osc",
+                    "window": 3,
+                    "output_col": "osc_slope_3",
+                },
             },
-        ],
+        },
     )
 
-    assert "rms" in ROLLING_STAT_MODES
     assert out.loc[idx[2], "osc_rms_3"] == pytest.approx(np.sqrt(np.mean([1.0, 9.0, 4.0])))
     assert out.loc[idx[4], "osc_slope_3"] == pytest.approx(2.5)
 
@@ -325,31 +328,25 @@ def test_rolling_stat_transform_uses_only_trailing_values() -> None:
     idx = pd.date_range("2024-01-01", periods=6, freq="h")
     df = pd.DataFrame({"osc": [1.0, 2.0, 3.0, 4.0, 100.0, 200.0]}, index=idx)
 
-    baseline = add_feature_transforms(
+    baseline = apply_feature_helpers(
         df,
-        transforms=[
-            {
-                "source_col": "osc",
-                "kind": "rolling_stat",
-                "mode": "root_mean_square",
-                "window": 3,
-                "output_col": "osc_rms_3",
+        transforms={
+            "rms": {
+                "enabled": True,
+                "params": {"source_col": "osc", "window": 3, "output_col": "osc_rms_3"},
             }
-        ],
+        },
     )
     changed = df.copy(deep=True)
     changed.loc[idx[4]:, "osc"] = [-1000.0, -2000.0]
-    changed_out = add_feature_transforms(
+    changed_out = apply_feature_helpers(
         changed,
-        transforms=[
-            {
-                "source_col": "osc",
-                "kind": "rolling_stat",
-                "mode": "root_mean_square",
-                "window": 3,
-                "output_col": "osc_rms_3",
+        transforms={
+            "rms": {
+                "enabled": True,
+                "params": {"source_col": "osc", "window": 3, "output_col": "osc_rms_3"},
             }
-        ],
+        },
     )
 
     pd.testing.assert_series_equal(
@@ -359,7 +356,7 @@ def test_rolling_stat_transform_uses_only_trailing_values() -> None:
     )
 
 
-def test_feature_transforms_resolve_single_column_selectors() -> None:
+def test_feature_helpers_resolve_single_column_selectors() -> None:
     idx = pd.date_range("2024-01-01", periods=4, freq="h")
     df = pd.DataFrame(
         {
@@ -370,23 +367,27 @@ def test_feature_transforms_resolve_single_column_selectors() -> None:
         index=idx,
     )
 
-    out = add_feature_transforms(
+    out = apply_feature_helpers(
         df,
-        transforms=[
-            {
-                "numerator_selector": {"exact": "lag_close_logret_1"},
-                "denominator_selector": {"regex": "^vol_rolling_[0-9]+$"},
-                "kind": "ratio",
-                "output_col": "lag_close_logret_1_over_selected_vol",
+        transforms={
+            "ratio": {
+                "enabled": True,
+                "params": {
+                    "numerator_selector": {"exact": "lag_close_logret_1"},
+                    "denominator_selector": {"regex": "^vol_rolling_[0-9]+$"},
+                    "output_col": "lag_close_logret_1_over_selected_vol",
+                },
             },
-            {
-                "source_selector": {"regex": "^volume_over_atr_[0-9]+$"},
-                "kind": "rolling_zscore",
-                "output_col": "volume_over_atr_selected_z_2",
-                "window": 2,
-                "shift": 1,
+            "rolling_zscore": {
+                "enabled": True,
+                "params": {
+                    "source_selector": {"regex": "^volume_over_atr_[0-9]+$"},
+                    "output_col": "volume_over_atr_selected_z_2",
+                    "window": 2,
+                    "shift": 1,
+                },
             },
-        ],
+        },
     )
 
     expected_ratio = (df["lag_close_logret_1"] / df["vol_rolling_36"]).astype("float32")
@@ -398,29 +399,19 @@ def test_feature_transforms_resolve_single_column_selectors() -> None:
     assert out["volume_over_atr_selected_z_2"].iloc[:2].isna().all()
 
 
-def test_tsfresh_rolling_transform_matches_export_calculator_family() -> None:
-    idx = pd.date_range("2024-01-01", periods=5, freq="h")
-    df = pd.DataFrame({"osc": [1.0, np.nan, -3.0, 2.0, 4.0]}, index=idx)
+def test_tsfresh_rolling_transform_is_no_longer_supported() -> None:
+    df = pd.DataFrame({"osc": [1.0, np.nan, -3.0, 2.0, 4.0]})
 
-    out = add_feature_transforms(
-        df,
-        transforms=[
-            {
-                "source_col": "osc",
-                "kind": "tsfresh_rolling",
-                "window": 4,
-            }
-        ],
-    )
-
-    assert {f"osc__{calculator}" for calculator in TSFRESH_ROLLING_CALCULATORS}.issubset(out.columns)
-    assert out.loc[idx[:3], "osc__sum_values"].isna().all()
-    assert out.loc[idx[3], "osc__sum_values"] == pytest.approx(0.0)
-    assert out.loc[idx[3], "osc__length"] == pytest.approx(3.0)
-    assert out.loc[idx[3], "osc__standard_deviation"] == pytest.approx(np.std([1.0, -3.0, 2.0]))
-    assert out.loc[idx[3], "osc__root_mean_square"] == pytest.approx(np.sqrt(np.mean([1.0, 9.0, 4.0])))
-    assert out.loc[idx[3], "osc__absolute_maximum"] == pytest.approx(3.0)
-    assert out.loc[idx[4], "osc__minimum"] == pytest.approx(-3.0)
+    with pytest.raises(ValueError, match="tsfresh_rolling"):
+        apply_feature_helpers(
+            df,
+            transforms={
+                "tsfresh_rolling": {
+                    "enabled": True,
+                    "params": {"source_col": "osc", "window": 4},
+                }
+            },
+        )
 
 
 def test_vol_normalized_momentum_resolves_vol_window_when_col_is_null() -> None:
@@ -543,17 +534,19 @@ def test_rolling_zscore_transform_is_point_in_time_safe() -> None:
     idx = pd.date_range("2024-01-01", periods=6, freq="H")
     df = pd.DataFrame({"lag_close_logret_1": [1.0, 2.0, 3.0, 100.0, 5.0, 6.0]}, index=idx)
 
-    out = add_feature_transforms(
+    out = apply_feature_helpers(
         df,
-        transforms=[
-            {
-                "source_col": "lag_close_logret_1",
-                "kind": "rolling_zscore",
-                "output_col": "lag_close_logret_1_z_3",
-                "window": 3,
-                "shift": 1,
+        transforms={
+            "rolling_zscore": {
+                "enabled": True,
+                "params": {
+                    "source_col": "lag_close_logret_1",
+                    "output_col": "lag_close_logret_1_z_3",
+                    "window": 3,
+                    "shift": 1,
+                },
             }
-        ],
+        },
     )
 
     z = out["lag_close_logret_1_z_3"]
@@ -588,19 +581,21 @@ def test_indicator_feature_transform_preserves_original_and_adds_clipped_variant
     )
     df.loc[df.index[-1], "volume_over_atr_24"] = float(expected_upper) * 5.0
 
-    out = add_feature_transforms(
+    out = apply_feature_helpers(
         df,
-        transforms=[
-            {
-                "source_col": "volume_over_atr_24",
-                "kind": "rolling_clip",
-                "output_col": "volume_over_atr_24_rollclip_48_q01_q99",
-                "window": 48,
-                "lower_q": 0.01,
-                "upper_q": 0.99,
-                "shift": 1,
+        transforms={
+            "rolling_clip": {
+                "enabled": True,
+                "params": {
+                    "source_col": "volume_over_atr_24",
+                    "output_col": "volume_over_atr_24_rollclip_48_q01_q99",
+                    "window": 48,
+                    "lower_q": 0.01,
+                    "upper_q": 0.99,
+                    "shift": 1,
+                },
             }
-        ],
+        },
     )
 
     assert "volume_over_atr_24" in out.columns

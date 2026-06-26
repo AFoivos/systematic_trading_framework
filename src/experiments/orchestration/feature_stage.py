@@ -5,6 +5,7 @@ from typing import Any
 
 import pandas as pd
 
+from src.features.helpers import apply_feature_helpers
 from src.features.registry import get_feature_fn
 from src.signals.registry import get_signal_fn
 
@@ -63,6 +64,33 @@ def _call_feature_fn(
     return fn(df, **call_params)
 
 
+def _asset_helper_block(
+    step: dict[str, Any],
+    key: str,
+    *,
+    asset: str | None,
+    asset_params: dict[str, Any],
+) -> Any:
+    base = step.get(key)
+    direct_from_asset_params = asset_params.pop(key, None)
+    if direct_from_asset_params is not None:
+        override = direct_from_asset_params
+    elif asset is None:
+        return base
+    else:
+        by_asset = step.get(f"{key}_by_asset", {}) or {}
+        if not isinstance(by_asset, dict):
+            return base
+        override = by_asset.get(str(asset))
+    if override is None:
+        return base
+    if base in (None, {}) or not isinstance(base, dict) or not isinstance(override, dict):
+        return override
+    merged = dict(base)
+    merged.update(override)
+    return merged
+
+
 def apply_feature_steps(
     df: pd.DataFrame,
     steps: list[dict[str, Any]],
@@ -77,12 +105,32 @@ def apply_feature_steps(
             continue
         name = step["step"]
         params = dict(step.get("params", {}) or {})
+        asset_params: dict[str, Any] = {}
         if asset is not None:
             params_by_asset = dict(step.get("params_by_asset", {}) or {})
             asset_params = dict(params_by_asset.get(str(asset), {}) or {})
+        transform_helpers = _asset_helper_block(
+            step,
+            "transforms",
+            asset=asset,
+            asset_params=asset_params,
+        )
+        normalization_helpers = _asset_helper_block(
+            step,
+            "normalizations",
+            asset=asset,
+            asset_params=asset_params,
+        )
+        if asset_params:
             params.update(asset_params)
         fn = get_feature_fn(name)
         out = _call_feature_fn(fn, out, params, asset=asset)
+        out = apply_feature_helpers(
+            out,
+            transforms=transform_helpers,
+            normalizations=normalization_helpers,
+            owner=f"features[{idx}]",
+        )
         out = _apply_output_mapping(out, step.get("outputs"), owner=f"features[{idx}]")
     return out
 

@@ -53,7 +53,7 @@ search_space:
     kind: categorical
     choices: [6, 8, 10, 12, 16, 20]
   - name: supersmoother_slope_window
-    path: features.3.params.transforms.0.window
+    path: features.3.transforms.slope.items.0.window
     kind: categorical
     choices: [2, 3, 4, 6]
   - name: roofing_high_pass_period
@@ -86,7 +86,7 @@ search_space:
     step: 6.0
   - name: amplitude_lookback
     path: features.22.params.amplitude_quantile_lookback
-    paths: [features.20.params.transforms.5.window]
+    paths: [features.20.transforms.rolling_zscore.items.0.window]
     kind: categorical
     choices: [96, 168, 252, 384, 504]
   - name: amplitude_min_quantile
@@ -97,7 +97,7 @@ search_space:
     step: 0.05
   - name: atr_lookback
     path: features.22.params.atr_quantile_lookback
-    paths: [features.20.params.transforms.6.window]
+    paths: [features.20.transforms.rolling_zscore.items.1.window]
     kind: categorical
     choices: [96, 168, 252, 384, 504]
   - name: atr_min_quantile
@@ -202,3 +202,4 @@ search_space:
     path: model.params.class_weight
     kind: categorical
     choices: [null, balanced]
+

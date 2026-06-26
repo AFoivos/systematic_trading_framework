@@ -117,73 +117,73 @@ pruning:
 
 search_space:
   - name: signal_roc_min
-    path: features.8.params.roc_min
+    path: features.7.params.roc_min
     kind: float
     low: 0.0015
     high: 0.0045
     step: 0.0005
 
   - name: signal_vol_z_min
-    path: features.8.params.vol_z_min
+    path: features.7.params.vol_z_min
     kind: float
     low: -1.8
     high: -0.2
     step: 0.1
 
   - name: signal_vol_z_max
-    path: features.8.params.vol_z_max
+    path: features.7.params.vol_z_max
     kind: float
     low: 1.0
     high: 2.4
     step: 0.1
 
   - name: signal_close_z_min
-    path: features.8.params.close_z_min
+    path: features.7.params.close_z_min
     kind: float
     low: -0.4
     high: 0.6
     step: 0.1
 
   - name: signal_close_z_max
-    path: features.8.params.close_z_max
+    path: features.7.params.close_z_max
     kind: float
     low: 0.9
     high: 2.0
     step: 0.1
 
   - name: signal_close_open_ratio_min
-    path: features.8.params.close_open_ratio_min
+    path: features.7.params.close_open_ratio_min
     kind: float
     low: 0.0
     high: 0.0012
     step: 0.0002
 
   - name: signal_mtf_1h_min
-    path: features.8.params.mtf_1h_min
+    path: features.7.params.mtf_1h_min
     kind: float
     low: -0.0015
     high: 0.0035
     step: 0.0005
 
   - name: signal_mtf_4h_min
-    path: features.8.params.mtf_4h_min
+    path: features.7.params.mtf_4h_min
     kind: float
     low: 0.0
     high: 0.0040
     step: 0.0005
 
   - name: signal_min_score_required
-    path: features.8.params.min_score_required
+    path: features.7.params.min_score_required
     kind: int
     low: 5
     high: 8
 
   - name: signal_require_bullish_candle
-    path: features.8.params.require_bullish_candle
+    path: features.7.params.require_bullish_candle
     kind: bool
 
   - name: signal_vol_adjustment_strength
-    path: features.8.params.vol_adjustment_strength
+    path: features.7.params.vol_adjustment_strength
     kind: float
     low: 0.5
     high: 2.0
@@ -242,3 +242,4 @@ search_space:
     path: backtest.risk_per_trade
     kind: categorical
     choices: [0.002, 0.0025, 0.003]
+
