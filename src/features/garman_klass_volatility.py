@@ -16,42 +16,49 @@ def add_garman_klass_volatility(
     output_col: str | None = None,
 ) -> pd.DataFrame:
     """
-    Add causal rolling Garman-Klass volatility from OHLC prices.
+    Apply the registered ``garman_klass_volatility`` feature transformation.
     
-    The calculation uses the trailing ``window`` bars and never references
-    future observations.
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: garman_klass_volatility
-            params: {}
+            params:
+              open_col: open
+              high_col: high
+              low_col: low
+              close_col: close
+              window: 20
+              output_col: null
+          output_cols:
+            - configured by output_col
     
     Required input columns
     ----------------------
     open_col:
-        Input column configured by ``open_col``. Default: ``open``.
+        Input dataframe column configured by ``open_col``. Default: ``open``.
     high_col:
-        Input column configured by ``high_col``. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input column configured by ``low_col``. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
     close_col:
-        Input column configured by ``close_col``. Default: ``close``.
+        Input dataframe column configured by ``close_col``. Default: ``close``.
     
     Parameters
     ----------
     open_col:
-        Input dataframe column name consumed by the component. Default: ``open``.
+        Input dataframe column configured by ``open_col``. Default: ``open``.
     high_col:
-        Input dataframe column name consumed by the component. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input dataframe column name consumed by the component. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
     close_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``close_col``. Default: ``close``.
     window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``20``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``20``.
     output_col:
-        Output column name emitted by the component. Default: ``None``.
+        Output dataframe column configured by ``output_col``. Default: ``null``.
     """
     _validate_columns(df, [open_col, high_col, low_col, close_col])
     _validate_window(window)

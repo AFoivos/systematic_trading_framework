@@ -12,6 +12,29 @@ from src.portfolio import PortfolioConstraints, apply_constraints, signal_to_raw
 
 @dataclass(frozen=True)
 class RLRewardConfig:
+    """
+    Container for ``RLRewardConfig`` RL model configuration.
+    
+    This RL model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        model:
+          kind: RLRewardConfig
+          params:
+            # no configurable parameters
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    None:
+        This callable has no public configuration parameters.
+    """
     cost_per_turnover: float = 0.0
     slippage_per_turnover: float = 0.0
     inventory_penalty: float = 0.0
@@ -21,6 +44,29 @@ class RLRewardConfig:
 
 @dataclass(frozen=True)
 class RLExecutionConfig:
+    """
+    Container for ``RLExecutionConfig`` RL model configuration.
+    
+    This RL model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        model:
+          kind: RLExecutionConfig
+          params:
+            # no configurable parameters
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    None:
+        This callable has no public configuration parameters.
+    """
     min_holding_bars: int = 0
     action_hysteresis: float = 0.0
     dd_guard_enabled: bool = False
@@ -233,6 +279,32 @@ class SingleAssetTradingEnv(gym.Env):
         }
 
     def reset(self, *, seed: int | None = None, options: dict | None = None) -> tuple[np.ndarray, dict]:
+        """
+        Apply the registered ``reset`` RL model transformation.
+        
+        This RL model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+        
+        YAML declaration::
+        
+            model:
+              kind: reset
+              params:
+                seed: null
+                options: null
+        
+        Required input columns
+        ----------------------
+        Direct inputs:
+            This callable operates on supplied Series/arrays directly or resolves
+            dataframe inputs from the configuration shown above at runtime.
+        
+        Parameters
+        ----------
+        seed:
+            Configuration parameter accepted by this RL model. Default: ``null``.
+        options:
+            Configuration parameter accepted by this RL model. Default: ``null``.
+        """
         super().reset(seed=seed)
         self.current_step = self.start_step
         self.position = 0.0
@@ -245,6 +317,29 @@ class SingleAssetTradingEnv(gym.Env):
         return self._build_observation(step=self.current_step, position=self.position, drawdown=self.drawdown), {}
 
     def step(self, action: np.ndarray | int) -> tuple[np.ndarray, float, bool, bool, dict]:
+        """
+        Apply the registered ``step`` RL model transformation.
+        
+        This RL model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+        
+        YAML declaration::
+        
+            model:
+              kind: step
+              params:
+                action: <required>
+        
+        Required input columns
+        ----------------------
+        Direct inputs:
+            This callable operates on supplied Series/arrays directly or resolves
+            dataframe inputs from the configuration shown above at runtime.
+        
+        Parameters
+        ----------
+        action:
+            Configuration parameter accepted by this RL model.
+        """
         prev_position = float(self.position)
         action_value = self._map_action(action)
         reward, info = self._transition(action_value=action_value)
@@ -464,6 +559,32 @@ class PortfolioTradingEnv(gym.Env):
         }
 
     def reset(self, *, seed: int | None = None, options: dict | None = None) -> tuple[np.ndarray, dict]:
+        """
+        Apply the registered ``reset`` RL model transformation.
+        
+        This RL model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+        
+        YAML declaration::
+        
+            model:
+              kind: reset
+              params:
+                seed: null
+                options: null
+        
+        Required input columns
+        ----------------------
+        Direct inputs:
+            This callable operates on supplied Series/arrays directly or resolves
+            dataframe inputs from the configuration shown above at runtime.
+        
+        Parameters
+        ----------
+        seed:
+            Configuration parameter accepted by this RL model. Default: ``null``.
+        options:
+            Configuration parameter accepted by this RL model. Default: ``null``.
+        """
         super().reset(seed=seed)
         self.current_step = self.start_step
         self.weights = pd.Series(0.0, index=self.asset_names, dtype=float)
@@ -477,6 +598,29 @@ class PortfolioTradingEnv(gym.Env):
         return self._build_observation(step=self.current_step, weights=self.weights, drawdown=self.drawdown), {}
 
     def step(self, action: np.ndarray | int) -> tuple[np.ndarray, float, bool, bool, dict]:
+        """
+        Apply the registered ``step`` RL model transformation.
+        
+        This RL model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+        
+        YAML declaration::
+        
+            model:
+              kind: step
+              params:
+                action: <required>
+        
+        Required input columns
+        ----------------------
+        Direct inputs:
+            This callable operates on supplied Series/arrays directly or resolves
+            dataframe inputs from the configuration shown above at runtime.
+        
+        Parameters
+        ----------
+        action:
+            Configuration parameter accepted by this RL model.
+        """
         prev_signals = self.signal_state.copy()
         signal_values = self._map_action(action)
         reward, info = self._transition(signal_values=signal_values)

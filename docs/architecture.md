@@ -1,41 +1,104 @@
 # Αρχιτεκτονική Systematic Trading Framework
 
-Τελευταία ενημέρωση: 2026-06-26
+Τελευταία ενημέρωση: 2026-06-27
 
-## Στόχος
+Το framework είναι config-driven σύστημα για research, ML evaluation,
+backtesting και paper/demo execution. Η αρχιτεκτονική δίνει προτεραιότητα σε
+χρονική αιτιότητα, reproducibility και καθαρά package boundaries.
 
-Το framework είναι πλέον οργανωμένο γύρω από ένα config-driven canonical
-experiment pipeline και ξεχωριστά registries ανά κατηγορία. Τα YAML configs
-δηλώνουν ονόματα components και τα pipelines τα επιλύουν μέσω registries, χωρίς
-scattered imports στο orchestration layer.
+## Υψηλού επιπέδου εικόνα
 
-## Canonical Pipeline
+```text
+YAML config
+   |
+   v
+config loader + validation
+   |
+   v
+canonical experiment pipeline
+   |
+   +-- data loading / PIT hardening
+   +-- feature generation + helpers
+   +-- target generation
+   +-- model training / inference
+   +-- signal generation
+   +-- backtesting / portfolio / evaluation
+   +-- monitoring / execution / artifacts
+```
 
-Το canonical pipeline είναι:
+Το stable CLI entrypoint είναι:
+
+```bash
+python -m src.experiments.runner path/to/config.yaml
+```
+
+Το canonical pipeline facade είναι:
 
 - `src.pipelines.canonical_pipeline.run_canonical_pipeline`
 - registry name: `canonical_experiment`
-- implementation facade προς το υπάρχον `src.experiments.runner.run_experiment`
-- πραγματική ενορχήστρωση στο `src.experiments.orchestration.pipeline.run_experiment_pipeline`
+- implementation facade προς `src.experiments.runner.run_experiment`
+- πραγματική ενορχήστρωση στο
+  `src.experiments.orchestration.pipeline.run_experiment_pipeline`
 
-Η σειρά εκτέλεσης είναι:
+## Σειρά εκτέλεσης
 
-1. data loading και PIT hardening
-2. data validation
-3. feature generation
-4. model training ή model pipeline stages
-5. signal generation
-6. optional post-signal target diagnostics
-7. backtesting/evaluation
-8. monitoring/execution output
-9. reporting/artifact writing
+1. Φόρτωση YAML.
+2. Config validation.
+3. Data loading.
+4. Point-in-time hardening.
+5. OHLCV/data contract validation.
+6. Feature generation.
+7. Feature helpers και output mappings.
+8. Target generation, αν υπάρχει model target.
+9. Model training/inference ή model pipeline stages.
+10. Signal generation.
+11. Backtest/evaluation.
+12. Monitoring, execution output και artifact writing.
 
-Το `src.experiments.runner` παραμένει stable legacy entrypoint, αλλά το
-canonical public pipeline βρίσκεται στο `src/pipelines`.
+## Package boundaries
+
+### `src/src_data`
+
+Ιδιοκτήτης για loading, PIT hardening και data validation. Δεν πρέπει να ξέρει
+για models ή signals.
+
+### `src/features`
+
+Ιδιοκτήτης για raw feature builders και helper transforms. Δεν πρέπει να εισάγει
+signals, models, experiments ή backtesting.
+
+### `src/targets`
+
+Ιδιοκτήτης για label/target builders. Επιτρέπεται να κοιτάει future bars μόνο
+για label generation. Δεν πρέπει να εισάγει models ή backtesting.
+
+### `src/models`
+
+Ιδιοκτήτης για model wrappers, fold-safe preprocessing και training adapters.
+Δεν φορτώνει data από μόνο του.
+
+### `src/signals`
+
+Ιδιοκτήτης για decision logic πάνω σε ήδη υπάρχοντα feature/model columns. Δεν
+πρέπει να κάνει βαρύ feature engineering εσωτερικά.
+
+### `src/experiments`
+
+Ιδιοκτήτης για orchestration, reporting, Optuna/search support και artifacts.
+Δεν πρέπει να φιλοξενεί canonical registries.
+
+### `src/backtesting`, `src/risk`, `src/portfolio`, `src/evaluation`
+
+Ιδιοκτήτες για εκτέλεση backtest, sizing/costs/constraints και metrics.
+
+### `src/execution`
+
+Ιδιοκτήτης για paper/demo execution outputs και MT5 demo runner. Live/demo
+orders προστατεύονται από explicit safety gates.
 
 ## Registries
 
-Τα canonical registries βρίσκονται πλέον ανά package:
+Τα canonical registries βρίσκονται ανά package:
 
 - `src/features/registry.py`
 - `src/signals/registry.py`
@@ -45,104 +108,73 @@ canonical public pipeline βρίσκεται στο `src/pipelines`.
 
 Κάθε registry:
 
-- ορίζεται από λίστα `(name, callable)` ώστε να εντοπίζονται duplicate names
-- περνά από `src.utils.registry.build_registry`
-- αποτυγχάνει με informative `RegistryLookupError` για άγνωστα names
-- εκθέτει `get_*_fn` ή `get_*_builder`
+- ορίζεται από λίστα `(name, callable)` ή lazy entries,
+- περνά από shared registry builder όπου χρειάζεται,
+- αποτυγχάνει με informative error για άγνωστα names,
+- εκθέτει public resolver όπως `get_feature_fn`, `get_signal_fn`,
+  `get_target_builder`, `get_model_builder`.
 
 Το παλιό `src.experiments.registry` είναι compatibility facade και δεν είναι
 πλέον ο ιδιοκτήτης των mappings.
 
-## Features
+## Feature architecture
 
-Canonical feature names είναι μόνο όσα αντιστοιχούν σε πραγματικούς feature
-builders. Παραδείγματα:
+Τα features χωρίζονται σε τρεις κατηγορίες:
 
-- `returns`
-- `volatility`
-- `trend`
-- `roc`
-- `atr`
-- `adx`
-- `vwap`
-- `hmm_regime`
-- `roofing_filter`
+1. Raw feature builders, π.χ. `atr`, `vwap`, `roofing_filter`,
+   `hilbert_transform`, `schaff_trend_cycle`.
+2. Transform helpers, π.χ. `ratio`, `difference`, `lag`, `reciprocal`,
+   `crossing_flag`, `threshold_flag`, `rising_flag`, `between_flag`,
+   `rolling_mean`, `rolling_std`, `rolling_sum`, `rolling_zscore`,
+   `rolling_clip`, `rolling_linear_regression`, `rms`, `slope`.
+3. Normalization helpers, π.χ. `returns`, `atr_distances`, `volatility`,
+   `rolling_zscores`.
 
-Οι μετατροπές δεν είναι canonical feature steps. Δηλώνονται μέσα στο feature step
-που παράγει το raw column:
-
-- `transforms` για γενικά helpers όπως `ratio`, `rms`, `slope`, `rolling_clip`,
-  `rolling_zscore`
-- `normalizations` για trading normalizations όπως `returns`, `atr_distances`,
-  `volatility`, `rolling_zscores`
-- `transforms_by_asset` και `normalizations_by_asset` όταν ένα multi-asset config
-  χρειάζεται διαφορετικά helper columns ανά asset
-
-Τα raw feature modules δεν πρέπει να παράγουν derived helper columns by default.
-
-Τα παλιά feature-stage signal steps κρατήθηκαν χωριστά στο
-`FEATURE_COMPATIBILITY_REGISTRY`:
-
-- `ehlers_semiscalp_long`
-- `ema_stoch_rsi_pullback`
-- `indicator_model_adaptive_pullback`
-- `roc_long_only_conditions`
-- `vwap_rms_ema_cross_long`
-
-Αυτά παραμένουν resolvable για υπάρχοντα configs, αλλά δεν θεωρούνται canonical
-features. Μελλοντικά πρέπει να μεταφερθούν είτε σε κανονικά feature modules είτε
-σε multi-signal-stage pipeline schema.
-
-### Προσθήκη νέου feature
-
-1. Δημιουργείς ένα αρχείο στο `src/features` ή `src/features/technical`, π.χ.
-   `src/features/technical/my_indicator.py`.
-2. Ορίζεις ένα καθαρό function που δέχεται `pd.DataFrame` και επιστρέφει νέο
-   `pd.DataFrame`.
-3. Δεν εισάγεις signals, models, backtesting ή experiments.
-4. Προσθέτεις το `(name, callable)` στο `src/features/registry.py`.
-5. Προσθέτεις focused tests για contract, missing columns και causality.
-6. Χρησιμοποιείς το νέο name στο YAML:
-
-```yaml
-features:
-  - step: my_indicator
-    params:
-      window: 20
-```
-
-## Signals
-
-Canonical signal names είναι στο `src/signals/registry.py`. Deprecated aliases
-υπάρχουν μόνο στο `DEPRECATED_SIGNAL_ALIASES`, όχι στο canonical
-`SIGNAL_REGISTRY`.
+Raw feature modules δεν πρέπει να παράγουν derived helper columns by default.
+Παράγωγα columns δηλώνονται στο YAML με `transforms` ή `normalizations`.
 
 Παράδειγμα:
 
-- canonical: `ehlers_continuation_short`
-- deprecated alias: `ehlers_continuation_short_signal`
-
-### Προσθήκη νέου signal
-
-1. Δημιουργείς ένα αρχείο στο `src/signals`.
-2. Το signal χρησιμοποιεί ήδη υπάρχοντα feature/model columns.
-3. Δεν εισάγει experiments ή models.
-4. Δεν κάνει βαρύ feature engineering εσωτερικά.
-5. Προσθέτεις το canonical name στο `src/signals/registry.py`.
-6. Το YAML χρησιμοποιεί:
-
 ```yaml
-signals:
-  kind: my_signal
-  params:
-    signal_col: signal_side
+features:
+  - step: hilbert_transform
+    params:
+      price_col: close
+      window: 64
+      amplitude_col: hilbert_amplitude_64
+      phase_col: hilbert_phase_64
+      instantaneous_frequency_col: hilbert_frequency_64
+    transforms:
+      reciprocal:
+        params:
+          source_col: hilbert_frequency_64
+          use_abs: true
+          output_col: hilbert_dominant_cycle_64
+      between_flag:
+        params:
+          source_col: hilbert_dominant_cycle_64
+          lower: 10.0
+          upper: 48.0
+          output_col: hilbert_cycle_ok_64
 ```
 
-## Targets
+## Signal architecture
+
+Canonical signal names βρίσκονται στο `src/signals/registry.py`. Ένα signal:
+
+- διαβάζει feature/model columns,
+- παράγει signal/side/weight/probability-derived output,
+- δεν κάνει data loading,
+- δεν εκπαιδεύει model,
+- δεν παράγει helper-style diagnostics που ανήκουν στα features.
+
+Deprecated aliases υπάρχουν μόνο για migration παλιών configs.
+
+## Target architecture
 
 Το target dispatch γίνεται από `src/targets/registry.py`.
 
-Canonical targets:
+Canonical targets περιλαμβάνουν:
 
 - `forward_return`
 - `future_return_regression`
@@ -150,25 +182,10 @@ Canonical targets:
 - `directional_triple_barrier`
 - `r_multiple`
 
-Το παλιό `build_classifier_target` παραμένει facade και καλεί `build_target`.
+Κάθε target πρέπει να τεκμηριώνει horizon, output columns και χρήση future
+information.
 
-### Προσθήκη νέου target
-
-1. Δημιουργείς ένα αρχείο στο `src/targets`.
-2. Το function επιστρέφει `(frame, label_col, fwd_col, meta)`.
-3. Δεν εισάγει models ή backtesting.
-4. Προσθέτεις το `(kind, builder)` στο `src/targets/registry.py`.
-5. Προσθέτεις validation/tests.
-6. Το YAML χρησιμοποιεί:
-
-```yaml
-model:
-  target:
-    kind: my_target
-    horizon: 5
-```
-
-## Models
+## Model architecture
 
 Το model resolution γίνεται από `src/models/registry.py`. Τα entries είναι lazy
 ώστε το import του registry να μη φορτώνει βαριές ML dependencies.
@@ -187,61 +204,46 @@ model:
 - `tft_forecaster`
 - `ppo_agent`
 
-### Προσθήκη νέου model
+Το preprocessing πρέπει να είναι train-fold safe. Scalers/encoders δεν γίνονται
+fit σε όλο το dataset πριν από split.
 
-1. Δημιουργείς wrapper/definition σε ένα αρχείο κάτω από `src/models`.
-2. Το model δεν κάνει data loading ή cleaning.
-3. Το preprocessing μένει στο model training layer μόνο αν είναι train-fold safe.
-4. Προσθέτεις lazy registry entry στο `src/models/registry.py`.
-5. Το YAML αλλάζει μόνο το `model.kind` και τα params:
+## Config validation
 
-```yaml
-model:
-  kind: logistic_regression_clf
-  params:
-    max_iter: 500
-```
+Το `src/utils/config_validation.py` είναι το κεντρικό σημείο για YAML contract
+checks. Ελέγχει:
 
-## Duplicate Cleanup
+- άγνωστα blocks/keys,
+- τύπους παραμέτρων,
+- feature helper names,
+- deprecated/unsupported feature params,
+- model/signal/target schema constraints.
 
-Το duplicate `rate_of_change` αφαιρέθηκε υπέρ του canonical `roc`.
+Το `src/utils/config.py` παραμένει stable facade για loading.
 
-Λόγος:
+## Legacy και compatibility
 
-- Τα YAML configs χρησιμοποιούν `roc`.
-- Το output convention είναι ήδη `roc_<window>`.
-- Το `rate_of_change` δεν χρησιμοποιούνταν από configs ή core imports.
-- Η μικρή χρηστικότητα `window`/`output_col` μεταφέρθηκε στο `roc`.
+Δεν διαγράφονται απότομα παλιά paths όταν υπάρχει πιθανότητα να χρησιμοποιούνται
+από configs/scripts. Compatibility facades πρέπει να μένουν μόνο όσο χρειάζεται
+για migration.
 
-Το `true_range.py` δεν αφαιρέθηκε, επειδή είναι πραγματικός shared helper:
+Τρέχοντες legacy candidates:
 
-- χρησιμοποιείται από `atr`
-- χρησιμοποιείται από `adx`
-- εκτίθεται από το technical package
+- feature-stage signal compatibility entries,
+- `src.experiments.registry`,
+- παλιά experiment/support diagnostics,
+- deprecated signal aliases,
+- re-export paths για backtest/trade helpers.
 
-## Layer Rules
+## Κανόνες επέκτασης
 
-Οι βασικοί κανόνες είναι:
+Για νέο feature/signal/target/model:
 
-- `features` δεν εξαρτώνται από `signals`, `models`, `backtesting`
-- `targets` δεν εξαρτώνται από `models`, `backtesting`
-- `signals` δεν εξαρτώνται από `experiments`, `models`
-- `models` δεν κάνουν data loading
-- `experiments` ενορχηστρώνουν και δεν φιλοξενούν canonical registries
+1. Πρόσθεσε module στο σωστό package.
+2. Κράτα τις εξαρτήσεις εντός boundary.
+3. Πρόσθεσε registry entry.
+4. Πρόσθεσε config validation αν εισάγεται νέο YAML contract.
+5. Πρόσθεσε tests για contract, edge cases και causality.
+6. Ενημέρωσε docs/catalog.
 
-Η κοινή trade-path προσομοίωση μετακινήθηκε στο `src/utils/trade_path.py` ώστε
-το `r_multiple` target να μην εισάγει `src.backtesting`.
-
-## Legacy Candidates
-
-Δεν διαγράφηκαν χωρίς πλήρη ασφάλεια:
-
-- feature-stage signal steps στο `FEATURE_COMPATIBILITY_REGISTRY`
-- `src.experiments.registry` compatibility facade
-- `src.experiments.models` compatibility export hub
-- old experiment/support diagnostics κάτω από `src/experiments/support`
-- `src.backtesting.trade_path` re-export path
-- deprecated signal aliases `*_signal`
-
-Αυτά πρέπει να αφαιρεθούν μόνο μετά από migration όλων των παλιών YAMLs και
-τυχόν εξωτερικών scripts που τα χρησιμοποιούν.
+Για cross-package refactor, πρώτα γράψε migration plan. Μην αλλάζεις silent
+runtime defaults χωρίς explicit τεκμηρίωση και tests.

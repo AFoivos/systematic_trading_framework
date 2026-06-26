@@ -85,6 +85,38 @@ def resolve_directional_barrier_double_touch(
     stop_level: float,
     tie_break: str,
 ) -> str:
+    """
+    Apply the registered ``resolve_directional_barrier_double_touch`` target transformation.
+    
+    This target uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        target:
+          kind: resolve_directional_barrier_double_touch
+          params:
+            bar_open: <required>
+            profit_level: <required>
+            stop_level: <required>
+            tie_break: <required>
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    bar_open:
+        Configuration parameter accepted by this target.
+    profit_level:
+        Configuration parameter accepted by this target.
+    stop_level:
+        Configuration parameter accepted by this target.
+    tie_break:
+        Configuration parameter accepted by this target.
+    """
     if tie_break == "profit":
         return "profit"
     if tie_break == "stop":
@@ -118,107 +150,158 @@ def build_directional_triple_barrier_target(
     target_cfg: dict[str, Any] | None,
 ) -> tuple[pd.DataFrame, str, str, dict[str, Any]]:
     """
-    Build a directional, ATR/price-unit triple-barrier meta target.
+    Apply the registered ``directional_triple_barrier`` target transformation.
     
-    This target evaluates only rows where a non-zero direction exists. The
-    direction column defines the trade side: positive values mean long
-    candidates, negative values mean short candidates. The target then checks
-    whether the directional profit barrier or the directional stop barrier is
-    touched first within the vertical barrier window.
-    
-    Labels:
-    - 1.0 when the directional profit barrier is touched first.
-    - 0.0 when the directional stop barrier is touched first.
-    - NaN for neutral vertical-barrier-only events when ``neutral_label: drop``.
+    This target uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         target:
           kind: directional_triple_barrier
-          params: {}
+          params:
+            add_r_multiple: <configured>
+            candidate_col: <configured>
+            candidate_out_col: <configured>
+            direction_col: <configured>
+            entry_price_mode: <configured>
+            event_ret_col: <configured>
+            fwd_col: <configured>
+            high_col: <configured>
+            hit_step_col: <configured>
+            hit_type_col: <configured>
+            horizon: <configured>
+            label_col: <configured>
+            low_col: <configured>
+            lower_barrier_col: <configured>
+            lower_mult: <configured>
+            max_holding: <configured>
+            meta_side_col: <configured>
+            min_vol: <configured>
+            neutral_label: <configured>
+            open_col: <configured>
+            oriented_r_col: <configured>
+            oriented_ret_col: <configured>
+            price_col: <configured>
+            profit_barrier_r: <configured>
+            r_clip: <configured>
+            r_col: <configured>
+            side_col: <configured>
+            stop_barrier_r: <configured>
+            tie_break: <configured>
+            upper_barrier_col: <configured>
+            upper_mult: <configured>
+            vertical_barrier_bars: <configured>
+            volatility_col: <configured>
+          outputs:
+            - configured by candidate_col
+            - configured by hit_type_col
+            - configured by label_col
     
     Required input columns
     ----------------------
-    None fixed by signature:
-        Required dataframe columns are resolved from configuration or from
-        upstream feature/target/signal stages at runtime.
+    candidate_out_col:
+        Input dataframe column configured by ``candidate_out_col``. Default: ``<configured>``.
+    direction_col:
+        Input dataframe column configured by ``direction_col``. Default: ``<configured>``.
+    event_ret_col:
+        Input dataframe column configured by ``event_ret_col``. Default: ``<configured>``.
+    fwd_col:
+        Input dataframe column configured by ``fwd_col``. Default: ``<configured>``.
+    high_col:
+        Input dataframe column configured by ``high_col``. Default: ``<configured>``.
+    hit_step_col:
+        Input dataframe column configured by ``hit_step_col``. Default: ``<configured>``.
+    low_col:
+        Input dataframe column configured by ``low_col``. Default: ``<configured>``.
+    lower_barrier_col:
+        Input dataframe column configured by ``lower_barrier_col``. Default: ``<configured>``.
+    meta_side_col:
+        Input dataframe column configured by ``meta_side_col``. Default: ``<configured>``.
+    open_col:
+        Input dataframe column configured by ``open_col``. Default: ``<configured>``.
+    oriented_r_col:
+        Input dataframe column configured by ``oriented_r_col``. Default: ``<configured>``.
+    oriented_ret_col:
+        Input dataframe column configured by ``oriented_ret_col``. Default: ``<configured>``.
+    price_col:
+        Input dataframe column configured by ``price_col``. Default: ``<configured>``.
+    r_col:
+        Input dataframe column configured by ``r_col``. Default: ``<configured>``.
+    side_col:
+        Input dataframe column configured by ``side_col``. Default: ``<configured>``.
+    upper_barrier_col:
+        Input dataframe column configured by ``upper_barrier_col``. Default: ``<configured>``.
+    volatility_col:
+        Input dataframe column configured by ``volatility_col``. Default: ``<configured>``.
     
     Parameters
     ----------
-    price_col:
-        Input close/price column used as the entry price when
-        ``entry_price_mode`` is ``current_close``.
-    open_col:
-        Input open column. Used for ``next_open`` entry mode and double-touch
-        tie-break resolution.
-    high_col:
-        Input high column used to detect profit/stop barrier touches.
-    low_col:
-        Input low column used to detect profit/stop barrier touches.
-    direction_col:
-        Input side/direction column. Positive values create long candidates,
-        negative values create short candidates, and zero values are ignored.
-    candidate_col:
-        Optional extra candidate filter column. When provided, rows are
-        evaluated only when both ``direction_col`` is non-zero and
-        ``candidate_col`` is non-zero.
-    volatility_col:
-        Input volatility/risk-distance column, usually ATR.
-    
-    outputs:
-        Optional mapping of output alias keys to output column names. This is
-        the preferred way to declare target output columns in YAML.
-    
-    label_col:
-        Output binary label column.
-    event_ret_col:
-        Output raw event return column.
-    fwd_col:
-        Forward-return column returned to the model pipeline. By default this
-        is the same as ``event_ret_col``.
-    candidate_out_col:
-        Output column marking which rows were valid directional candidates.
-    hit_step_col:
-        Output column showing after how many bars the event ended.
-    hit_type_col:
-        Output column containing ``profit``, ``stop``, or ``neutral``.
-    upper_barrier_col:
-        Output column for the upper price barrier.
-    lower_barrier_col:
-        Output column for the lower price barrier.
-    meta_side_col:
-        Output column containing the normalized meta-labeling side.
-    oriented_ret_col:
-        Output return column after orienting return by trade direction.
-    r_col:
-        Output column for event R-multiple. Used only when
-        ``add_r_multiple`` is true.
-    oriented_r_col:
-        Output column for oriented R-multiple. Used only when
-        ``add_r_multiple`` is true.
-    
-    profit_barrier_r:
-        Profit barrier distance in volatility/R units.
-    stop_barrier_r:
-        Stop barrier distance in volatility/R units.
-    vertical_barrier_bars:
-        Maximum number of future bars used to evaluate the event.
-    min_vol:
-        Minimum volatility floor used to avoid zero or invalid risk distance.
-    neutral_label:
-        Handling for events where neither profit nor stop is touched before the
-        vertical barrier. Allowed values are ``drop``, ``profit``, and ``stop``.
-    tie_break:
-        Rule used when profit and stop are touched in the same bar. Allowed
-        values are ``closest_to_open``, ``profit``, and ``stop``.
-    entry_price_mode:
-        Entry price assumption. Allowed values are ``current_close`` and
-        ``next_open``.
     add_r_multiple:
-        If true, also writes ``r_col`` and ``oriented_r_col``.
+        Boolean switch controlling optional target behavior. Default: ``<configured>``.
+    candidate_col:
+        Output dataframe column configured by ``candidate_col``. Default: ``<configured>``.
+    candidate_out_col:
+        Input dataframe column configured by ``candidate_out_col``. Default: ``<configured>``.
+    direction_col:
+        Input dataframe column configured by ``direction_col``. Default: ``<configured>``.
+    entry_price_mode:
+        Mode selector controlling how this target is applied. Default: ``<configured>``.
+    event_ret_col:
+        Input dataframe column configured by ``event_ret_col``. Default: ``<configured>``.
+    fwd_col:
+        Input dataframe column configured by ``fwd_col``. Default: ``<configured>``.
+    high_col:
+        Input dataframe column configured by ``high_col``. Default: ``<configured>``.
+    hit_step_col:
+        Input dataframe column configured by ``hit_step_col``. Default: ``<configured>``.
+    hit_type_col:
+        Output dataframe column configured by ``hit_type_col``. Default: ``<configured>``.
+    horizon:
+        Trailing lookback or forecast horizon controlling this target. Default: ``<configured>``.
+    label_col:
+        Output dataframe column configured by ``label_col``. Default: ``<configured>``.
+    low_col:
+        Input dataframe column configured by ``low_col``. Default: ``<configured>``.
+    lower_barrier_col:
+        Input dataframe column configured by ``lower_barrier_col``. Default: ``<configured>``.
+    lower_mult:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    max_holding:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    meta_side_col:
+        Input dataframe column configured by ``meta_side_col``. Default: ``<configured>``.
+    min_vol:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    neutral_label:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    open_col:
+        Input dataframe column configured by ``open_col``. Default: ``<configured>``.
+    oriented_r_col:
+        Input dataframe column configured by ``oriented_r_col``. Default: ``<configured>``.
+    oriented_ret_col:
+        Input dataframe column configured by ``oriented_ret_col``. Default: ``<configured>``.
+    price_col:
+        Input dataframe column configured by ``price_col``. Default: ``<configured>``.
+    profit_barrier_r:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
     r_clip:
-        Optional R-multiple clipping. Can be null, a scalar bound, or a
-        two-value list such as ``[-5.0, 5.0]``.
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    r_col:
+        Input dataframe column configured by ``r_col``. Default: ``<configured>``.
+    side_col:
+        Input dataframe column configured by ``side_col``. Default: ``<configured>``.
+    stop_barrier_r:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    tie_break:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    upper_barrier_col:
+        Input dataframe column configured by ``upper_barrier_col``. Default: ``<configured>``.
+    upper_mult:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    vertical_barrier_bars:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    volatility_col:
+        Input dataframe column configured by ``volatility_col``. Default: ``<configured>``.
     """
 
 

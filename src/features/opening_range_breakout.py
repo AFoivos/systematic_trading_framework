@@ -608,89 +608,111 @@ def add_opening_range_breakout_features(
     asset: str | None = None,
 ) -> pd.DataFrame:
     """
-    Add London/New York opening-range breakout candidate features.
+    Apply the registered ``opening_range_breakout`` feature transformation.
     
-    The function converts UTC timestamps to each session's local timezone before comparing
-    session times, so DST transitions are handled by the IANA timezone database rather than by
-    fixed UTC-hour assumptions.
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: opening_range_breakout
-            params: {}
+            params:
+              sessions: null
+              enabled_sessions: null
+              asset_session_map: null
+              asset_alias_map: null
+              timestamp_col: timestamp
+              timezone_input: UTC
+              price_col: close
+              open_col: open
+              high_col: high
+              low_col: low
+              close_col: close
+              atr_col: atr_24
+              volatility_col: vol_rolling_24
+              min_range_atr: 0.4
+              max_range_atr: 2.5
+              breakout_buffer_atr: 0.1
+              post_breakout_active_bars: 3
+              max_breakouts_per_session: 1
+              use_close_breakout: true
+              allow_reversal_same_session: false
+              opening_range_bars: null
+              use_extended_trade_until: false
+              asset_col: asset
+              asset: null
+          output_cols:
+            - atr_24
     
     Required input columns
     ----------------------
     timestamp_col:
-        Input column configured by ``timestamp_col``. Default: ``timestamp``.
+        Input dataframe column configured by ``timestamp_col``. Default: ``timestamp``.
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     open_col:
-        Input column configured by ``open_col``. Default: ``open``.
+        Input dataframe column configured by ``open_col``. Default: ``open``.
     high_col:
-        Input column configured by ``high_col``. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input column configured by ``low_col``. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
     close_col:
-        Input column configured by ``close_col``. Default: ``close``.
-    atr_col:
-        Input column configured by ``atr_col``. Default: ``atr_24``.
+        Input dataframe column configured by ``close_col``. Default: ``close``.
     volatility_col:
-        Input column configured by ``volatility_col``. Default: ``vol_rolling_24``.
+        Input dataframe column configured by ``volatility_col``. Default: ``vol_rolling_24``.
     asset_col:
-        Input column configured by ``asset_col``. Default: ``asset``.
+        Input dataframe column configured by ``asset_col``. Default: ``asset``.
     
     Parameters
     ----------
     sessions:
-        Configuration value used by the registered component. Default: ``None``.
+        Configuration parameter accepted by this feature. Default: ``null``.
     enabled_sessions:
-        Configuration value used by the registered component. Default: ``None``.
+        Configuration parameter accepted by this feature. Default: ``null``.
     asset_session_map:
-        Configuration value used by the registered component. Default: ``None``.
+        Configuration parameter accepted by this feature. Default: ``null``.
     asset_alias_map:
-        Configuration value used by the registered component. Default: ``None``.
+        Configuration parameter accepted by this feature. Default: ``null``.
     timestamp_col:
-        Input dataframe column name consumed by the component. Default: ``timestamp``.
+        Input dataframe column configured by ``timestamp_col``. Default: ``timestamp``.
     timezone_input:
-        Configuration value used by the registered component. Default: ``UTC``.
+        Configuration parameter accepted by this feature. Default: ``UTC``.
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     open_col:
-        Input dataframe column name consumed by the component. Default: ``open``.
+        Input dataframe column configured by ``open_col``. Default: ``open``.
     high_col:
-        Input dataframe column name consumed by the component. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input dataframe column name consumed by the component. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
     close_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``close_col``. Default: ``close``.
     atr_col:
-        Input dataframe column name consumed by the component. Default: ``atr_24``.
+        Output dataframe column configured by ``atr_col``. Default: ``atr_24``.
     volatility_col:
-        Input dataframe column name consumed by the component. Default: ``vol_rolling_24``.
+        Input dataframe column configured by ``volatility_col``. Default: ``vol_rolling_24``.
     min_range_atr:
-        Configuration value used by the registered component. Default: ``0.4``.
+        Configuration parameter accepted by this feature. Default: ``0.4``.
     max_range_atr:
-        Configuration value used by the registered component. Default: ``2.5``.
+        Configuration parameter accepted by this feature. Default: ``2.5``.
     breakout_buffer_atr:
-        Configuration value used by the registered component. Default: ``0.1``.
+        Configuration parameter accepted by this feature. Default: ``0.1``.
     post_breakout_active_bars:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``3``.
+        Configuration parameter accepted by this feature. Default: ``3``.
     max_breakouts_per_session:
-        Configuration value used by the registered component. Default: ``1``.
+        Configuration parameter accepted by this feature. Default: ``1``.
     use_close_breakout:
-        Configuration value used by the registered component. Default: ``True``.
+        Boolean switch controlling optional feature behavior. Default: ``true``.
     allow_reversal_same_session:
-        Configuration value used by the registered component. Default: ``False``.
+        Configuration parameter accepted by this feature. Default: ``false``.
     opening_range_bars:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``None``.
+        Configuration parameter accepted by this feature. Default: ``null``.
     use_extended_trade_until:
-        Configuration value used by the registered component. Default: ``False``.
+        Boolean switch controlling optional feature behavior. Default: ``false``.
     asset_col:
-        Input dataframe column name consumed by the component. Default: ``asset``.
+        Input dataframe column configured by ``asset_col``. Default: ``asset``.
     asset:
-        Optional asset identifier used in multi-asset orchestration metadata.
+        Configuration parameter accepted by this feature. Default: ``null``.
     """
     _ = price_col, open_col  # Kept for config symmetry with other OHLCV feature steps.
     if int(post_breakout_active_bars) <= 0:

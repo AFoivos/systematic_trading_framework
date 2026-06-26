@@ -14,26 +14,38 @@ def train_elastic_net_classifier(
     returns_col: str | None = None,
 ) -> tuple[pd.DataFrame, object, dict[str, Any]]:
     """
-    Train the registered ``elastic_net_clf`` model component.
+    Apply the registered ``elastic_net_clf`` model transformation.
+    
+    This model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         model:
           kind: elastic_net_clf
-          params: {}
+          params:
+            returns_col: null
+            params: <configured>
+            penalty: <configured>
+            preprocessing: <configured>
+            solver: <configured>
     
     Required input columns
     ----------------------
     returns_col:
-        Optional input column configured by ``returns_col``; used when a value is provided.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
     
     Parameters
     ----------
-    model_cfg:
-        Configuration mapping, usually resolved from YAML before this
-        registered component is called.
     returns_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
+    params:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    penalty:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    preprocessing:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    solver:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
     """
     cfg = dict(model_cfg or {})
     params = dict(cfg.get("params", {}) or {})

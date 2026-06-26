@@ -413,24 +413,199 @@ def indicator_model_adaptive_pullback_signal(
     **params: Any,
 ) -> pd.DataFrame:
     """
-    Registry-compatible wrapper returning only the transformed DataFrame.
+    Apply the registered ``indicator_model_adaptive_pullback`` signal transformation.
+    
+    This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         signals:
           kind: indicator_model_adaptive_pullback
-          params: {}
+          params:
+            close_col: close
+            ema_fast: 20
+            ema_mid: 50
+            ema_slow: 100
+            ema_fast_col: null
+            ema_mid_col: null
+            ema_slow_col: null
+            ema_slope_fast_col: null
+            ema_slope_mid_col: null
+            adx_col: null
+            min_adx: 18.0
+            max_adx: 45.0
+            rsi_col: null
+            rsi_long_min: 45.0
+            rsi_long_max: 68.0
+            rsi_short_min: 32.0
+            rsi_short_max: 55.0
+            stoch_k_col: stoch_rsi_k
+            stoch_d_col: stoch_rsi_d
+            stoch_cross_up_col: stoch_rsi_cross_up
+            stoch_cross_down_col: stoch_rsi_cross_down
+            stoch_long_max: 60.0
+            stoch_short_min: 40.0
+            macd_hist_col: macd_hist
+            macd_hist_slope_col: macd_hist_slope
+            require_macd_confirmation: true
+            atr_pct_rank_col: null
+            min_atr_pct_rank: 0.2
+            max_atr_pct_rank: 0.9
+            bb_bandwidth_col: bollinger_bandwidth
+            bb_bandwidth_rank_col: bollinger_bandwidth_rank_100
+            min_bb_bandwidth: 0.0
+            min_bb_bandwidth_rank: 0.2
+            distance_ema_fast_atr_col: null
+            max_distance_from_ema_atr: 0.75
+            candidate_long_col: candidate_long
+            candidate_short_col: candidate_short
+            direction_col: direction
+            signal_col: signal
+            candidate_col: signal_candidate
+            signal_name_col: signal_name
+            score_col: signal_score
+            signal_name: indicator_model_adaptive_pullback
+          output_cols:
+            - signal
+            - signal_candidate
     
     Required input columns
     ----------------------
-    None fixed by signature:
-        Required dataframe columns are resolved from configuration or from
-        upstream feature/target/signal stages at runtime.
+    close_col:
+        Input dataframe column configured by ``close_col``. Default: ``close``.
+    ema_fast_col:
+        Input dataframe column configured by ``ema_fast_col``. Default: ``null``.
+    ema_mid_col:
+        Input dataframe column configured by ``ema_mid_col``. Default: ``null``.
+    ema_slow_col:
+        Input dataframe column configured by ``ema_slow_col``. Default: ``null``.
+    ema_slope_fast_col:
+        Input dataframe column configured by ``ema_slope_fast_col``. Default: ``null``.
+    ema_slope_mid_col:
+        Input dataframe column configured by ``ema_slope_mid_col``. Default: ``null``.
+    adx_col:
+        Input dataframe column configured by ``adx_col``. Default: ``null``.
+    rsi_col:
+        Input dataframe column configured by ``rsi_col``. Default: ``null``.
+    stoch_k_col:
+        Input dataframe column configured by ``stoch_k_col``. Default: ``stoch_rsi_k``.
+    stoch_d_col:
+        Input dataframe column configured by ``stoch_d_col``. Default: ``stoch_rsi_d``.
+    stoch_cross_up_col:
+        Input dataframe column configured by ``stoch_cross_up_col``. Default: ``stoch_rsi_cross_up``.
+    stoch_cross_down_col:
+        Input dataframe column configured by ``stoch_cross_down_col``. Default: ``stoch_rsi_cross_down``.
+    macd_hist_col:
+        Input dataframe column configured by ``macd_hist_col``. Default: ``macd_hist``.
+    macd_hist_slope_col:
+        Input dataframe column configured by ``macd_hist_slope_col``. Default: ``macd_hist_slope``.
+    atr_pct_rank_col:
+        Input dataframe column configured by ``atr_pct_rank_col``. Default: ``null``.
+    bb_bandwidth_col:
+        Input dataframe column configured by ``bb_bandwidth_col``. Default: ``bollinger_bandwidth``.
+    bb_bandwidth_rank_col:
+        Input dataframe column configured by ``bb_bandwidth_rank_col``. Default: ``bollinger_bandwidth_rank_100``.
+    distance_ema_fast_atr_col:
+        Input dataframe column configured by ``distance_ema_fast_atr_col``. Default: ``null``.
+    candidate_long_col:
+        Input dataframe column configured by ``candidate_long_col``. Default: ``candidate_long``.
+    candidate_short_col:
+        Input dataframe column configured by ``candidate_short_col``. Default: ``candidate_short``.
+    direction_col:
+        Input dataframe column configured by ``direction_col``. Default: ``direction``.
+    signal_name_col:
+        Input dataframe column configured by ``signal_name_col``. Default: ``signal_name``.
+    score_col:
+        Input dataframe column configured by ``score_col``. Default: ``signal_score``.
     
     Parameters
     ----------
-    params:
-        Additional keyword parameters accepted from YAML ``params``.
+    close_col:
+        Input dataframe column configured by ``close_col``. Default: ``close``.
+    ema_fast:
+        Configuration parameter accepted by this signal. Default: ``20``.
+    ema_mid:
+        Configuration parameter accepted by this signal. Default: ``50``.
+    ema_slow:
+        Configuration parameter accepted by this signal. Default: ``100``.
+    ema_fast_col:
+        Input dataframe column configured by ``ema_fast_col``. Default: ``null``.
+    ema_mid_col:
+        Input dataframe column configured by ``ema_mid_col``. Default: ``null``.
+    ema_slow_col:
+        Input dataframe column configured by ``ema_slow_col``. Default: ``null``.
+    ema_slope_fast_col:
+        Input dataframe column configured by ``ema_slope_fast_col``. Default: ``null``.
+    ema_slope_mid_col:
+        Input dataframe column configured by ``ema_slope_mid_col``. Default: ``null``.
+    adx_col:
+        Input dataframe column configured by ``adx_col``. Default: ``null``.
+    min_adx:
+        Configuration parameter accepted by this signal. Default: ``18.0``.
+    max_adx:
+        Configuration parameter accepted by this signal. Default: ``45.0``.
+    rsi_col:
+        Input dataframe column configured by ``rsi_col``. Default: ``null``.
+    rsi_long_min:
+        Numeric threshold used by this signal. Default: ``45.0``.
+    rsi_long_max:
+        Numeric threshold used by this signal. Default: ``68.0``.
+    rsi_short_min:
+        Numeric threshold used by this signal. Default: ``32.0``.
+    rsi_short_max:
+        Numeric threshold used by this signal. Default: ``55.0``.
+    stoch_k_col:
+        Input dataframe column configured by ``stoch_k_col``. Default: ``stoch_rsi_k``.
+    stoch_d_col:
+        Input dataframe column configured by ``stoch_d_col``. Default: ``stoch_rsi_d``.
+    stoch_cross_up_col:
+        Input dataframe column configured by ``stoch_cross_up_col``. Default: ``stoch_rsi_cross_up``.
+    stoch_cross_down_col:
+        Input dataframe column configured by ``stoch_cross_down_col``. Default: ``stoch_rsi_cross_down``.
+    stoch_long_max:
+        Numeric threshold used by this signal. Default: ``60.0``.
+    stoch_short_min:
+        Numeric threshold used by this signal. Default: ``40.0``.
+    macd_hist_col:
+        Input dataframe column configured by ``macd_hist_col``. Default: ``macd_hist``.
+    macd_hist_slope_col:
+        Input dataframe column configured by ``macd_hist_slope_col``. Default: ``macd_hist_slope``.
+    require_macd_confirmation:
+        Configuration parameter accepted by this signal. Default: ``true``.
+    atr_pct_rank_col:
+        Input dataframe column configured by ``atr_pct_rank_col``. Default: ``null``.
+    min_atr_pct_rank:
+        Configuration parameter accepted by this signal. Default: ``0.2``.
+    max_atr_pct_rank:
+        Configuration parameter accepted by this signal. Default: ``0.9``.
+    bb_bandwidth_col:
+        Input dataframe column configured by ``bb_bandwidth_col``. Default: ``bollinger_bandwidth``.
+    bb_bandwidth_rank_col:
+        Input dataframe column configured by ``bb_bandwidth_rank_col``. Default: ``bollinger_bandwidth_rank_100``.
+    min_bb_bandwidth:
+        Configuration parameter accepted by this signal. Default: ``0.0``.
+    min_bb_bandwidth_rank:
+        Configuration parameter accepted by this signal. Default: ``0.2``.
+    distance_ema_fast_atr_col:
+        Input dataframe column configured by ``distance_ema_fast_atr_col``. Default: ``null``.
+    max_distance_from_ema_atr:
+        Configuration parameter accepted by this signal. Default: ``0.75``.
+    candidate_long_col:
+        Input dataframe column configured by ``candidate_long_col``. Default: ``candidate_long``.
+    candidate_short_col:
+        Input dataframe column configured by ``candidate_short_col``. Default: ``candidate_short``.
+    direction_col:
+        Input dataframe column configured by ``direction_col``. Default: ``direction``.
+    signal_col:
+        Output dataframe column configured by ``signal_col``. Default: ``signal``.
+    candidate_col:
+        Output dataframe column configured by ``candidate_col``. Default: ``signal_candidate``.
+    signal_name_col:
+        Input dataframe column configured by ``signal_name_col``. Default: ``signal_name``.
+    score_col:
+        Input dataframe column configured by ``score_col``. Default: ``signal_score``.
+    signal_name:
+        Configuration parameter accepted by this signal. Default: ``indicator_model_adaptive_pullback``.
     """
     out, _ = build_indicator_model_adaptive_pullback_signal(df, params)
     return out

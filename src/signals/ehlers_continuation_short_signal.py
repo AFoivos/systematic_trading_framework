@@ -218,23 +218,124 @@ def ehlers_continuation_short_signal(df: pd.DataFrame, **params: Any) -> pd.Data
     """
     Apply the registered ``ehlers_continuation_short`` signal transformation.
     
+    This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
     YAML declaration::
     
         signals:
           kind: ehlers_continuation_short
-          params: {}
-        # Legacy kind alias: ehlers_continuation_short_signal
+          params:
+            entry_mode: state
+            entry_delay_bars: 0
+            short_only: true
+            use_ema_regime: true
+            use_mama_fama: true
+            use_roofing_lt_slope: true
+            use_decycler: true
+            ema_fast_col: ema_50
+            ema_slow_col: ema_100
+            mama_col: mama
+            fama_col: fama
+            roofing_col: roofing_filter_48_10
+            roofing_slope_col: roofing_filter_48_10_slope
+            decycler_osc_col: decycler_oscillator_30_60
+            ema_condition_col: ehlers_continuation_ema50_lt_ema100
+            mama_condition_col: ehlers_continuation_mama_lt_fama
+            roofing_negative_col: ehlers_continuation_roofing_lt_zero
+            roofing_slope_negative_col: ehlers_continuation_roofing_slope_lt_zero
+            roofing_lt_slope_col: ehlers_continuation_roofing_lt_slope
+            decycler_negative_col: ehlers_continuation_decycler_osc_lt_zero
+            state_col: ehlers_continuation_short_state
+            entry_col: ehlers_continuation_short_entry
+            signal_col: ehlers_continuation_signal
+            candidate_col: ehlers_continuation_candidate
+          output_cols:
+            - ehlers_continuation_signal
+            - ehlers_continuation_candidate
     
     Required input columns
     ----------------------
-    None fixed by signature:
-        Required dataframe columns are resolved from configuration or from
-        upstream feature/target/signal stages at runtime.
+    ema_fast_col:
+        Input dataframe column configured by ``ema_fast_col``. Default: ``ema_50``.
+    ema_slow_col:
+        Input dataframe column configured by ``ema_slow_col``. Default: ``ema_100``.
+    mama_col:
+        Input dataframe column configured by ``mama_col``. Default: ``mama``.
+    fama_col:
+        Input dataframe column configured by ``fama_col``. Default: ``fama``.
+    roofing_col:
+        Input dataframe column configured by ``roofing_col``. Default: ``roofing_filter_48_10``.
+    roofing_slope_col:
+        Input dataframe column configured by ``roofing_slope_col``. Default: ``roofing_filter_48_10_slope``.
+    decycler_osc_col:
+        Input dataframe column configured by ``decycler_osc_col``. Default: ``decycler_oscillator_30_60``.
+    ema_condition_col:
+        Input dataframe column configured by ``ema_condition_col``. Default: ``ehlers_continuation_ema50_lt_ema100``.
+    mama_condition_col:
+        Input dataframe column configured by ``mama_condition_col``. Default: ``ehlers_continuation_mama_lt_fama``.
+    roofing_negative_col:
+        Input dataframe column configured by ``roofing_negative_col``. Default: ``ehlers_continuation_roofing_lt_zero``.
+    roofing_slope_negative_col:
+        Input dataframe column configured by ``roofing_slope_negative_col``. Default: ``ehlers_continuation_roofing_slope_lt_zero``.
+    roofing_lt_slope_col:
+        Input dataframe column configured by ``roofing_lt_slope_col``. Default: ``ehlers_continuation_roofing_lt_slope``.
+    decycler_negative_col:
+        Input dataframe column configured by ``decycler_negative_col``. Default: ``ehlers_continuation_decycler_osc_lt_zero``.
+    state_col:
+        Input dataframe column configured by ``state_col``. Default: ``ehlers_continuation_short_state``.
+    entry_col:
+        Input dataframe column configured by ``entry_col``. Default: ``ehlers_continuation_short_entry``.
     
     Parameters
     ----------
-    params:
-        Additional keyword parameters accepted from YAML ``params``.
+    entry_mode:
+        Mode selector controlling how this signal is applied. Default: ``state``.
+    entry_delay_bars:
+        Configuration parameter accepted by this signal. Default: ``0``.
+    short_only:
+        Configuration parameter accepted by this signal. Default: ``true``.
+    use_ema_regime:
+        Boolean switch controlling optional signal behavior. Default: ``true``.
+    use_mama_fama:
+        Boolean switch controlling optional signal behavior. Default: ``true``.
+    use_roofing_lt_slope:
+        Boolean switch controlling optional signal behavior. Default: ``true``.
+    use_decycler:
+        Boolean switch controlling optional signal behavior. Default: ``true``.
+    ema_fast_col:
+        Input dataframe column configured by ``ema_fast_col``. Default: ``ema_50``.
+    ema_slow_col:
+        Input dataframe column configured by ``ema_slow_col``. Default: ``ema_100``.
+    mama_col:
+        Input dataframe column configured by ``mama_col``. Default: ``mama``.
+    fama_col:
+        Input dataframe column configured by ``fama_col``. Default: ``fama``.
+    roofing_col:
+        Input dataframe column configured by ``roofing_col``. Default: ``roofing_filter_48_10``.
+    roofing_slope_col:
+        Input dataframe column configured by ``roofing_slope_col``. Default: ``roofing_filter_48_10_slope``.
+    decycler_osc_col:
+        Input dataframe column configured by ``decycler_osc_col``. Default: ``decycler_oscillator_30_60``.
+    ema_condition_col:
+        Input dataframe column configured by ``ema_condition_col``. Default: ``ehlers_continuation_ema50_lt_ema100``.
+    mama_condition_col:
+        Input dataframe column configured by ``mama_condition_col``. Default: ``ehlers_continuation_mama_lt_fama``.
+    roofing_negative_col:
+        Input dataframe column configured by ``roofing_negative_col``. Default: ``ehlers_continuation_roofing_lt_zero``.
+    roofing_slope_negative_col:
+        Input dataframe column configured by ``roofing_slope_negative_col``. Default: ``ehlers_continuation_roofing_slope_lt_zero``.
+    roofing_lt_slope_col:
+        Input dataframe column configured by ``roofing_lt_slope_col``. Default: ``ehlers_continuation_roofing_lt_slope``.
+    decycler_negative_col:
+        Input dataframe column configured by ``decycler_negative_col``. Default: ``ehlers_continuation_decycler_osc_lt_zero``.
+    state_col:
+        Input dataframe column configured by ``state_col``. Default: ``ehlers_continuation_short_state``.
+    entry_col:
+        Input dataframe column configured by ``entry_col``. Default: ``ehlers_continuation_short_entry``.
+    signal_col:
+        Output dataframe column configured by ``signal_col``. Default: ``ehlers_continuation_signal``.
+    candidate_col:
+        Output dataframe column configured by ``candidate_col``. Default: ``ehlers_continuation_candidate``.
     """
     out, _ = build_ehlers_continuation_short_signal(df, params)
     return out

@@ -83,29 +83,79 @@ def build_future_return_regression_target(
     target_cfg: dict[str, Any] | None,
 ) -> tuple[pd.DataFrame, str, str, dict[str, Any]]:
     """
-    Build a dense all-bar continuous future-return target for regression forecasters.
+    Apply the registered ``future_return_regression`` target transformation.
     
-    The target intentionally uses future bars only in the target column. Feature selection later
-    excludes every emitted target column, so the model can learn from current/past features while
-    being evaluated against the configured forward horizon.
+    This target uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         target:
           kind: future_return_regression
-          params: {}
+          params:
+            clip: <configured>
+            fwd_col: <configured>
+            horizon: <configured>
+            horizon_bars: <configured>
+            label_col: <configured>
+            normalize_by_volatility: <configured>
+            normalizer_col: <configured>
+            price_col: <configured>
+            raw_fwd_col: <configured>
+            returns_col: <configured>
+            returns_type: <configured>
+            target_col: <configured>
+            volatility_col: <configured>
+            volatility_floor: <configured>
+          outputs:
+            - configured by label_col
     
     Required input columns
     ----------------------
-    None fixed by signature:
-        Required dataframe columns are resolved from configuration or from
-        upstream feature/target/signal stages at runtime.
+    fwd_col:
+        Input dataframe column configured by ``fwd_col``. Default: ``<configured>``.
+    normalizer_col:
+        Input dataframe column configured by ``normalizer_col``. Default: ``<configured>``.
+    price_col:
+        Input dataframe column configured by ``price_col``. Default: ``<configured>``.
+    raw_fwd_col:
+        Input dataframe column configured by ``raw_fwd_col``. Default: ``<configured>``.
+    returns_col:
+        Input dataframe column configured by ``returns_col``. Default: ``<configured>``.
+    target_col:
+        Input dataframe column configured by ``target_col``. Default: ``<configured>``.
+    volatility_col:
+        Input dataframe column configured by ``volatility_col``. Default: ``<configured>``.
     
     Parameters
     ----------
-    target_cfg:
-        Configuration mapping, usually resolved from YAML before this
-        registered component is called.
+    clip:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    fwd_col:
+        Input dataframe column configured by ``fwd_col``. Default: ``<configured>``.
+    horizon:
+        Trailing lookback or forecast horizon controlling this target. Default: ``<configured>``.
+    horizon_bars:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    label_col:
+        Output dataframe column configured by ``label_col``. Default: ``<configured>``.
+    normalize_by_volatility:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    normalizer_col:
+        Input dataframe column configured by ``normalizer_col``. Default: ``<configured>``.
+    price_col:
+        Input dataframe column configured by ``price_col``. Default: ``<configured>``.
+    raw_fwd_col:
+        Input dataframe column configured by ``raw_fwd_col``. Default: ``<configured>``.
+    returns_col:
+        Input dataframe column configured by ``returns_col``. Default: ``<configured>``.
+    returns_type:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    target_col:
+        Input dataframe column configured by ``target_col``. Default: ``<configured>``.
+    volatility_col:
+        Input dataframe column configured by ``volatility_col``. Default: ``<configured>``.
+    volatility_floor:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
     """
     cfg = apply_target_output_aliases(target_cfg)
     price_col = str(cfg.get("price_col", "close"))

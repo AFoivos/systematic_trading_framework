@@ -17,31 +17,40 @@ def forecast_vol_adjusted_signal(
     """
     Apply the registered ``forecast_vol_adjusted`` signal transformation.
     
+    This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
     YAML declaration::
     
         signals:
           kind: forecast_vol_adjusted
-          params: {}
+          params:
+            forecast_col: pred_ret
+            vol_col: pred_vol
+            signal_col: null
+            clip: 1.0
+            vol_floor: 1e-06
+          output_cols:
+            - configured by signal_col
     
     Required input columns
     ----------------------
     forecast_col:
-        Input column configured by ``forecast_col``. Default: ``pred_ret``.
+        Input dataframe column configured by ``forecast_col``. Default: ``pred_ret``.
     vol_col:
-        Input column configured by ``vol_col``. Default: ``pred_vol``.
+        Input dataframe column configured by ``vol_col``. Default: ``pred_vol``.
     
     Parameters
     ----------
     forecast_col:
-        Input dataframe column name consumed by the component. Default: ``pred_ret``.
+        Input dataframe column configured by ``forecast_col``. Default: ``pred_ret``.
     vol_col:
-        Input dataframe column name consumed by the component. Default: ``pred_vol``.
+        Input dataframe column configured by ``vol_col``. Default: ``pred_vol``.
     signal_col:
-        Output column name emitted by the component. Default: ``None``.
+        Output dataframe column configured by ``signal_col``. Default: ``null``.
     clip:
-        Configuration value used by the registered component. Default: ``1.0``.
+        Configuration parameter accepted by this signal. Default: ``1.0``.
     vol_floor:
-        Configuration value used by the registered component. Default: ``1e-06``.
+        Configuration parameter accepted by this signal. Default: ``1e-06``.
     """
     output_col = resolve_signal_output_name(
         signal_col=signal_col,

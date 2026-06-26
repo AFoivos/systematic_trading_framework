@@ -15,13 +15,38 @@ def add_trend_regime_features(
     inplace: bool = False,
 ) -> pd.DataFrame:
     """
-    Add the SMA-based trend regime features used by the dashboard builder.
-
+    Apply the registered ``trend_regime`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
     YAML declaration::
-
+    
         features:
           - step: trend_regime
-            params: {}
+            params:
+              price_col: close
+              base_sma_for_sign: 50
+              short_sma: 20
+              long_sma: 50
+              inplace: false
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input dataframe column configured by ``price_col``. Default: ``close``.
+    
+    Parameters
+    ----------
+    price_col:
+        Input dataframe column configured by ``price_col``. Default: ``close``.
+    base_sma_for_sign:
+        Configuration parameter accepted by this feature. Default: ``50``.
+    short_sma:
+        Configuration parameter accepted by this feature. Default: ``20``.
+    long_sma:
+        Configuration parameter accepted by this feature. Default: ``50``.
+    inplace:
+        Boolean switch controlling optional feature behavior. Default: ``false``.
     """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame")

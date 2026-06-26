@@ -13,32 +13,37 @@ def regime_filtered_signal(
     active_value: float = 1.0,
 ) -> pd.Series:
     """
-    Keep base signal only when regime_col == active_value.
+    Apply the registered ``regime_filtered`` signal transformation.
+    
+    This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         signals:
           kind: regime_filtered
           params:
-            base_signal_col: signal
-            regime_col: trend_regime
+            base_signal_col: <required>
+            regime_col: <required>
+            signal_col: null
+            active_value: 1.0
+          output_cols:
+            - configured by signal_col
     
     Required input columns
     ----------------------
-    None fixed by signature:
-        Required dataframe columns are resolved from configuration or from
-        upstream feature/target/signal stages at runtime.
+    regime_col:
+        Input dataframe column configured by ``regime_col``.
     
     Parameters
     ----------
     base_signal_col:
-        Output column name emitted by the component.
+        Input dataframe column configured by ``base_signal_col``.
     regime_col:
-        Input dataframe column name consumed by the component.
+        Input dataframe column configured by ``regime_col``.
     signal_col:
-        Output column name emitted by the component. Default: ``None``.
+        Output dataframe column configured by ``signal_col``. Default: ``null``.
     active_value:
-        Configuration value used by the registered component. Default: ``1.0``.
+        Configuration parameter accepted by this signal. Default: ``1.0``.
     """
     if base_signal_col not in df.columns:
         raise KeyError(f"base_signal_col '{base_signal_col}' not found in DataFrame")

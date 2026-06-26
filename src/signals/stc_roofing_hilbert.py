@@ -382,22 +382,193 @@ def stc_roofing_hilbert_signal(df: pd.DataFrame, **params: Any) -> pd.DataFrame:
     """
     Apply the registered ``stc_roofing_hilbert`` signal transformation.
     
+    This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
     YAML declaration::
     
         signals:
           kind: stc_roofing_hilbert
-          params: {}
+          params:
+            mode: long_short
+            ema_fast_col: ema_50
+            ema_slow_col: ema_100
+            roofing_col: roofing_filter
+            roofing_slope_col: roofing_slope
+            stc_col: stc
+            hilbert_cycle_ok_col: hilbert_cycle_ok
+            hilbert_amplitude_rising_col: hilbert_amplitude_rising
+            zscore_momentum_col: zscore_momentum_20
+            adx_col: adx_14
+            volatility_regime_col: volatility_regime
+            stc_long_cross_level: 25.0
+            stc_short_cross_level: 75.0
+            roofing_slope_bars: 3
+            use_ema_regime: true
+            use_roofing_filter: true
+            use_roofing_slope: true
+            use_hilbert_filter: false
+            use_zscore_filter: false
+            use_adx_filter: false
+            adx_min: 18.0
+            use_atr_vol_filter: false
+            allowed_volatility_regimes: [0, 1]
+            entry_delay_bars: 0
+            long_candidate_col: stc_roofing_long_candidate
+            short_candidate_col: stc_roofing_short_candidate
+            signal_col: stc_roofing_signal
+            candidate_col: stc_roofing_signal_candidate
+            hilbert_long_candidate_col: stc_roofing_hilbert_long_candidate
+            hilbert_short_candidate_col: stc_roofing_hilbert_short_candidate
+            hilbert_signal_col: stc_roofing_hilbert_signal
+            ema_bullish_col: stc_roofing_ema_bullish
+            ema_bearish_col: stc_roofing_ema_bearish
+            roofing_positive_col: stc_roofing_roofing_positive
+            roofing_negative_col: stc_roofing_roofing_negative
+            roofing_slope_positive_col: stc_roofing_roofing_slope_positive
+            roofing_slope_negative_col: stc_roofing_roofing_slope_negative
+            stc_cross_up_col: stc_roofing_stc_cross_up
+            stc_cross_down_col: stc_roofing_stc_cross_down
+            hilbert_pass_col: stc_roofing_hilbert_pass
+            zscore_long_pass_col: stc_roofing_zscore_long_pass
+            zscore_short_pass_col: stc_roofing_zscore_short_pass
+            adx_pass_col: stc_roofing_adx_pass
+            volatility_pass_col: stc_roofing_volatility_pass
+          output_cols:
+            - stc_roofing_long_candidate
+            - stc_roofing_short_candidate
+            - stc_roofing_signal
+            - stc_roofing_signal_candidate
+            - stc_roofing_hilbert_long_candidate
+            - stc_roofing_hilbert_short_candidate
+            - stc_roofing_hilbert_pass
+            - stc_roofing_zscore_long_pass
+            - stc_roofing_zscore_short_pass
+            - stc_roofing_adx_pass
+            - stc_roofing_volatility_pass
     
     Required input columns
     ----------------------
-    None fixed by signature:
-        Required dataframe columns are resolved from configuration or from
-        upstream feature/target/signal stages at runtime.
+    ema_fast_col:
+        Input dataframe column configured by ``ema_fast_col``. Default: ``ema_50``.
+    ema_slow_col:
+        Input dataframe column configured by ``ema_slow_col``. Default: ``ema_100``.
+    roofing_col:
+        Input dataframe column configured by ``roofing_col``. Default: ``roofing_filter``.
+    roofing_slope_col:
+        Input dataframe column configured by ``roofing_slope_col``. Default: ``roofing_slope``.
+    stc_col:
+        Input dataframe column configured by ``stc_col``. Default: ``stc``.
+    hilbert_cycle_ok_col:
+        Input dataframe column configured by ``hilbert_cycle_ok_col``. Default: ``hilbert_cycle_ok``.
+    zscore_momentum_col:
+        Input dataframe column configured by ``zscore_momentum_col``. Default: ``zscore_momentum_20``.
+    adx_col:
+        Input dataframe column configured by ``adx_col``. Default: ``adx_14``.
+    volatility_regime_col:
+        Input dataframe column configured by ``volatility_regime_col``. Default: ``volatility_regime``.
+    roofing_positive_col:
+        Input dataframe column configured by ``roofing_positive_col``. Default: ``stc_roofing_roofing_positive``.
+    roofing_negative_col:
+        Input dataframe column configured by ``roofing_negative_col``. Default: ``stc_roofing_roofing_negative``.
+    roofing_slope_positive_col:
+        Input dataframe column configured by ``roofing_slope_positive_col``. Default: ``stc_roofing_roofing_slope_positive``.
+    roofing_slope_negative_col:
+        Input dataframe column configured by ``roofing_slope_negative_col``. Default: ``stc_roofing_roofing_slope_negative``.
+    stc_cross_up_col:
+        Input dataframe column configured by ``stc_cross_up_col``. Default: ``stc_roofing_stc_cross_up``.
+    stc_cross_down_col:
+        Input dataframe column configured by ``stc_cross_down_col``. Default: ``stc_roofing_stc_cross_down``.
     
     Parameters
     ----------
-    params:
-        Additional keyword parameters accepted from YAML ``params``.
+    mode:
+        Mode selector controlling how this signal is applied. Default: ``long_short``.
+    ema_fast_col:
+        Input dataframe column configured by ``ema_fast_col``. Default: ``ema_50``.
+    ema_slow_col:
+        Input dataframe column configured by ``ema_slow_col``. Default: ``ema_100``.
+    roofing_col:
+        Input dataframe column configured by ``roofing_col``. Default: ``roofing_filter``.
+    roofing_slope_col:
+        Input dataframe column configured by ``roofing_slope_col``. Default: ``roofing_slope``.
+    stc_col:
+        Input dataframe column configured by ``stc_col``. Default: ``stc``.
+    hilbert_cycle_ok_col:
+        Input dataframe column configured by ``hilbert_cycle_ok_col``. Default: ``hilbert_cycle_ok``.
+    hilbert_amplitude_rising_col:
+        Input dataframe column configured by ``hilbert_amplitude_rising_col``. Default: ``hilbert_amplitude_rising``.
+    zscore_momentum_col:
+        Input dataframe column configured by ``zscore_momentum_col``. Default: ``zscore_momentum_20``.
+    adx_col:
+        Input dataframe column configured by ``adx_col``. Default: ``adx_14``.
+    volatility_regime_col:
+        Input dataframe column configured by ``volatility_regime_col``. Default: ``volatility_regime``.
+    stc_long_cross_level:
+        Configuration parameter accepted by this signal. Default: ``25.0``.
+    stc_short_cross_level:
+        Configuration parameter accepted by this signal. Default: ``75.0``.
+    roofing_slope_bars:
+        Configuration parameter accepted by this signal. Default: ``3``.
+    use_ema_regime:
+        Boolean switch controlling optional signal behavior. Default: ``true``.
+    use_roofing_filter:
+        Boolean switch controlling optional signal behavior. Default: ``true``.
+    use_roofing_slope:
+        Boolean switch controlling optional signal behavior. Default: ``true``.
+    use_hilbert_filter:
+        Boolean switch controlling optional signal behavior. Default: ``false``.
+    use_zscore_filter:
+        Boolean switch controlling optional signal behavior. Default: ``false``.
+    use_adx_filter:
+        Boolean switch controlling optional signal behavior. Default: ``false``.
+    adx_min:
+        Numeric threshold used by this signal. Default: ``18.0``.
+    use_atr_vol_filter:
+        Boolean switch controlling optional signal behavior. Default: ``false``.
+    allowed_volatility_regimes:
+        Configuration parameter accepted by this signal. Default: ``[0, 1]``.
+    entry_delay_bars:
+        Configuration parameter accepted by this signal. Default: ``0``.
+    long_candidate_col:
+        Output dataframe column configured by ``long_candidate_col``. Default: ``stc_roofing_long_candidate``.
+    short_candidate_col:
+        Output dataframe column configured by ``short_candidate_col``. Default: ``stc_roofing_short_candidate``.
+    signal_col:
+        Output dataframe column configured by ``signal_col``. Default: ``stc_roofing_signal``.
+    candidate_col:
+        Output dataframe column configured by ``candidate_col``. Default: ``stc_roofing_signal_candidate``.
+    hilbert_long_candidate_col:
+        Output dataframe column configured by ``hilbert_long_candidate_col``. Default: ``stc_roofing_hilbert_long_candidate``.
+    hilbert_short_candidate_col:
+        Output dataframe column configured by ``hilbert_short_candidate_col``. Default: ``stc_roofing_hilbert_short_candidate``.
+    hilbert_signal_col:
+        Input dataframe column configured by ``hilbert_signal_col``. Default: ``stc_roofing_hilbert_signal``.
+    ema_bullish_col:
+        Input dataframe column configured by ``ema_bullish_col``. Default: ``stc_roofing_ema_bullish``.
+    ema_bearish_col:
+        Input dataframe column configured by ``ema_bearish_col``. Default: ``stc_roofing_ema_bearish``.
+    roofing_positive_col:
+        Input dataframe column configured by ``roofing_positive_col``. Default: ``stc_roofing_roofing_positive``.
+    roofing_negative_col:
+        Input dataframe column configured by ``roofing_negative_col``. Default: ``stc_roofing_roofing_negative``.
+    roofing_slope_positive_col:
+        Input dataframe column configured by ``roofing_slope_positive_col``. Default: ``stc_roofing_roofing_slope_positive``.
+    roofing_slope_negative_col:
+        Input dataframe column configured by ``roofing_slope_negative_col``. Default: ``stc_roofing_roofing_slope_negative``.
+    stc_cross_up_col:
+        Input dataframe column configured by ``stc_cross_up_col``. Default: ``stc_roofing_stc_cross_up``.
+    stc_cross_down_col:
+        Input dataframe column configured by ``stc_cross_down_col``. Default: ``stc_roofing_stc_cross_down``.
+    hilbert_pass_col:
+        Output dataframe column configured by ``hilbert_pass_col``. Default: ``stc_roofing_hilbert_pass``.
+    zscore_long_pass_col:
+        Output dataframe column configured by ``zscore_long_pass_col``. Default: ``stc_roofing_zscore_long_pass``.
+    zscore_short_pass_col:
+        Output dataframe column configured by ``zscore_short_pass_col``. Default: ``stc_roofing_zscore_short_pass``.
+    adx_pass_col:
+        Output dataframe column configured by ``adx_pass_col``. Default: ``stc_roofing_adx_pass``.
+    volatility_pass_col:
+        Output dataframe column configured by ``volatility_pass_col``. Default: ``stc_roofing_volatility_pass``.
     """
     out, _ = build_stc_roofing_hilbert_signal(df, params)
     return out

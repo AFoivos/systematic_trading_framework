@@ -13,31 +13,37 @@ def add_mama(
     output_col: str | None = None,
 ) -> pd.DataFrame:
     """
-    Add John Ehlers' causal MESA Adaptive Moving Average.
+    Apply the registered ``mama`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: mama
-            params: {}
+            params:
+              price_col: close
+              fast_limit: 0.5
+              slow_limit: 0.05
+              output_col: null
+          output_cols:
+            - configured by output_col
     
     Required input columns
     ----------------------
-    mama:
-        Required dataframe column read directly by this component.
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     
     Parameters
     ----------
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     fast_limit:
-        Configuration value used by the registered component. Default: ``0.5``.
+        Configuration parameter accepted by this feature. Default: ``0.5``.
     slow_limit:
-        Configuration value used by the registered component. Default: ``0.05``.
+        Configuration parameter accepted by this feature. Default: ``0.05``.
     output_col:
-        Output column name emitted by the component. Default: ``None``.
+        Output dataframe column configured by ``output_col``. Default: ``null``.
     """
     require_columns(df, [price_col], feature="MAMA")
     validate_mama_limits(fast_limit, slow_limit)

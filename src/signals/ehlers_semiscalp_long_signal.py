@@ -216,24 +216,99 @@ def ehlers_semiscalp_long_feature(df: pd.DataFrame, **params: Any) -> pd.DataFra
 
 def ehlers_semiscalp_long_signal(df: pd.DataFrame, **params: Any) -> pd.DataFrame:
     """
-    Apply ``signals.kind: ehlers_semiscalp_long`` from YAML.
+    Apply the registered ``ehlers_semiscalp_long`` signal transformation.
+    
+    This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         signals:
           kind: ehlers_semiscalp_long
-          params: {}
+          params:
+            entry_mode: transition
+            require_mama_rising: false
+            roofing_trigger_mode: rising
+            price_col: close
+            mama_col: mama
+            fama_col: fama
+            decycler_col: decycler
+            roofing_col: roofing_filter_48_10
+            laguerre_col: laguerre_rsi
+            fisher_col: fisher_transform
+            hilbert_amplitude_col: hilbert_amplitude_64
+            dominant_cycle_period_col: dominant_cycle_period
+            amplitude_lookback: 100
+            laguerre_min: 0.5
+            min_cycle_period: 10.0
+            max_cycle_period: 48.0
+            use_cycle_period_filter: false
+            signal_col: signal_side
+            candidate_col: signal_candidate
+          output_cols:
+            - signal_side
+            - signal_candidate
     
     Required input columns
     ----------------------
-    None fixed by signature:
-        Required dataframe columns are resolved from configuration or from
-        upstream feature/target/signal stages at runtime.
+    price_col:
+        Input dataframe column configured by ``price_col``. Default: ``close``.
+    mama_col:
+        Input dataframe column configured by ``mama_col``. Default: ``mama``.
+    fama_col:
+        Input dataframe column configured by ``fama_col``. Default: ``fama``.
+    decycler_col:
+        Input dataframe column configured by ``decycler_col``. Default: ``decycler``.
+    roofing_col:
+        Input dataframe column configured by ``roofing_col``. Default: ``roofing_filter_48_10``.
+    laguerre_col:
+        Input dataframe column configured by ``laguerre_col``. Default: ``laguerre_rsi``.
+    fisher_col:
+        Input dataframe column configured by ``fisher_col``. Default: ``fisher_transform``.
+    hilbert_amplitude_col:
+        Input dataframe column configured by ``hilbert_amplitude_col``. Default: ``hilbert_amplitude_64``.
+    dominant_cycle_period_col:
+        Input dataframe column configured by ``dominant_cycle_period_col``. Default: ``dominant_cycle_period``.
     
     Parameters
     ----------
-    params:
-        Additional keyword parameters accepted from YAML ``params``.
+    entry_mode:
+        Mode selector controlling how this signal is applied. Default: ``transition``.
+    require_mama_rising:
+        Configuration parameter accepted by this signal. Default: ``false``.
+    roofing_trigger_mode:
+        Mode selector controlling how this signal is applied. Default: ``rising``.
+    price_col:
+        Input dataframe column configured by ``price_col``. Default: ``close``.
+    mama_col:
+        Input dataframe column configured by ``mama_col``. Default: ``mama``.
+    fama_col:
+        Input dataframe column configured by ``fama_col``. Default: ``fama``.
+    decycler_col:
+        Input dataframe column configured by ``decycler_col``. Default: ``decycler``.
+    roofing_col:
+        Input dataframe column configured by ``roofing_col``. Default: ``roofing_filter_48_10``.
+    laguerre_col:
+        Input dataframe column configured by ``laguerre_col``. Default: ``laguerre_rsi``.
+    fisher_col:
+        Input dataframe column configured by ``fisher_col``. Default: ``fisher_transform``.
+    hilbert_amplitude_col:
+        Input dataframe column configured by ``hilbert_amplitude_col``. Default: ``hilbert_amplitude_64``.
+    dominant_cycle_period_col:
+        Input dataframe column configured by ``dominant_cycle_period_col``. Default: ``dominant_cycle_period``.
+    amplitude_lookback:
+        Configuration parameter accepted by this signal. Default: ``100``.
+    laguerre_min:
+        Numeric threshold used by this signal. Default: ``0.5``.
+    min_cycle_period:
+        Configuration parameter accepted by this signal. Default: ``10.0``.
+    max_cycle_period:
+        Configuration parameter accepted by this signal. Default: ``48.0``.
+    use_cycle_period_filter:
+        Boolean switch controlling optional signal behavior. Default: ``false``.
+    signal_col:
+        Output dataframe column configured by ``signal_col``. Default: ``signal_side``.
+    candidate_col:
+        Output dataframe column configured by ``candidate_col``. Default: ``signal_candidate``.
     """
     out, _ = build_ehlers_semiscalp_long_signal(df, params)
     return out

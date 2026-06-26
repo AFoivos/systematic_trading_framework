@@ -26,49 +26,67 @@ def probability_vol_adjusted_signal(
     """
     Apply the registered ``probability_vol_adjusted`` signal transformation.
     
+    This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
     YAML declaration::
     
         signals:
           kind: probability_vol_adjusted
-          params: {}
+          params:
+            prob_col: pred_prob
+            vol_col: pred_vol
+            signal_col: null
+            prob_center: 0.5
+            upper: null
+            lower: null
+            vol_target: 0.001
+            clip: 1.0
+            vol_floor: 1e-06
+            min_signal_abs: 0.0
+            activation_filters: null
+            top_quantile: null
+            top_quantile_window: null
+            max_trade_rate: null
+          output_cols:
+            - configured by signal_col
     
     Required input columns
     ----------------------
     prob_col:
-        Input column configured by ``prob_col``. Default: ``pred_prob``.
+        Input dataframe column configured by ``prob_col``. Default: ``pred_prob``.
     vol_col:
-        Input column configured by ``vol_col``. Default: ``pred_vol``.
+        Input dataframe column configured by ``vol_col``. Default: ``pred_vol``.
     
     Parameters
     ----------
     prob_col:
-        Input dataframe column name consumed by the component. Default: ``pred_prob``.
+        Input dataframe column configured by ``prob_col``. Default: ``pred_prob``.
     vol_col:
-        Input dataframe column name consumed by the component. Default: ``pred_vol``.
+        Input dataframe column configured by ``vol_col``. Default: ``pred_vol``.
     signal_col:
-        Output column name emitted by the component. Default: ``None``.
+        Output dataframe column configured by ``signal_col``. Default: ``null``.
     prob_center:
-        Configuration value used by the registered component. Default: ``0.5``.
+        Configuration parameter accepted by this signal. Default: ``0.5``.
     upper:
-        Configuration value used by the registered component. Default: ``None``.
+        Configuration parameter accepted by this signal. Default: ``null``.
     lower:
-        Configuration value used by the registered component. Default: ``None``.
+        Configuration parameter accepted by this signal. Default: ``null``.
     vol_target:
-        Configuration value used by the registered component. Default: ``0.001``.
+        Configuration parameter accepted by this signal. Default: ``0.001``.
     clip:
-        Configuration value used by the registered component. Default: ``1.0``.
+        Configuration parameter accepted by this signal. Default: ``1.0``.
     vol_floor:
-        Configuration value used by the registered component. Default: ``1e-06``.
+        Configuration parameter accepted by this signal. Default: ``1e-06``.
     min_signal_abs:
-        Configuration value used by the registered component. Default: ``0.0``.
+        Configuration parameter accepted by this signal. Default: ``0.0``.
     activation_filters:
-        Configuration value used by the registered component. Default: ``None``.
+        Configuration parameter accepted by this signal. Default: ``null``.
     top_quantile:
-        Configuration value used by the registered component. Default: ``None``.
+        Configuration parameter accepted by this signal. Default: ``null``.
     top_quantile_window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``None``.
+        Trailing lookback or forecast horizon controlling this signal. Default: ``null``.
     max_trade_rate:
-        Configuration value used by the registered component. Default: ``None``.
+        Configuration parameter accepted by this signal. Default: ``null``.
     """
     output_col = resolve_signal_output_name(
         signal_col=signal_col,

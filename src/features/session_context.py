@@ -7,6 +7,32 @@ import pandas as pd
 
 
 def index_in_timezone(index: pd.Index, timezone: str) -> pd.DatetimeIndex:
+    """
+    Apply the registered ``index_in_timezone`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: index_in_timezone
+            params:
+              index: <required>
+              timezone: <required>
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    index:
+        Configuration parameter accepted by this feature.
+    timezone:
+        Configuration parameter accepted by this feature.
+    """
     idx = pd.DatetimeIndex(pd.to_datetime(index, errors="raise"))
     if idx.tz is None:
         idx = idx.tz_localize("UTC")
@@ -14,6 +40,38 @@ def index_in_timezone(index: pd.Index, timezone: str) -> pd.DatetimeIndex:
 
 
 def session_mask(hours: pd.Index, index: pd.Index, *, start_hour: int, end_hour: int) -> pd.Series:
+    """
+    Apply the registered ``session_mask`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: session_mask
+            params:
+              hours: <required>
+              index: <required>
+              start_hour: <required>
+              end_hour: <required>
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    hours:
+        Configuration parameter accepted by this feature.
+    index:
+        Configuration parameter accepted by this feature.
+    start_hour:
+        Configuration parameter accepted by this feature.
+    end_hour:
+        Configuration parameter accepted by this feature.
+    """
     if not (0 <= start_hour <= 23 and 0 <= end_hour <= 24):
         raise ValueError("Session hours must satisfy 0 <= start_hour <= 23 and 0 <= end_hour <= 24.")
     if start_hour == end_hour:
@@ -36,29 +94,34 @@ def add_session_context_features(
     """
     Apply the registered ``session_context`` feature transformation.
     
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
     YAML declaration::
     
         features:
           - step: session_context
-            params: {}
+            params:
+              timezone: UTC
+              add_cyclical_time: true
+              include_weekend_flag: true
+              sessions: null
     
     Required input columns
     ----------------------
-    session_europe:
-        Required dataframe column read directly by this component.
-    session_us:
-        Required dataframe column read directly by this component.
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
     
     Parameters
     ----------
     timezone:
-        Configuration value used by the registered component. Default: ``UTC``.
+        Configuration parameter accepted by this feature. Default: ``UTC``.
     add_cyclical_time:
-        Configuration value used by the registered component. Default: ``True``.
+        Boolean switch controlling optional feature behavior. Default: ``true``.
     include_weekend_flag:
-        Configuration value used by the registered component. Default: ``True``.
+        Configuration parameter accepted by this feature. Default: ``true``.
     sessions:
-        Configuration value used by the registered component. Default: ``None``.
+        Configuration parameter accepted by this feature. Default: ``null``.
     """
     out = df.copy()
     local_idx = index_in_timezone(out.index, timezone)

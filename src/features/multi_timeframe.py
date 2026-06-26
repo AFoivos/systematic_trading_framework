@@ -288,80 +288,97 @@ def add_multi_timeframe_features(
     regime_long_window: int = 48,
 ) -> pd.DataFrame:
     """
-    Build 1h/4h features from 30m OHLCV and align them back point-in-time.
+    Apply the registered ``multi_timeframe`` feature transformation.
     
-    `shift_to_last_closed=True` is the only supported production mode. The function labels
-    resampled HTF bars at their close and asof-merges backward, so a base row cannot receive
-    a higher-timeframe feature whose close time is after the row timestamp. Use
-    `timestamp_convention="bar_start"` for feeds whose timestamps are bar opens.
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: multi_timeframe
-            params: {}
+            params:
+              base_interval_minutes: 30
+              timeframes: [1h, 4h]
+              price_col: close
+              high_col: high
+              low_col: low
+              open_col: open
+              volume_col: volume
+              returns_col: close_logret
+              timezone: UTC
+              shift_to_last_closed: true
+              timestamp_convention: bar_close
+              timestamp_col: timestamp
+              asset_col: asset
+              volatility_window: 12
+              trend_ema_span: 8
+              trend_sma_window: 20
+              atr_window: 14
+              adx_window: 14
+              regime_short_window: 12
+              regime_long_window: 48
     
     Required input columns
     ----------------------
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     high_col:
-        Input column configured by ``high_col``. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input column configured by ``low_col``. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
     open_col:
-        Input column configured by ``open_col``. Default: ``open``.
+        Input dataframe column configured by ``open_col``. Default: ``open``.
     volume_col:
-        Input column configured by ``volume_col``. Default: ``volume``.
+        Input dataframe column configured by ``volume_col``. Default: ``volume``.
     returns_col:
-        Input column configured by ``returns_col``. Default: ``close_logret``.
+        Input dataframe column configured by ``returns_col``. Default: ``close_logret``.
     timestamp_col:
-        Input column configured by ``timestamp_col``. Default: ``timestamp``.
+        Input dataframe column configured by ``timestamp_col``. Default: ``timestamp``.
     asset_col:
-        Input column configured by ``asset_col``. Default: ``asset``.
+        Input dataframe column configured by ``asset_col``. Default: ``asset``.
     
     Parameters
     ----------
     base_interval_minutes:
-        Configuration value used by the registered component. Default: ``30``.
+        Configuration parameter accepted by this feature. Default: ``30``.
     timeframes:
-        Configuration value used by the registered component. Default: ``('1h', '4h')``.
+        Configuration parameter accepted by this feature. Default: ``[1h, 4h]``.
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     high_col:
-        Input dataframe column name consumed by the component. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input dataframe column name consumed by the component. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
     open_col:
-        Input dataframe column name consumed by the component. Default: ``open``.
+        Input dataframe column configured by ``open_col``. Default: ``open``.
     volume_col:
-        Input dataframe column name consumed by the component. Default: ``volume``.
+        Input dataframe column configured by ``volume_col``. Default: ``volume``.
     returns_col:
-        Input dataframe column name consumed by the component. Default: ``close_logret``.
+        Input dataframe column configured by ``returns_col``. Default: ``close_logret``.
     timezone:
-        Configuration value used by the registered component. Default: ``UTC``.
+        Configuration parameter accepted by this feature. Default: ``UTC``.
     shift_to_last_closed:
-        Configuration value used by the registered component. Default: ``True``.
+        Configuration parameter accepted by this feature. Default: ``true``.
     timestamp_convention:
-        Configuration value used by the registered component. Default: ``bar_close``.
+        Configuration parameter accepted by this feature. Default: ``bar_close``.
     timestamp_col:
-        Input dataframe column name consumed by the component. Default: ``timestamp``.
+        Input dataframe column configured by ``timestamp_col``. Default: ``timestamp``.
     asset_col:
-        Input dataframe column name consumed by the component. Default: ``asset``.
+        Input dataframe column configured by ``asset_col``. Default: ``asset``.
     volatility_window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``12``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``12``.
     trend_ema_span:
-        Configuration value used by the registered component. Default: ``8``.
+        Configuration parameter accepted by this feature. Default: ``8``.
     trend_sma_window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``20``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``20``.
     atr_window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``14``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``14``.
     adx_window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``14``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``14``.
     regime_short_window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``12``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``12``.
     regime_long_window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``48``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``48``.
     """
     if not shift_to_last_closed:
         raise ValueError("multi_timeframe currently supports only shift_to_last_closed=true.")

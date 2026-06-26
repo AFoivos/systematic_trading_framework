@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import pytest
 
-from src.features.returns import compute_returns
+from src.features.helpers.normalizations.returns import compute_returns
 from src.features.regime_context import add_regime_context_features
 from src.features.technical.adx import add_adx_features
 from src.features.technical.atr import add_atr_features

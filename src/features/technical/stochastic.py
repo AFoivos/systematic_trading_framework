@@ -16,35 +16,43 @@ def add_stochastic_features(
     """
     Apply the registered ``stochastic`` feature transformation.
     
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
     YAML declaration::
     
         features:
           - step: stochastic
-            params: {}
+            params:
+              price_col: close
+              high_col: high
+              low_col: low
+              window: 14
+              smooth: 3
+              inplace: false
     
     Required input columns
     ----------------------
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     high_col:
-        Input column configured by ``high_col``. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input column configured by ``low_col``. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
     
     Parameters
     ----------
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     high_col:
-        Input dataframe column name consumed by the component. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input dataframe column name consumed by the component. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
     window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``14``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``14``.
     smooth:
-        Configuration value used by the registered component. Default: ``3``.
+        Configuration parameter accepted by this feature. Default: ``3``.
     inplace:
-        Configuration value used by the registered component. Default: ``False``.
+        Boolean switch controlling optional feature behavior. Default: ``false``.
     """
     missing = [c for c in (price_col, high_col, low_col) if c not in df.columns]
     if missing:
@@ -61,6 +69,38 @@ def add_stochastic_features(
 
 
 def compute_stoch_k(close: pd.Series, high: pd.Series, low: pd.Series, window: int = 14) -> pd.Series:
+    """
+    Compute the ``compute_stoch_k`` feature value.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: compute_stoch_k
+            params:
+              close: <required>
+              high: <required>
+              low: <required>
+              window: 14
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    close:
+        Configuration parameter accepted by this feature.
+    high:
+        Configuration parameter accepted by this feature.
+    low:
+        Configuration parameter accepted by this feature.
+    window:
+        Trailing lookback or forecast horizon controlling this feature. Default: ``14``.
+    """
     if not (isinstance(close, pd.Series) and isinstance(high, pd.Series) and isinstance(low, pd.Series)):
         raise TypeError("close, high, low must be pandas Series")
 
@@ -74,6 +114,32 @@ def compute_stoch_k(close: pd.Series, high: pd.Series, low: pd.Series, window: i
 
 
 def compute_stoch_d(k: pd.Series, smooth: int = 3) -> pd.Series:
+    """
+    Compute the ``compute_stoch_d`` feature value.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: compute_stoch_d
+            params:
+              k: <required>
+              smooth: 3
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    k:
+        Configuration parameter accepted by this feature.
+    smooth:
+        Configuration parameter accepted by this feature. Default: ``3``.
+    """
     if not isinstance(k, pd.Series):
         raise TypeError("k must be a pandas Series")
     d = k.rolling(window=smooth, min_periods=smooth).mean()

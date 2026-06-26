@@ -30,6 +30,29 @@ TARGET_KINDS = registry_names(TARGET_REGISTRY)
 
 
 def get_target_builder(name: str) -> TargetBuilder:
+    """
+    Apply the registered ``get_target_builder`` target transformation.
+    
+    This target uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        target:
+          kind: get_target_builder
+          params:
+            name: <required>
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    name:
+        Configuration parameter accepted by this target.
+    """
     return get_registered_component(TARGET_REGISTRY, name, category="target")
 
 
@@ -37,6 +60,29 @@ def build_target(
     df: pd.DataFrame,
     target_cfg: dict[str, Any] | None,
 ) -> tuple[pd.DataFrame, str, str, dict[str, Any]]:
+    """
+    Apply the registered ``target`` target transformation.
+    
+    This target uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        target:
+          kind: target
+          params:
+            kind: <configured>
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    kind:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    """
     cfg = dict(target_cfg or {})
     kind = str(cfg.get("kind", "forward_return"))
     builder = get_target_builder(kind)

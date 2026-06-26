@@ -280,22 +280,136 @@ def c2_regime_aware_momentum_signal(df: pd.DataFrame, **params: Any) -> pd.DataF
     """
     Apply the registered ``c2_regime_aware_momentum`` signal transformation.
     
+    This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
     YAML declaration::
     
         signals:
           kind: c2_regime_aware_momentum
-          params: {}
+          params:
+            mode: long_short
+            trend_regime_col: trend_regime
+            ppo_col: ppo
+            ppo_signal_col: ppo_signal
+            ppo_hist_col: ppo_hist
+            adx_col: adx_14
+            roc_col: roc_12
+            zscore_momentum_col: zscore_momentum_20
+            volatility_regime_col: volatility_regime
+            adx_min: 18.0
+            zscore_long_min: 0.0
+            zscore_short_max: 0.0
+            roc_long_min: 0.0
+            roc_short_max: 0.0
+            use_ppo_signal_cross: true
+            allowed_volatility_regimes: [0, 1]
+            long_candidate_col: c2_long_candidate
+            short_candidate_col: c2_short_candidate
+            signal_col: c2_signal
+            candidate_col: c2_signal_candidate
+            bullish_trend_col: c2_bullish_trend
+            bearish_trend_col: c2_bearish_trend
+            adx_pass_col: c2_adx_pass
+            ppo_long_pass_col: c2_ppo_long_pass
+            ppo_short_pass_col: c2_ppo_short_pass
+            roc_long_pass_col: c2_roc_long_pass
+            roc_short_pass_col: c2_roc_short_pass
+            zscore_long_pass_col: c2_zscore_long_pass
+            zscore_short_pass_col: c2_zscore_short_pass
+            volatility_pass_col: c2_volatility_regime_pass
+          output_cols:
+            - c2_long_candidate
+            - c2_short_candidate
+            - c2_signal
+            - c2_signal_candidate
+            - c2_adx_pass
+            - c2_ppo_long_pass
+            - c2_ppo_short_pass
+            - c2_roc_long_pass
+            - c2_roc_short_pass
+            - c2_zscore_long_pass
+            - c2_zscore_short_pass
+            - c2_volatility_regime_pass
     
     Required input columns
     ----------------------
-    None fixed by signature:
-        Required dataframe columns are resolved from configuration or from
-        upstream feature/target/signal stages at runtime.
+    trend_regime_col:
+        Input dataframe column configured by ``trend_regime_col``. Default: ``trend_regime``.
+    ppo_col:
+        Input dataframe column configured by ``ppo_col``. Default: ``ppo``.
+    ppo_hist_col:
+        Input dataframe column configured by ``ppo_hist_col``. Default: ``ppo_hist``.
+    adx_col:
+        Input dataframe column configured by ``adx_col``. Default: ``adx_14``.
+    roc_col:
+        Input dataframe column configured by ``roc_col``. Default: ``roc_12``.
+    zscore_momentum_col:
+        Input dataframe column configured by ``zscore_momentum_col``. Default: ``zscore_momentum_20``.
+    volatility_regime_col:
+        Input dataframe column configured by ``volatility_regime_col``. Default: ``volatility_regime``.
     
     Parameters
     ----------
-    params:
-        Additional keyword parameters accepted from YAML ``params``.
+    mode:
+        Mode selector controlling how this signal is applied. Default: ``long_short``.
+    trend_regime_col:
+        Input dataframe column configured by ``trend_regime_col``. Default: ``trend_regime``.
+    ppo_col:
+        Input dataframe column configured by ``ppo_col``. Default: ``ppo``.
+    ppo_signal_col:
+        Input dataframe column configured by ``ppo_signal_col``. Default: ``ppo_signal``.
+    ppo_hist_col:
+        Input dataframe column configured by ``ppo_hist_col``. Default: ``ppo_hist``.
+    adx_col:
+        Input dataframe column configured by ``adx_col``. Default: ``adx_14``.
+    roc_col:
+        Input dataframe column configured by ``roc_col``. Default: ``roc_12``.
+    zscore_momentum_col:
+        Input dataframe column configured by ``zscore_momentum_col``. Default: ``zscore_momentum_20``.
+    volatility_regime_col:
+        Input dataframe column configured by ``volatility_regime_col``. Default: ``volatility_regime``.
+    adx_min:
+        Numeric threshold used by this signal. Default: ``18.0``.
+    zscore_long_min:
+        Numeric threshold used by this signal. Default: ``0.0``.
+    zscore_short_max:
+        Numeric threshold used by this signal. Default: ``0.0``.
+    roc_long_min:
+        Numeric threshold used by this signal. Default: ``0.0``.
+    roc_short_max:
+        Numeric threshold used by this signal. Default: ``0.0``.
+    use_ppo_signal_cross:
+        Boolean switch controlling optional signal behavior. Default: ``true``.
+    allowed_volatility_regimes:
+        Configuration parameter accepted by this signal. Default: ``[0, 1]``.
+    long_candidate_col:
+        Output dataframe column configured by ``long_candidate_col``. Default: ``c2_long_candidate``.
+    short_candidate_col:
+        Output dataframe column configured by ``short_candidate_col``. Default: ``c2_short_candidate``.
+    signal_col:
+        Output dataframe column configured by ``signal_col``. Default: ``c2_signal``.
+    candidate_col:
+        Output dataframe column configured by ``candidate_col``. Default: ``c2_signal_candidate``.
+    bullish_trend_col:
+        Input dataframe column configured by ``bullish_trend_col``. Default: ``c2_bullish_trend``.
+    bearish_trend_col:
+        Input dataframe column configured by ``bearish_trend_col``. Default: ``c2_bearish_trend``.
+    adx_pass_col:
+        Output dataframe column configured by ``adx_pass_col``. Default: ``c2_adx_pass``.
+    ppo_long_pass_col:
+        Output dataframe column configured by ``ppo_long_pass_col``. Default: ``c2_ppo_long_pass``.
+    ppo_short_pass_col:
+        Output dataframe column configured by ``ppo_short_pass_col``. Default: ``c2_ppo_short_pass``.
+    roc_long_pass_col:
+        Output dataframe column configured by ``roc_long_pass_col``. Default: ``c2_roc_long_pass``.
+    roc_short_pass_col:
+        Output dataframe column configured by ``roc_short_pass_col``. Default: ``c2_roc_short_pass``.
+    zscore_long_pass_col:
+        Output dataframe column configured by ``zscore_long_pass_col``. Default: ``c2_zscore_long_pass``.
+    zscore_short_pass_col:
+        Output dataframe column configured by ``zscore_short_pass_col``. Default: ``c2_zscore_short_pass``.
+    volatility_pass_col:
+        Output dataframe column configured by ``volatility_pass_col``. Default: ``c2_volatility_regime_pass``.
     """
     out, _ = build_c2_regime_aware_momentum_signal(df, params)
     return out

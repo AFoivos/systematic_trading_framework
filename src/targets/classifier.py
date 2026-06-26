@@ -12,6 +12,29 @@ def build_classifier_target(
     df: pd.DataFrame,
     target_cfg: dict[str, Any] | None,
 ) -> tuple[pd.DataFrame, str, str, dict[str, Any]]:
+    """
+    Apply the registered ``classifier`` target transformation.
+    
+    This target uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        target:
+          kind: classifier
+          params:
+            # no configurable parameters
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    None:
+        This callable has no public configuration parameters.
+    """
     return build_target(df=df, target_cfg=target_cfg)
 
 

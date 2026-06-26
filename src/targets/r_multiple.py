@@ -148,246 +148,170 @@ def build_r_multiple_target(
     target_cfg: dict[str, Any] | None,
 ) -> tuple[pd.DataFrame, str, str, dict[str, Any]]:
     """
-    Build a long-only R-multiple meta-label target for already-emitted strategy
-    candidates.
+    Apply the registered ``r_multiple`` target transformation.
     
-    This target evaluates only rows where ``candidate_col`` is positive. For
-    each candidate row, it simulates a realistic long trade path using entry
-    price, stop loss, take profit, and maximum holding period. The resulting
-    trade is converted into R-multiple units and labeled according to whether
-    the trade achieved at least ``target_r_min`` R.
-    
-    Labels:
-    - 1.0 when the simulated trade reaches ``target_r_min`` or more.
-    - 0.0 when the simulated trade produces less than ``target_r_min``.
-    - NaN when the row is not a candidate or cannot be evaluated.
-    
-    This is mainly used for meta-labeling: the manual/rule-based strategy
-    creates trade candidates, and the ML model learns which candidates are
-    worth keeping.
-    
-    YAML declaration inside model config::
-    
-        model:
-          kind: lightgbm_clf
-          target:
-            kind: r_multiple
-    
-            candidate_col: signal_candidate
-    
-            price_col: close
-            open_col: open
-            high_col: high
-            low_col: low
-    
-            volatility_col: atr_over_price_14
-            stop_mode: volatility_stop
-    
-            entry_price_mode: next_open
-            side: long_only
-    
-            target_r_min: 1.0
-            take_profit_r: 2.0
-            stop_loss_r: 1.0
-            max_holding_bars: 16
-    
-            tie_break: conservative
-            allow_partial_horizon: false
-    
-            outputs:
-              label_col: label
-              fwd_col: r_target_event_ret
-              candidate_out_col: r_target_candidate
-              trade_r_col: r_target_trade_r
-              oriented_r_col: r_target_oriented_r
-              entry_price_col: r_target_entry_price
-              exit_price_col: r_target_exit_price
-              stop_price_col: r_target_stop_price
-              take_profit_price_col: r_target_take_profit_price
-              exit_reason_col: r_target_exit_reason
-              bars_held_col: r_target_bars_held
-              hit_type_col: r_target_hit_type
-              hit_step_col: r_target_hit_step
-    
-            diagnostic_feature_cols: null
-    
-          output_cols:
-            - label
-            - r_target_event_ret
-            - r_target_candidate
-            - r_target_trade_r
-            - r_target_oriented_r
-            - r_target_entry_price
-            - r_target_exit_price
-            - r_target_stop_price
-            - r_target_take_profit_price
-            - r_target_exit_reason
-            - r_target_bars_held
-            - r_target_hit_type
-            - r_target_hit_step
-    
-    YAML declaration with fixed-return stop mode::
-    
-        model:
-          kind: lightgbm_clf
-          target:
-            kind: r_multiple
-    
-            candidate_col: signal_candidate
-    
-            price_col: close
-            open_col: open
-            high_col: high
-            low_col: low
-    
-            stop_mode: fixed_return
-            stop_loss_return: 0.005
-            take_profit_return: 0.010
-    
-            entry_price_mode: next_open
-            side: long_only
-    
-            target_r_min: 1.0
-            max_holding_bars: 16
-    
-            tie_break: conservative
-            allow_partial_horizon: false
-    
-            outputs:
-              label_col: label
-              fwd_col: r_target_event_ret
-              candidate_out_col: r_target_candidate
-              trade_r_col: r_target_trade_r
-              oriented_r_col: r_target_oriented_r
-              entry_price_col: r_target_entry_price
-              exit_price_col: r_target_exit_price
-              stop_price_col: r_target_stop_price
-              take_profit_price_col: r_target_take_profit_price
-              exit_reason_col: r_target_exit_reason
-              bars_held_col: r_target_bars_held
-              hit_type_col: r_target_hit_type
-              hit_step_col: r_target_hit_step
-    
-          output_cols:
-            - label
-            - r_target_event_ret
-            - r_target_candidate
-            - r_target_trade_r
-            - r_target_oriented_r
-            - r_target_entry_price
-            - r_target_exit_price
-            - r_target_stop_price
-            - r_target_take_profit_price
-            - r_target_exit_reason
-            - r_target_bars_held
-            - r_target_hit_type
-            - r_target_hit_step
+    This target uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         target:
           kind: r_multiple
-          params: {}
+          params:
+            allow_partial_horizon: <configured>
+            bars_held_col: <configured>
+            candidate_col: <configured>
+            candidate_out_col: <configured>
+            entry_price_col: <configured>
+            entry_price_mode: <configured>
+            exit_price_col: <configured>
+            exit_reason_col: <configured>
+            fwd_col: <configured>
+            high_col: <configured>
+            hit_step_col: <configured>
+            hit_type_col: <configured>
+            invalid_entry: <configured>
+            label_col: <configured>
+            low_col: <configured>
+            max_holding: <configured>
+            max_holding_bars: <configured>
+            max_holding_close: <configured>
+            open_col: <configured>
+            oriented_r_col: <configured>
+            price_col: <configured>
+            r_col: <configured>
+            side: <configured>
+            stop_loss: <configured>
+            stop_loss_r: <configured>
+            stop_loss_return: <configured>
+            stop_mode: <configured>
+            stop_price_col: <configured>
+            take_profit: <configured>
+            take_profit_price_col: <configured>
+            take_profit_r: <configured>
+            take_profit_return: <configured>
+            target_r_min: <configured>
+            tie_break: <configured>
+            trade_r_col: <configured>
+            unavailable_tail: <configured>
+            volatility_col: <configured>
+          outputs:
+            - configured by candidate_col
+            - configured by hit_type_col
+            - configured by label_col
     
     Required input columns
     ----------------------
-    bars_held:
-        Required dataframe column read directly by this component.
-    exit_idx:
-        Required dataframe column read directly by this component.
-    exit_reason:
-        Required dataframe column read directly by this component.
-    raw_exit_price:
-        Required dataframe column read directly by this component.
+    bars_held_col:
+        Input dataframe column configured by ``bars_held_col``. Default: ``<configured>``.
+    candidate_out_col:
+        Input dataframe column configured by ``candidate_out_col``. Default: ``<configured>``.
+    entry_price_col:
+        Input dataframe column configured by ``entry_price_col``. Default: ``<configured>``.
+    exit_price_col:
+        Input dataframe column configured by ``exit_price_col``. Default: ``<configured>``.
+    exit_reason_col:
+        Input dataframe column configured by ``exit_reason_col``. Default: ``<configured>``.
+    fwd_col:
+        Input dataframe column configured by ``fwd_col``. Default: ``<configured>``.
+    high_col:
+        Input dataframe column configured by ``high_col``. Default: ``<configured>``.
+    hit_step_col:
+        Input dataframe column configured by ``hit_step_col``. Default: ``<configured>``.
+    low_col:
+        Input dataframe column configured by ``low_col``. Default: ``<configured>``.
+    open_col:
+        Input dataframe column configured by ``open_col``. Default: ``<configured>``.
+    oriented_r_col:
+        Input dataframe column configured by ``oriented_r_col``. Default: ``<configured>``.
+    price_col:
+        Input dataframe column configured by ``price_col``. Default: ``<configured>``.
+    r_col:
+        Input dataframe column configured by ``r_col``. Default: ``<configured>``.
+    stop_price_col:
+        Input dataframe column configured by ``stop_price_col``. Default: ``<configured>``.
+    take_profit_price_col:
+        Input dataframe column configured by ``take_profit_price_col``. Default: ``<configured>``.
+    trade_r_col:
+        Input dataframe column configured by ``trade_r_col``. Default: ``<configured>``.
+    volatility_col:
+        Input dataframe column configured by ``volatility_col``. Default: ``<configured>``.
     
     Parameters
     ----------
-    candidate_col:
-        Input column that marks candidate trades. Rows are evaluated only when
-        this column is greater than zero.
-    label_col:
-        Output binary target column. A value of 1 means the candidate achieved
-        at least ``target_r_min`` R; a value of 0 means it did not.
-    fwd_col:
-        Output event return column passed back to the model pipeline as the
-        forward-return column.
-    candidate_out_col:
-        Output column showing which rows were candidate trades.
-    trade_r_col:
-        Output column containing the realized R-multiple of the simulated trade.
-    oriented_r_col:
-        Output oriented R-multiple column. For long-only targets this is the
-        same as ``trade_r_col``.
-    entry_price_col:
-        Output column with the simulated entry price.
-    exit_price_col:
-        Output column with the simulated exit price.
-    stop_price_col:
-        Output column with the stop-loss price.
-    take_profit_price_col:
-        Output column with the take-profit price.
-    exit_reason_col:
-        Output column with the trade exit reason, such as ``take_profit``,
-        ``stop_loss``, ``max_holding_close``, ``unavailable_tail``, or
-        ``invalid_entry``.
-    bars_held_col:
-        Output column with the number of bars held.
-    hit_type_col:
-        Output column mirroring the exit reason.
-    hit_step_col:
-        Output column with the number of bars from entry until exit.
-    
-    price_col:
-        Input close/price column. Used for current-close entry mode and as the
-        close path during trade simulation.
-    open_col:
-        Input open column. Used for next-open entry mode and intrabar
-        tie-break logic.
-    high_col:
-        Input high column used to detect take-profit and stop-loss touches.
-    low_col:
-        Input low column used to detect take-profit and stop-loss touches.
-    volatility_col:
-        Input volatility column used when ``stop_mode`` is
-        ``volatility_stop``. This should usually be a return/ratio volatility
-        column, for example ATR divided by price.
-    entry_price_mode:
-        Entry assumption. Allowed values are ``next_open`` and
-        ``current_close``.
-    side:
-        Trade side. Current implementation supports only ``long_only``.
-    
-    target_r_min:
-        Minimum realized R-multiple required for label 1.
-    take_profit_r:
-        Take-profit distance in R units when ``stop_mode`` is
-        ``volatility_stop``.
-    stop_loss_r:
-        Stop-loss distance multiplier when ``stop_mode`` is
-        ``volatility_stop``.
-    max_holding_bars:
-        Maximum number of bars the simulated trade can remain open.
-    stop_mode:
-        Stop/take-profit distance mode. Allowed values are
-        ``volatility_stop`` and ``fixed_return``.
-    stop_loss_return:
-        Fixed stop-loss return distance used only when ``stop_mode`` is
-        ``fixed_return``.
-    take_profit_return:
-        Fixed take-profit return distance used only when ``stop_mode`` is
-        ``fixed_return``.
-    tie_break:
-        Rule used when stop loss and take profit are both touched inside the
-        same bar. Allowed values are ``conservative``, ``take_profit``,
-        ``stop_loss``, and ``closest_to_open``.
     allow_partial_horizon:
-        If false, candidates near the end of the dataset are marked unavailable
-        when the full max-holding horizon is not available. If true, the target
-        allows a shortened final horizon.
-    
-    diagnostic_feature_cols:
-        Optional list of feature columns used only for winner/loser diagnostic
-        summaries in metadata.
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    bars_held_col:
+        Input dataframe column configured by ``bars_held_col``. Default: ``<configured>``.
+    candidate_col:
+        Output dataframe column configured by ``candidate_col``. Default: ``<configured>``.
+    candidate_out_col:
+        Input dataframe column configured by ``candidate_out_col``. Default: ``<configured>``.
+    entry_price_col:
+        Input dataframe column configured by ``entry_price_col``. Default: ``<configured>``.
+    entry_price_mode:
+        Mode selector controlling how this target is applied. Default: ``<configured>``.
+    exit_price_col:
+        Input dataframe column configured by ``exit_price_col``. Default: ``<configured>``.
+    exit_reason_col:
+        Input dataframe column configured by ``exit_reason_col``. Default: ``<configured>``.
+    fwd_col:
+        Input dataframe column configured by ``fwd_col``. Default: ``<configured>``.
+    high_col:
+        Input dataframe column configured by ``high_col``. Default: ``<configured>``.
+    hit_step_col:
+        Input dataframe column configured by ``hit_step_col``. Default: ``<configured>``.
+    hit_type_col:
+        Output dataframe column configured by ``hit_type_col``. Default: ``<configured>``.
+    invalid_entry:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    label_col:
+        Output dataframe column configured by ``label_col``. Default: ``<configured>``.
+    low_col:
+        Input dataframe column configured by ``low_col``. Default: ``<configured>``.
+    max_holding:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    max_holding_bars:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    max_holding_close:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    open_col:
+        Input dataframe column configured by ``open_col``. Default: ``<configured>``.
+    oriented_r_col:
+        Input dataframe column configured by ``oriented_r_col``. Default: ``<configured>``.
+    price_col:
+        Input dataframe column configured by ``price_col``. Default: ``<configured>``.
+    r_col:
+        Input dataframe column configured by ``r_col``. Default: ``<configured>``.
+    side:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    stop_loss:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    stop_loss_r:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    stop_loss_return:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    stop_mode:
+        Mode selector controlling how this target is applied. Default: ``<configured>``.
+    stop_price_col:
+        Input dataframe column configured by ``stop_price_col``. Default: ``<configured>``.
+    take_profit:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    take_profit_price_col:
+        Input dataframe column configured by ``take_profit_price_col``. Default: ``<configured>``.
+    take_profit_r:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    take_profit_return:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    target_r_min:
+        Numeric threshold used by this target. Default: ``<configured>``.
+    tie_break:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    trade_r_col:
+        Input dataframe column configured by ``trade_r_col``. Default: ``<configured>``.
+    unavailable_tail:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    volatility_col:
+        Input dataframe column configured by ``volatility_col``. Default: ``<configured>``.
     """
 
     cfg = apply_target_output_aliases(_flatten_cfg(target_cfg))

@@ -238,26 +238,26 @@ def train_ppo_agent(
     returns_col: str | None = None,
 ) -> tuple[pd.DataFrame, object, dict[str, Any]]:
     """
-    Train the registered ``ppo_agent`` model component.
+    Apply the registered ``ppo_agent`` RL model transformation.
+    
+    This RL model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         model:
           kind: ppo_agent
-          params: {}
+          params:
+            returns_col: null
     
     Required input columns
     ----------------------
     returns_col:
-        Optional input column configured by ``returns_col``; used when a value is provided.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
     
     Parameters
     ----------
-    model_cfg:
-        Configuration mapping, usually resolved from YAML before this
-        registered component is called.
     returns_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
     """
     return _train_single_asset_rl(
         df,
@@ -274,26 +274,26 @@ def train_dqn_agent(
     returns_col: str | None = None,
 ) -> tuple[pd.DataFrame, object, dict[str, Any]]:
     """
-    Train the registered ``dqn_agent`` model component.
+    Apply the registered ``dqn_agent`` RL model transformation.
+    
+    This RL model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         model:
           kind: dqn_agent
-          params: {}
+          params:
+            returns_col: null
     
     Required input columns
     ----------------------
     returns_col:
-        Optional input column configured by ``returns_col``; used when a value is provided.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
     
     Parameters
     ----------
-    model_cfg:
-        Configuration mapping, usually resolved from YAML before this
-        registered component is called.
     returns_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
     """
     return _train_single_asset_rl(
         df,

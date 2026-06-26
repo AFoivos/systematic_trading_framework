@@ -17,35 +17,49 @@ def add_ppo_features(
     """
     Apply the registered ``ppo`` feature transformation.
     
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
     YAML declaration::
     
         features:
           - step: ppo
-            params: {}
+            params:
+              price_col: close
+              fast: 12
+              slow: 26
+              signal: 9
+              ppo_col: null
+              ppo_signal_col: null
+              ppo_hist_col: null
+              inplace: false
     
     Required input columns
     ----------------------
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
+    ppo_col:
+        Input dataframe column configured by ``ppo_col``. Default: ``null``.
+    ppo_hist_col:
+        Input dataframe column configured by ``ppo_hist_col``. Default: ``null``.
     
     Parameters
     ----------
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     fast:
-        Configuration value used by the registered component. Default: ``12``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``12``.
     slow:
-        Configuration value used by the registered component. Default: ``26``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``26``.
     signal:
-        Configuration value used by the registered component. Default: ``9``.
+        Configuration parameter accepted by this feature. Default: ``9``.
     ppo_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``ppo_col``. Default: ``null``.
     ppo_signal_col:
-        Output column name emitted by the component. Default: ``None``.
+        Input dataframe column configured by ``ppo_signal_col``. Default: ``null``.
     ppo_hist_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``ppo_hist_col``. Default: ``null``.
     inplace:
-        Configuration value used by the registered component. Default: ``False``.
+        Boolean switch controlling optional feature behavior. Default: ``false``.
     """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame")
@@ -74,6 +88,48 @@ def compute_ppo(
     ppo_signal_col: str | None = None,
     ppo_hist_col: str | None = None,
 ) -> pd.DataFrame:
+    """
+    Compute the ``compute_ppo`` feature value.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: compute_ppo
+            params:
+              close: <required>
+              fast: 12
+              slow: 26
+              signal: 9
+              ppo_col: null
+              ppo_signal_col: null
+              ppo_hist_col: null
+    
+    Required input columns
+    ----------------------
+    ppo_col:
+        Input dataframe column configured by ``ppo_col``. Default: ``null``.
+    ppo_hist_col:
+        Input dataframe column configured by ``ppo_hist_col``. Default: ``null``.
+    
+    Parameters
+    ----------
+    close:
+        Configuration parameter accepted by this feature.
+    fast:
+        Trailing lookback or forecast horizon controlling this feature. Default: ``12``.
+    slow:
+        Trailing lookback or forecast horizon controlling this feature. Default: ``26``.
+    signal:
+        Configuration parameter accepted by this feature. Default: ``9``.
+    ppo_col:
+        Input dataframe column configured by ``ppo_col``. Default: ``null``.
+    ppo_signal_col:
+        Input dataframe column configured by ``ppo_signal_col``. Default: ``null``.
+    ppo_hist_col:
+        Input dataframe column configured by ``ppo_hist_col``. Default: ``null``.
+    """
     provided_output_cols = (ppo_col, ppo_signal_col, ppo_hist_col)
     if any(col is not None and (not isinstance(col, str) or not col.strip()) for col in provided_output_cols):
         raise ValueError("PPO output columns must be non-empty strings.")

@@ -14,34 +14,39 @@ def add_parkinson_volatility(
     output_col: str | None = None,
 ) -> pd.DataFrame:
     """
-    Add causal rolling Parkinson volatility from high/low prices.
+    Apply the registered ``parkinson_volatility`` feature transformation.
     
-    The estimator uses only the current and trailing ``window - 1`` bars:
-    ``sqrt(mean(log(high / low)^2) / (4 * log(2)))``.
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: parkinson_volatility
-            params: {}
+            params:
+              high_col: high
+              low_col: low
+              window: 20
+              output_col: null
+          output_cols:
+            - configured by output_col
     
     Required input columns
     ----------------------
     high_col:
-        Input column configured by ``high_col``. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input column configured by ``low_col``. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
     
     Parameters
     ----------
     high_col:
-        Input dataframe column name consumed by the component. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input dataframe column name consumed by the component. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
     window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``20``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``20``.
     output_col:
-        Output column name emitted by the component. Default: ``None``.
+        Output dataframe column configured by ``output_col``. Default: ``null``.
     """
     _validate_columns(df, [high_col, low_col])
     _validate_window(window)

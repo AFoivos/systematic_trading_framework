@@ -24,31 +24,40 @@ def add_inverse_fisher_transform(
     output_col: str | None = None,
 ) -> pd.DataFrame:
     """
-    Add a causal inverse Fisher transform bounded between -1 and 1.
+    Apply the registered ``inverse_fisher_transform`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: inverse_fisher_transform
-            params: {}
+            params:
+              input_col: close
+              window: 10
+              scale: 1.0
+              normalize: true
+              output_col: null
+          output_cols:
+            - configured by output_col
     
     Required input columns
     ----------------------
     input_col:
-        Input column configured by ``input_col``. Default: ``close``.
+        Input dataframe column configured by ``input_col``. Default: ``close``.
     
     Parameters
     ----------
     input_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``input_col``. Default: ``close``.
     window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``10``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``10``.
     scale:
-        Configuration value used by the registered component. Default: ``1.0``.
+        Configuration parameter accepted by this feature. Default: ``1.0``.
     normalize:
-        Configuration value used by the registered component. Default: ``True``.
+        Configuration parameter accepted by this feature. Default: ``true``.
     output_col:
-        Output column name emitted by the component. Default: ``None``.
+        Output dataframe column configured by ``output_col``. Default: ``null``.
     """
     require_columns(df, [input_col], feature="inverse Fisher Transform")
     resolved_window = validate_int(window, name="window", minimum=2)

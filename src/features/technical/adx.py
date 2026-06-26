@@ -20,35 +20,43 @@ def add_adx_features(
     """
     Apply the registered ``adx`` feature transformation.
     
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
     YAML declaration::
     
         features:
           - step: adx
-            params: {}
+            params:
+              high_col: high
+              low_col: low
+              close_col: close
+              window: 14
+              windows: null
+              inplace: false
     
     Required input columns
     ----------------------
     high_col:
-        Input column configured by ``high_col``. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input column configured by ``low_col``. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
     close_col:
-        Input column configured by ``close_col``. Default: ``close``.
+        Input dataframe column configured by ``close_col``. Default: ``close``.
     
     Parameters
     ----------
     high_col:
-        Input dataframe column name consumed by the component. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input dataframe column name consumed by the component. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
     close_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``close_col``. Default: ``close``.
     window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``14``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``14``.
     windows:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``None``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``null``.
     inplace:
-        Configuration value used by the registered component. Default: ``False``.
+        Boolean switch controlling optional feature behavior. Default: ``false``.
     """
     missing = [c for c in (high_col, low_col, close_col) if c not in df.columns]
     if missing:
@@ -80,6 +88,38 @@ def _resolve_windows(*, window: int, windows: Sequence[int] | None) -> list[int]
 
 
 def compute_adx(high: pd.Series, low: pd.Series, close: pd.Series, window: int = 14) -> pd.DataFrame:
+    """
+    Compute the ``compute_adx`` feature value.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: compute_adx
+            params:
+              high: <required>
+              low: <required>
+              close: <required>
+              window: 14
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    high:
+        Configuration parameter accepted by this feature.
+    low:
+        Configuration parameter accepted by this feature.
+    close:
+        Configuration parameter accepted by this feature.
+    window:
+        Trailing lookback or forecast horizon controlling this feature. Default: ``14``.
+    """
     up_move = high.diff()
     down_move = -low.diff()
 

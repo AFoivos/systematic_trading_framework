@@ -20,67 +20,67 @@ def add_roofing_filter(
     slope_negative_col: str | None = None,
     cross_up_zero_col: str | None = None,
     cross_down_zero_col: str | None = None,
-    add_derived: bool = True,
+    add_derived: bool = False,
 ) -> pd.DataFrame:
     """
-    Add a causal Ehlers-style roofing filter.
+    Apply the registered ``roofing_filter`` feature transformation.
     
-    The implementation applies a two-pole high-pass filter followed by a
-    SuperSmoother low-pass filter, using only current and prior samples.
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: roofing_filter
-            params: {}
+            params:
+              price_col: close
+              high_pass_period: 48
+              low_pass_period: 10
+              slope_bars: 3
+              output_col: null
+              slope_col: null
+              positive_col: null
+              negative_col: null
+              slope_positive_col: null
+              slope_negative_col: null
+              cross_up_zero_col: null
+              cross_down_zero_col: null
+              add_derived: false
+          output_cols:
+            - configured by output_col
     
     Required input columns
     ----------------------
-    cross_down_zero_col:
-        Required dataframe column read directly by this component.
-    cross_up_zero_col:
-        Required dataframe column read directly by this component.
-    negative_col:
-        Required dataframe column read directly by this component.
-    positive_col:
-        Required dataframe column read directly by this component.
-    slope_col:
-        Required dataframe column read directly by this component.
-    slope_negative_col:
-        Required dataframe column read directly by this component.
-    slope_positive_col:
-        Required dataframe column read directly by this component.
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     
     Parameters
     ----------
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     high_pass_period:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``48``.
+        Configuration parameter accepted by this feature. Default: ``48``.
     low_pass_period:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``10``.
+        Configuration parameter accepted by this feature. Default: ``10``.
     slope_bars:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``3``.
+        Configuration parameter accepted by this feature. Default: ``3``.
     output_col:
-        Output column name emitted by the component. Default: ``None``.
+        Output dataframe column configured by ``output_col``. Default: ``null``.
     slope_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Deprecated. Use ``transforms.difference`` on ``output_col`` instead.
     positive_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Deprecated. Use ``transforms.threshold_flag`` on ``output_col`` instead.
     negative_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Deprecated. Use ``transforms.threshold_flag`` on ``output_col`` instead.
     slope_positive_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Deprecated. Use ``transforms.threshold_flag`` on the helper slope column instead.
     slope_negative_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Deprecated. Use ``transforms.threshold_flag`` on the helper slope column instead.
     cross_up_zero_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Deprecated. Use ``transforms.crossing_flag`` on ``output_col`` instead.
     cross_down_zero_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Deprecated. Use ``transforms.crossing_flag`` on ``output_col`` instead.
     add_derived:
-        Configuration value used by the registered component. Default: ``True``.
+        Deprecated. Raw features no longer emit helper-style derived columns.
     """
     _validate_columns(df, [price_col])
     _validate_period(high_pass_period, name="high_pass_period")
@@ -88,11 +88,8 @@ def add_roofing_filter(
     _validate_slope_bars(slope_bars)
     if not isinstance(add_derived, bool):
         raise ValueError("add_derived must be boolean.")
-    if high_pass_period <= low_pass_period:
-        raise ValueError("high_pass_period must be greater than low_pass_period.")
-    col = _resolve_output_col(output_col, f"roofing_filter_{high_pass_period}_{low_pass_period}")
-    derived_cols = _resolve_derived_cols(
-        base_col=col,
+    _reject_derived_outputs(
+        add_derived=add_derived,
         slope_col=slope_col,
         positive_col=positive_col,
         negative_col=negative_col,
@@ -101,20 +98,13 @@ def add_roofing_filter(
         cross_up_zero_col=cross_up_zero_col,
         cross_down_zero_col=cross_down_zero_col,
     )
+    if high_pass_period <= low_pass_period:
+        raise ValueError("high_pass_period must be greater than low_pass_period.")
+    col = _resolve_output_col(output_col, f"roofing_filter_{high_pass_period}_{low_pass_period}")
 
     out = df.copy()
     price = out[price_col].astype(float).to_numpy()
     out[col] = _compute_roofing_filter(price, high_pass_period=high_pass_period, low_pass_period=low_pass_period)
-    if add_derived:
-        roofing = out[col].astype(float)
-        slope = roofing - roofing.shift(int(slope_bars))
-        out[derived_cols["slope_col"]] = slope
-        out[derived_cols["positive_col"]] = roofing.gt(0.0)
-        out[derived_cols["negative_col"]] = roofing.lt(0.0)
-        out[derived_cols["slope_positive_col"]] = slope.gt(0.0)
-        out[derived_cols["slope_negative_col"]] = slope.lt(0.0)
-        out[derived_cols["cross_up_zero_col"]] = roofing.shift(1).le(0.0) & roofing.gt(0.0)
-        out[derived_cols["cross_down_zero_col"]] = roofing.shift(1).ge(0.0) & roofing.lt(0.0)
     return out
 
 
@@ -168,9 +158,9 @@ def _resolve_output_col(output_col: str | None, default: str) -> str:
     return output_col
 
 
-def _resolve_derived_cols(
+def _reject_derived_outputs(
     *,
-    base_col: str,
+    add_derived: bool,
     slope_col: str | None,
     positive_col: str | None,
     negative_col: str | None,
@@ -178,29 +168,24 @@ def _resolve_derived_cols(
     slope_negative_col: str | None,
     cross_up_zero_col: str | None,
     cross_down_zero_col: str | None,
-) -> dict[str, str]:
-    exact_defaults = base_col == "roofing_filter"
-    defaults = {
-        "slope_col": "roofing_slope" if exact_defaults else f"{base_col}_slope",
-        "positive_col": "roofing_positive" if exact_defaults else f"{base_col}_positive",
-        "negative_col": "roofing_negative" if exact_defaults else f"{base_col}_negative",
-        "slope_positive_col": "roofing_slope_positive" if exact_defaults else f"{base_col}_slope_positive",
-        "slope_negative_col": "roofing_slope_negative" if exact_defaults else f"{base_col}_slope_negative",
-        "cross_up_zero_col": "roofing_cross_up_zero" if exact_defaults else f"{base_col}_cross_up_zero",
-        "cross_down_zero_col": "roofing_cross_down_zero" if exact_defaults else f"{base_col}_cross_down_zero",
+) -> None:
+    requested = {
+        "add_derived": add_derived,
+        "slope_col": slope_col,
+        "positive_col": positive_col,
+        "negative_col": negative_col,
+        "slope_positive_col": slope_positive_col,
+        "slope_negative_col": slope_negative_col,
+        "cross_up_zero_col": cross_up_zero_col,
+        "cross_down_zero_col": cross_down_zero_col,
     }
-    resolved = {
-        "slope_col": _resolve_output_col(slope_col, defaults["slope_col"]),
-        "positive_col": _resolve_output_col(positive_col, defaults["positive_col"]),
-        "negative_col": _resolve_output_col(negative_col, defaults["negative_col"]),
-        "slope_positive_col": _resolve_output_col(slope_positive_col, defaults["slope_positive_col"]),
-        "slope_negative_col": _resolve_output_col(slope_negative_col, defaults["slope_negative_col"]),
-        "cross_up_zero_col": _resolve_output_col(cross_up_zero_col, defaults["cross_up_zero_col"]),
-        "cross_down_zero_col": _resolve_output_col(cross_down_zero_col, defaults["cross_down_zero_col"]),
-    }
-    if base_col in set(resolved.values()) or len(set(resolved.values())) != len(resolved):
-        raise ValueError("Roofing derived output columns must be unique and distinct from output_col.")
-    return resolved
+    active = [key for key, value in requested.items() if value not in (False, None)]
+    if active:
+        fields = ", ".join(active)
+        raise ValueError(
+            "roofing_filter no longer emits derived slope/flag/cross columns. "
+            f"Move {fields} to feature transforms using difference, threshold_flag, and crossing_flag helpers."
+        )
 
 
 __all__ = [

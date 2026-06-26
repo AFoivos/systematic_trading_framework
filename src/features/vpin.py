@@ -17,45 +17,52 @@ def add_vpin(
     output_col: str | None = None,
 ) -> pd.DataFrame:
     """
-    Add VPIN from real signed or buy/sell volume data.
+    Apply the registered ``vpin`` feature transformation.
     
-    The function does not infer buy/sell volume from OHLC prices. Provide either
-    ``buy_volume_col`` and ``sell_volume_col`` or ``signed_volume_col`` plus
-    ``volume_col``. With ``bucket_volume=None`` it emits a bar-window VPIN ratio;
-    with ``bucket_volume`` it uses causal volume buckets and forward-fills the
-    last completed bucket estimate.
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: vpin
-            params: {}
+            params:
+              buy_volume_col: buy_volume
+              sell_volume_col: sell_volume
+              signed_volume_col: null
+              volume_col: volume
+              window: 50
+              bucket_volume: null
+              output_col: null
+          output_cols:
+            - configured by output_col
     
     Required input columns
     ----------------------
     buy_volume_col:
-        Input column configured by ``buy_volume_col``. Default: ``buy_volume``.
+        Input dataframe column configured by ``buy_volume_col``. Default: ``buy_volume``.
     sell_volume_col:
-        Input column configured by ``sell_volume_col``. Default: ``sell_volume``.
+        Input dataframe column configured by ``sell_volume_col``. Default: ``sell_volume``.
+    signed_volume_col:
+        Input dataframe column configured by ``signed_volume_col``. Default: ``null``.
     volume_col:
-        Input column configured by ``volume_col``. Default: ``volume``.
+        Input dataframe column configured by ``volume_col``. Default: ``volume``.
     
     Parameters
     ----------
     buy_volume_col:
-        Input dataframe column name consumed by the component. Default: ``buy_volume``.
+        Input dataframe column configured by ``buy_volume_col``. Default: ``buy_volume``.
     sell_volume_col:
-        Input dataframe column name consumed by the component. Default: ``sell_volume``.
+        Input dataframe column configured by ``sell_volume_col``. Default: ``sell_volume``.
     signed_volume_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``signed_volume_col``. Default: ``null``.
     volume_col:
-        Input dataframe column name consumed by the component. Default: ``volume``.
+        Input dataframe column configured by ``volume_col``. Default: ``volume``.
     window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``50``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``50``.
     bucket_volume:
-        Configuration value used by the registered component. Default: ``None``.
+        Configuration parameter accepted by this feature. Default: ``null``.
     output_col:
-        Output column name emitted by the component. Default: ``None``.
+        Output dataframe column configured by ``output_col``. Default: ``null``.
     """
     _validate_positive_int(window, name="window")
     if bucket_volume is not None and (not isinstance(bucket_volume, Real) or isinstance(bucket_volume, bool) or bucket_volume <= 0):

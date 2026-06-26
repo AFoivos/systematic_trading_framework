@@ -16,25 +16,30 @@ def add_return_momentum_features(
     """
     Apply the registered ``return_momentum`` feature transformation.
     
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
     YAML declaration::
     
         features:
           - step: return_momentum
-            params: {}
+            params:
+              returns_col: close_logret
+              windows: [5, 20, 60]
+              inplace: false
     
     Required input columns
     ----------------------
     returns_col:
-        Input column configured by ``returns_col``. Default: ``close_logret``.
+        Input dataframe column configured by ``returns_col``. Default: ``close_logret``.
     
     Parameters
     ----------
     returns_col:
-        Input dataframe column name consumed by the component. Default: ``close_logret``.
+        Input dataframe column configured by ``returns_col``. Default: ``close_logret``.
     windows:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``(5, 20, 60)``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``[5, 20, 60]``.
     inplace:
-        Configuration value used by the registered component. Default: ``False``.
+        Boolean switch controlling optional feature behavior. Default: ``false``.
     """
     out = df if inplace else df.copy()
     out = ensure_close_based_returns(out, returns_col=returns_col)
@@ -45,6 +50,29 @@ def add_return_momentum_features(
 
 
 def compute_return_momentum(returns: pd.Series, window: int) -> pd.Series:
+    """
+    Compute the ``compute_return_momentum`` feature value.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: compute_return_momentum
+            params:
+              window: <required>
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    window:
+        Trailing lookback or forecast horizon controlling this feature.
+    """
     if not isinstance(returns, pd.Series):
         raise TypeError("returns must be a pandas Series")
     mom = returns.rolling(window=window).sum()

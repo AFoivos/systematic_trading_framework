@@ -129,6 +129,29 @@ class SequenceFeatureExtractor(BaseFeaturesExtractor):
         )
 
     def forward(self, observations: torch.Tensor) -> torch.Tensor:
+        """
+        Apply the registered ``forward`` RL model transformation.
+        
+        This RL model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+        
+        YAML declaration::
+        
+            model:
+              kind: forward
+              params:
+                # no configurable parameters
+        
+        Required input columns
+        ----------------------
+        Direct inputs:
+            This callable operates on supplied Series/arrays directly or resolves
+            dataframe inputs from the configuration shown above at runtime.
+        
+        Parameters
+        ----------
+        None:
+            This callable has no public configuration parameters.
+        """
         x = observations.float()
         if self.kind == "flatten":
             return self.extractor(x)

@@ -168,22 +168,108 @@ def vwap_rms_ema_cross_long_hmm_gate_signal(df: pd.DataFrame, **params: Any) -> 
     """
     Apply the registered ``vwap_rms_ema_cross_long_hmm_gate`` signal transformation.
     
+    This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
     YAML declaration::
     
         signals:
           kind: vwap_rms_ema_cross_long_hmm_gate
-          params: {}
+          params:
+            ema_mid_col: ema_50
+            ema_slow_col: ema_96
+            ema_mid_rms_col: ema_50__root_mean_square
+            vwap_rms_col: vwap_40__root_mean_square
+            ppo_col: ppo_12_36
+            ppo_signal_col: ppo_signal_9
+            ppo_hist_min: 0.0002
+            hmm_regime_col: hmm_regime
+            hmm_min_regime: 1
+            hmm_prob_col: null
+            hmm_prob_min: null
+            regime_col: ema_50_above_ema_96
+            cross_up_col: vwap_40_rms_cross_above_ema_50_rms
+            ppo_hist_col: ppo_hist_12_36_9
+            ppo_hist_positive_col: ppo_hist_12_36_9_positive
+            ppo_above_signal_col: ppo_12_36_above_ppo_signal_9
+            hmm_ok_col: hmm_regime_ok
+            long_setup_col: vwap_40_rms_ema_50_cross_long_hmm_setup
+            signal_col: signal_side
+            candidate_col: signal_candidate
+          output_cols:
+            - signal_side
+            - signal_candidate
     
     Required input columns
     ----------------------
-    None fixed by signature:
-        Required dataframe columns are resolved from configuration or from
-        upstream feature/target/signal stages at runtime.
+    ema_mid_col:
+        Input dataframe column configured by ``ema_mid_col``. Default: ``ema_50``.
+    ema_slow_col:
+        Input dataframe column configured by ``ema_slow_col``. Default: ``ema_96``.
+    ema_mid_rms_col:
+        Input dataframe column configured by ``ema_mid_rms_col``. Default: ``ema_50__root_mean_square``.
+    vwap_rms_col:
+        Input dataframe column configured by ``vwap_rms_col``. Default: ``vwap_40__root_mean_square``.
+    ppo_col:
+        Input dataframe column configured by ``ppo_col``. Default: ``ppo_12_36``.
+    hmm_regime_col:
+        Input dataframe column configured by ``hmm_regime_col``. Default: ``hmm_regime``.
+    hmm_prob_col:
+        Input dataframe column configured by ``hmm_prob_col``. Default: ``null``.
+    regime_col:
+        Input dataframe column configured by ``regime_col``. Default: ``ema_50_above_ema_96``.
+    cross_up_col:
+        Input dataframe column configured by ``cross_up_col``. Default: ``vwap_40_rms_cross_above_ema_50_rms``.
+    ppo_hist_col:
+        Input dataframe column configured by ``ppo_hist_col``. Default: ``ppo_hist_12_36_9``.
+    ppo_hist_positive_col:
+        Input dataframe column configured by ``ppo_hist_positive_col``. Default: ``ppo_hist_12_36_9_positive``.
+    hmm_ok_col:
+        Input dataframe column configured by ``hmm_ok_col``. Default: ``hmm_regime_ok``.
+    long_setup_col:
+        Input dataframe column configured by ``long_setup_col``. Default: ``vwap_40_rms_ema_50_cross_long_hmm_setup``.
     
     Parameters
     ----------
-    params:
-        Additional keyword parameters accepted from YAML ``params``.
+    ema_mid_col:
+        Input dataframe column configured by ``ema_mid_col``. Default: ``ema_50``.
+    ema_slow_col:
+        Input dataframe column configured by ``ema_slow_col``. Default: ``ema_96``.
+    ema_mid_rms_col:
+        Input dataframe column configured by ``ema_mid_rms_col``. Default: ``ema_50__root_mean_square``.
+    vwap_rms_col:
+        Input dataframe column configured by ``vwap_rms_col``. Default: ``vwap_40__root_mean_square``.
+    ppo_col:
+        Input dataframe column configured by ``ppo_col``. Default: ``ppo_12_36``.
+    ppo_signal_col:
+        Input dataframe column configured by ``ppo_signal_col``. Default: ``ppo_signal_9``.
+    ppo_hist_min:
+        Numeric threshold used by this signal. Default: ``0.0002``.
+    hmm_regime_col:
+        Input dataframe column configured by ``hmm_regime_col``. Default: ``hmm_regime``.
+    hmm_min_regime:
+        Configuration parameter accepted by this signal. Default: ``1``.
+    hmm_prob_col:
+        Input dataframe column configured by ``hmm_prob_col``. Default: ``null``.
+    hmm_prob_min:
+        Numeric threshold used by this signal. Default: ``null``.
+    regime_col:
+        Input dataframe column configured by ``regime_col``. Default: ``ema_50_above_ema_96``.
+    cross_up_col:
+        Input dataframe column configured by ``cross_up_col``. Default: ``vwap_40_rms_cross_above_ema_50_rms``.
+    ppo_hist_col:
+        Input dataframe column configured by ``ppo_hist_col``. Default: ``ppo_hist_12_36_9``.
+    ppo_hist_positive_col:
+        Input dataframe column configured by ``ppo_hist_positive_col``. Default: ``ppo_hist_12_36_9_positive``.
+    ppo_above_signal_col:
+        Input dataframe column configured by ``ppo_above_signal_col``. Default: ``ppo_12_36_above_ppo_signal_9``.
+    hmm_ok_col:
+        Input dataframe column configured by ``hmm_ok_col``. Default: ``hmm_regime_ok``.
+    long_setup_col:
+        Input dataframe column configured by ``long_setup_col``. Default: ``vwap_40_rms_ema_50_cross_long_hmm_setup``.
+    signal_col:
+        Output dataframe column configured by ``signal_col``. Default: ``signal_side``.
+    candidate_col:
+        Output dataframe column configured by ``candidate_col``. Default: ``signal_candidate``.
     """
     out, _ = build_vwap_rms_ema_cross_long_hmm_gate_signal(df, params)
     return out

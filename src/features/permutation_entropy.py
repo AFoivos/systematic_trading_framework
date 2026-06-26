@@ -17,36 +17,43 @@ def add_permutation_entropy(
     output_col: str | None = None,
 ) -> pd.DataFrame:
     """
-    Add causal rolling permutation entropy.
+    Apply the registered ``permutation_entropy`` feature transformation.
     
-    Ties are resolved deterministically by NumPy's stable order; no future
-    samples are used.
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: permutation_entropy
-            params: {}
+            params:
+              source_col: close
+              window: 64
+              order: 3
+              delay: 1
+              normalize: true
+              output_col: null
+          output_cols:
+            - configured by output_col
     
     Required input columns
     ----------------------
     source_col:
-        Input column configured by ``source_col``. Default: ``close``.
+        Input dataframe column configured by ``source_col``. Default: ``close``.
     
     Parameters
     ----------
     source_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``source_col``. Default: ``close``.
     window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``64``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``64``.
     order:
-        Configuration value used by the registered component. Default: ``3``.
+        Configuration parameter accepted by this feature. Default: ``3``.
     delay:
-        Configuration value used by the registered component. Default: ``1``.
+        Configuration parameter accepted by this feature. Default: ``1``.
     normalize:
-        Configuration value used by the registered component. Default: ``True``.
+        Configuration parameter accepted by this feature. Default: ``true``.
     output_col:
-        Output column name emitted by the component. Default: ``None``.
+        Output dataframe column configured by ``output_col``. Default: ``null``.
     """
     _validate_columns(df, [source_col])
     _validate_positive_int(window, name="window")

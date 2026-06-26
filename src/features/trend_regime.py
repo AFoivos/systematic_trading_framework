@@ -21,43 +21,52 @@ def add_trend_regime(
     long_sma: int | None = None,
 ) -> pd.DataFrame:
     """
-    Add a causal trend regime feature.
+    Apply the registered ``trend_regime`` feature transformation.
     
-    ``method='ema'`` compares fast and slow EMAs and emits ``1, 0, -1``. The
-    legacy ``method='sma_legacy'`` path preserves the existing project
-    ``trend_regime`` YAML contract based on SMA columns.
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: trend_regime
-            params: {}
+            params:
+              price_col: close
+              fast_span: 20
+              slow_span: 50
+              neutral_threshold: 0.0
+              output_col: null
+              method: ema
+              base_sma_for_sign: null
+              short_sma: null
+              long_sma: null
+          output_cols:
+            - configured by output_col
     
     Required input columns
     ----------------------
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     
     Parameters
     ----------
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     fast_span:
-        Configuration value used by the registered component. Default: ``20``.
+        Configuration parameter accepted by this feature. Default: ``20``.
     slow_span:
-        Configuration value used by the registered component. Default: ``50``.
+        Configuration parameter accepted by this feature. Default: ``50``.
     neutral_threshold:
-        Numeric threshold controlling the component decision rule. Default: ``0.0``.
+        Numeric threshold used by this feature. Default: ``0.0``.
     output_col:
-        Output column name emitted by the component. Default: ``None``.
+        Output dataframe column configured by ``output_col``. Default: ``null``.
     method:
-        Mode selector that controls the registered component behavior. Default: ``ema``.
+        Configuration parameter accepted by this feature. Default: ``ema``.
     base_sma_for_sign:
-        Configuration value used by the registered component. Default: ``None``.
+        Configuration parameter accepted by this feature. Default: ``null``.
     short_sma:
-        Configuration value used by the registered component. Default: ``None``.
+        Configuration parameter accepted by this feature. Default: ``null``.
     long_sma:
-        Configuration value used by the registered component. Default: ``None``.
+        Configuration parameter accepted by this feature. Default: ``null``.
     """
     if method == "ema" and any(value is not None for value in (base_sma_for_sign, short_sma, long_sma)):
         method = "sma_legacy"

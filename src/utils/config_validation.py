@@ -72,7 +72,24 @@ _FEATURE_SELECTOR_PROFILES = {
     "ftmo_fx_intraday_regime_v1",
     "ftmo_fx_intraday_momentum_v1",
 }
-_FEATURE_TRANSFORM_HELPERS = {"ratio", "rolling_clip", "rolling_zscore", "rms", "slope"}
+_FEATURE_TRANSFORM_HELPERS = {
+    "between_flag",
+    "crossing_flag",
+    "difference",
+    "lag",
+    "ratio",
+    "reciprocal",
+    "rising_flag",
+    "rolling_clip",
+    "rolling_linear_regression",
+    "rolling_mean",
+    "rolling_std",
+    "rolling_sum",
+    "rolling_zscore",
+    "rms",
+    "slope",
+    "threshold_flag",
+}
 _FEATURE_NORMALIZATION_HELPERS = {"returns", "atr_distances", "volatility", "rolling_zscores"}
 _TARGET_OUTPUT_KEYS = {
     "label_col",
@@ -1446,6 +1463,14 @@ def validate_features_block(features: Any) -> None:
                 raise ConfigValidationError("features[].params.min_cycle must be <= max_cycle.")
             if "add_derived" in params and not isinstance(params["add_derived"], bool):
                 raise ConfigValidationError("features[].params.add_derived must be boolean.")
+            if params.get("add_derived") is True or any(
+                params.get(key) is not None
+                for key in ("dominant_cycle_col", "cycle_ok_col", "amplitude_rising_col")
+            ):
+                raise ConfigValidationError(
+                    "hilbert_transform derived outputs are no longer supported in feature params; "
+                    "use transforms.reciprocal, transforms.between_flag, and transforms.rising_flag."
+                )
         if step["step"] == "schaff_trend_cycle":
             params = step.get("params") or {}
             for key in (
@@ -1472,6 +1497,15 @@ def validate_features_block(features: Any) -> None:
                 and int(params["fast"]) >= int(params["slow"])
             ):
                 raise ConfigValidationError("features[].params.fast must be < slow.")
+            if any(
+                params.get(key) is not None
+                for key in ("cross_up_col", "cross_down_col", "rising_col", "falling_col")
+            ):
+                raise ConfigValidationError(
+                    "schaff_trend_cycle derived outputs are no longer supported in feature params; "
+                    "use transforms.crossing_flag, transforms.rising_flag, transforms.difference, "
+                    "and transforms.threshold_flag."
+                )
             for key in ("long_cross_level", "short_cross_level"):
                 if key in params:
                     value = _finite_number(params[key], field=f"features[].params.{key}")

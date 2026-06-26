@@ -10,18 +10,104 @@ EPSILON = 1e-12
 
 
 def require_columns(df: pd.DataFrame, columns: list[str], *, feature: str) -> None:
+    """
+    Apply the registered ``require_columns`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: require_columns
+            params:
+              columns: <required>
+              feature: <required>
+    
+    Required input columns
+    ----------------------
+    columns:
+        Configured dataframe columns used by this feature.
+    
+    Parameters
+    ----------
+    columns:
+        Configured dataframe columns used by this feature.
+    feature:
+        Configuration parameter accepted by this feature.
+    """
     missing = [column for column in columns if column not in df.columns]
     if missing:
         raise KeyError(f"Missing columns for {feature}: {missing}")
 
 
 def validate_int(value: int, *, name: str, minimum: int = 1) -> int:
+    """
+    Apply the registered ``validate_int`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: validate_int
+            params:
+              value: <required>
+              name: <required>
+              minimum: 1
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    value:
+        Configuration parameter accepted by this feature.
+    name:
+        Configuration parameter accepted by this feature.
+    minimum:
+        Configuration parameter accepted by this feature. Default: ``1``.
+    """
     if isinstance(value, bool) or not isinstance(value, Integral) or int(value) < minimum:
         raise ValueError(f"{name} must be an integer greater than or equal to {minimum}.")
     return int(value)
 
 
 def validate_float(value: float, *, name: str, minimum: float | None = None, maximum: float | None = None) -> float:
+    """
+    Apply the registered ``validate_float`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: validate_float
+            params:
+              value: <required>
+              name: <required>
+              minimum: null
+              maximum: null
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    value:
+        Configuration parameter accepted by this feature.
+    name:
+        Configuration parameter accepted by this feature.
+    minimum:
+        Configuration parameter accepted by this feature. Default: ``null``.
+    maximum:
+        Configuration parameter accepted by this feature. Default: ``null``.
+    """
     if isinstance(value, bool) or not isinstance(value, Real) or not np.isfinite(float(value)):
         raise ValueError(f"{name} must be a finite number.")
     resolved = float(value)
@@ -33,12 +119,64 @@ def validate_float(value: float, *, name: str, minimum: float | None = None, max
 
 
 def validate_bool(value: bool, *, name: str) -> bool:
+    """
+    Apply the registered ``validate_bool`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: validate_bool
+            params:
+              value: <required>
+              name: <required>
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    value:
+        Configuration parameter accepted by this feature.
+    name:
+        Configuration parameter accepted by this feature.
+    """
     if not isinstance(value, bool):
         raise ValueError(f"{name} must be boolean.")
     return value
 
 
 def validate_mama_limits(fast_limit: float, slow_limit: float) -> tuple[float, float]:
+    """
+    Apply the registered ``validate_mama_limits`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: validate_mama_limits
+            params:
+              fast_limit: <required>
+              slow_limit: <required>
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    fast_limit:
+        Configuration parameter accepted by this feature.
+    slow_limit:
+        Configuration parameter accepted by this feature.
+    """
     fast = validate_float(fast_limit, name="fast_limit", minimum=EPSILON, maximum=1.0)
     slow = validate_float(slow_limit, name="slow_limit", minimum=EPSILON, maximum=1.0)
     if slow > fast:
@@ -47,6 +185,34 @@ def validate_mama_limits(fast_limit: float, slow_limit: float) -> tuple[float, f
 
 
 def resolve_output_col(output_col: str | None, default: str) -> str:
+    """
+    Apply the registered ``resolve_output_col`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: resolve_output_col
+            params:
+              output_col: <required>
+              default: <required>
+          output_cols:
+            - configured by output_col
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    output_col:
+        Output dataframe column configured by ``output_col``.
+    default:
+        Configuration parameter accepted by this feature.
+    """
     if output_col is None:
         return default
     if not isinstance(output_col, str) or not output_col.strip():
@@ -55,6 +221,35 @@ def resolve_output_col(output_col: str | None, default: str) -> str:
 
 
 def resolve_named_col(value: str | None, *, default: str, name: str) -> str:
+    """
+    Apply the registered ``resolve_named_col`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: resolve_named_col
+            params:
+              value: <required>
+              default: <required>
+              name: <required>
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    value:
+        Configuration parameter accepted by this feature.
+    default:
+        Configuration parameter accepted by this feature.
+    name:
+        Configuration parameter accepted by this feature.
+    """
     if value is None:
         return default
     if not isinstance(value, str) or not value.strip():
@@ -63,15 +258,86 @@ def resolve_named_col(value: str | None, *, default: str, name: str) -> str:
 
 
 def ensure_unique_columns(columns: list[str], *, feature: str) -> None:
+    """
+    Apply the registered ``ensure_unique_columns`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: ensure_unique_columns
+            params:
+              columns: <required>
+              feature: <required>
+    
+    Required input columns
+    ----------------------
+    columns:
+        Configured dataframe columns used by this feature.
+    
+    Parameters
+    ----------
+    columns:
+        Configured dataframe columns used by this feature.
+    feature:
+        Configuration parameter accepted by this feature.
+    """
     if len(set(columns)) != len(columns):
         raise ValueError(f"{feature} output columns must be unique.")
 
 
 def as_float_array(series: pd.Series) -> np.ndarray:
+    """
+    Apply the registered ``as_float_array`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: as_float_array
+            params:
+              # no configurable parameters
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    None:
+        This callable has no public configuration parameters.
+    """
     return series.astype(float).to_numpy()
 
 
 def compute_weighted_smooth(values: np.ndarray) -> np.ndarray:
+    """
+    Compute the ``compute_weighted_smooth`` feature value.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: compute_weighted_smooth
+            params:
+              values: <required>
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    values:
+        Configuration parameter accepted by this feature.
+    """
     smooth = np.full(values.size, np.nan, dtype=float)
     for idx in range(values.size):
         if idx < 3:
@@ -204,6 +470,32 @@ def compute_mesa_components(
 
 
 def compute_high_pass(values: np.ndarray, *, period: int) -> np.ndarray:
+    """
+    Compute the ``compute_high_pass`` feature value.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: compute_high_pass
+            params:
+              values: <required>
+              period: <required>
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    values:
+        Configuration parameter accepted by this feature.
+    period:
+        Trailing lookback or forecast horizon controlling this feature.
+    """
     period = validate_int(period, name="period", minimum=3)
     high_pass = np.full(values.size, np.nan, dtype=float)
     state = np.zeros(values.size, dtype=float)
@@ -229,6 +521,32 @@ def compute_high_pass(values: np.ndarray, *, period: int) -> np.ndarray:
 
 
 def compute_decycler(values: np.ndarray, *, period: int) -> np.ndarray:
+    """
+    Compute the ``compute_decycler`` feature value.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: compute_decycler
+            params:
+              values: <required>
+              period: <required>
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    values:
+        Configuration parameter accepted by this feature.
+    period:
+        Trailing lookback or forecast horizon controlling this feature.
+    """
     high_pass = compute_high_pass(values, period=period)
     decycler = np.full(values.size, np.nan, dtype=float)
     valid = np.isfinite(values) & np.isfinite(high_pass)
@@ -237,6 +555,32 @@ def compute_decycler(values: np.ndarray, *, period: int) -> np.ndarray:
 
 
 def compute_supersmoother(values: np.ndarray, *, period: int) -> np.ndarray:
+    """
+    Compute the ``compute_supersmoother`` feature value.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: compute_supersmoother
+            params:
+              values: <required>
+              period: <required>
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    values:
+        Configuration parameter accepted by this feature.
+    period:
+        Trailing lookback or forecast horizon controlling this feature.
+    """
     period = validate_int(period, name="period", minimum=2)
     result = np.full(values.size, np.nan, dtype=float)
     if values.size == 0:
@@ -263,6 +607,35 @@ def compute_supersmoother(values: np.ndarray, *, period: int) -> np.ndarray:
 
 
 def rolling_min_max(values: np.ndarray, *, idx: int, window: int) -> tuple[float, float] | None:
+    """
+    Apply the registered ``rolling_min_max`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: rolling_min_max
+            params:
+              values: <required>
+              idx: <required>
+              window: <required>
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    values:
+        Configuration parameter accepted by this feature.
+    idx:
+        Configuration parameter accepted by this feature.
+    window:
+        Trailing lookback or forecast horizon controlling this feature.
+    """
     if idx + 1 < window:
         return None
     sample = values[idx - window + 1 : idx + 1]
@@ -272,6 +645,35 @@ def rolling_min_max(values: np.ndarray, *, idx: int, window: int) -> tuple[float
 
 
 def normalize_to_unit_interval(value: float, low: float, high: float) -> float:
+    """
+    Apply the registered ``normalize_to_unit_interval`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: normalize_to_unit_interval
+            params:
+              value: <required>
+              low: <required>
+              high: <required>
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    value:
+        Configuration parameter accepted by this feature.
+    low:
+        Configuration parameter accepted by this feature.
+    high:
+        Configuration parameter accepted by this feature.
+    """
     if abs(high - low) <= EPSILON:
         return 0.0
     return 2.0 * ((value - low) / (high - low) - 0.5)

@@ -67,36 +67,38 @@ def add_volatility_features(
     inplace: bool = False,
 ) -> pd.DataFrame:
     """
-    Assumes:
-    - df[returns_col] 
+    Apply the registered ``volatility`` feature transformation.
     
-    Adds volatility features to DataFrame:
-    - vol_rolling_{w}
-    - vol_ewma_{span}
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: volatility
-            params: {}
+            params:
+              returns_col: close_logret
+              rolling_windows: [10, 20, 60]
+              ewma_spans: [10, 20]
+              annualization_factor: 252.0
+              inplace: false
     
     Required input columns
     ----------------------
     returns_col:
-        Input column configured by ``returns_col``. Default: ``close_logret``.
+        Input dataframe column configured by ``returns_col``. Default: ``close_logret``.
     
     Parameters
     ----------
     returns_col:
-        Input dataframe column name consumed by the component. Default: ``close_logret``.
+        Input dataframe column configured by ``returns_col``. Default: ``close_logret``.
     rolling_windows:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``(10, 20, 60)``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``[10, 20, 60]``.
     ewma_spans:
-        Configuration value used by the registered component. Default: ``(10, 20)``.
+        Configuration parameter accepted by this feature. Default: ``[10, 20]``.
     annualization_factor:
-        Configuration value used by the registered component. Default: ``252.0``.
+        Configuration parameter accepted by this feature. Default: ``252.0``.
     inplace:
-        Configuration value used by the registered component. Default: ``False``.
+        Boolean switch controlling optional feature behavior. Default: ``false``.
     """
     out = df if inplace else df.copy()
     out = ensure_close_based_returns(out, returns_col=returns_col)

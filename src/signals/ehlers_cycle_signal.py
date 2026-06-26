@@ -349,44 +349,98 @@ def build_ehlers_cycle_long_signal(
 def ehlers_cycle_long_signal(df: pd.DataFrame, **params: Any) -> pd.DataFrame:
     """
     Apply the registered ``ehlers_cycle_long`` signal transformation.
-
-    This wrapper returns only the transformed dataframe. Use
-    ``build_ehlers_cycle_long_signal`` when metadata is also needed.
-
+    
+    This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
     YAML declaration::
-
+    
         signals:
           kind: ehlers_cycle_long
           params:
+            entry_delay_bars: 0
+            mode: long_only
+            entry_mode: state
+            acp_col: autocorrelation_periodogram_10_48
+            acp_power_col: autocorrelation_periodogram_10_48_power
+            acp_sdv_col: autocorrelation_periodogram_10_48__standard_deviation
+            roofing_filter_col: roofing_filter_48_10
+            roofing_filter_slope_col: roofing_filter_48_10_slope
+            decycler_osc_col: decycler_oscillator_30_60
+            rolling_r2_col: rolling_r2_96
+            rolling_r2_slope_col: rolling_r2_slope_96
             signal_col: cycle_signal
+            rolling_r2_threshold: 0.0
+            rolling_r2_slope_threshold: 0.0
+            acp_threshold: 30.0
+            acp_power_threshold: 50.0
+            acp_sdv_threshold: 5.0
+            acp_ratio_threshold: 0.15
+            roofing_filter_threshold: 0.0
+            decycler_osc_threshold: 0.0
           output_cols:
             - cycle_signal
-
+    
     Required input columns
     ----------------------
     acp_col:
-        Dominant cycle period column, usually produced by
-        ``autocorrelation_periodogram``.
+        Input dataframe column configured by ``acp_col``. Default: ``autocorrelation_periodogram_10_48``.
     acp_power_col:
-        Autocorrelation periodogram power column.
+        Input dataframe column configured by ``acp_power_col``. Default: ``autocorrelation_periodogram_10_48_power``.
     acp_sdv_col:
-        Rolling standard deviation or dispersion column of the ACP value.
+        Input dataframe column configured by ``acp_sdv_col``. Default: ``autocorrelation_periodogram_10_48__standard_deviation``.
     roofing_filter_col:
-        Roofing filter value column.
+        Input dataframe column configured by ``roofing_filter_col``. Default: ``roofing_filter_48_10``.
     roofing_filter_slope_col:
-        Roofing filter slope column.
+        Input dataframe column configured by ``roofing_filter_slope_col``. Default: ``roofing_filter_48_10_slope``.
     decycler_osc_col:
-        Decycler oscillator column.
+        Input dataframe column configured by ``decycler_osc_col``. Default: ``decycler_oscillator_30_60``.
     rolling_r2_col:
-        Rolling R2 trend-quality column.
+        Input dataframe column configured by ``rolling_r2_col``. Default: ``rolling_r2_96``.
     rolling_r2_slope_col:
-        Rolling R2 slope column.
-
+        Input dataframe column configured by ``rolling_r2_slope_col``. Default: ``rolling_r2_slope_96``.
+    
     Parameters
     ----------
-    **params:
-        Additional keyword parameters accepted from YAML ``signals.params`` and
-        forwarded to ``build_ehlers_cycle_long_signal``.
+    entry_delay_bars:
+        Configuration parameter accepted by this signal. Default: ``0``.
+    mode:
+        Mode selector controlling how this signal is applied. Default: ``long_only``.
+    entry_mode:
+        Mode selector controlling how this signal is applied. Default: ``state``.
+    acp_col:
+        Input dataframe column configured by ``acp_col``. Default: ``autocorrelation_periodogram_10_48``.
+    acp_power_col:
+        Input dataframe column configured by ``acp_power_col``. Default: ``autocorrelation_periodogram_10_48_power``.
+    acp_sdv_col:
+        Input dataframe column configured by ``acp_sdv_col``. Default: ``autocorrelation_periodogram_10_48__standard_deviation``.
+    roofing_filter_col:
+        Input dataframe column configured by ``roofing_filter_col``. Default: ``roofing_filter_48_10``.
+    roofing_filter_slope_col:
+        Input dataframe column configured by ``roofing_filter_slope_col``. Default: ``roofing_filter_48_10_slope``.
+    decycler_osc_col:
+        Input dataframe column configured by ``decycler_osc_col``. Default: ``decycler_oscillator_30_60``.
+    rolling_r2_col:
+        Input dataframe column configured by ``rolling_r2_col``. Default: ``rolling_r2_96``.
+    rolling_r2_slope_col:
+        Input dataframe column configured by ``rolling_r2_slope_col``. Default: ``rolling_r2_slope_96``.
+    signal_col:
+        Output dataframe column configured by ``signal_col``. Default: ``cycle_signal``.
+    rolling_r2_threshold:
+        Numeric threshold used by this signal. Default: ``0.0``.
+    rolling_r2_slope_threshold:
+        Numeric threshold used by this signal. Default: ``0.0``.
+    acp_threshold:
+        Numeric threshold used by this signal. Default: ``30.0``.
+    acp_power_threshold:
+        Numeric threshold used by this signal. Default: ``50.0``.
+    acp_sdv_threshold:
+        Numeric threshold used by this signal. Default: ``5.0``.
+    acp_ratio_threshold:
+        Numeric threshold used by this signal. Default: ``0.15``.
+    roofing_filter_threshold:
+        Numeric threshold used by this signal. Default: ``0.0``.
+    decycler_osc_threshold:
+        Numeric threshold used by this signal. Default: ``0.0``.
     """
     out, _ = build_ehlers_cycle_long_signal(df, params)
     return out

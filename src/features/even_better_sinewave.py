@@ -15,31 +15,40 @@ def add_even_better_sinewave(
     output_col: str | None = None,
 ) -> pd.DataFrame:
     """
-    Add Ehlers' causal Even Better Sinewave oscillator.
+    Apply the registered ``even_better_sinewave`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: even_better_sinewave
-            params: {}
+            params:
+              price_col: close
+              duration: 40
+              smoothing_period: 10
+              power_window: 3
+              output_col: null
+          output_cols:
+            - configured by output_col
     
     Required input columns
     ----------------------
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     
     Parameters
     ----------
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     duration:
-        Configuration value used by the registered component. Default: ``40``.
+        Configuration parameter accepted by this feature. Default: ``40``.
     smoothing_period:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``10``.
+        Configuration parameter accepted by this feature. Default: ``10``.
     power_window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``3``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``3``.
     output_col:
-        Output column name emitted by the component. Default: ``None``.
+        Output dataframe column configured by ``output_col``. Default: ``null``.
     """
     require_columns(df, [price_col], feature="Even Better Sinewave")
     resolved_duration = validate_int(duration, name="duration", minimum=4)

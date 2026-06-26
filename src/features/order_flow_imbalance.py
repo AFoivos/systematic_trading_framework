@@ -19,44 +19,62 @@ def add_order_flow_imbalance(
     output_col: str | None = None,
 ) -> pd.DataFrame:
     """
-    Add causal order-flow imbalance from real flow or quote data.
+    Apply the registered ``order_flow_imbalance`` feature transformation.
     
-    Provide buy/sell volume columns or full bid/ask price and size columns. The
-    function does not derive order flow from OHLC bars.
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: order_flow_imbalance
-            params: {}
+            params:
+              buy_volume_col: buy_volume
+              sell_volume_col: sell_volume
+              bid_price_col: null
+              ask_price_col: null
+              bid_size_col: null
+              ask_size_col: null
+              window: 1
+              normalize: false
+              output_col: null
+          output_cols:
+            - configured by output_col
     
     Required input columns
     ----------------------
     buy_volume_col:
-        Input column configured by ``buy_volume_col``. Default: ``buy_volume``.
+        Input dataframe column configured by ``buy_volume_col``. Default: ``buy_volume``.
     sell_volume_col:
-        Input column configured by ``sell_volume_col``. Default: ``sell_volume``.
+        Input dataframe column configured by ``sell_volume_col``. Default: ``sell_volume``.
+    bid_price_col:
+        Input dataframe column configured by ``bid_price_col``. Default: ``null``.
+    ask_price_col:
+        Input dataframe column configured by ``ask_price_col``. Default: ``null``.
+    bid_size_col:
+        Input dataframe column configured by ``bid_size_col``. Default: ``null``.
+    ask_size_col:
+        Input dataframe column configured by ``ask_size_col``. Default: ``null``.
     
     Parameters
     ----------
     buy_volume_col:
-        Input dataframe column name consumed by the component. Default: ``buy_volume``.
+        Input dataframe column configured by ``buy_volume_col``. Default: ``buy_volume``.
     sell_volume_col:
-        Input dataframe column name consumed by the component. Default: ``sell_volume``.
+        Input dataframe column configured by ``sell_volume_col``. Default: ``sell_volume``.
     bid_price_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``bid_price_col``. Default: ``null``.
     ask_price_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``ask_price_col``. Default: ``null``.
     bid_size_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``bid_size_col``. Default: ``null``.
     ask_size_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``ask_size_col``. Default: ``null``.
     window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``1``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``1``.
     normalize:
-        Configuration value used by the registered component. Default: ``False``.
+        Configuration parameter accepted by this feature. Default: ``false``.
     output_col:
-        Output column name emitted by the component. Default: ``None``.
+        Output dataframe column configured by ``output_col``. Default: ``null``.
     """
     _validate_positive_int(window, name="window")
     col = _resolve_output_col(output_col, "order_flow_imbalance" if window == 1 else f"order_flow_imbalance_{window}")

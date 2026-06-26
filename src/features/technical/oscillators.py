@@ -18,6 +18,50 @@ def add_oscillator_features(
     stoch_smooth: int = 3,
     inplace: bool = False,
 ) -> pd.DataFrame:
+    """
+    Apply the registered ``oscillator`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: oscillator
+            params:
+              price_col: close
+              high_col: high
+              low_col: low
+              rsi_windows: [14]
+              stoch_windows: [14]
+              stoch_smooth: 3
+              inplace: false
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input dataframe column configured by ``price_col``. Default: ``close``.
+    high_col:
+        Input dataframe column configured by ``high_col``. Default: ``high``.
+    low_col:
+        Input dataframe column configured by ``low_col``. Default: ``low``.
+    
+    Parameters
+    ----------
+    price_col:
+        Input dataframe column configured by ``price_col``. Default: ``close``.
+    high_col:
+        Input dataframe column configured by ``high_col``. Default: ``high``.
+    low_col:
+        Input dataframe column configured by ``low_col``. Default: ``low``.
+    rsi_windows:
+        Trailing lookback or forecast horizon controlling this feature. Default: ``[14]``.
+    stoch_windows:
+        Trailing lookback or forecast horizon controlling this feature. Default: ``[14]``.
+    stoch_smooth:
+        Configuration parameter accepted by this feature. Default: ``3``.
+    inplace:
+        Boolean switch controlling optional feature behavior. Default: ``false``.
+    """
     missing = [c for c in (price_col, high_col, low_col) if c not in df.columns]
     if missing:
         raise KeyError(f"Missing columns for oscillators: {missing}")

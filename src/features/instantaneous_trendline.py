@@ -23,31 +23,42 @@ def add_instantaneous_trendline(
     add_trigger: bool = True,
 ) -> pd.DataFrame:
     """
-    Add Ehlers' causal instantaneous trendline and optional trigger.
+    Apply the registered ``instantaneous_trendline`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: instantaneous_trendline
-            params: {}
+            params:
+              price_col: close
+              alpha: 0.07
+              output_col: null
+              trigger_col: null
+              add_trigger: true
+          output_cols:
+            - configured by output_col
     
     Required input columns
     ----------------------
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
+    trigger_col:
+        Input dataframe column configured by ``trigger_col``. Default: ``null``.
     
     Parameters
     ----------
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     alpha:
-        Configuration value used by the registered component. Default: ``0.07``.
+        Configuration parameter accepted by this feature. Default: ``0.07``.
     output_col:
-        Output column name emitted by the component. Default: ``None``.
+        Output dataframe column configured by ``output_col``. Default: ``null``.
     trigger_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``trigger_col``. Default: ``null``.
     add_trigger:
-        Configuration value used by the registered component. Default: ``True``.
+        Boolean switch controlling optional feature behavior. Default: ``true``.
     """
     require_columns(df, [price_col], feature="instantaneous trendline")
     a = validate_float(alpha, name="alpha", minimum=0.0, maximum=1.0)

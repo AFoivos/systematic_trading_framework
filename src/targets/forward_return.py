@@ -13,25 +13,53 @@ def build_forward_return_target(
     target_cfg: dict[str, Any] | None,
 ) -> tuple[pd.DataFrame, str, str, dict[str, Any]]:
     """
-    Build the canonical forward-return target and optional binary label columns.
+    Apply the registered ``forward_return`` target transformation.
+    
+    This target uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         target:
           kind: forward_return
-          params: {}
+          params:
+            fwd_col: <configured>
+            horizon: <configured>
+            label_col: <configured>
+            price_col: <configured>
+            quantiles: <configured>
+            returns_col: <configured>
+            returns_type: <configured>
+            threshold: <configured>
+          outputs:
+            - configured by label_col
     
     Required input columns
     ----------------------
-    None fixed by signature:
-        Required dataframe columns are resolved from configuration or from
-        upstream feature/target/signal stages at runtime.
+    fwd_col:
+        Input dataframe column configured by ``fwd_col``. Default: ``<configured>``.
+    price_col:
+        Input dataframe column configured by ``price_col``. Default: ``<configured>``.
+    returns_col:
+        Input dataframe column configured by ``returns_col``. Default: ``<configured>``.
     
     Parameters
     ----------
-    target_cfg:
-        Configuration mapping, usually resolved from YAML before this
-        registered component is called.
+    fwd_col:
+        Input dataframe column configured by ``fwd_col``. Default: ``<configured>``.
+    horizon:
+        Trailing lookback or forecast horizon controlling this target. Default: ``<configured>``.
+    label_col:
+        Output dataframe column configured by ``label_col``. Default: ``<configured>``.
+    price_col:
+        Input dataframe column configured by ``price_col``. Default: ``<configured>``.
+    quantiles:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    returns_col:
+        Input dataframe column configured by ``returns_col``. Default: ``<configured>``.
+    returns_type:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    threshold:
+        Numeric threshold used by this target. Default: ``<configured>``.
     """
     cfg = apply_target_output_aliases(target_cfg)
     price_col = cfg.get("price_col", "close")

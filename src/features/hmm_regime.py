@@ -27,61 +27,77 @@ def add_hmm_regime(
     standardize_eps: float = 1e-12,
 ) -> pd.DataFrame:
     """
-    Add Hidden Markov Model regimes without full-sample fitting.
+    Apply the registered ``hmm_regime`` feature transformation.
     
-    ``mode='expanding'`` fits on observations strictly before the row being
-    scored. ``mode='static_train'`` fits once on the first ``train_size`` valid
-    observations and only scores later rows. If ``standardize=True``,
-    normalization statistics are estimated from the HMM training window only.
-    The ``hmmlearn`` package is required at runtime.
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: hmm_regime
-            params: {}
+            params:
+              feature_cols: null
+              price_col: close
+              returns_col: null
+              n_states: 2
+              mode: expanding
+              train_size: null
+              min_train_size: null
+              refit_interval: 1
+              covariance_type: diag
+              n_iter: 100
+              random_state: 0
+              output_col: null
+              include_probabilities: false
+              probability_prefix: hmm_regime_prob
+              standardize: false
+              standardize_eps: 1e-12
+          output_cols:
+            - configured by output_col
     
     Required input columns
     ----------------------
+    feature_cols:
+        Configured dataframe columns used by this feature. Default: ``null``.
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     returns_col:
-        Optional input column configured by ``returns_col``; used when a value is provided.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
     
     Parameters
     ----------
     feature_cols:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Configured dataframe columns used by this feature. Default: ``null``.
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     returns_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
     n_states:
-        Configuration value used by the registered component. Default: ``2``.
+        Configuration parameter accepted by this feature. Default: ``2``.
     mode:
-        Mode selector that controls the registered component behavior. Default: ``expanding``.
+        Mode selector controlling how this feature is applied. Default: ``expanding``.
     train_size:
-        Configuration value used by the registered component. Default: ``None``.
+        Configuration parameter accepted by this feature. Default: ``null``.
     min_train_size:
-        Configuration value used by the registered component. Default: ``None``.
+        Configuration parameter accepted by this feature. Default: ``null``.
     refit_interval:
-        Configuration value used by the registered component. Default: ``1``.
+        Configuration parameter accepted by this feature. Default: ``1``.
     covariance_type:
-        Configuration value used by the registered component. Default: ``diag``.
+        Configuration parameter accepted by this feature. Default: ``diag``.
     n_iter:
-        Configuration value used by the registered component. Default: ``100``.
+        Configuration parameter accepted by this feature. Default: ``100``.
     random_state:
-        Configuration value used by the registered component. Default: ``0``.
+        Configuration parameter accepted by this feature. Default: ``0``.
     output_col:
-        Output column name emitted by the component. Default: ``None``.
+        Output dataframe column configured by ``output_col``. Default: ``null``.
     include_probabilities:
-        Configuration value used by the registered component. Default: ``False``.
+        Configuration parameter accepted by this feature. Default: ``false``.
     probability_prefix:
-        Configuration value used by the registered component. Default: ``hmm_regime_prob``.
+        Configuration parameter accepted by this feature. Default: ``hmm_regime_prob``.
     standardize:
-        Configuration value used by the registered component. Default: ``False``.
+        Configuration parameter accepted by this feature. Default: ``false``.
     standardize_eps:
-        Configuration value used by the registered component. Default: ``1e-12``.
+        Configuration parameter accepted by this feature. Default: ``1e-12``.
     """
     _validate_positive_int(n_states, name="n_states")
     if n_states < 2:

@@ -19,46 +19,56 @@ def add_volatility_regime(
     output_col: str | None = None,
 ) -> pd.DataFrame:
     """
-    Add a causal volatility regime feature.
+    Apply the registered ``volatility_regime`` feature transformation.
     
-    ``method='ratio'`` emits ``vol / trailing_mean(vol)``. ``method='percentile'``
-    emits ``0, 1, 2`` based on trailing rolling quantiles of the volatility
-    series. If ``vol_col`` is not provided, trailing return volatility is
-    computed from ``returns_col`` or ``price_col``.
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: volatility_regime
-            params: {}
+            params:
+              vol_col: null
+              price_col: close
+              returns_col: null
+              vol_window: 20
+              regime_window: 100
+              method: ratio
+              lower_quantile: 0.33
+              upper_quantile: 0.67
+              output_col: null
+          output_cols:
+            - configured by output_col
     
     Required input columns
     ----------------------
+    vol_col:
+        Input dataframe column configured by ``vol_col``. Default: ``null``.
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     returns_col:
-        Optional input column configured by ``returns_col``; used when a value is provided.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
     
     Parameters
     ----------
     vol_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``vol_col``. Default: ``null``.
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     returns_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
     vol_window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``20``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``20``.
     regime_window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``100``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``100``.
     method:
-        Mode selector that controls the registered component behavior. Default: ``ratio``.
+        Configuration parameter accepted by this feature. Default: ``ratio``.
     lower_quantile:
-        Configuration value used by the registered component. Default: ``0.33``.
+        Configuration parameter accepted by this feature. Default: ``0.33``.
     upper_quantile:
-        Configuration value used by the registered component. Default: ``0.67``.
+        Configuration parameter accepted by this feature. Default: ``0.67``.
     output_col:
-        Output column name emitted by the component. Default: ``None``.
+        Output dataframe column configured by ``output_col``. Default: ``null``.
     """
     _validate_window(vol_window, name="vol_window")
     _validate_window(regime_window, name="regime_window")

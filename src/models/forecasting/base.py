@@ -62,6 +62,96 @@ def prepare_forecaster_inputs(
     dict[str, Any],
     dict[str, Any],
 ]:
+    """
+    Apply the registered ``prepare_forecaster_inputs`` model transformation.
+    
+    This model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        model:
+          kind: prepare_forecaster_inputs
+          params:
+            model_params: <required>
+            pred_ret_col: <required>
+            pred_prob_col: <required>
+            required_features: <required>
+            runtime_estimator_family: <required>
+            feature_cols: <configured>
+            feature_selectors: <configured>
+            horizon: <configured>
+            kind: <configured>
+            method: <configured>
+            minimum_expected_features: <configured>
+            oriented_r_col: <configured>
+            output_cols: <configured>
+            r_col: <configured>
+            regression_target_col: <configured>
+            split: <configured>
+            target: <configured>
+            target_col: <configured>
+            use_features: <configured>
+          outputs:
+            - configured by output_cols
+    
+    Required input columns
+    ----------------------
+    pred_ret_col:
+        Input dataframe column configured by ``pred_ret_col``.
+    pred_prob_col:
+        Input dataframe column configured by ``pred_prob_col``.
+    feature_cols:
+        Configured dataframe columns used by this model. Default: ``<configured>``.
+    oriented_r_col:
+        Input dataframe column configured by ``oriented_r_col``. Default: ``<configured>``.
+    r_col:
+        Input dataframe column configured by ``r_col``. Default: ``<configured>``.
+    regression_target_col:
+        Input dataframe column configured by ``regression_target_col``. Default: ``<configured>``.
+    target_col:
+        Input dataframe column configured by ``target_col``. Default: ``<configured>``.
+    
+    Parameters
+    ----------
+    model_params:
+        Configuration parameter accepted by this model.
+    pred_ret_col:
+        Input dataframe column configured by ``pred_ret_col``.
+    pred_prob_col:
+        Input dataframe column configured by ``pred_prob_col``.
+    required_features:
+        Configuration parameter accepted by this model.
+    runtime_estimator_family:
+        Configuration parameter accepted by this model.
+    feature_cols:
+        Configured dataframe columns used by this model. Default: ``<configured>``.
+    feature_selectors:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    horizon:
+        Trailing lookback or forecast horizon controlling this model. Default: ``<configured>``.
+    kind:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    method:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    minimum_expected_features:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    oriented_r_col:
+        Input dataframe column configured by ``oriented_r_col``. Default: ``<configured>``.
+    output_cols:
+        Configured dataframe columns used by this model. Default: ``<configured>``.
+    r_col:
+        Input dataframe column configured by ``r_col``. Default: ``<configured>``.
+    regression_target_col:
+        Input dataframe column configured by ``regression_target_col``. Default: ``<configured>``.
+    split:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    target:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    target_col:
+        Input dataframe column configured by ``target_col``. Default: ``<configured>``.
+    use_features:
+        Boolean switch controlling optional model behavior. Default: ``<configured>``.
+    """
     runtime_meta = resolve_runtime_for_model(
         model_cfg=model_cfg,
         model_params=model_params,
@@ -193,6 +283,112 @@ def train_forward_forecaster(
     required_features: bool = False,
     runtime_estimator_family: str = "statsmodels",
 ) -> tuple[pd.DataFrame, object, dict[str, Any]]:
+    """
+    Apply the registered ``forward_forecaster`` model transformation.
+    
+    This model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        model:
+          kind: forward_forecaster
+          params:
+            model_kind: <required>
+            fold_predictor: <required>
+            returns_col: null
+            required_features: false
+            runtime_estimator_family: statsmodels
+            active_feature_count: <configured>
+            actual_model_feature_count: <configured>
+            diagnostics: <configured>
+            dropped_constant_count: <configured>
+            dropped_missing_count: <configured>
+            dropped_selector_count: <configured>
+            feature_pipeline: <configured>
+            final_feature_names: <configured>
+            model_feature_count: <configured>
+            model_train_rows: <configured>
+            params: <configured>
+            pred_is_oos_col: <configured>
+            pred_prob_col: <configured>
+            pred_ret_col: <configured>
+            pred_vol: <configured>
+            prob_scale: <configured>
+            raw_feature_count: <configured>
+            reported_feature_count: <configured>
+            resolved_feature_count: <configured>
+            selected_feature_count: <configured>
+            threshold: <configured>
+            train_rows_raw: <configured>
+    
+    Required input columns
+    ----------------------
+    returns_col:
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
+    pred_is_oos_col:
+        Input dataframe column configured by ``pred_is_oos_col``. Default: ``<configured>``.
+    pred_prob_col:
+        Input dataframe column configured by ``pred_prob_col``. Default: ``<configured>``.
+    pred_ret_col:
+        Input dataframe column configured by ``pred_ret_col``. Default: ``<configured>``.
+    
+    Parameters
+    ----------
+    model_kind:
+        Configuration parameter accepted by this model.
+    fold_predictor:
+        Configuration parameter accepted by this model.
+    returns_col:
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
+    required_features:
+        Configuration parameter accepted by this model. Default: ``false``.
+    runtime_estimator_family:
+        Configuration parameter accepted by this model. Default: ``statsmodels``.
+    active_feature_count:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    actual_model_feature_count:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    diagnostics:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    dropped_constant_count:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    dropped_missing_count:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    dropped_selector_count:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    feature_pipeline:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    final_feature_names:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    model_feature_count:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    model_train_rows:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    params:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    pred_is_oos_col:
+        Input dataframe column configured by ``pred_is_oos_col``. Default: ``<configured>``.
+    pred_prob_col:
+        Input dataframe column configured by ``pred_prob_col``. Default: ``<configured>``.
+    pred_ret_col:
+        Input dataframe column configured by ``pred_ret_col``. Default: ``<configured>``.
+    pred_vol:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    prob_scale:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    raw_feature_count:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    reported_feature_count:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    resolved_feature_count:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    selected_feature_count:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    threshold:
+        Numeric threshold used by this model. Default: ``<configured>``.
+    train_rows_raw:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    """
     model_cfg = dict(model_cfg or {})
     model_params = dict(model_cfg.get("params", {}) or {})
     pred_ret_col = str(model_cfg.get("pred_ret_col") or "pred_ret")
@@ -541,26 +737,26 @@ def train_sarimax_forecaster(
     returns_col: str | None = None,
 ) -> tuple[pd.DataFrame, object, dict[str, Any]]:
     """
-    Train the registered ``sarimax_forecaster`` model component.
+    Apply the registered ``sarimax_forecaster`` model transformation.
+    
+    This model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         model:
           kind: sarimax_forecaster
-          params: {}
+          params:
+            returns_col: null
     
     Required input columns
     ----------------------
     returns_col:
-        Optional input column configured by ``returns_col``; used when a value is provided.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
     
     Parameters
     ----------
-    model_cfg:
-        Configuration mapping, usually resolved from YAML before this
-        registered component is called.
     returns_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
     """
     return train_forward_forecaster(
         df=df,
@@ -579,26 +775,42 @@ def train_garch_forecaster(
     returns_col: str | None = None,
 ) -> tuple[pd.DataFrame, object, dict[str, Any]]:
     """
-    Train the registered ``garch_forecaster`` model component.
+    Apply the registered ``garch_forecaster`` model transformation.
+    
+    This model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         model:
           kind: garch_forecaster
-          params: {}
+          params:
+            returns_col: null
+            params: <configured>
+            price_col: <configured>
+            returns_input_col: <configured>
+            target: <configured>
     
     Required input columns
     ----------------------
     returns_col:
-        Optional input column configured by ``returns_col``; used when a value is provided.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
+    price_col:
+        Input dataframe column configured by ``price_col``. Default: ``<configured>``.
+    returns_input_col:
+        Input dataframe column configured by ``returns_input_col``. Default: ``<configured>``.
     
     Parameters
     ----------
-    model_cfg:
-        Configuration mapping, usually resolved from YAML before this
-        registered component is called.
     returns_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
+    params:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    price_col:
+        Input dataframe column configured by ``price_col``. Default: ``<configured>``.
+    returns_input_col:
+        Input dataframe column configured by ``returns_input_col``. Default: ``<configured>``.
+    target:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
     """
     cfg = dict(model_cfg or {})
     target_cfg = dict(cfg.get("target", {}) or {})
@@ -636,26 +848,26 @@ def train_lightgbm_regressor(
     returns_col: str | None = None,
 ) -> tuple[pd.DataFrame, object, dict[str, Any]]:
     """
-    Train the registered ``lightgbm_regressor`` model component.
+    Apply the registered ``lightgbm_regressor`` model transformation.
+    
+    This model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         model:
           kind: lightgbm_regressor
-          params: {}
+          params:
+            returns_col: null
     
     Required input columns
     ----------------------
     returns_col:
-        Optional input column configured by ``returns_col``; used when a value is provided.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
     
     Parameters
     ----------
-    model_cfg:
-        Configuration mapping, usually resolved from YAML before this
-        registered component is called.
     returns_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
     """
     return train_forward_forecaster(
         df=df,
@@ -674,26 +886,26 @@ def train_tft_forecaster(
     returns_col: str | None = None,
 ) -> tuple[pd.DataFrame, object, dict[str, Any]]:
     """
-    Train the registered ``tft_forecaster`` model component.
+    Apply the registered ``tft_forecaster`` model transformation.
+    
+    This model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         model:
           kind: tft_forecaster
-          params: {}
+          params:
+            returns_col: null
     
     Required input columns
     ----------------------
     returns_col:
-        Optional input column configured by ``returns_col``; used when a value is provided.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
     
     Parameters
     ----------
-    model_cfg:
-        Configuration mapping, usually resolved from YAML before this
-        registered component is called.
     returns_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
     """
     return train_forward_forecaster(
         df=df,
@@ -712,26 +924,26 @@ def train_lstm_forecaster(
     returns_col: str | None = None,
 ) -> tuple[pd.DataFrame, object, dict[str, Any]]:
     """
-    Train the registered ``lstm_forecaster`` model component.
+    Apply the registered ``lstm_forecaster`` model transformation.
+    
+    This model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         model:
           kind: lstm_forecaster
-          params: {}
+          params:
+            returns_col: null
     
     Required input columns
     ----------------------
     returns_col:
-        Optional input column configured by ``returns_col``; used when a value is provided.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
     
     Parameters
     ----------
-    model_cfg:
-        Configuration mapping, usually resolved from YAML before this
-        registered component is called.
     returns_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
     """
     return train_forward_forecaster(
         df,
@@ -750,26 +962,26 @@ def train_patchtst_forecaster(
     returns_col: str | None = None,
 ) -> tuple[pd.DataFrame, object, dict[str, Any]]:
     """
-    Train the registered ``patchtst_forecaster`` model component.
+    Apply the registered ``patchtst_forecaster`` model transformation.
+    
+    This model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         model:
           kind: patchtst_forecaster
-          params: {}
+          params:
+            returns_col: null
     
     Required input columns
     ----------------------
     returns_col:
-        Optional input column configured by ``returns_col``; used when a value is provided.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
     
     Parameters
     ----------
-    model_cfg:
-        Configuration mapping, usually resolved from YAML before this
-        registered component is called.
     returns_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
     """
     return train_forward_forecaster(
         df,

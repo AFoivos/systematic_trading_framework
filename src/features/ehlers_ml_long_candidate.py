@@ -50,83 +50,105 @@ def ehlers_ml_long_candidate_feature(
     side_col: str = "signal_side",
 ) -> pd.DataFrame:
     """
-    Add causal derived Ehlers features and long-only candidate columns.
+    Apply the registered ``ehlers_ml_long_candidate`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: ehlers_ml_long_candidate
-            params: {}
+            params:
+              amplitude_col: hilbert_amplitude
+              cycle_period_col: dominant_cycle_period
+              roofing_col: roofing_filter
+              mama_col: mama
+              fama_col: fama
+              close_col: close
+              decycler_col: decycler
+              instantaneous_trendline_col: instantaneous_trendline
+              frama_col: frama
+              supersmoother_col: supersmoother
+              dominant_cycle_phase_col: dominant_cycle_phase
+              atr_col: null
+              amplitude_lookback: 128
+              amplitude_min_quantile: 0.5
+              min_cycle_period: 8.0
+              max_cycle_period: 60.0
+              slope_bars: 1
+              candidate_col: ehlers_ml_candidate
+              side_col: signal_side
+          output_cols:
+            - configured by atr_col
+            - ehlers_ml_candidate
     
     Required input columns
     ----------------------
     amplitude_col:
-        Input column configured by ``amplitude_col``. Default: ``hilbert_amplitude``.
+        Input dataframe column configured by ``amplitude_col``. Default: ``hilbert_amplitude``.
     cycle_period_col:
-        Input column configured by ``cycle_period_col``. Default: ``dominant_cycle_period``.
+        Input dataframe column configured by ``cycle_period_col``. Default: ``dominant_cycle_period``.
     roofing_col:
-        Input column configured by ``roofing_col``. Default: ``roofing_filter``.
+        Input dataframe column configured by ``roofing_col``. Default: ``roofing_filter``.
     mama_col:
-        Input column configured by ``mama_col``. Default: ``mama``.
+        Input dataframe column configured by ``mama_col``. Default: ``mama``.
     fama_col:
-        Input column configured by ``fama_col``. Default: ``fama``.
+        Input dataframe column configured by ``fama_col``. Default: ``fama``.
     close_col:
-        Input column configured by ``close_col``. Default: ``close``.
+        Input dataframe column configured by ``close_col``. Default: ``close``.
     decycler_col:
-        Input column configured by ``decycler_col``. Default: ``decycler``.
+        Input dataframe column configured by ``decycler_col``. Default: ``decycler``.
     instantaneous_trendline_col:
-        Input column configured by ``instantaneous_trendline_col``. Default: ``instantaneous_trendline``.
+        Input dataframe column configured by ``instantaneous_trendline_col``. Default: ``instantaneous_trendline``.
     frama_col:
-        Input column configured by ``frama_col``. Default: ``frama``.
+        Input dataframe column configured by ``frama_col``. Default: ``frama``.
     supersmoother_col:
-        Input column configured by ``supersmoother_col``. Default: ``supersmoother``.
+        Input dataframe column configured by ``supersmoother_col``. Default: ``supersmoother``.
     dominant_cycle_phase_col:
-        Input column configured by ``dominant_cycle_phase_col``. Default: ``dominant_cycle_phase``.
-    candidate_col:
-        Input column configured by ``candidate_col``. Default: ``ehlers_ml_candidate``.
+        Input dataframe column configured by ``dominant_cycle_phase_col``. Default: ``dominant_cycle_phase``.
     side_col:
-        Input column configured by ``side_col``. Default: ``signal_side``.
+        Input dataframe column configured by ``side_col``. Default: ``signal_side``.
     
     Parameters
     ----------
     amplitude_col:
-        Input dataframe column name consumed by the component. Default: ``hilbert_amplitude``.
+        Input dataframe column configured by ``amplitude_col``. Default: ``hilbert_amplitude``.
     cycle_period_col:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``dominant_cycle_period``.
+        Input dataframe column configured by ``cycle_period_col``. Default: ``dominant_cycle_period``.
     roofing_col:
-        Input dataframe column name consumed by the component. Default: ``roofing_filter``.
+        Input dataframe column configured by ``roofing_col``. Default: ``roofing_filter``.
     mama_col:
-        Input dataframe column name consumed by the component. Default: ``mama``.
+        Input dataframe column configured by ``mama_col``. Default: ``mama``.
     fama_col:
-        Input dataframe column name consumed by the component. Default: ``fama``.
+        Input dataframe column configured by ``fama_col``. Default: ``fama``.
     close_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``close_col``. Default: ``close``.
     decycler_col:
-        Input dataframe column name consumed by the component. Default: ``decycler``.
+        Input dataframe column configured by ``decycler_col``. Default: ``decycler``.
     instantaneous_trendline_col:
-        Input dataframe column name consumed by the component. Default: ``instantaneous_trendline``.
+        Input dataframe column configured by ``instantaneous_trendline_col``. Default: ``instantaneous_trendline``.
     frama_col:
-        Input dataframe column name consumed by the component. Default: ``frama``.
+        Input dataframe column configured by ``frama_col``. Default: ``frama``.
     supersmoother_col:
-        Input dataframe column name consumed by the component. Default: ``supersmoother``.
+        Input dataframe column configured by ``supersmoother_col``. Default: ``supersmoother``.
     dominant_cycle_phase_col:
-        Input dataframe column name consumed by the component. Default: ``dominant_cycle_phase``.
+        Input dataframe column configured by ``dominant_cycle_phase_col``. Default: ``dominant_cycle_phase``.
     atr_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Output dataframe column configured by ``atr_col``. Default: ``null``.
     amplitude_lookback:
-        Configuration value used by the registered component. Default: ``128``.
+        Configuration parameter accepted by this feature. Default: ``128``.
     amplitude_min_quantile:
-        Configuration value used by the registered component. Default: ``0.5``.
+        Configuration parameter accepted by this feature. Default: ``0.5``.
     min_cycle_period:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``8.0``.
+        Configuration parameter accepted by this feature. Default: ``8.0``.
     max_cycle_period:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``60.0``.
+        Configuration parameter accepted by this feature. Default: ``60.0``.
     slope_bars:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``1``.
+        Configuration parameter accepted by this feature. Default: ``1``.
     candidate_col:
-        Input dataframe column name consumed by the component. Default: ``ehlers_ml_candidate``.
+        Output dataframe column configured by ``candidate_col``. Default: ``ehlers_ml_candidate``.
     side_col:
-        Input dataframe column name consumed by the component. Default: ``signal_side``.
+        Input dataframe column configured by ``side_col``. Default: ``signal_side``.
     """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("df must be a pandas DataFrame.")

@@ -66,28 +66,109 @@ def train_event_transformer_encoder(
     returns_col: str | None = None,
 ) -> tuple[pd.DataFrame, object, dict[str, Any]]:
     """
-    Train the registered ``event_transformer_encoder`` model component.
+    Apply the registered ``event_transformer_encoder`` model transformation.
+    
+    This model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         model:
           kind: event_transformer_encoder
-          params: {}
+          params:
+            returns_col: null
+            batch_size: <configured>
+            candidate_col: <configured>
+            deterministic: <configured>
+            dropout: <configured>
+            embedding_dim: <configured>
+            embedding_prefix: <configured>
+            epochs: <configured>
+            feature_cols: <configured>
+            feature_selectors: <configured>
+            hidden_dim: <configured>
+            learning_rate: <configured>
+            lookback: <configured>
+            method: <configured>
+            min_train_samples: <configured>
+            num_heads: <configured>
+            num_layers: <configured>
+            params: <configured>
+            pred_is_oos_col: <configured>
+            pred_prob_col: <configured>
+            repro_mode: <configured>
+            seed: <configured>
+            split: <configured>
+            target: <configured>
+            threads: <configured>
+            weight_decay: <configured>
+          outputs:
+            - configured by candidate_col
     
     Required input columns
     ----------------------
-    horizon:
-        Required dataframe column read directly by this component.
     returns_col:
-        Optional input column configured by ``returns_col``; used when a value is provided.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
+    feature_cols:
+        Configured dataframe columns used by this model. Default: ``<configured>``.
+    pred_is_oos_col:
+        Input dataframe column configured by ``pred_is_oos_col``. Default: ``<configured>``.
+    pred_prob_col:
+        Input dataframe column configured by ``pred_prob_col``. Default: ``<configured>``.
     
     Parameters
     ----------
-    model_cfg:
-        Configuration mapping, usually resolved from YAML before this
-        registered component is called.
     returns_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
+    batch_size:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    candidate_col:
+        Output dataframe column configured by ``candidate_col``. Default: ``<configured>``.
+    deterministic:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    dropout:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    embedding_dim:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    embedding_prefix:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    epochs:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    feature_cols:
+        Configured dataframe columns used by this model. Default: ``<configured>``.
+    feature_selectors:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    hidden_dim:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    learning_rate:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    lookback:
+        Trailing lookback or forecast horizon controlling this model. Default: ``<configured>``.
+    method:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    min_train_samples:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    num_heads:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    num_layers:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    params:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    pred_is_oos_col:
+        Input dataframe column configured by ``pred_is_oos_col``. Default: ``<configured>``.
+    pred_prob_col:
+        Input dataframe column configured by ``pred_prob_col``. Default: ``<configured>``.
+    repro_mode:
+        Mode selector controlling how this model is applied. Default: ``<configured>``.
+    seed:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    split:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    target:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    threads:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
+    weight_decay:
+        Configuration parameter accepted by this model. Default: ``<configured>``.
     """
     try:
         import torch

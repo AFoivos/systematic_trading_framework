@@ -12,27 +12,34 @@ def add_homodyne_discriminator(
     output_col: str | None = None,
 ) -> pd.DataFrame:
     """
-    Add a causal Ehlers homodyne discriminator period estimate.
+    Apply the registered ``homodyne_discriminator`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: homodyne_discriminator
-            params: {}
+            params:
+              price_col: close
+              use_smoothed_period: false
+              output_col: null
+          output_cols:
+            - configured by output_col
     
     Required input columns
     ----------------------
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     
     Parameters
     ----------
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     use_smoothed_period:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``False``.
+        Boolean switch controlling optional feature behavior. Default: ``false``.
     output_col:
-        Output column name emitted by the component. Default: ``None``.
+        Output dataframe column configured by ``output_col``. Default: ``null``.
     """
     require_columns(df, [price_col], feature="homodyne discriminator")
     validate_bool(use_smoothed_period, name="use_smoothed_period")

@@ -13,27 +13,33 @@ def add_bollinger_features(
     """
     Apply the registered ``bollinger`` feature transformation.
     
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
     YAML declaration::
     
         features:
           - step: bollinger
-            params: {}
+            params:
+              price_col: close
+              window: 20
+              n_std: 2.0
+              inplace: false
     
     Required input columns
     ----------------------
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     
     Parameters
     ----------
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``20``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``20``.
     n_std:
-        Configuration value used by the registered component. Default: ``2.0``.
+        Configuration parameter accepted by this feature. Default: ``2.0``.
     inplace:
-        Configuration value used by the registered component. Default: ``False``.
+        Boolean switch controlling optional feature behavior. Default: ``false``.
     """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame")
@@ -43,6 +49,35 @@ def add_bollinger_features(
 
 
 def add_bollinger_bands(close: pd.Series, window: int = 20, n_std: float = 2.0) -> pd.DataFrame:
+    """
+    Apply the registered ``bollinger_bands`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: bollinger_bands
+            params:
+              close: <required>
+              window: 20
+              n_std: 2.0
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    close:
+        Configuration parameter accepted by this feature.
+    window:
+        Trailing lookback or forecast horizon controlling this feature. Default: ``20``.
+    n_std:
+        Configuration parameter accepted by this feature. Default: ``2.0``.
+    """
     ma = close.rolling(window=window, min_periods=window).mean()
     sd = close.rolling(window=window, min_periods=window).std(ddof=0)
     upper = ma + n_std * sd

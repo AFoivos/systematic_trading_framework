@@ -17,29 +17,38 @@ def add_roc_features(
     """
     Apply the registered ``roc`` feature transformation.
     
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
     YAML declaration::
     
         features:
           - step: roc
-            params: {}
+            params:
+              price_col: close
+              windows: [10, 20]
+              window: null
+              output_col: null
+              inplace: false
+          output_cols:
+            - configured by output_col
     
     Required input columns
     ----------------------
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     
     Parameters
     ----------
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     windows:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``(10, 20)``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``[10, 20]``.
     window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``None``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``null``.
     output_col:
-        Output column name emitted by the component. Default: ``None``.
+        Output dataframe column configured by ``output_col``. Default: ``null``.
     inplace:
-        Configuration value used by the registered component. Default: ``False``.
+        Boolean switch controlling optional feature behavior. Default: ``false``.
     """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame")
@@ -58,6 +67,32 @@ def add_roc_features(
 
 
 def compute_roc(close: pd.Series, window: int = 10) -> pd.Series:
+    """
+    Compute the ``compute_roc`` feature value.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: compute_roc
+            params:
+              close: <required>
+              window: 10
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    close:
+        Configuration parameter accepted by this feature.
+    window:
+        Trailing lookback or forecast horizon controlling this feature. Default: ``10``.
+    """
     _validate_window(window)
     roc = close / close.shift(window) - 1.0
     roc.name = f"roc_{window}"

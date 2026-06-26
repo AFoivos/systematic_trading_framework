@@ -22,59 +22,72 @@ def dense_return_forecast_signal(
     clip: float | None = None,
 ) -> pd.DataFrame:
     """
-    Convert dense return forecasts into signed after-cost opportunity scores.
+    Apply the registered ``dense_return_forecast`` signal transformation.
     
-    The output is intentionally continuous. It is not a candidate filter and it does not apply
-    independent asset thresholds. Portfolio ranking/hysteresis decides whether the score is
-    worth allocating capital to.
+    This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         signals:
           kind: dense_return_forecast
-          params: {}
+          params:
+            forecast_col: pred_ret
+            signal_col: expected_net_return
+            expected_net_return_col: expected_net_return
+            estimated_cost_col: estimated_round_trip_cost
+            cost_per_turnover: 0.0
+            slippage_per_turnover: 0.0
+            cost_round_trip_mult: 2.0
+            forecast_is_vol_normalized: false
+            volatility_col: atr_14
+            price_col: close
+            volatility_floor: 1e-12
+            signed_cost_adjustment: true
+            clip: null
+          output_cols:
+            - expected_net_return
     
     Required input columns
     ----------------------
     forecast_col:
-        Input column configured by ``forecast_col``. Default: ``pred_ret``.
+        Input dataframe column configured by ``forecast_col``. Default: ``pred_ret``.
     expected_net_return_col:
-        Input column configured by ``expected_net_return_col``. Default: ``expected_net_return``.
+        Input dataframe column configured by ``expected_net_return_col``. Default: ``expected_net_return``.
     estimated_cost_col:
-        Input column configured by ``estimated_cost_col``. Default: ``estimated_round_trip_cost``.
+        Input dataframe column configured by ``estimated_cost_col``. Default: ``estimated_round_trip_cost``.
     volatility_col:
-        Input column configured by ``volatility_col``. Default: ``atr_14``.
+        Input dataframe column configured by ``volatility_col``. Default: ``atr_14``.
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     
     Parameters
     ----------
     forecast_col:
-        Input dataframe column name consumed by the component. Default: ``pred_ret``.
+        Input dataframe column configured by ``forecast_col``. Default: ``pred_ret``.
     signal_col:
-        Output column name emitted by the component. Default: ``expected_net_return``.
+        Output dataframe column configured by ``signal_col``. Default: ``expected_net_return``.
     expected_net_return_col:
-        Input dataframe column name consumed by the component. Default: ``expected_net_return``.
+        Input dataframe column configured by ``expected_net_return_col``. Default: ``expected_net_return``.
     estimated_cost_col:
-        Input dataframe column name consumed by the component. Default: ``estimated_round_trip_cost``.
+        Input dataframe column configured by ``estimated_cost_col``. Default: ``estimated_round_trip_cost``.
     cost_per_turnover:
-        Configuration value used by the registered component. Default: ``0.0``.
+        Configuration parameter accepted by this signal. Default: ``0.0``.
     slippage_per_turnover:
-        Configuration value used by the registered component. Default: ``0.0``.
+        Configuration parameter accepted by this signal. Default: ``0.0``.
     cost_round_trip_mult:
-        Configuration value used by the registered component. Default: ``2.0``.
+        Configuration parameter accepted by this signal. Default: ``2.0``.
     forecast_is_vol_normalized:
-        Configuration value used by the registered component. Default: ``False``.
+        Configuration parameter accepted by this signal. Default: ``false``.
     volatility_col:
-        Input dataframe column name consumed by the component. Default: ``atr_14``.
+        Input dataframe column configured by ``volatility_col``. Default: ``atr_14``.
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     volatility_floor:
-        Configuration value used by the registered component. Default: ``1e-12``.
+        Configuration parameter accepted by this signal. Default: ``1e-12``.
     signed_cost_adjustment:
-        Configuration value used by the registered component. Default: ``True``.
+        Configuration parameter accepted by this signal. Default: ``true``.
     clip:
-        Configuration value used by the registered component. Default: ``None``.
+        Configuration parameter accepted by this signal. Default: ``null``.
     """
     if forecast_col not in df.columns:
         raise KeyError(f"forecast_col '{forecast_col}' not found in DataFrame")

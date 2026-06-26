@@ -14,25 +14,30 @@ def add_price_momentum_features(
     """
     Apply the registered ``price_momentum`` feature transformation.
     
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
     YAML declaration::
     
         features:
           - step: price_momentum
-            params: {}
+            params:
+              price_col: close
+              windows: [5, 20, 60]
+              inplace: false
     
     Required input columns
     ----------------------
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     
     Parameters
     ----------
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     windows:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``(5, 20, 60)``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``[5, 20, 60]``.
     inplace:
-        Configuration value used by the registered component. Default: ``False``.
+        Boolean switch controlling optional feature behavior. Default: ``false``.
     """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame")
@@ -44,6 +49,29 @@ def add_price_momentum_features(
 
 
 def compute_price_momentum(prices: pd.Series, window: int) -> pd.Series:
+    """
+    Compute the ``compute_price_momentum`` feature value.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: compute_price_momentum
+            params:
+              window: <required>
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    window:
+        Trailing lookback or forecast horizon controlling this feature.
+    """
     if not isinstance(prices, pd.Series):
         raise TypeError("prices must be a pandas Series")
     mom = prices / prices.shift(window) - 1.0

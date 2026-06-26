@@ -473,24 +473,234 @@ def ppo_adx_stochrsi_trend_signal(
     **params: Any,
 ) -> pd.DataFrame:
     """
-    Registry-compatible wrapper returning only the transformed DataFrame.
+    Apply the registered ``ppo_adx_stochrsi_trend`` signal transformation.
+    
+    This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         signals:
           kind: ppo_adx_stochrsi_trend
-          params: {}
+          params:
+            close_col: close
+            high_col: high
+            low_col: low
+            ema_fast_col: ema_50
+            ema_slow_col: ema_150
+            ppo_col: ppo
+            ppo_signal_col: ppo_signal
+            adx_col: adx
+            plus_di_col: plus_di
+            minus_di_col: minus_di
+            atr_col: atr
+            stoch_k_col: stochrsi_k
+            stoch_d_col: stochrsi_d
+            mode: long_short
+            require_adx: true
+            adx_threshold: 20.0
+            ppo_slope_threshold: 0.0
+            stoch_oversold: 0.2
+            stoch_overbought: 0.8
+            stoch_entry_mode: reset_or_cross
+            atr_stop_mult: 1.5
+            atr_take_profit_mult: 2.0
+            atr_trailing_mult: 1.0
+            use_atr_trailing_stop: false
+            signal_col: signal
+            position_col: position
+            entry_long_col: entry_long
+            entry_short_col: entry_short
+            exit_long_col: exit_long
+            exit_short_col: exit_short
+            long_setup_col: long_setup
+            short_setup_col: short_setup
+            exit_long_rule_col: exit_long_rule
+            exit_short_rule_col: exit_short_rule
+            ppo_slope_col: ppo_slope
+            ema_trend_state_col: ema_trend_state
+            directional_spread_col: directional_spread
+            stoch_bullish_reset_col: stochrsi_bullish_reset
+            stoch_bearish_reset_col: stochrsi_bearish_reset
+            stoch_bullish_cross_col: stochrsi_bullish_cross
+            stoch_bearish_cross_col: stochrsi_bearish_cross
+            atr_stop_distance_col: atr_stop_distance
+            atr_take_profit_distance_col: atr_take_profit_distance
+            atr_stop_long_col: atr_stop_long
+            atr_stop_short_col: atr_stop_short
+            atr_take_profit_long_col: atr_take_profit_long
+            atr_take_profit_short_col: atr_take_profit_short
+            atr_trailing_stop_long_col: atr_trailing_stop_long
+            atr_trailing_stop_short_col: atr_trailing_stop_short
+          output_cols:
+            - signal
     
     Required input columns
     ----------------------
-    None fixed by signature:
-        Required dataframe columns are resolved from configuration or from
-        upstream feature/target/signal stages at runtime.
+    close_col:
+        Input dataframe column configured by ``close_col``. Default: ``close``.
+    high_col:
+        Input dataframe column configured by ``high_col``. Default: ``high``.
+    low_col:
+        Input dataframe column configured by ``low_col``. Default: ``low``.
+    ema_fast_col:
+        Input dataframe column configured by ``ema_fast_col``. Default: ``ema_50``.
+    ema_slow_col:
+        Input dataframe column configured by ``ema_slow_col``. Default: ``ema_150``.
+    ppo_col:
+        Input dataframe column configured by ``ppo_col``. Default: ``ppo``.
+    adx_col:
+        Input dataframe column configured by ``adx_col``. Default: ``adx``.
+    plus_di_col:
+        Input dataframe column configured by ``plus_di_col``. Default: ``plus_di``.
+    minus_di_col:
+        Input dataframe column configured by ``minus_di_col``. Default: ``minus_di``.
+    atr_col:
+        Input dataframe column configured by ``atr_col``. Default: ``atr``.
+    stoch_k_col:
+        Input dataframe column configured by ``stoch_k_col``. Default: ``stochrsi_k``.
+    stoch_d_col:
+        Input dataframe column configured by ``stoch_d_col``. Default: ``stochrsi_d``.
+    position_col:
+        Input dataframe column configured by ``position_col``. Default: ``position``.
+    entry_long_col:
+        Input dataframe column configured by ``entry_long_col``. Default: ``entry_long``.
+    entry_short_col:
+        Input dataframe column configured by ``entry_short_col``. Default: ``entry_short``.
+    exit_long_col:
+        Input dataframe column configured by ``exit_long_col``. Default: ``exit_long``.
+    exit_short_col:
+        Input dataframe column configured by ``exit_short_col``. Default: ``exit_short``.
+    long_setup_col:
+        Input dataframe column configured by ``long_setup_col``. Default: ``long_setup``.
+    short_setup_col:
+        Input dataframe column configured by ``short_setup_col``. Default: ``short_setup``.
+    exit_long_rule_col:
+        Input dataframe column configured by ``exit_long_rule_col``. Default: ``exit_long_rule``.
+    exit_short_rule_col:
+        Input dataframe column configured by ``exit_short_rule_col``. Default: ``exit_short_rule``.
+    ppo_slope_col:
+        Input dataframe column configured by ``ppo_slope_col``. Default: ``ppo_slope``.
+    ema_trend_state_col:
+        Input dataframe column configured by ``ema_trend_state_col``. Default: ``ema_trend_state``.
+    directional_spread_col:
+        Input dataframe column configured by ``directional_spread_col``. Default: ``directional_spread``.
+    atr_stop_distance_col:
+        Input dataframe column configured by ``atr_stop_distance_col``. Default: ``atr_stop_distance``.
+    atr_take_profit_distance_col:
+        Input dataframe column configured by ``atr_take_profit_distance_col``. Default: ``atr_take_profit_distance``.
+    atr_stop_long_col:
+        Input dataframe column configured by ``atr_stop_long_col``. Default: ``atr_stop_long``.
+    atr_stop_short_col:
+        Input dataframe column configured by ``atr_stop_short_col``. Default: ``atr_stop_short``.
+    atr_take_profit_long_col:
+        Input dataframe column configured by ``atr_take_profit_long_col``. Default: ``atr_take_profit_long``.
+    atr_take_profit_short_col:
+        Input dataframe column configured by ``atr_take_profit_short_col``. Default: ``atr_take_profit_short``.
+    atr_trailing_stop_long_col:
+        Input dataframe column configured by ``atr_trailing_stop_long_col``. Default: ``atr_trailing_stop_long``.
+    atr_trailing_stop_short_col:
+        Input dataframe column configured by ``atr_trailing_stop_short_col``. Default: ``atr_trailing_stop_short``.
     
     Parameters
     ----------
-    params:
-        Additional keyword parameters accepted from YAML ``params``.
+    close_col:
+        Input dataframe column configured by ``close_col``. Default: ``close``.
+    high_col:
+        Input dataframe column configured by ``high_col``. Default: ``high``.
+    low_col:
+        Input dataframe column configured by ``low_col``. Default: ``low``.
+    ema_fast_col:
+        Input dataframe column configured by ``ema_fast_col``. Default: ``ema_50``.
+    ema_slow_col:
+        Input dataframe column configured by ``ema_slow_col``. Default: ``ema_150``.
+    ppo_col:
+        Input dataframe column configured by ``ppo_col``. Default: ``ppo``.
+    ppo_signal_col:
+        Input dataframe column configured by ``ppo_signal_col``. Default: ``ppo_signal``.
+    adx_col:
+        Input dataframe column configured by ``adx_col``. Default: ``adx``.
+    plus_di_col:
+        Input dataframe column configured by ``plus_di_col``. Default: ``plus_di``.
+    minus_di_col:
+        Input dataframe column configured by ``minus_di_col``. Default: ``minus_di``.
+    atr_col:
+        Input dataframe column configured by ``atr_col``. Default: ``atr``.
+    stoch_k_col:
+        Input dataframe column configured by ``stoch_k_col``. Default: ``stochrsi_k``.
+    stoch_d_col:
+        Input dataframe column configured by ``stoch_d_col``. Default: ``stochrsi_d``.
+    mode:
+        Mode selector controlling how this signal is applied. Default: ``long_short``.
+    require_adx:
+        Configuration parameter accepted by this signal. Default: ``true``.
+    adx_threshold:
+        Numeric threshold used by this signal. Default: ``20.0``.
+    ppo_slope_threshold:
+        Numeric threshold used by this signal. Default: ``0.0``.
+    stoch_oversold:
+        Configuration parameter accepted by this signal. Default: ``0.2``.
+    stoch_overbought:
+        Configuration parameter accepted by this signal. Default: ``0.8``.
+    stoch_entry_mode:
+        Mode selector controlling how this signal is applied. Default: ``reset_or_cross``.
+    atr_stop_mult:
+        Configuration parameter accepted by this signal. Default: ``1.5``.
+    atr_take_profit_mult:
+        Configuration parameter accepted by this signal. Default: ``2.0``.
+    atr_trailing_mult:
+        Configuration parameter accepted by this signal. Default: ``1.0``.
+    use_atr_trailing_stop:
+        Boolean switch controlling optional signal behavior. Default: ``false``.
+    signal_col:
+        Output dataframe column configured by ``signal_col``. Default: ``signal``.
+    position_col:
+        Input dataframe column configured by ``position_col``. Default: ``position``.
+    entry_long_col:
+        Input dataframe column configured by ``entry_long_col``. Default: ``entry_long``.
+    entry_short_col:
+        Input dataframe column configured by ``entry_short_col``. Default: ``entry_short``.
+    exit_long_col:
+        Input dataframe column configured by ``exit_long_col``. Default: ``exit_long``.
+    exit_short_col:
+        Input dataframe column configured by ``exit_short_col``. Default: ``exit_short``.
+    long_setup_col:
+        Input dataframe column configured by ``long_setup_col``. Default: ``long_setup``.
+    short_setup_col:
+        Input dataframe column configured by ``short_setup_col``. Default: ``short_setup``.
+    exit_long_rule_col:
+        Input dataframe column configured by ``exit_long_rule_col``. Default: ``exit_long_rule``.
+    exit_short_rule_col:
+        Input dataframe column configured by ``exit_short_rule_col``. Default: ``exit_short_rule``.
+    ppo_slope_col:
+        Input dataframe column configured by ``ppo_slope_col``. Default: ``ppo_slope``.
+    ema_trend_state_col:
+        Input dataframe column configured by ``ema_trend_state_col``. Default: ``ema_trend_state``.
+    directional_spread_col:
+        Input dataframe column configured by ``directional_spread_col``. Default: ``directional_spread``.
+    stoch_bullish_reset_col:
+        Input dataframe column configured by ``stoch_bullish_reset_col``. Default: ``stochrsi_bullish_reset``.
+    stoch_bearish_reset_col:
+        Input dataframe column configured by ``stoch_bearish_reset_col``. Default: ``stochrsi_bearish_reset``.
+    stoch_bullish_cross_col:
+        Input dataframe column configured by ``stoch_bullish_cross_col``. Default: ``stochrsi_bullish_cross``.
+    stoch_bearish_cross_col:
+        Input dataframe column configured by ``stoch_bearish_cross_col``. Default: ``stochrsi_bearish_cross``.
+    atr_stop_distance_col:
+        Input dataframe column configured by ``atr_stop_distance_col``. Default: ``atr_stop_distance``.
+    atr_take_profit_distance_col:
+        Input dataframe column configured by ``atr_take_profit_distance_col``. Default: ``atr_take_profit_distance``.
+    atr_stop_long_col:
+        Input dataframe column configured by ``atr_stop_long_col``. Default: ``atr_stop_long``.
+    atr_stop_short_col:
+        Input dataframe column configured by ``atr_stop_short_col``. Default: ``atr_stop_short``.
+    atr_take_profit_long_col:
+        Input dataframe column configured by ``atr_take_profit_long_col``. Default: ``atr_take_profit_long``.
+    atr_take_profit_short_col:
+        Input dataframe column configured by ``atr_take_profit_short_col``. Default: ``atr_take_profit_short``.
+    atr_trailing_stop_long_col:
+        Input dataframe column configured by ``atr_trailing_stop_long_col``. Default: ``atr_trailing_stop_long``.
+    atr_trailing_stop_short_col:
+        Input dataframe column configured by ``atr_trailing_stop_short_col``. Default: ``atr_trailing_stop_short``.
     """
     out, _ = build_ppo_adx_stochrsi_trend_signal(df, params)
     return out

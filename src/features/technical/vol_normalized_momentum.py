@@ -57,33 +57,41 @@ def add_vol_normalized_momentum_features(
     """
     Apply the registered ``vol_normalized_momentum`` feature transformation.
     
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
     YAML declaration::
     
         features:
           - step: vol_normalized_momentum
-            params: {}
+            params:
+              returns_col: close_logret
+              vol_col: vol_rolling_20
+              vol_window: null
+              windows: [5, 20, 60]
+              eps: 1e-08
+              inplace: false
     
     Required input columns
     ----------------------
     returns_col:
-        Input column configured by ``returns_col``. Default: ``close_logret``.
+        Input dataframe column configured by ``returns_col``. Default: ``close_logret``.
     vol_col:
-        Input column configured by ``vol_col``. Default: ``vol_rolling_20``.
+        Input dataframe column configured by ``vol_col``. Default: ``vol_rolling_20``.
     
     Parameters
     ----------
     returns_col:
-        Input dataframe column name consumed by the component. Default: ``close_logret``.
+        Input dataframe column configured by ``returns_col``. Default: ``close_logret``.
     vol_col:
-        Input dataframe column name consumed by the component. Default: ``vol_rolling_20``.
+        Input dataframe column configured by ``vol_col``. Default: ``vol_rolling_20``.
     vol_window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``None``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``null``.
     windows:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``(5, 20, 60)``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``[5, 20, 60]``.
     eps:
-        Configuration value used by the registered component. Default: ``1e-08``.
+        Configuration parameter accepted by this feature. Default: ``1e-08``.
     inplace:
-        Configuration value used by the registered component. Default: ``False``.
+        Boolean switch controlling optional feature behavior. Default: ``false``.
     """
     if vol_window is not None and (
         isinstance(vol_window, bool) or not isinstance(vol_window, int) or vol_window <= 0
@@ -115,6 +123,35 @@ def compute_vol_normalized_momentum(
     window: int,
     eps: float = 1e-8,
 ) -> pd.Series:
+    """
+    Compute the ``compute_vol_normalized_momentum`` feature value.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: compute_vol_normalized_momentum
+            params:
+              volatility: <required>
+              window: <required>
+              eps: 1e-08
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    volatility:
+        Configuration parameter accepted by this feature.
+    window:
+        Trailing lookback or forecast horizon controlling this feature.
+    eps:
+        Configuration parameter accepted by this feature. Default: ``1e-08``.
+    """
     if not isinstance(returns, pd.Series):
         raise TypeError("returns must be a pandas Series")
     if not isinstance(volatility, pd.Series):

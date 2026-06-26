@@ -19,6 +19,44 @@ def add_momentum_features(
     windows: Sequence[int] = (5, 20, 60),
     inplace: bool = False,
 ) -> pd.DataFrame:
+    """
+    Apply the registered ``momentum`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: momentum
+            params:
+              price_col: close
+              returns_col: close_logret
+              vol_col: vol_rolling_20
+              windows: [5, 20, 60]
+              inplace: false
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input dataframe column configured by ``price_col``. Default: ``close``.
+    returns_col:
+        Input dataframe column configured by ``returns_col``. Default: ``close_logret``.
+    vol_col:
+        Input dataframe column configured by ``vol_col``. Default: ``vol_rolling_20``.
+    
+    Parameters
+    ----------
+    price_col:
+        Input dataframe column configured by ``price_col``. Default: ``close``.
+    returns_col:
+        Input dataframe column configured by ``returns_col``. Default: ``close_logret``.
+    vol_col:
+        Input dataframe column configured by ``vol_col``. Default: ``vol_rolling_20``.
+    windows:
+        Trailing lookback or forecast horizon controlling this feature. Default: ``[5, 20, 60]``.
+    inplace:
+        Boolean switch controlling optional feature behavior. Default: ``false``.
+    """
     out = df if inplace else df.copy()
     if price_col not in out.columns:
         raise KeyError(f"Missing columns for momentum features: ['{price_col}']")

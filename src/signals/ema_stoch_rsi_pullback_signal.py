@@ -307,24 +307,93 @@ def ema_stoch_rsi_pullback_signal(
     **params: Any,
 ) -> pd.DataFrame:
     """
-    Registry-compatible wrapper returning only the transformed DataFrame.
+    Apply the registered ``ema_stoch_rsi_pullback`` signal transformation.
+    
+    This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         signals:
           kind: ema_stoch_rsi_pullback
-          params: {}
+          params:
+            price_col: close
+            ema_fast_col: ema_50
+            ema_slow_col: ema_150
+            stoch_k_col: stoch_rsi_k
+            stoch_d_col: stoch_rsi_d
+            stoch_recover_col: stoch_rsi_recover_from_oversold
+            stoch_fall_col: stoch_rsi_fall_from_overbought
+            oversold: 0.2
+            overbought: 0.8
+            max_bars_after_cross: 30
+            require_k_d_confirmation: true
+            require_price_above_slow_ema_for_long: true
+            require_price_below_slow_ema_for_short: true
+            use_first_pullback_only: true
+            prefix: ema_stoch
+            side_col: signal_side
+            candidate_col: signal_candidate
+            signal_col: null
+          output_cols:
+            - configured by signal_col
     
     Required input columns
     ----------------------
-    None fixed by signature:
-        Required dataframe columns are resolved from configuration or from
-        upstream feature/target/signal stages at runtime.
+    price_col:
+        Input dataframe column configured by ``price_col``. Default: ``close``.
+    ema_fast_col:
+        Input dataframe column configured by ``ema_fast_col``. Default: ``ema_50``.
+    ema_slow_col:
+        Input dataframe column configured by ``ema_slow_col``. Default: ``ema_150``.
+    stoch_k_col:
+        Input dataframe column configured by ``stoch_k_col``. Default: ``stoch_rsi_k``.
+    stoch_d_col:
+        Input dataframe column configured by ``stoch_d_col``. Default: ``stoch_rsi_d``.
+    stoch_recover_col:
+        Input dataframe column configured by ``stoch_recover_col``. Default: ``stoch_rsi_recover_from_oversold``.
+    stoch_fall_col:
+        Input dataframe column configured by ``stoch_fall_col``. Default: ``stoch_rsi_fall_from_overbought``.
+    side_col:
+        Input dataframe column configured by ``side_col``. Default: ``signal_side``.
     
     Parameters
     ----------
-    params:
-        Additional keyword parameters accepted from YAML ``params``.
+    price_col:
+        Input dataframe column configured by ``price_col``. Default: ``close``.
+    ema_fast_col:
+        Input dataframe column configured by ``ema_fast_col``. Default: ``ema_50``.
+    ema_slow_col:
+        Input dataframe column configured by ``ema_slow_col``. Default: ``ema_150``.
+    stoch_k_col:
+        Input dataframe column configured by ``stoch_k_col``. Default: ``stoch_rsi_k``.
+    stoch_d_col:
+        Input dataframe column configured by ``stoch_d_col``. Default: ``stoch_rsi_d``.
+    stoch_recover_col:
+        Input dataframe column configured by ``stoch_recover_col``. Default: ``stoch_rsi_recover_from_oversold``.
+    stoch_fall_col:
+        Input dataframe column configured by ``stoch_fall_col``. Default: ``stoch_rsi_fall_from_overbought``.
+    oversold:
+        Configuration parameter accepted by this signal. Default: ``0.2``.
+    overbought:
+        Configuration parameter accepted by this signal. Default: ``0.8``.
+    max_bars_after_cross:
+        Configuration parameter accepted by this signal. Default: ``30``.
+    require_k_d_confirmation:
+        Configuration parameter accepted by this signal. Default: ``true``.
+    require_price_above_slow_ema_for_long:
+        Configuration parameter accepted by this signal. Default: ``true``.
+    require_price_below_slow_ema_for_short:
+        Configuration parameter accepted by this signal. Default: ``true``.
+    use_first_pullback_only:
+        Boolean switch controlling optional signal behavior. Default: ``true``.
+    prefix:
+        Configuration parameter accepted by this signal. Default: ``ema_stoch``.
+    side_col:
+        Input dataframe column configured by ``side_col``. Default: ``signal_side``.
+    candidate_col:
+        Input dataframe column configured by ``candidate_col``. Default: ``signal_candidate``.
+    signal_col:
+        Output dataframe column configured by ``signal_col``. Default: ``null``.
     """
     out, _ = build_ema_stoch_rsi_signal(df, params)
     return out

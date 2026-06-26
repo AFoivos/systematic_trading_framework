@@ -22,34 +22,42 @@ def add_trend_features(
     """
     Apply the registered ``trend`` feature transformation.
     
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
     YAML declaration::
     
         features:
           - step: trend
-            params: {}
+            params:
+              price_col: close
+              sma_windows: [20, 50, 200]
+              ema_spans: [20, 50]
+              sma_col_template: null
+              ema_col_template: null
+              add_ratios: false
+              inplace: false
     
     Required input columns
     ----------------------
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     
     Parameters
     ----------
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     sma_windows:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``(20, 50, 200)``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``[20, 50, 200]``.
     ema_spans:
-        Configuration value used by the registered component. Default: ``(20, 50)``.
+        Configuration parameter accepted by this feature. Default: ``[20, 50]``.
     sma_col_template:
-        Configuration value used by the registered component. Default: ``None``.
+        Configuration parameter accepted by this feature. Default: ``null``.
     ema_col_template:
-        Configuration value used by the registered component. Default: ``None``.
+        Configuration parameter accepted by this feature. Default: ``null``.
     add_ratios:
-        No longer supported. Derived price-over-moving-average ratios must be
-        declared with nested ``transforms.ratio`` helpers. Default: ``False``.
+        Boolean switch controlling optional feature behavior. Default: ``false``.
     inplace:
-        Configuration value used by the registered component. Default: ``False``.
+        Boolean switch controlling optional feature behavior. Default: ``false``.
     """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame")

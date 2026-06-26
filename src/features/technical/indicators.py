@@ -35,6 +35,82 @@ def add_indicator_features(
     vol_z_window: int = 20,
     include_mfi: bool = True,
 ) -> pd.DataFrame:
+    """
+    Apply the registered ``indicator`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: indicator
+            params:
+              price_col: close
+              high_col: high
+              low_col: low
+              volume_col: volume
+              bb_window: 20
+              bb_nstd: 2.0
+              macd_fast: 12
+              macd_slow: 26
+              macd_signal: 9
+              ppo_fast: 12
+              ppo_slow: 26
+              ppo_signal: 9
+              roc_windows: [10, 20]
+              atr_window: 14
+              adx_window: 14
+              vol_z_window: 20
+              include_mfi: true
+    
+    Required input columns
+    ----------------------
+    price_col:
+        Input dataframe column configured by ``price_col``. Default: ``close``.
+    high_col:
+        Input dataframe column configured by ``high_col``. Default: ``high``.
+    low_col:
+        Input dataframe column configured by ``low_col``. Default: ``low``.
+    volume_col:
+        Input dataframe column configured by ``volume_col``. Default: ``volume``.
+    
+    Parameters
+    ----------
+    price_col:
+        Input dataframe column configured by ``price_col``. Default: ``close``.
+    high_col:
+        Input dataframe column configured by ``high_col``. Default: ``high``.
+    low_col:
+        Input dataframe column configured by ``low_col``. Default: ``low``.
+    volume_col:
+        Input dataframe column configured by ``volume_col``. Default: ``volume``.
+    bb_window:
+        Trailing lookback or forecast horizon controlling this feature. Default: ``20``.
+    bb_nstd:
+        Configuration parameter accepted by this feature. Default: ``2.0``.
+    macd_fast:
+        Configuration parameter accepted by this feature. Default: ``12``.
+    macd_slow:
+        Configuration parameter accepted by this feature. Default: ``26``.
+    macd_signal:
+        Configuration parameter accepted by this feature. Default: ``9``.
+    ppo_fast:
+        Configuration parameter accepted by this feature. Default: ``12``.
+    ppo_slow:
+        Configuration parameter accepted by this feature. Default: ``26``.
+    ppo_signal:
+        Configuration parameter accepted by this feature. Default: ``9``.
+    roc_windows:
+        Trailing lookback or forecast horizon controlling this feature. Default: ``[10, 20]``.
+    atr_window:
+        Trailing lookback or forecast horizon controlling this feature. Default: ``14``.
+    adx_window:
+        Trailing lookback or forecast horizon controlling this feature. Default: ``14``.
+    vol_z_window:
+        Trailing lookback or forecast horizon controlling this feature. Default: ``20``.
+    include_mfi:
+        Configuration parameter accepted by this feature. Default: ``true``.
+    """
     missing = [c for c in (price_col, high_col, low_col, volume_col) if c not in df.columns]
     if missing:
         raise KeyError(f"Missing columns for indicators: {missing}")

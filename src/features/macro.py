@@ -18,41 +18,44 @@ def add_macro_context_features(
     allow_missing: bool = False,
 ) -> pd.DataFrame:
     """
-    Add reusable macro/exogenous context transforms with an explicit availability lag.
+    Apply the registered ``macro_context`` feature transformation.
     
-    The input columns are assumed to represent externally sourced covariates whose publication or
-    ingestion timing may lag market timestamps. To avoid inadvertent lookahead, every source
-    series is shifted by `availability_lag` before any derived features are computed.
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: macro_context
             params:
-              columns: [macro_value]
+              columns: <required>
+              availability_lag: 1
+              lags: [1, 24]
+              pct_change_periods: [1, 24]
+              zscore_window: 168
+              ema_spans: []
+              allow_missing: false
     
     Required input columns
     ----------------------
-    None fixed by signature:
-        Required dataframe columns are resolved from configuration or from
-        upstream feature/target/signal stages at runtime.
+    columns:
+        Configured dataframe columns used by this feature.
     
     Parameters
     ----------
     columns:
-        Configuration value used by the registered component.
+        Configured dataframe columns used by this feature.
     availability_lag:
-        Configuration value used by the registered component. Default: ``1``.
+        Configuration parameter accepted by this feature. Default: ``1``.
     lags:
-        Configuration value used by the registered component. Default: ``(1, 24)``.
+        Configuration parameter accepted by this feature. Default: ``[1, 24]``.
     pct_change_periods:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``(1, 24)``.
+        Configuration parameter accepted by this feature. Default: ``[1, 24]``.
     zscore_window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``168``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``168``.
     ema_spans:
-        Configuration value used by the registered component. Default: ``()``.
+        Configuration parameter accepted by this feature. Default: ``[]``.
     allow_missing:
-        Configuration value used by the registered component. Default: ``False``.
+        Configuration parameter accepted by this feature. Default: ``false``.
     """
     if not isinstance(columns, Sequence) or isinstance(columns, (str, bytes)):
         raise TypeError("columns must be a sequence of column names.")

@@ -245,24 +245,146 @@ def build_vwap_rms_ema_cross_long_signal(
 
 def vwap_rms_ema_cross_long_signal(df: pd.DataFrame, **params: Any) -> pd.DataFrame:
     """
-    Apply the registered ``vwap_rms_ema_cross_long`` feature and ``vwap_rms_ema_cross_long`` signal transformation.
+    Apply the registered ``vwap_rms_ema_cross_long`` signal transformation.
+    
+    This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         signals:
           kind: vwap_rms_ema_cross_long
-          params: {}
+          params:
+            ema_mid_col: ema_50
+            ema_slow_col: ema_100
+            ema_mid_rms_col: ema_50__root_mean_square
+            vwap_rms_col: vwap_20__root_mean_square
+            ppo_col: ppo
+            ppo_signal_col: ppo_signal
+            ppo_hist_min: 0.0
+            use_ppo_confirmation: true
+            use_ema_regime: true
+            use_vwap_rms_cross: true
+            use_mfi_confirmation: false
+            mfi_col: mfi_14
+            mfi_lower: 40.0
+            mfi_upper: 80.0
+            entry_delay_bars: 0
+            mode: long_only
+            regime_col: ema_50_above_ema_100
+            short_regime_col: ema_50_below_ema_100
+            cross_up_col: vwap_rms_cross_above_ema_50_rms
+            cross_down_col: vwap_rms_cross_below_ema_50_rms
+            ppo_hist_col: ppo_hist
+            ppo_hist_positive_col: ppo_hist_positive
+            ppo_hist_negative_col: ppo_hist_negative
+            ppo_above_signal_col: ppo_above_signal
+            ppo_below_signal_col: ppo_below_signal
+            mfi_confirmation_col: mfi_confirmation
+            long_setup_col: vwap_rms_ema_cross_long_setup
+            short_setup_col: vwap_rms_ema_cross_short_setup
+            signal_col: signal_side
+            candidate_col: signal_candidate
+          output_cols:
+            - signal_side
+            - signal_candidate
     
     Required input columns
     ----------------------
-    None fixed by signature:
-        Required dataframe columns are resolved from configuration or from
-        upstream feature/target/signal stages at runtime.
+    ema_mid_col:
+        Input dataframe column configured by ``ema_mid_col``. Default: ``ema_50``.
+    ema_slow_col:
+        Input dataframe column configured by ``ema_slow_col``. Default: ``ema_100``.
+    ema_mid_rms_col:
+        Input dataframe column configured by ``ema_mid_rms_col``. Default: ``ema_50__root_mean_square``.
+    vwap_rms_col:
+        Input dataframe column configured by ``vwap_rms_col``. Default: ``vwap_20__root_mean_square``.
+    ppo_col:
+        Input dataframe column configured by ``ppo_col``. Default: ``ppo``.
+    mfi_col:
+        Input dataframe column configured by ``mfi_col``. Default: ``mfi_14``.
+    regime_col:
+        Input dataframe column configured by ``regime_col``. Default: ``ema_50_above_ema_100``.
+    short_regime_col:
+        Input dataframe column configured by ``short_regime_col``. Default: ``ema_50_below_ema_100``.
+    cross_up_col:
+        Input dataframe column configured by ``cross_up_col``. Default: ``vwap_rms_cross_above_ema_50_rms``.
+    cross_down_col:
+        Input dataframe column configured by ``cross_down_col``. Default: ``vwap_rms_cross_below_ema_50_rms``.
+    ppo_hist_col:
+        Input dataframe column configured by ``ppo_hist_col``. Default: ``ppo_hist``.
+    ppo_hist_positive_col:
+        Input dataframe column configured by ``ppo_hist_positive_col``. Default: ``ppo_hist_positive``.
+    ppo_hist_negative_col:
+        Input dataframe column configured by ``ppo_hist_negative_col``. Default: ``ppo_hist_negative``.
+    mfi_confirmation_col:
+        Input dataframe column configured by ``mfi_confirmation_col``. Default: ``mfi_confirmation``.
+    long_setup_col:
+        Input dataframe column configured by ``long_setup_col``. Default: ``vwap_rms_ema_cross_long_setup``.
+    short_setup_col:
+        Input dataframe column configured by ``short_setup_col``. Default: ``vwap_rms_ema_cross_short_setup``.
     
     Parameters
     ----------
-    params:
-        Additional keyword parameters accepted from YAML ``params``.
+    ema_mid_col:
+        Input dataframe column configured by ``ema_mid_col``. Default: ``ema_50``.
+    ema_slow_col:
+        Input dataframe column configured by ``ema_slow_col``. Default: ``ema_100``.
+    ema_mid_rms_col:
+        Input dataframe column configured by ``ema_mid_rms_col``. Default: ``ema_50__root_mean_square``.
+    vwap_rms_col:
+        Input dataframe column configured by ``vwap_rms_col``. Default: ``vwap_20__root_mean_square``.
+    ppo_col:
+        Input dataframe column configured by ``ppo_col``. Default: ``ppo``.
+    ppo_signal_col:
+        Input dataframe column configured by ``ppo_signal_col``. Default: ``ppo_signal``.
+    ppo_hist_min:
+        Numeric threshold used by this signal. Default: ``0.0``.
+    use_ppo_confirmation:
+        Boolean switch controlling optional signal behavior. Default: ``true``.
+    use_ema_regime:
+        Boolean switch controlling optional signal behavior. Default: ``true``.
+    use_vwap_rms_cross:
+        Boolean switch controlling optional signal behavior. Default: ``true``.
+    use_mfi_confirmation:
+        Boolean switch controlling optional signal behavior. Default: ``false``.
+    mfi_col:
+        Input dataframe column configured by ``mfi_col``. Default: ``mfi_14``.
+    mfi_lower:
+        Configuration parameter accepted by this signal. Default: ``40.0``.
+    mfi_upper:
+        Configuration parameter accepted by this signal. Default: ``80.0``.
+    entry_delay_bars:
+        Configuration parameter accepted by this signal. Default: ``0``.
+    mode:
+        Mode selector controlling how this signal is applied. Default: ``long_only``.
+    regime_col:
+        Input dataframe column configured by ``regime_col``. Default: ``ema_50_above_ema_100``.
+    short_regime_col:
+        Input dataframe column configured by ``short_regime_col``. Default: ``ema_50_below_ema_100``.
+    cross_up_col:
+        Input dataframe column configured by ``cross_up_col``. Default: ``vwap_rms_cross_above_ema_50_rms``.
+    cross_down_col:
+        Input dataframe column configured by ``cross_down_col``. Default: ``vwap_rms_cross_below_ema_50_rms``.
+    ppo_hist_col:
+        Input dataframe column configured by ``ppo_hist_col``. Default: ``ppo_hist``.
+    ppo_hist_positive_col:
+        Input dataframe column configured by ``ppo_hist_positive_col``. Default: ``ppo_hist_positive``.
+    ppo_hist_negative_col:
+        Input dataframe column configured by ``ppo_hist_negative_col``. Default: ``ppo_hist_negative``.
+    ppo_above_signal_col:
+        Input dataframe column configured by ``ppo_above_signal_col``. Default: ``ppo_above_signal``.
+    ppo_below_signal_col:
+        Input dataframe column configured by ``ppo_below_signal_col``. Default: ``ppo_below_signal``.
+    mfi_confirmation_col:
+        Input dataframe column configured by ``mfi_confirmation_col``. Default: ``mfi_confirmation``.
+    long_setup_col:
+        Input dataframe column configured by ``long_setup_col``. Default: ``vwap_rms_ema_cross_long_setup``.
+    short_setup_col:
+        Input dataframe column configured by ``short_setup_col``. Default: ``vwap_rms_ema_cross_short_setup``.
+    signal_col:
+        Output dataframe column configured by ``signal_col``. Default: ``signal_side``.
+    candidate_col:
+        Output dataframe column configured by ``candidate_col``. Default: ``signal_candidate``.
     """
     out, _ = build_vwap_rms_ema_cross_long_signal(df, params)
     return out

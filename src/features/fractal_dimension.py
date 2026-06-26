@@ -13,30 +13,34 @@ def add_fractal_dimension(
     output_col: str | None = None,
 ) -> pd.DataFrame:
     """
-    Add causal rolling Katz fractal dimension.
+    Apply the registered ``fractal_dimension`` feature transformation.
     
-    This module uses the Katz method, not Higuchi. Each value is computed from
-    the current and trailing ``window - 1`` observations only.
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: fractal_dimension
-            params: {}
+            params:
+              price_col: close
+              window: 128
+              output_col: null
+          output_cols:
+            - configured by output_col
     
     Required input columns
     ----------------------
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     
     Parameters
     ----------
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``128``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``128``.
     output_col:
-        Output column name emitted by the component. Default: ``None``.
+        Output dataframe column configured by ``output_col``. Default: ``null``.
     """
     _validate_columns(df, [price_col])
     _validate_window(window)

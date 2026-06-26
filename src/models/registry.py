@@ -58,14 +58,83 @@ RL_MODEL_KINDS = frozenset({"dqn_agent", "dqn_portfolio_agent", "ppo_agent", "pp
 
 
 def get_model_fn(name: str) -> ModelFn:
+    """
+    Apply the registered ``get_model_fn`` model transformation.
+    
+    This model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        model:
+          kind: get_model_fn
+          params:
+            name: <required>
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    name:
+        Configuration parameter accepted by this model.
+    """
     return get_registered_component(MODEL_REGISTRY, name, category="model")
 
 
 def is_portfolio_model_kind(name: str) -> bool:
+    """
+    Apply the registered ``is_portfolio_model_kind`` model transformation.
+    
+    This model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        model:
+          kind: is_portfolio_model_kind
+          params:
+            name: <required>
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    name:
+        Configuration parameter accepted by this model.
+    """
     return str(name) in PORTFOLIO_MODEL_REGISTRY
 
 
 def is_rl_model_kind(name: str) -> bool:
+    """
+    Apply the registered ``is_rl_model_kind`` model transformation.
+    
+    This model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        model:
+          kind: is_rl_model_kind
+          params:
+            name: <required>
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    name:
+        Configuration parameter accepted by this model.
+    """
     return str(name) in RL_MODEL_KINDS
 
 

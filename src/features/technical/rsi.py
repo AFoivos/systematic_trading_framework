@@ -16,27 +16,33 @@ def add_rsi_features(
     """
     Apply the registered ``rsi`` feature transformation.
     
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
     YAML declaration::
     
         features:
           - step: rsi
-            params: {}
+            params:
+              price_col: close
+              windows: [14]
+              method: wilder
+              inplace: false
     
     Required input columns
     ----------------------
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     
     Parameters
     ----------
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     windows:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``(14,)``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``[14]``.
     method:
-        Mode selector that controls the registered component behavior. Default: ``wilder``.
+        Configuration parameter accepted by this feature. Default: ``wilder``.
     inplace:
-        Configuration value used by the registered component. Default: ``False``.
+        Boolean switch controlling optional feature behavior. Default: ``false``.
     """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame")
@@ -48,6 +54,32 @@ def add_rsi_features(
 
 
 def compute_rsi(prices: pd.Series, window: int = 14, method: str = "wilder") -> pd.Series:
+    """
+    Compute the ``compute_rsi`` feature value.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: compute_rsi
+            params:
+              window: 14
+              method: wilder
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    window:
+        Trailing lookback or forecast horizon controlling this feature. Default: ``14``.
+    method:
+        Configuration parameter accepted by this feature. Default: ``wilder``.
+    """
     if not isinstance(prices, pd.Series):
         raise TypeError("prices must be a pandas Series")
 

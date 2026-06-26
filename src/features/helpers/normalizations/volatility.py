@@ -16,6 +16,45 @@ def add_volatility_normalization_features(
     percentile_window: int = 252,
     inplace: bool = False,
 ) -> pd.DataFrame:
+    """
+    Apply the ``volatility_normalization`` normalization helper transformation.
+    
+    This normalization helper uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        normalizations:
+          volatility_normalization:
+            params:
+              close_col: close
+              atr_col: atr_14
+              add_atr_pct: true
+              add_atr_percentile: true
+              percentile_window: 252
+              inplace: false
+          outputs:
+            - atr_14
+    
+    Required input columns
+    ----------------------
+    close_col:
+        Input dataframe column configured by ``close_col``. Default: ``close``.
+    
+    Parameters
+    ----------
+    close_col:
+        Input dataframe column configured by ``close_col``. Default: ``close``.
+    atr_col:
+        Output dataframe column configured by ``atr_col``. Default: ``atr_14``.
+    add_atr_pct:
+        Boolean switch controlling optional normalization helper behavior. Default: ``true``.
+    add_atr_percentile:
+        Boolean switch controlling optional normalization helper behavior. Default: ``true``.
+    percentile_window:
+        Trailing lookback or forecast horizon controlling this normalization helper. Default: ``252``.
+    inplace:
+        Boolean switch controlling optional normalization helper behavior. Default: ``false``.
+    """
     require_columns(df, [close_col, atr_col], owner="volatility normalization")
     if isinstance(percentile_window, bool) or int(percentile_window) <= 1:
         raise ValueError("percentile_window must be > 1.")

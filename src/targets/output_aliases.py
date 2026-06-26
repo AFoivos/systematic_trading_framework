@@ -30,6 +30,29 @@ TARGET_OUTPUT_KEYS = frozenset(
 
 
 def apply_target_output_aliases(target_cfg: dict[str, Any] | None) -> dict[str, Any]:
+    """
+    Apply the registered ``apply_target_output_aliases`` target transformation.
+    
+    This target uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        target:
+          kind: apply_target_output_aliases
+          params:
+            outputs: <configured>
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    outputs:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    """
     cfg = dict(target_cfg or {})
     outputs = cfg.get("outputs")
     if outputs in (None, {}):

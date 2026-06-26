@@ -315,28 +315,29 @@ def train_ppo_portfolio_agent(
     returns_col: str | None = None,
 ) -> tuple[dict[str, pd.DataFrame], object, dict[str, Any]]:
     """
-    Train the registered ``ppo_portfolio_agent`` model component.
+    Apply the registered ``ppo_portfolio_agent`` RL model transformation.
+    
+    This RL model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         model:
           kind: ppo_portfolio_agent
-          params: {}
+          params:
+            asset_frames: <required>
+            returns_col: null
     
     Required input columns
     ----------------------
     returns_col:
-        Optional input column configured by ``returns_col``; used when a value is provided.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
     
     Parameters
     ----------
     asset_frames:
-        Configuration value used by the registered component.
-    model_cfg:
-        Configuration mapping, usually resolved from YAML before this
-        registered component is called.
+        Configuration parameter accepted by this RL model.
     returns_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
     """
     return _train_portfolio_rl(
         asset_frames,
@@ -353,28 +354,29 @@ def train_dqn_portfolio_agent(
     returns_col: str | None = None,
 ) -> tuple[dict[str, pd.DataFrame], object, dict[str, Any]]:
     """
-    Train the registered ``dqn_portfolio_agent`` model component.
+    Apply the registered ``dqn_portfolio_agent`` RL model transformation.
+    
+    This RL model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         model:
           kind: dqn_portfolio_agent
-          params: {}
+          params:
+            asset_frames: <required>
+            returns_col: null
     
     Required input columns
     ----------------------
     returns_col:
-        Optional input column configured by ``returns_col``; used when a value is provided.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
     
     Parameters
     ----------
     asset_frames:
-        Configuration value used by the registered component.
-    model_cfg:
-        Configuration mapping, usually resolved from YAML before this
-        registered component is called.
+        Configuration parameter accepted by this RL model.
     returns_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
     """
     return _train_portfolio_rl(
         asset_frames,

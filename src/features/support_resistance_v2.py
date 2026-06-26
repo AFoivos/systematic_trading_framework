@@ -39,48 +39,59 @@ def add_support_resistance_v2_features(
     inplace: bool = False,
 ) -> pd.DataFrame:
     """
-    Add PIT-safe pivot-based support and resistance context.
+    Apply the registered ``support_resistance_v2`` feature transformation.
     
-    A pivot is confirmed only after `pivot_confirm_bars` future bars have elapsed, so all
-    emitted levels are available without lookahead at the current timestamp.
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: support_resistance_v2
-            params: {}
+            params:
+              price_col: close
+              high_col: high
+              low_col: low
+              atr_col: null
+              atr_window: 24
+              pivot_left_window: 24
+              pivot_confirm_bars: 6
+              touch_tolerance_atr: 0.25
+              breakout_tolerance_atr: 0.05
+              inplace: false
+          output_cols:
+            - configured by atr_col
     
     Required input columns
     ----------------------
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     high_col:
-        Input column configured by ``high_col``. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input column configured by ``low_col``. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
     
     Parameters
     ----------
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     high_col:
-        Input dataframe column name consumed by the component. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input dataframe column name consumed by the component. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
     atr_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Output dataframe column configured by ``atr_col``. Default: ``null``.
     atr_window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``24``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``24``.
     pivot_left_window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``24``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``24``.
     pivot_confirm_bars:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``6``.
+        Configuration parameter accepted by this feature. Default: ``6``.
     touch_tolerance_atr:
-        Configuration value used by the registered component. Default: ``0.25``.
+        Configuration parameter accepted by this feature. Default: ``0.25``.
     breakout_tolerance_atr:
-        Configuration value used by the registered component. Default: ``0.05``.
+        Configuration parameter accepted by this feature. Default: ``0.05``.
     inplace:
-        Configuration value used by the registered component. Default: ``False``.
+        Boolean switch controlling optional feature behavior. Default: ``false``.
     """
     missing = [col for col in (price_col, high_col, low_col) if col not in df.columns]
     if missing:

@@ -291,22 +291,142 @@ def c1_trend_pullback_vwap_signal(df: pd.DataFrame, **params: Any) -> pd.DataFra
     """
     Apply the registered ``c1_trend_pullback_vwap`` signal transformation.
     
+    This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
     YAML declaration::
     
         signals:
           kind: c1_trend_pullback_vwap
-          params: {}
+          params:
+            mode: long_short
+            trend_regime_col: trend_regime
+            long_trigger_col: vwap_rms_ema_cross_long_setup
+            short_trigger_col: vwap_rms_ema_cross_short_setup
+            ppo_hist_col: ppo_hist
+            ppo_above_signal_col: ppo_above_signal
+            ppo_below_signal_col: ppo_below_signal
+            mfi_col: mfi_14
+            stoch_k_col: stoch_rsi_k
+            stoch_d_col: stoch_rsi_d
+            zscore_momentum_col: zscore_momentum_20
+            volatility_regime_col: volatility_regime
+            trend_quality_col: rolling_r2_trend_quality_96
+            mfi_long_min: 40.0
+            mfi_long_max: 80.0
+            mfi_short_min: 20.0
+            mfi_short_max: 60.0
+            long_zscore_min: 0.0
+            short_zscore_max: 0.0
+            max_volatility_regime: 1.0
+            strict_trend_quality_min: 0.35
+            strict_mfi_long_min: 50.0
+            strict_mfi_short_max: 50.0
+            strict_long_zscore_min: 0.5
+            strict_short_zscore_max: -0.5
+            use_strict_signal: false
+            long_candidate_col: c1_long_candidate
+            short_candidate_col: c1_short_candidate
+            long_candidate_strict_col: c1_long_candidate_strict
+            short_candidate_strict_col: c1_short_candidate_strict
+            signal_col: signal_side
+            candidate_col: signal_candidate
+          output_cols:
+            - c1_long_candidate
+            - c1_short_candidate
+            - signal_side
+            - signal_candidate
     
     Required input columns
     ----------------------
-    None fixed by signature:
-        Required dataframe columns are resolved from configuration or from
-        upstream feature/target/signal stages at runtime.
+    trend_regime_col:
+        Input dataframe column configured by ``trend_regime_col``. Default: ``trend_regime``.
+    long_trigger_col:
+        Input dataframe column configured by ``long_trigger_col``. Default: ``vwap_rms_ema_cross_long_setup``.
+    short_trigger_col:
+        Input dataframe column configured by ``short_trigger_col``. Default: ``vwap_rms_ema_cross_short_setup``.
+    ppo_hist_col:
+        Input dataframe column configured by ``ppo_hist_col``. Default: ``ppo_hist``.
+    mfi_col:
+        Input dataframe column configured by ``mfi_col``. Default: ``mfi_14``.
+    stoch_k_col:
+        Input dataframe column configured by ``stoch_k_col``. Default: ``stoch_rsi_k``.
+    stoch_d_col:
+        Input dataframe column configured by ``stoch_d_col``. Default: ``stoch_rsi_d``.
+    zscore_momentum_col:
+        Input dataframe column configured by ``zscore_momentum_col``. Default: ``zscore_momentum_20``.
+    volatility_regime_col:
+        Input dataframe column configured by ``volatility_regime_col``. Default: ``volatility_regime``.
+    long_candidate_strict_col:
+        Input dataframe column configured by ``long_candidate_strict_col``. Default: ``c1_long_candidate_strict``.
+    short_candidate_strict_col:
+        Input dataframe column configured by ``short_candidate_strict_col``. Default: ``c1_short_candidate_strict``.
     
     Parameters
     ----------
-    params:
-        Additional keyword parameters accepted from YAML ``params``.
+    mode:
+        Mode selector controlling how this signal is applied. Default: ``long_short``.
+    trend_regime_col:
+        Input dataframe column configured by ``trend_regime_col``. Default: ``trend_regime``.
+    long_trigger_col:
+        Input dataframe column configured by ``long_trigger_col``. Default: ``vwap_rms_ema_cross_long_setup``.
+    short_trigger_col:
+        Input dataframe column configured by ``short_trigger_col``. Default: ``vwap_rms_ema_cross_short_setup``.
+    ppo_hist_col:
+        Input dataframe column configured by ``ppo_hist_col``. Default: ``ppo_hist``.
+    ppo_above_signal_col:
+        Input dataframe column configured by ``ppo_above_signal_col``. Default: ``ppo_above_signal``.
+    ppo_below_signal_col:
+        Input dataframe column configured by ``ppo_below_signal_col``. Default: ``ppo_below_signal``.
+    mfi_col:
+        Input dataframe column configured by ``mfi_col``. Default: ``mfi_14``.
+    stoch_k_col:
+        Input dataframe column configured by ``stoch_k_col``. Default: ``stoch_rsi_k``.
+    stoch_d_col:
+        Input dataframe column configured by ``stoch_d_col``. Default: ``stoch_rsi_d``.
+    zscore_momentum_col:
+        Input dataframe column configured by ``zscore_momentum_col``. Default: ``zscore_momentum_20``.
+    volatility_regime_col:
+        Input dataframe column configured by ``volatility_regime_col``. Default: ``volatility_regime``.
+    trend_quality_col:
+        Input dataframe column configured by ``trend_quality_col``. Default: ``rolling_r2_trend_quality_96``.
+    mfi_long_min:
+        Numeric threshold used by this signal. Default: ``40.0``.
+    mfi_long_max:
+        Numeric threshold used by this signal. Default: ``80.0``.
+    mfi_short_min:
+        Numeric threshold used by this signal. Default: ``20.0``.
+    mfi_short_max:
+        Numeric threshold used by this signal. Default: ``60.0``.
+    long_zscore_min:
+        Numeric threshold used by this signal. Default: ``0.0``.
+    short_zscore_max:
+        Numeric threshold used by this signal. Default: ``0.0``.
+    max_volatility_regime:
+        Configuration parameter accepted by this signal. Default: ``1.0``.
+    strict_trend_quality_min:
+        Numeric threshold used by this signal. Default: ``0.35``.
+    strict_mfi_long_min:
+        Numeric threshold used by this signal. Default: ``50.0``.
+    strict_mfi_short_max:
+        Numeric threshold used by this signal. Default: ``50.0``.
+    strict_long_zscore_min:
+        Numeric threshold used by this signal. Default: ``0.5``.
+    strict_short_zscore_max:
+        Numeric threshold used by this signal. Default: ``-0.5``.
+    use_strict_signal:
+        Boolean switch controlling optional signal behavior. Default: ``false``.
+    long_candidate_col:
+        Output dataframe column configured by ``long_candidate_col``. Default: ``c1_long_candidate``.
+    short_candidate_col:
+        Output dataframe column configured by ``short_candidate_col``. Default: ``c1_short_candidate``.
+    long_candidate_strict_col:
+        Input dataframe column configured by ``long_candidate_strict_col``. Default: ``c1_long_candidate_strict``.
+    short_candidate_strict_col:
+        Input dataframe column configured by ``short_candidate_strict_col``. Default: ``c1_short_candidate_strict``.
+    signal_col:
+        Output dataframe column configured by ``signal_col``. Default: ``signal_side``.
+    candidate_col:
+        Output dataframe column configured by ``candidate_col``. Default: ``signal_candidate``.
     """
     out, _ = build_c1_trend_pullback_vwap_signal(df, params)
     return out

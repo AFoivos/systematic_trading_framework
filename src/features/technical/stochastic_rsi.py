@@ -22,39 +22,51 @@ def add_stochastic_rsi_features(
     """
     Apply the registered ``stochastic_rsi`` feature transformation.
     
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
     YAML declaration::
     
         features:
           - step: stochastic_rsi
-            params: {}
+            params:
+              price_col: close
+              rsi_period: 14
+              stoch_period: 14
+              k_period: 3
+              d_period: 3
+              oversold: 0.2
+              overbought: 0.8
+              prefix: stoch_rsi
+              method: wilder
+              inplace: false
     
     Required input columns
     ----------------------
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     
     Parameters
     ----------
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     rsi_period:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``14``.
+        Configuration parameter accepted by this feature. Default: ``14``.
     stoch_period:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``14``.
+        Configuration parameter accepted by this feature. Default: ``14``.
     k_period:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``3``.
+        Configuration parameter accepted by this feature. Default: ``3``.
     d_period:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``3``.
+        Configuration parameter accepted by this feature. Default: ``3``.
     oversold:
-        Configuration value used by the registered component. Default: ``0.2``.
+        Configuration parameter accepted by this feature. Default: ``0.2``.
     overbought:
-        Configuration value used by the registered component. Default: ``0.8``.
+        Configuration parameter accepted by this feature. Default: ``0.8``.
     prefix:
-        Configuration value used by the registered component. Default: ``stoch_rsi``.
+        Configuration parameter accepted by this feature. Default: ``stoch_rsi``.
     method:
-        Mode selector that controls the registered component behavior. Default: ``wilder``.
+        Configuration parameter accepted by this feature. Default: ``wilder``.
     inplace:
-        Configuration value used by the registered component. Default: ``False``.
+        Boolean switch controlling optional feature behavior. Default: ``false``.
     """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame")
@@ -86,6 +98,50 @@ def compute_stochastic_rsi(
     prefix: str = "stoch_rsi",
     method: str = "wilder",
 ) -> pd.DataFrame:
+    """
+    Compute the ``compute_stochastic_rsi`` feature value.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: compute_stochastic_rsi
+            params:
+              rsi_period: 14
+              stoch_period: 14
+              k_period: 3
+              d_period: 3
+              oversold: 0.2
+              overbought: 0.8
+              prefix: stoch_rsi
+              method: wilder
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    rsi_period:
+        Configuration parameter accepted by this feature. Default: ``14``.
+    stoch_period:
+        Configuration parameter accepted by this feature. Default: ``14``.
+    k_period:
+        Configuration parameter accepted by this feature. Default: ``3``.
+    d_period:
+        Configuration parameter accepted by this feature. Default: ``3``.
+    oversold:
+        Configuration parameter accepted by this feature. Default: ``0.2``.
+    overbought:
+        Configuration parameter accepted by this feature. Default: ``0.8``.
+    prefix:
+        Configuration parameter accepted by this feature. Default: ``stoch_rsi``.
+    method:
+        Configuration parameter accepted by this feature. Default: ``wilder``.
+    """
     if not isinstance(prices, pd.Series):
         raise TypeError("prices must be a pandas Series")
     for name, value in {

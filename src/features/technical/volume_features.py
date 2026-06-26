@@ -16,43 +16,55 @@ def add_volume_features(
     inplace: bool = False,
 ) -> pd.DataFrame:
     """
-    Apply the registered ``volume_features`` feature transformation.
+    Apply the registered ``volume`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
-          - step: volume_features
-            params: {}
+          - step: volume
+            params:
+              volume_col: volume
+              atr_col: null
+              high_col: high
+              low_col: low
+              close_col: close
+              atr_window: 14
+              vol_z_window: 20
+              inplace: false
+          output_cols:
+            - configured by atr_col
     
     Required input columns
     ----------------------
     volume_col:
-        Input column configured by ``volume_col``. Default: ``volume``.
+        Input dataframe column configured by ``volume_col``. Default: ``volume``.
     high_col:
-        Input column configured by ``high_col``. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input column configured by ``low_col``. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
     close_col:
-        Input column configured by ``close_col``. Default: ``close``.
+        Input dataframe column configured by ``close_col``. Default: ``close``.
     
     Parameters
     ----------
     volume_col:
-        Input dataframe column name consumed by the component. Default: ``volume``.
+        Input dataframe column configured by ``volume_col``. Default: ``volume``.
     atr_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Output dataframe column configured by ``atr_col``. Default: ``null``.
     high_col:
-        Input dataframe column name consumed by the component. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input dataframe column name consumed by the component. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
     close_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``close_col``. Default: ``close``.
     atr_window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``14``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``14``.
     vol_z_window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``20``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``20``.
     inplace:
-        Configuration value used by the registered component. Default: ``False``.
+        Boolean switch controlling optional feature behavior. Default: ``false``.
     """
     if volume_col not in df.columns:
         raise KeyError(f"volume_col '{volume_col}' not found in DataFrame")
@@ -87,6 +99,32 @@ def add_volume_features(
 
 
 def compute_volume_zscore(volume: pd.Series, window: int = 20) -> pd.Series:
+    """
+    Compute the ``compute_volume_zscore`` feature value.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: compute_volume_zscore
+            params:
+              volume: <required>
+              window: 20
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    volume:
+        Configuration parameter accepted by this feature.
+    window:
+        Trailing lookback or forecast horizon controlling this feature. Default: ``20``.
+    """
     mean = volume.rolling(window=window, min_periods=window).mean()
     std = volume.rolling(window=window, min_periods=window).std(ddof=0)
     z = (volume - mean) / std.replace(0, np.nan)
@@ -95,6 +133,35 @@ def compute_volume_zscore(volume: pd.Series, window: int = 20) -> pd.Series:
 
 
 def compute_volume_over_atr(volume: pd.Series, atr: pd.Series, *, window: int) -> pd.Series:
+    """
+    Compute the ``compute_volume_over_atr`` feature value.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: compute_volume_over_atr
+            params:
+              volume: <required>
+              atr: <required>
+              window: <required>
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    volume:
+        Configuration parameter accepted by this feature.
+    atr:
+        Configuration parameter accepted by this feature.
+    window:
+        Trailing lookback or forecast horizon controlling this feature.
+    """
     out = volume.astype(float) / atr.astype(float)
     out.name = f"volume_over_atr_{window}"
     return out

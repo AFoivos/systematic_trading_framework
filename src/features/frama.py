@@ -29,45 +29,63 @@ def add_frama(
     add_diagnostics: bool = False,
 ) -> pd.DataFrame:
     """
-    Add Ehlers' causal Fractal Adaptive Moving Average.
+    Apply the registered ``frama`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: frama
-            params: {}
+            params:
+              price_col: close
+              high_col: high
+              low_col: low
+              window: 16
+              fast_period: 4
+              slow_period: 300
+              output_col: null
+              alpha_col: null
+              fractal_dimension_col: null
+              add_diagnostics: false
+          output_cols:
+            - configured by output_col
     
     Required input columns
     ----------------------
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     high_col:
-        Input column configured by ``high_col``. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input column configured by ``low_col``. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
+    alpha_col:
+        Input dataframe column configured by ``alpha_col``. Default: ``null``.
+    fractal_dimension_col:
+        Input dataframe column configured by ``fractal_dimension_col``. Default: ``null``.
     
     Parameters
     ----------
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     high_col:
-        Input dataframe column name consumed by the component. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input dataframe column name consumed by the component. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
     window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``16``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``16``.
     fast_period:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``4``.
+        Configuration parameter accepted by this feature. Default: ``4``.
     slow_period:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``300``.
+        Configuration parameter accepted by this feature. Default: ``300``.
     output_col:
-        Output column name emitted by the component. Default: ``None``.
+        Output dataframe column configured by ``output_col``. Default: ``null``.
     alpha_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``alpha_col``. Default: ``null``.
     fractal_dimension_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``fractal_dimension_col``. Default: ``null``.
     add_diagnostics:
-        Configuration value used by the registered component. Default: ``False``.
+        Boolean switch controlling optional feature behavior. Default: ``false``.
     """
     require_columns(df, [price_col, high_col, low_col], feature="FRAMA")
     resolved_window = validate_int(window, name="window", minimum=4)

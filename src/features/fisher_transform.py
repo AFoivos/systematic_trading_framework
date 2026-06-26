@@ -27,33 +27,44 @@ def add_fisher_transform(
     add_signal: bool = True,
 ) -> pd.DataFrame:
     """
-    Add Ehlers' causal Fisher Transform over a trailing price range.
+    Apply the registered ``fisher_transform`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: fisher_transform
-            params: {}
+            params:
+              price_col: close
+              window: 10
+              clip: 0.999
+              output_col: null
+              signal_col: null
+              add_signal: true
+          output_cols:
+            - configured by output_col
+            - configured by signal_col
     
     Required input columns
     ----------------------
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     
     Parameters
     ----------
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``10``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``10``.
     clip:
-        Configuration value used by the registered component. Default: ``0.999``.
+        Configuration parameter accepted by this feature. Default: ``0.999``.
     output_col:
-        Output column name emitted by the component. Default: ``None``.
+        Output dataframe column configured by ``output_col``. Default: ``null``.
     signal_col:
-        Output column name emitted by the component. Default: ``None``.
+        Output dataframe column configured by ``signal_col``. Default: ``null``.
     add_signal:
-        Configuration value used by the registered component. Default: ``True``.
+        Boolean switch controlling optional feature behavior. Default: ``true``.
     """
     require_columns(df, [price_col], feature="Fisher Transform")
     resolved_window = validate_int(window, name="window", minimum=2)

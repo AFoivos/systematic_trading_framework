@@ -4,6 +4,29 @@ from typing import Any, Callable
 
 
 def make_vec_env(env_fns: list[Callable[[], object]]):
+    """
+    Apply the registered ``make_vec_env`` RL model transformation.
+    
+    This RL model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        model:
+          kind: make_vec_env
+          params:
+            env_fns: <required>
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    env_fns:
+        Configuration parameter accepted by this RL model.
+    """
     if not env_fns:
         raise ValueError("At least one environment factory is required.")
     envs = [env_fn() for env_fn in env_fns]
@@ -13,6 +36,56 @@ def make_vec_env(env_fns: list[Callable[[], object]]):
 
 
 def build_policy_kwargs(params: dict[str, Any]) -> dict[str, Any]:
+    """
+    Apply the registered ``build_policy_kwargs`` RL model transformation.
+    
+    This RL model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        model:
+          kind: build_policy_kwargs
+          params:
+            conv_channels: <configured>
+            dropout: <configured>
+            extractor: <configured>
+            features_dim: <configured>
+            hidden_dim: <configured>
+            kernel_sizes: <configured>
+            kind: <configured>
+            net_arch: <configured>
+            num_heads: <configured>
+            num_layers: <configured>
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    conv_channels:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    dropout:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    extractor:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    features_dim:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    hidden_dim:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    kernel_sizes:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    kind:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    net_arch:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    num_heads:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    num_layers:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    """
     from stable_baselines3.common.torch_layers import FlattenExtractor
 
     extractor_cfg = dict(params.get("extractor", {}) or {})
@@ -48,6 +121,104 @@ def train_sb3_model(
     params: dict[str, Any],
     runtime_meta: dict[str, Any],
 ) -> tuple[object, dict[str, Any]]:
+    """
+    Apply the registered ``sb3_model`` RL model transformation.
+    
+    This RL model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        model:
+          kind: sb3_model
+          params:
+            algorithm: <required>
+            env: <required>
+            observation_space: <required>
+            runtime_meta: <required>
+            batch_size: <configured>
+            buffer_size: <configured>
+            clip_range: <configured>
+            device: <configured>
+            ent_coef: <configured>
+            exploration_final_eps: <configured>
+            exploration_fraction: <configured>
+            exploration_initial_eps: <configured>
+            gae_lambda: <configured>
+            gamma: <configured>
+            gradient_steps: <configured>
+            learning_rate: <configured>
+            learning_starts: <configured>
+            max_grad_norm: <configured>
+            n_steps: <configured>
+            policy: <configured>
+            seed: <configured>
+            target_update_interval: <configured>
+            tau: <configured>
+            total_timesteps: <configured>
+            train_freq: <configured>
+            vf_coef: <configured>
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    algorithm:
+        Configuration parameter accepted by this RL model.
+    env:
+        Configuration parameter accepted by this RL model.
+    observation_space:
+        Configuration parameter accepted by this RL model.
+    runtime_meta:
+        Configuration parameter accepted by this RL model.
+    batch_size:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    buffer_size:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    clip_range:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    device:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    ent_coef:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    exploration_final_eps:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    exploration_fraction:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    exploration_initial_eps:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    gae_lambda:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    gamma:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    gradient_steps:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    learning_rate:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    learning_starts:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    max_grad_norm:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    n_steps:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    policy:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    seed:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    target_update_interval:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    tau:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    total_timesteps:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    train_freq:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    vf_coef:
+        Configuration parameter accepted by this RL model. Default: ``<configured>``.
+    """
     del observation_space
     algo = str(algorithm).lower()
     if algo not in {"ppo", "dqn"}:

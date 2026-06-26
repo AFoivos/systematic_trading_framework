@@ -75,32 +75,38 @@ def add_rolling_r2_trend_quality(
     _validate_window(window)
     threshold = _validate_probability(trend_quality_threshold, field="trend_quality_threshold")
     r2_name = _resolve_output_col(output_col, f"rolling_r2_trend_quality_{window}", field="output_col")
-    slope_name = _resolve_output_col(slope_col, f"rolling_r2_slope_{window}", field="slope_col")
-    intercept_name = _resolve_output_col(
-        intercept_col,
-        f"rolling_r2_intercept_{window}",
-        field="intercept_col",
-    )
-    rising_name = _resolve_output_col(
-        rising_col,
-        f"rolling_r2_trend_quality_{window}_rising",
-        field="rising_col",
-    )
-    quality_name = _resolve_output_col(
-        trend_quality_col,
-        f"rolling_r2_trend_quality_{window}_ok",
-        field="trend_quality_col",
-    )
 
     out = df.copy()
     price = _clean_numeric(out[price_col])
     slope, intercept, r2 = _rolling_linear_regression(price, window=window)
 
     out[r2_name] = r2
-    out[slope_name] = slope
-    out[intercept_name] = intercept
-    out[rising_name] = ((r2 > r2.shift(1)) & r2.notna() & r2.shift(1).notna()).astype("int8")
-    out[quality_name] = (r2.notna() & (r2 >= threshold)).astype("int8")
+    if slope_col is not None:
+        out[_resolve_output_col(slope_col, f"rolling_r2_slope_{window}", field="slope_col")] = slope
+    if intercept_col is not None:
+        out[
+            _resolve_output_col(
+                intercept_col,
+                f"rolling_r2_intercept_{window}",
+                field="intercept_col",
+            )
+        ] = intercept
+    if rising_col is not None:
+        out[
+            _resolve_output_col(
+                rising_col,
+                f"rolling_r2_trend_quality_{window}_rising",
+                field="rising_col",
+            )
+        ] = ((r2 > r2.shift(1)) & r2.notna() & r2.shift(1).notna()).astype("int8")
+    if trend_quality_col is not None:
+        out[
+            _resolve_output_col(
+                trend_quality_col,
+                f"rolling_r2_trend_quality_{window}_ok",
+                field="trend_quality_col",
+            )
+        ] = (r2.notna() & (r2 >= threshold)).astype("int8")
     return out
 
 

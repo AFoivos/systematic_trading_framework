@@ -24,53 +24,82 @@ def add_hilbert_transform(
     min_cycle: int = 10,
     max_cycle: int = 48,
     amplitude_slope_bars: int = 3,
-    add_derived: bool = True,
+    add_derived: bool = False,
 ) -> pd.DataFrame:
     """
-    Add rolling endpoint Hilbert transform features.
-    
-    This is a trailing-window FFT Hilbert approximation. It is causal because
-    each row uses only the trailing window ending at that row, but endpoint
-    phase/frequency estimates can have window-edge artifacts and should not be
-    treated as full-sample analytic-signal values.
-    
+    Apply the registered ``hilbert_transform`` feature transformation.
+
+    This raw feature computes causal Hilbert endpoint amplitude, phase, and
+    instantaneous frequency from a trailing price window. Derived cycle-period
+    reciprocals, range flags, and amplitude-rising flags are intentionally not
+    produced here; use feature helpers such as ``reciprocal``,
+    ``between_flag``, and ``rising_flag`` for those columns.
+
     YAML declaration::
-    
+
         features:
           - step: hilbert_transform
-            params: {}
-    
+            params:
+              price_col: close
+              window: 64
+              amplitude_col: hilbert_amplitude_64
+              phase_col: hilbert_phase_64
+              instantaneous_frequency_col: hilbert_instantaneous_frequency_64
+              add_derived: false
+            transforms:
+              reciprocal:
+                source_col: hilbert_instantaneous_frequency_64
+                use_abs: true
+                output_col: hilbert_dominant_cycle_64
+              between_flag:
+                source_col: hilbert_dominant_cycle_64
+                lower: 10.0
+                upper: 48.0
+                output_col: hilbert_cycle_ok_64
+              rising_flag:
+                source_col: hilbert_amplitude_64
+                periods: 3
+                output_col: hilbert_amplitude_rising_64
+          output_cols:
+            - hilbert_amplitude_64
+            - hilbert_phase_64
+            - hilbert_instantaneous_frequency_64
+
     Required input columns
     ----------------------
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
-    
+        Price input column.
+
     Parameters
     ----------
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Price input column.
     window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``64``.
+        Trailing window used for the Hilbert transform.
     amplitude_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Output column for endpoint analytic-signal amplitude.
     phase_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Output column for endpoint unwrapped phase.
     instantaneous_frequency_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Output column for endpoint instantaneous frequency.
     dominant_cycle_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Deprecated derived output. Use ``transforms.reciprocal`` on
+        ``instantaneous_frequency_col`` with ``use_abs: true``.
     cycle_ok_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Deprecated derived output. Use ``transforms.between_flag`` on the
+        helper-produced dominant cycle column.
     amplitude_rising_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Deprecated derived output. Use ``transforms.rising_flag`` on
+        ``amplitude_col``.
     min_cycle:
-        Configuration value used by the registered component. Default: ``10``.
+        Deprecated helper parameter retained only for config validation.
     max_cycle:
-        Configuration value used by the registered component. Default: ``48``.
+        Deprecated helper parameter retained only for config validation.
     amplitude_slope_bars:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``3``.
+        Deprecated helper parameter retained only for config validation.
     add_derived:
-        Configuration value used by the registered component. Default: ``True``.
+        Deprecated switch. Must remain ``false``; derived outputs belong in
+        helpers.
     """
     _validate_columns(df, [price_col])
     _validate_window(window)
@@ -80,17 +109,16 @@ def add_hilbert_transform(
         amplitude_slope_bars=amplitude_slope_bars,
         add_derived=add_derived,
     )
+    _reject_derived_outputs(
+        add_derived=add_derived,
+        dominant_cycle_col=dominant_cycle_col,
+        cycle_ok_col=cycle_ok_col,
+        amplitude_rising_col=amplitude_rising_col,
+    )
     output_cols = _resolve_output_cols(
         amplitude_col or f"hilbert_amplitude_{window}",
         phase_col or f"hilbert_phase_{window}",
         instantaneous_frequency_col or f"hilbert_instantaneous_frequency_{window}",
-    )
-    derived_cols = _resolve_derived_output_cols(
-        window=window,
-        amplitude_col=output_cols[0],
-        dominant_cycle_col=dominant_cycle_col,
-        cycle_ok_col=cycle_ok_col,
-        amplitude_rising_col=amplitude_rising_col,
     )
 
     out = df.copy()
@@ -115,17 +143,6 @@ def add_hilbert_transform(
     out[output_cols[0]] = amplitude
     out[output_cols[1]] = phase
     out[output_cols[2]] = frequency
-    if add_derived:
-        dominant_cycle = np.full(len(out), np.nan, dtype=float)
-        valid_frequency = np.isfinite(frequency) & (np.abs(frequency) > 1e-12)
-        dominant_cycle[valid_frequency] = 1.0 / np.abs(frequency[valid_frequency])
-        out[derived_cols[0]] = dominant_cycle
-        out[derived_cols[1]] = (
-            pd.Series(dominant_cycle, index=out.index)
-            .between(float(min_cycle), float(max_cycle), inclusive="both")
-        )
-        amplitude_series = pd.Series(amplitude, index=out.index)
-        out[derived_cols[2]] = amplitude_series.gt(amplitude_series.shift(int(amplitude_slope_bars)))
     return out
 
 
@@ -169,27 +186,26 @@ def _resolve_output_cols(*columns: str) -> tuple[str, str, str]:
     return columns
 
 
-def _resolve_derived_output_cols(
+def _reject_derived_outputs(
     *,
-    window: int,
-    amplitude_col: str,
+    add_derived: bool,
     dominant_cycle_col: str | None,
     cycle_ok_col: str | None,
     amplitude_rising_col: str | None,
-) -> tuple[str, str, str]:
-    exact_defaults = amplitude_col == "hilbert_amplitude"
-    columns = (
-        dominant_cycle_col or ("hilbert_dominant_cycle" if exact_defaults else f"hilbert_dominant_cycle_{window}"),
-        cycle_ok_col or ("hilbert_cycle_ok" if exact_defaults else f"hilbert_cycle_ok_{window}"),
-        amplitude_rising_col
-        or ("hilbert_amplitude_rising" if exact_defaults else f"hilbert_amplitude_rising_{window}"),
-    )
-    for column in columns:
-        if not isinstance(column, str) or not column.strip():
-            raise ValueError("Hilbert derived output columns must be non-empty strings.")
-    if amplitude_col in set(columns) or len(set(columns)) != len(columns):
-        raise ValueError("Hilbert derived output columns must be unique and distinct from amplitude_col.")
-    return columns
+) -> None:
+    requested = {
+        "add_derived": add_derived,
+        "dominant_cycle_col": dominant_cycle_col,
+        "cycle_ok_col": cycle_ok_col,
+        "amplitude_rising_col": amplitude_rising_col,
+    }
+    enabled = [name for name, value in requested.items() if value not in (False, None)]
+    if enabled:
+        raise ValueError(
+            "Hilbert derived outputs are no longer produced by hilbert_transform "
+            f"({', '.join(enabled)} requested). Use transforms.reciprocal, "
+            "transforms.between_flag, and transforms.rising_flag."
+        )
 
 
 __all__ = [

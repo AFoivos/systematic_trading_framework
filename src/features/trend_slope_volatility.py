@@ -22,52 +22,68 @@ def add_trend_slope_volatility(
     strong_threshold: float = 1.0,
 ) -> pd.DataFrame:
     """
-    Add a causal trend-slope divided by volatility feature.
+    Apply the registered ``trend_slope_volatility`` feature transformation.
     
-    A positive ratio means the rolling trend slope is positive relative to the
-    volatility used. A large absolute ratio means the trend is cleaner or
-    stronger relative to noise. ``price_col`` is used as provided, so callers
-    may pass raw price or a precomputed log-price column.
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: trend_slope_volatility
-            params: {}
+            params:
+              price_col: close
+              volatility_col: null
+              window: 96
+              annualize: false
+              periods_per_year: null
+              slope_col: null
+              volatility_used_col: null
+              slope_vol_ratio_col: null
+              positive_col: null
+              rising_col: null
+              strong_trend_col: null
+              strong_threshold: 1.0
+          output_cols:
+            - configured by slope_col
+            - configured by volatility_used_col
+            - configured by slope_vol_ratio_col
+            - configured by positive_col
+            - configured by rising_col
+            - configured by strong_trend_col
     
     Required input columns
     ----------------------
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     volatility_col:
-        Optional input column configured by ``volatility_col``; used when a value is provided.
+        Input dataframe column configured by ``volatility_col``. Default: ``null``.
     
     Parameters
     ----------
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     volatility_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``volatility_col``. Default: ``null``.
     window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``96``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``96``.
     annualize:
-        Configuration value used by the registered component. Default: ``False``.
+        Boolean switch controlling optional feature behavior. Default: ``false``.
     periods_per_year:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``None``.
+        Configuration parameter accepted by this feature. Default: ``null``.
     slope_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Output dataframe column configured by ``slope_col``. Default: ``null``.
     volatility_used_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Output dataframe column configured by ``volatility_used_col``. Default: ``null``.
     slope_vol_ratio_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Output dataframe column configured by ``slope_vol_ratio_col``. Default: ``null``.
     positive_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Output dataframe column configured by ``positive_col``. Default: ``null``.
     rising_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Output dataframe column configured by ``rising_col``. Default: ``null``.
     strong_trend_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Output dataframe column configured by ``strong_trend_col``. Default: ``null``.
     strong_threshold:
-        Numeric threshold controlling the component decision rule. Default: ``1.0``.
+        Numeric threshold used by this feature. Default: ``1.0``.
     """
     _validate_columns(df, [price_col], feature="trend slope volatility")
     if volatility_col is not None:
@@ -90,21 +106,13 @@ def add_trend_slope_volatility(
         f"trend_slope_vol_ratio_{window}",
         field="slope_vol_ratio_col",
     )
-    positive_name = _resolve_output_col(
-        positive_col,
-        f"trend_slope_vol_ratio_{window}_positive",
-        field="positive_col",
-    )
-    rising_name = _resolve_output_col(
-        rising_col,
-        f"trend_slope_vol_ratio_{window}_rising",
-        field="rising_col",
-    )
-    strong_name = _resolve_output_col(
-        strong_trend_col,
-        f"trend_slope_vol_ratio_{window}_strong",
-        field="strong_trend_col",
-    )
+    for field, value in (
+        ("positive_col", positive_col),
+        ("rising_col", rising_col),
+        ("strong_trend_col", strong_trend_col),
+    ):
+        if value is not None:
+            _resolve_output_col(value, "unused", field=field)
 
     out = df.copy()
     price = _clean_numeric(out[price_col])
@@ -120,9 +128,12 @@ def add_trend_slope_volatility(
     out[slope_name] = slope
     out[volatility_name] = volatility
     out[ratio_name] = ratio
-    out[positive_name] = (ratio.notna() & (ratio > 0.0)).astype("int8")
-    out[rising_name] = ((ratio > ratio.shift(1)) & ratio.notna() & ratio.shift(1).notna()).astype("int8")
-    out[strong_name] = (ratio.notna() & (ratio.abs() >= threshold)).astype("int8")
+    if positive_col is not None:
+        out[positive_col] = (ratio.notna() & (ratio > 0.0)).astype("int8")
+    if rising_col is not None:
+        out[rising_col] = ((ratio > ratio.shift(1)) & ratio.notna() & ratio.shift(1).notna()).astype("int8")
+    if strong_trend_col is not None:
+        out[strong_trend_col] = (ratio.notna() & (ratio.abs() >= threshold)).astype("int8")
     return out
 
 

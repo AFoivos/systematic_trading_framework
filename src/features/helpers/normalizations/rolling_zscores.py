@@ -15,6 +15,40 @@ def add_rolling_zscore_features(
     shift_stats: bool = True,
     inplace: bool = False,
 ) -> pd.DataFrame:
+    """
+    Apply the ``rolling_zscore`` normalization helper transformation.
+    
+    This normalization helper uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        normalizations:
+          rolling_zscore:
+            params:
+              columns: <required>
+              window: 96
+              min_periods: null
+              shift_stats: true
+              inplace: false
+    
+    Required input columns
+    ----------------------
+    columns:
+        Configured dataframe columns used by this normalization helper.
+    
+    Parameters
+    ----------
+    columns:
+        Configured dataframe columns used by this normalization helper.
+    window:
+        Trailing lookback or forecast horizon controlling this normalization helper. Default: ``96``.
+    min_periods:
+        Configuration parameter accepted by this normalization helper. Default: ``null``.
+    shift_stats:
+        Boolean switch controlling optional normalization helper behavior. Default: ``true``.
+    inplace:
+        Boolean switch controlling optional normalization helper behavior. Default: ``false``.
+    """
     if isinstance(window, bool) or int(window) <= 1:
         raise ValueError("window must be > 1.")
     if min_periods is not None and (isinstance(min_periods, bool) or int(min_periods) <= 0):

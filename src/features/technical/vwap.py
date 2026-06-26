@@ -22,46 +22,60 @@ def add_vwap_features(
     """
     Apply the registered ``vwap`` feature transformation.
     
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
     YAML declaration::
     
         features:
           - step: vwap
-            params: {}
+            params:
+              high_col: high
+              low_col: low
+              close_col: close
+              volume_col: volume
+              window: 20
+              windows: null
+              add_distance: false
+              vwap_col: null
+              distance_col: null
+              inplace: false
+          output_cols:
+            - configured by vwap_col
+            - configured by distance_col
     
     Required input columns
     ----------------------
     high_col:
-        Input column configured by ``high_col``. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input column configured by ``low_col``. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
     close_col:
-        Input column configured by ``close_col``. Default: ``close``.
+        Input dataframe column configured by ``close_col``. Default: ``close``.
     volume_col:
-        Input column configured by ``volume_col``. Default: ``volume``.
+        Input dataframe column configured by ``volume_col``. Default: ``volume``.
     
     Parameters
     ----------
     high_col:
-        Input dataframe column name consumed by the component. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input dataframe column name consumed by the component. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
     close_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``close_col``. Default: ``close``.
     volume_col:
-        Input dataframe column name consumed by the component. Default: ``volume``.
+        Input dataframe column configured by ``volume_col``. Default: ``volume``.
     window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``20``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``20``.
     windows:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``None``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``null``.
     add_distance:
-        No longer supported. Derived distance output must be declared with a
-        nested ``transforms.ratio`` helper. Default: ``False``.
+        Boolean switch controlling optional feature behavior. Default: ``false``.
     vwap_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Output dataframe column configured by ``vwap_col``. Default: ``null``.
     distance_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Output dataframe column configured by ``distance_col``. Default: ``null``.
     inplace:
-        Configuration value used by the registered component. Default: ``False``.
+        Boolean switch controlling optional feature behavior. Default: ``false``.
     """
     missing = [c for c in (high_col, low_col, close_col, volume_col) if c not in df.columns]
     if missing:
@@ -121,6 +135,35 @@ def _resolve_windows(*, window: int, windows: Sequence[int] | None) -> list[int]
 
 
 def compute_vwap(price: pd.Series, volume: pd.Series, window: int = 20) -> pd.Series:
+    """
+    Compute the ``compute_vwap`` feature value.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: compute_vwap
+            params:
+              price: <required>
+              volume: <required>
+              window: 20
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    price:
+        Configuration parameter accepted by this feature.
+    volume:
+        Configuration parameter accepted by this feature.
+    window:
+        Trailing lookback or forecast horizon controlling this feature. Default: ``20``.
+    """
     if not isinstance(price, pd.Series) or not isinstance(volume, pd.Series):
         raise TypeError("price and volume must be pandas Series")
     if isinstance(window, bool) or int(window) <= 0:

@@ -45,10 +45,21 @@ features:
     low_pass_period: 10
     slope_bars: 1
     output_col: ehlers_roofing_48_10
-    slope_col: ehlers_roofing_48_10_slope
-    cross_up_zero_col: ehlers_roofing_48_10_cross_up
-    cross_down_zero_col: ehlers_roofing_48_10_cross_down
-    add_derived: true
+  transforms:
+    difference:
+      source_col: ehlers_roofing_48_10
+      periods: 1
+      output_col: ehlers_roofing_48_10_slope
+    crossing_flag:
+      items:
+      - source_col: ehlers_roofing_48_10
+        threshold: 0.0
+        direction: up
+        output_col: ehlers_roofing_48_10_cross_up
+      - source_col: ehlers_roofing_48_10
+        threshold: 0.0
+        direction: down
+        output_col: ehlers_roofing_48_10_cross_down
 - step: hilbert_transform
   params:
     price_col: close

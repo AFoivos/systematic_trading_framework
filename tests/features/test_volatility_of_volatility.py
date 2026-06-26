@@ -61,11 +61,13 @@ def test_volatility_of_volatility_rising_and_high_flags() -> None:
         window=3,
         mean_window=3,
         output_col="vov",
+        rising_col="vov_rising",
+        high_vov_col="vov_high",
         high_vov_mult=1.0,
     )
 
-    assert out["volatility_of_volatility_vol_3_rising"].sum() > 0
-    assert out["volatility_of_volatility_vol_3_high"].sum() > 0
+    assert out["vov_rising"].sum() > 0
+    assert out["vov_high"].sum() > 0
 
 
 def test_volatility_of_volatility_missing_columns() -> None:

@@ -92,6 +92,29 @@ SIGNAL_KINDS = registry_names(SIGNAL_REGISTRY, DEPRECATED_SIGNAL_ALIASES)
 
 
 def get_signal_fn(name: str) -> SignalFn:
+    """
+    Apply the registered ``get_signal_fn`` signal transformation.
+    
+    This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        signals:
+          kind: get_signal_fn
+          params:
+            name: <required>
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    name:
+        Configuration parameter accepted by this signal.
+    """
     return get_registered_component(
         SIGNAL_REGISTRY,
         name,

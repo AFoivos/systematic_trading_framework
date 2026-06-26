@@ -22,54 +22,73 @@ def add_yang_zhang_volatility(
     high_vol_regime_col: str | None = None,
 ) -> pd.DataFrame:
     """
-    Add causal rolling Yang-Zhang volatility from OHLC prices.
+    Apply the registered ``yang_zhang_volatility`` feature transformation.
     
-    Overnight, open-close, and Rogers-Satchell components are estimated over
-    trailing windows. The overnight return uses ``close.shift(1)`` only.
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: yang_zhang_volatility
-            params: {}
+            params:
+              open_col: open
+              high_col: high
+              low_col: low
+              close_col: close
+              window: 20
+              regime_window: null
+              high_vol_mult: 1.0
+              output_col: null
+              rolling_mean_col: null
+              ratio_col: null
+              rising_col: null
+              high_vol_regime_col: null
+          output_cols:
+            - configured by output_col
+            - configured by ratio_col
+            - configured by rising_col
     
     Required input columns
     ----------------------
     open_col:
-        Input column configured by ``open_col``. Default: ``open``.
+        Input dataframe column configured by ``open_col``. Default: ``open``.
     high_col:
-        Input column configured by ``high_col``. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input column configured by ``low_col``. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
     close_col:
-        Input column configured by ``close_col``. Default: ``close``.
+        Input dataframe column configured by ``close_col``. Default: ``close``.
+    rolling_mean_col:
+        Input dataframe column configured by ``rolling_mean_col``. Default: ``null``.
+    high_vol_regime_col:
+        Input dataframe column configured by ``high_vol_regime_col``. Default: ``null``.
     
     Parameters
     ----------
     open_col:
-        Input dataframe column name consumed by the component. Default: ``open``.
+        Input dataframe column configured by ``open_col``. Default: ``open``.
     high_col:
-        Input dataframe column name consumed by the component. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input dataframe column name consumed by the component. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
     close_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``close_col``. Default: ``close``.
     window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``20``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``20``.
     regime_window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``None``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``null``.
     high_vol_mult:
-        Configuration value used by the registered component. Default: ``1.0``.
+        Configuration parameter accepted by this feature. Default: ``1.0``.
     output_col:
-        Output column name emitted by the component. Default: ``None``.
+        Output dataframe column configured by ``output_col``. Default: ``null``.
     rolling_mean_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``rolling_mean_col``. Default: ``null``.
     ratio_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Output dataframe column configured by ``ratio_col``. Default: ``null``.
     rising_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Output dataframe column configured by ``rising_col``. Default: ``null``.
     high_vol_regime_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``high_vol_regime_col``. Default: ``null``.
     """
     _validate_columns(df, [open_col, high_col, low_col, close_col])
     _validate_window(window)

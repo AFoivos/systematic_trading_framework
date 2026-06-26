@@ -22,47 +22,56 @@ def add_support_resistance_features(
     inplace: bool = False,
 ) -> pd.DataFrame:
     """
-    Add point-in-time safe rolling support and resistance levels.
+    Apply the registered ``support_resistance`` feature transformation.
     
-    Support is defined as the rolling minimum of `low_col` over each window.
-    Resistance is defined as the rolling maximum of `high_col` over each window.
-    Distances are computed relative to the current `price_col` and optionally normalized by ATR.
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: support_resistance
-            params: {}
+            params:
+              price_col: close
+              high_col: high
+              low_col: low
+              windows: [24, 72, 168]
+              atr_col: null
+              atr_window: 24
+              include_pct_distance: true
+              include_atr_distance: true
+              inplace: false
+          output_cols:
+            - configured by atr_col
     
     Required input columns
     ----------------------
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     high_col:
-        Input column configured by ``high_col``. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input column configured by ``low_col``. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
     
     Parameters
     ----------
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     high_col:
-        Input dataframe column name consumed by the component. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input dataframe column name consumed by the component. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
     windows:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``(24, 72, 168)``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``[24, 72, 168]``.
     atr_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Output dataframe column configured by ``atr_col``. Default: ``null``.
     atr_window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``24``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``24``.
     include_pct_distance:
-        Configuration value used by the registered component. Default: ``True``.
+        Configuration parameter accepted by this feature. Default: ``true``.
     include_atr_distance:
-        Configuration value used by the registered component. Default: ``True``.
+        Configuration parameter accepted by this feature. Default: ``true``.
     inplace:
-        Configuration value used by the registered component. Default: ``False``.
+        Boolean switch controlling optional feature behavior. Default: ``false``.
     """
     missing = [col for col in (price_col, high_col, low_col) if col not in df.columns]
     if missing:

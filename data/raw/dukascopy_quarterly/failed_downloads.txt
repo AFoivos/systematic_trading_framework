@@ -1,0 +1,3 @@
+2015_Q2|US30|usa30idxusd|ask|2015-04-01|2015-07-01|exit_status=1
+2015_Q4|US30|usa30idxusd|ask|2015-10-01|2016-01-01|exit_status=1
+2015_Q4|SPX500|usa500idxusd|bid|2015-10-01|2016-01-01|exit_status=1

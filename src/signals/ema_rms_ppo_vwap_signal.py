@@ -251,22 +251,139 @@ def ema_rms_ppo_vwap_signal(df: pd.DataFrame, **params: Any) -> pd.DataFrame:
     """
     Apply the registered ``ema_rms_ppo_vwap`` signal transformation.
     
+    This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
     YAML declaration::
     
         signals:
           kind: ema_rms_ppo_vwap
-          params: {}
+          params:
+            close_col: close
+            atr_col: atr_14
+            ema_fast_rms_col: ema_20__root_mean_square
+            ema_mid_rms_col: ema_50__root_mean_square
+            ema_slow_rms_col: ema_100__root_mean_square
+            vwap_col: vwap_20
+            vwap_rms_col: vwap_20__root_mean_square
+            ppo_col: ppo
+            ppo_signal_col: ppo_signal
+            mode: long_short
+            require_vwap_rms_filter: false
+            require_rms_slope_filter: false
+            max_vwap_distance_atr: 1.0
+            min_rms_slope: 0.0
+            signal_col: signal_side
+            candidate_col: signal_candidate
+            bull_stack_col: ema_rms_bull_stack
+            bear_stack_col: ema_rms_bear_stack
+            fast_slope_col: ema_rms_fast_slope
+            vwap_distance_atr_col: vwap_distance_atr
+            vwap_reclaim_col: vwap_reclaim
+            vwap_reject_col: vwap_reject
+            vwap_rms_long_bias_col: vwap_rms_long_bias
+            vwap_rms_short_bias_col: vwap_rms_short_bias
+            ppo_hist_col: ppo_hist
+            long_setup_col: ema_rms_long_setup
+            short_setup_col: ema_rms_short_setup
+          output_cols:
+            - atr_14
+            - vwap_20
+            - signal_side
+            - signal_candidate
     
     Required input columns
     ----------------------
-    None fixed by signature:
-        Required dataframe columns are resolved from configuration or from
-        upstream feature/target/signal stages at runtime.
+    close_col:
+        Input dataframe column configured by ``close_col``. Default: ``close``.
+    ema_fast_rms_col:
+        Input dataframe column configured by ``ema_fast_rms_col``. Default: ``ema_20__root_mean_square``.
+    ema_mid_rms_col:
+        Input dataframe column configured by ``ema_mid_rms_col``. Default: ``ema_50__root_mean_square``.
+    ema_slow_rms_col:
+        Input dataframe column configured by ``ema_slow_rms_col``. Default: ``ema_100__root_mean_square``.
+    vwap_rms_col:
+        Input dataframe column configured by ``vwap_rms_col``. Default: ``vwap_20__root_mean_square``.
+    ppo_col:
+        Input dataframe column configured by ``ppo_col``. Default: ``ppo``.
+    bull_stack_col:
+        Input dataframe column configured by ``bull_stack_col``. Default: ``ema_rms_bull_stack``.
+    bear_stack_col:
+        Input dataframe column configured by ``bear_stack_col``. Default: ``ema_rms_bear_stack``.
+    fast_slope_col:
+        Input dataframe column configured by ``fast_slope_col``. Default: ``ema_rms_fast_slope``.
+    vwap_distance_atr_col:
+        Input dataframe column configured by ``vwap_distance_atr_col``. Default: ``vwap_distance_atr``.
+    vwap_reclaim_col:
+        Input dataframe column configured by ``vwap_reclaim_col``. Default: ``vwap_reclaim``.
+    vwap_reject_col:
+        Input dataframe column configured by ``vwap_reject_col``. Default: ``vwap_reject``.
+    vwap_rms_long_bias_col:
+        Input dataframe column configured by ``vwap_rms_long_bias_col``. Default: ``vwap_rms_long_bias``.
+    vwap_rms_short_bias_col:
+        Input dataframe column configured by ``vwap_rms_short_bias_col``. Default: ``vwap_rms_short_bias``.
+    ppo_hist_col:
+        Input dataframe column configured by ``ppo_hist_col``. Default: ``ppo_hist``.
+    long_setup_col:
+        Input dataframe column configured by ``long_setup_col``. Default: ``ema_rms_long_setup``.
+    short_setup_col:
+        Input dataframe column configured by ``short_setup_col``. Default: ``ema_rms_short_setup``.
     
     Parameters
     ----------
-    params:
-        Additional keyword parameters accepted from YAML ``params``.
+    close_col:
+        Input dataframe column configured by ``close_col``. Default: ``close``.
+    atr_col:
+        Output dataframe column configured by ``atr_col``. Default: ``atr_14``.
+    ema_fast_rms_col:
+        Input dataframe column configured by ``ema_fast_rms_col``. Default: ``ema_20__root_mean_square``.
+    ema_mid_rms_col:
+        Input dataframe column configured by ``ema_mid_rms_col``. Default: ``ema_50__root_mean_square``.
+    ema_slow_rms_col:
+        Input dataframe column configured by ``ema_slow_rms_col``. Default: ``ema_100__root_mean_square``.
+    vwap_col:
+        Output dataframe column configured by ``vwap_col``. Default: ``vwap_20``.
+    vwap_rms_col:
+        Input dataframe column configured by ``vwap_rms_col``. Default: ``vwap_20__root_mean_square``.
+    ppo_col:
+        Input dataframe column configured by ``ppo_col``. Default: ``ppo``.
+    ppo_signal_col:
+        Input dataframe column configured by ``ppo_signal_col``. Default: ``ppo_signal``.
+    mode:
+        Mode selector controlling how this signal is applied. Default: ``long_short``.
+    require_vwap_rms_filter:
+        Configuration parameter accepted by this signal. Default: ``false``.
+    require_rms_slope_filter:
+        Configuration parameter accepted by this signal. Default: ``false``.
+    max_vwap_distance_atr:
+        Configuration parameter accepted by this signal. Default: ``1.0``.
+    min_rms_slope:
+        Configuration parameter accepted by this signal. Default: ``0.0``.
+    signal_col:
+        Output dataframe column configured by ``signal_col``. Default: ``signal_side``.
+    candidate_col:
+        Output dataframe column configured by ``candidate_col``. Default: ``signal_candidate``.
+    bull_stack_col:
+        Input dataframe column configured by ``bull_stack_col``. Default: ``ema_rms_bull_stack``.
+    bear_stack_col:
+        Input dataframe column configured by ``bear_stack_col``. Default: ``ema_rms_bear_stack``.
+    fast_slope_col:
+        Input dataframe column configured by ``fast_slope_col``. Default: ``ema_rms_fast_slope``.
+    vwap_distance_atr_col:
+        Input dataframe column configured by ``vwap_distance_atr_col``. Default: ``vwap_distance_atr``.
+    vwap_reclaim_col:
+        Input dataframe column configured by ``vwap_reclaim_col``. Default: ``vwap_reclaim``.
+    vwap_reject_col:
+        Input dataframe column configured by ``vwap_reject_col``. Default: ``vwap_reject``.
+    vwap_rms_long_bias_col:
+        Input dataframe column configured by ``vwap_rms_long_bias_col``. Default: ``vwap_rms_long_bias``.
+    vwap_rms_short_bias_col:
+        Input dataframe column configured by ``vwap_rms_short_bias_col``. Default: ``vwap_rms_short_bias``.
+    ppo_hist_col:
+        Input dataframe column configured by ``ppo_hist_col``. Default: ``ppo_hist``.
+    long_setup_col:
+        Input dataframe column configured by ``long_setup_col``. Default: ``ema_rms_long_setup``.
+    short_setup_col:
+        Input dataframe column configured by ``short_setup_col``. Default: ``ema_rms_short_setup``.
     """
     out, _ = build_ema_rms_ppo_vwap_signal(df, params)
     return out

@@ -67,6 +67,35 @@ def apply_feature_helpers(
     normalizations: Mapping[str, Any] | None = None,
     owner: str = "features[]",
 ) -> pd.DataFrame:
+    """
+    Apply the ``apply_feature_helpers`` feature helper transformation.
+    
+    This feature helper uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        transforms:
+          apply_feature_helpers:
+            params:
+              transforms: null
+              normalizations: null
+              owner: features[]
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    transforms:
+        Configuration parameter accepted by this feature helper. Default: ``null``.
+    normalizations:
+        Configuration parameter accepted by this feature helper. Default: ``null``.
+    owner:
+        Error-message owner used while applying helper blocks. Default: ``features[]``.
+    """
     out = _apply_section(df, transforms, registry=TRANSFORM_HELPERS, owner=f"{owner}.transforms")
     out = _apply_section(out, normalizations, registry=NORMALIZATION_HELPERS, owner=f"{owner}.normalizations")
     return out

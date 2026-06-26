@@ -14,29 +14,37 @@ def add_laguerre_rsi(
     as_percent: bool = False,
 ) -> pd.DataFrame:
     """
-    Add Ehlers' causal Laguerre RSI oscillator.
+    Apply the registered ``laguerre_rsi`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: laguerre_rsi
-            params: {}
+            params:
+              price_col: close
+              gamma: 0.5
+              output_col: null
+              as_percent: false
+          output_cols:
+            - configured by output_col
     
     Required input columns
     ----------------------
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     
     Parameters
     ----------
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     gamma:
-        Configuration value used by the registered component. Default: ``0.5``.
+        Configuration parameter accepted by this feature. Default: ``0.5``.
     output_col:
-        Output column name emitted by the component. Default: ``None``.
+        Output dataframe column configured by ``output_col``. Default: ``null``.
     as_percent:
-        Configuration value used by the registered component. Default: ``False``.
+        Configuration parameter accepted by this feature. Default: ``false``.
     """
     require_columns(df, [price_col], feature="Laguerre RSI")
     resolved_gamma = validate_float(gamma, name="gamma", minimum=0.0, maximum=1.0)

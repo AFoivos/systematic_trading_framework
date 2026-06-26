@@ -58,30 +58,163 @@ def build_triple_barrier_target(
     target_cfg: dict[str, Any] | None,
 ) -> tuple[pd.DataFrame, str, str, dict[str, Any]]:
     """
-    Build a binary triple-barrier target.
+    Apply the registered ``triple_barrier`` target transformation.
     
-    Labels:
-    - 1.0 when the upper barrier is touched first
-    - 0.0 when the lower barrier is touched first
-    - NaN (default) when neither barrier is touched before the vertical barrier
+    This target uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         target:
           kind: triple_barrier
-          params: {}
+          params:
+            add_r_multiple: <configured>
+            candidate_col: <configured>
+            candidate_mode: <configured>
+            candidate_out_col: <configured>
+            entry_price_mode: <configured>
+            event_ret_col: <configured>
+            fwd_col: <configured>
+            high_col: <configured>
+            hit_step_col: <configured>
+            hit_type_col: <configured>
+            horizon: <configured>
+            label_col: <configured>
+            label_mode: <configured>
+            low_col: <configured>
+            lower_barrier_col: <configured>
+            lower_mult: <configured>
+            max_holding: <configured>
+            meta_side_col: <configured>
+            min_vol: <configured>
+            neutral_label: <configured>
+            open_col: <configured>
+            oriented_r_col: <configured>
+            oriented_ret_col: <configured>
+            price_col: <configured>
+            r_clip: <configured>
+            r_col: <configured>
+            returns_col: <configured>
+            side_col: <configured>
+            tie_break: <configured>
+            upper_barrier_col: <configured>
+            upper_mult: <configured>
+            vol_source_col: <configured>
+            vol_window: <configured>
+            volatility_col: <configured>
+          outputs:
+            - configured by candidate_col
+            - configured by hit_type_col
+            - configured by label_col
     
     Required input columns
     ----------------------
-    None fixed by signature:
-        Required dataframe columns are resolved from configuration or from
-        upstream feature/target/signal stages at runtime.
+    candidate_out_col:
+        Input dataframe column configured by ``candidate_out_col``. Default: ``<configured>``.
+    event_ret_col:
+        Input dataframe column configured by ``event_ret_col``. Default: ``<configured>``.
+    fwd_col:
+        Input dataframe column configured by ``fwd_col``. Default: ``<configured>``.
+    high_col:
+        Input dataframe column configured by ``high_col``. Default: ``<configured>``.
+    hit_step_col:
+        Input dataframe column configured by ``hit_step_col``. Default: ``<configured>``.
+    low_col:
+        Input dataframe column configured by ``low_col``. Default: ``<configured>``.
+    lower_barrier_col:
+        Input dataframe column configured by ``lower_barrier_col``. Default: ``<configured>``.
+    meta_side_col:
+        Input dataframe column configured by ``meta_side_col``. Default: ``<configured>``.
+    open_col:
+        Input dataframe column configured by ``open_col``. Default: ``<configured>``.
+    oriented_r_col:
+        Input dataframe column configured by ``oriented_r_col``. Default: ``<configured>``.
+    oriented_ret_col:
+        Input dataframe column configured by ``oriented_ret_col``. Default: ``<configured>``.
+    price_col:
+        Input dataframe column configured by ``price_col``. Default: ``<configured>``.
+    r_col:
+        Input dataframe column configured by ``r_col``. Default: ``<configured>``.
+    returns_col:
+        Input dataframe column configured by ``returns_col``. Default: ``<configured>``.
+    side_col:
+        Input dataframe column configured by ``side_col``. Default: ``<configured>``.
+    upper_barrier_col:
+        Input dataframe column configured by ``upper_barrier_col``. Default: ``<configured>``.
+    vol_source_col:
+        Input dataframe column configured by ``vol_source_col``. Default: ``<configured>``.
+    volatility_col:
+        Input dataframe column configured by ``volatility_col``. Default: ``<configured>``.
     
     Parameters
     ----------
-    target_cfg:
-        Configuration mapping, usually resolved from YAML before this
-        registered component is called.
+    add_r_multiple:
+        Boolean switch controlling optional target behavior. Default: ``<configured>``.
+    candidate_col:
+        Output dataframe column configured by ``candidate_col``. Default: ``<configured>``.
+    candidate_mode:
+        Mode selector controlling how this target is applied. Default: ``<configured>``.
+    candidate_out_col:
+        Input dataframe column configured by ``candidate_out_col``. Default: ``<configured>``.
+    entry_price_mode:
+        Mode selector controlling how this target is applied. Default: ``<configured>``.
+    event_ret_col:
+        Input dataframe column configured by ``event_ret_col``. Default: ``<configured>``.
+    fwd_col:
+        Input dataframe column configured by ``fwd_col``. Default: ``<configured>``.
+    high_col:
+        Input dataframe column configured by ``high_col``. Default: ``<configured>``.
+    hit_step_col:
+        Input dataframe column configured by ``hit_step_col``. Default: ``<configured>``.
+    hit_type_col:
+        Output dataframe column configured by ``hit_type_col``. Default: ``<configured>``.
+    horizon:
+        Trailing lookback or forecast horizon controlling this target. Default: ``<configured>``.
+    label_col:
+        Output dataframe column configured by ``label_col``. Default: ``<configured>``.
+    label_mode:
+        Mode selector controlling how this target is applied. Default: ``<configured>``.
+    low_col:
+        Input dataframe column configured by ``low_col``. Default: ``<configured>``.
+    lower_barrier_col:
+        Input dataframe column configured by ``lower_barrier_col``. Default: ``<configured>``.
+    lower_mult:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    max_holding:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    meta_side_col:
+        Input dataframe column configured by ``meta_side_col``. Default: ``<configured>``.
+    min_vol:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    neutral_label:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    open_col:
+        Input dataframe column configured by ``open_col``. Default: ``<configured>``.
+    oriented_r_col:
+        Input dataframe column configured by ``oriented_r_col``. Default: ``<configured>``.
+    oriented_ret_col:
+        Input dataframe column configured by ``oriented_ret_col``. Default: ``<configured>``.
+    price_col:
+        Input dataframe column configured by ``price_col``. Default: ``<configured>``.
+    r_clip:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    r_col:
+        Input dataframe column configured by ``r_col``. Default: ``<configured>``.
+    returns_col:
+        Input dataframe column configured by ``returns_col``. Default: ``<configured>``.
+    side_col:
+        Input dataframe column configured by ``side_col``. Default: ``<configured>``.
+    tie_break:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    upper_barrier_col:
+        Input dataframe column configured by ``upper_barrier_col``. Default: ``<configured>``.
+    upper_mult:
+        Configuration parameter accepted by this target. Default: ``<configured>``.
+    vol_source_col:
+        Input dataframe column configured by ``vol_source_col``. Default: ``<configured>``.
+    vol_window:
+        Trailing lookback or forecast horizon controlling this target. Default: ``<configured>``.
+    volatility_col:
+        Input dataframe column configured by ``volatility_col``. Default: ``<configured>``.
     """
     cfg = apply_target_output_aliases(target_cfg)
     price_col = str(cfg.get("price_col", "close"))

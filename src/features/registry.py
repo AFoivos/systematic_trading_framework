@@ -37,7 +37,7 @@ from .order_flow_imbalance import add_order_flow_imbalance
 from .parkinson_volatility import add_parkinson_volatility
 from .permutation_entropy import add_permutation_entropy
 from .regime_context import add_regime_context_features
-from .returns import add_close_returns
+from .helpers.normalizations.returns import add_close_returns
 from .rolling_r2_trend_quality import add_rolling_r2_trend_quality
 from .roofing_filter import add_roofing_filter
 from .session_context import add_session_context_features
@@ -172,6 +172,29 @@ FEATURE_KINDS = registry_names(FEATURE_REGISTRY, FEATURE_COMPATIBILITY_REGISTRY)
 
 
 def get_feature_fn(name: str) -> FeatureFn:
+    """
+    Apply the registered ``get_feature_fn`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: get_feature_fn
+            params:
+              name: <required>
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    name:
+        Configuration parameter accepted by this feature.
+    """
     return get_registered_component(
         FEATURE_REGISTRY,
         name,

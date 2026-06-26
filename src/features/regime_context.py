@@ -22,39 +22,50 @@ def add_regime_context_features(
     """
     Apply the registered ``regime_context`` feature transformation.
     
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
     YAML declaration::
     
         features:
           - step: regime_context
-            params: {}
+            params:
+              price_col: close
+              returns_col: close_ret
+              vol_short_window: 24
+              vol_long_window: 168
+              trend_fast_span: 24
+              trend_slow_span: 72
+              vol_ratio_high_threshold: 1.25
+              vol_ratio_low_threshold: 0.85
+              vol_window_pairs: null
     
     Required input columns
     ----------------------
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     returns_col:
-        Input column configured by ``returns_col``. Default: ``close_ret``.
+        Input dataframe column configured by ``returns_col``. Default: ``close_ret``.
     
     Parameters
     ----------
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     returns_col:
-        Input dataframe column name consumed by the component. Default: ``close_ret``.
+        Input dataframe column configured by ``returns_col``. Default: ``close_ret``.
     vol_short_window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``24``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``24``.
     vol_long_window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``168``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``168``.
     trend_fast_span:
-        Configuration value used by the registered component. Default: ``24``.
+        Configuration parameter accepted by this feature. Default: ``24``.
     trend_slow_span:
-        Configuration value used by the registered component. Default: ``72``.
+        Configuration parameter accepted by this feature. Default: ``72``.
     vol_ratio_high_threshold:
-        Numeric threshold controlling the component decision rule. Default: ``1.25``.
+        Numeric threshold used by this feature. Default: ``1.25``.
     vol_ratio_low_threshold:
-        Numeric threshold controlling the component decision rule. Default: ``0.85``.
+        Numeric threshold used by this feature. Default: ``0.85``.
     vol_window_pairs:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``None``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``null``.
     """
     if price_col not in df.columns:
         raise KeyError(f"price_col '{price_col}' not found in DataFrame.")

@@ -1,392 +1,176 @@
-# systematic-trading-framework
+# Systematic Trading Framework
 
-A **research-first, systematic trading framework** for quantitative finance, designed to support the full lifecycle from **hypothesis-driven research** to **robust backtesting**, **machine learning–based strategy evaluation**, and **multi-asset portfolio construction**.
+Ερευνητικό framework για συστηματικό trading, time-series forecasting,
+machine learning και portfolio/backtest workflows. Ο στόχος του repo είναι να
+επιτρέπει πειράματα που είναι αναπαράξιμα, time-aware και ελέγξιμα, όχι να
+λειτουργεί ως συλλογή από ad-hoc trading scripts.
 
-This repository prioritizes:
+Το project είναι φτιαγμένο γύρω από YAML experiments. Ένα experiment δηλώνει
+data, features, targets, model, signals, backtest, monitoring και execution
+outputs. Ο runner φορτώνει το YAML, εκτελεί το pipeline με σταθερή σειρά και
+γράφει artifacts για audit και σύγκριση.
 
-* statistical rigor,
-* reproducibility,
-* time-aware evaluation,
-* and risk-aware modeling.
+## Για ποιον είναι
 
-It is explicitly **not** a collection of ad-hoc trading strategies or heuristic-driven bots.
+- Για quant/data science έρευνα σε χρηματοοικονομικές χρονοσειρές.
+- Για σύγκριση rule-based signals, ML classifiers/regressors, forecasting
+  models και reinforcement learning agents.
+- Για backtests με χρονική αιτιότητα, walk-forward/OOS λογική και explicit
+  risk controls.
+- Για παραγωγή paper/demo execution artifacts με ξεκάθαρα safety guards.
 
----
+Δεν είναι turnkey live-trading bot. Κάθε στρατηγική πρέπει να αξιολογείται με
+out-of-sample discipline, transaction costs, spread assumptions και data-quality
+checks.
 
-## 🎯 Project Philosophy
+## Γρήγορη εκκίνηση
 
-Financial markets are **non-stationary, noisy, and regime-dependent**.
-Any serious quantitative system must therefore:
-
-1. Respect the **temporal structure** of data
-2. Avoid information leakage at all costs
-3. Separate **research**, **evaluation**, and **execution logic**
-4. Treat **risk management** as a first-class component
-5. Benchmark all models against **simple, interpretable baselines**
-
-This framework is built around those principles.
-
----
-
-## 🧠 Core Objectives
-
-* Systematic **alpha research** and feature experimentation
-* Time-series–aware **backtesting & evaluation**
-* Comparison of:
-
-  * statistical models
-  * machine learning models
-  * deep learning architectures
-  * reinforcement learning agents
-* Explicit **risk modeling and control**
-* Modular, extensible architecture suitable for research → production transition
-* **Point-in-time data integrity** (survivorship-bias control, corporate actions, timestamp alignment)
-* **Persisted data/feature snapshots** for reproducibility (raw + processed dataset versioning)
-* **Signal aggregation layer** (rank/decay/confidence-weighted sizing)
-* **Portfolio optimization with constraints** (market/sector neutrality, turnover caps)
-* **Robustness & strict OOS evaluation** (walk-forward, purged splits, fold-level diagnostics)
-* **Monitoring & drift detection** for production-grade iteration
-* **Paper execution artifacts** (target weights / rebalance order exports)
-
----
-
-## 🧱 Repository Structure
-
-```
-systematic-trading-framework/
-│
-├── config/                 # YAML configs (models, experiments, backtests)
-│
-├── data/
-│   ├── raw/                # Persisted raw/canonical snapshots
-│   ├── processed/          # Persisted feature snapshots
-│   └── metadata/           # Universe snapshots, asset metadata
-│
-├── notebooks/              # Exploratory research (EDA, diagnostics)
-│
-├── src/
-│   ├── features/           # Feature engineering (lags, rolling stats, regimes)
-│   ├── models/             # Estimator/fold engines and notebook baselines
-│   ├── intraday/           # Intraday interval/session defaults and annualization helpers
-│   ├── experiments/        # Registry, façades and split orchestration/model adapters
-│   ├── backtesting/        # Time-aware backtesting engine
-│   ├── risk/               # Position sizing, exposure control, costs
-│   ├── evaluation/         # Metrics & performance analysis
-│   ├── signals/            # Signal aggregation (rank/decay/confidence)
-│   ├── portfolio/          # Portfolio construction & optimization
-│   ├── monitoring/         # Drift and feature stability diagnostics
-│   ├── execution/          # Paper execution order exports
-│   ├── src_data/           # Market data loading, PIT hardening, snapshot storage
-│   └── utils/              # Shared utilities, config loader/defaults/validation/schemas
-│
-├── tests/                  # Unit & integration tests
-│
-├── logs/                   # Experiment & backtest logs
-│
-└── README.md
-```
-
----
-
-## 🐳 Docker Workflow (No `venv`)
-
-Use Docker/Compose to run everything inside a containerized Python environment.
-
-Build the image:
+Προτεινόμενη εκτέλεση μέσω Docker:
 
 ```bash
 docker compose build
-```
-
-Run an interactive shell:
-
-```bash
-docker compose run --rm app
-```
-
-Run tests:
-
-```bash
 docker compose run --rm app pytest
+docker compose run --rm app python -m src.experiments.runner config/experiments/lab/feature_signal_target_lab.yaml
 ```
 
-Run an experiment:
+Για local Python περιβάλλον:
 
 ```bash
-docker compose run --rm app python -m src.experiments.runner config/experiments/btcusd_1h_dukas_xgboost_triple_barrier_garch_long_oos.yaml
+python -m pip install -r requirements.txt
+python -m pytest
+python -m src.experiments.runner config/experiments/lab/feature_signal_target_lab.yaml
 ```
 
-Notes:
+Τα περισσότερα production-like experiments βρίσκονται κάτω από
+`config/experiments/`. Τα generated artifacts και logs γράφονται κυρίως σε
+`logs/`, `tmp/` ή στα paths που δηλώνονται στο YAML.
 
-* Source code is mounted into `/workspace`, so local edits are visible immediately in the container.
-* You can keep API keys in a local `.env` file (already git-ignored) and pass them to Compose with:
+## Βασική δομή
+
+```text
+config/                  YAML configs για experiments, execution και labs
+data/                    raw/processed datasets και local snapshots
+docs/                    ελληνική τεκμηρίωση, catalogs και strategy notes
+scripts/                 βοηθητικά scripts για data prep, diagnostics, MT5
+src/
+  backtesting/           backtest engines και trade-path logic
+  evaluation/            metrics και performance analysis
+  execution/             paper/demo execution outputs και MT5 demo runner
+  experiments/           orchestration, runner, reporting, Optuna support
+  features/              raw features, technical indicators και helpers
+  models/                ML/forecasting/RL wrappers και model registry
+  pipelines/             canonical pipeline facade και registry
+  portfolio/             portfolio construction και constraints
+  risk/                  sizing, costs και exposure controls
+  signals/               signal builders που διαβάζουν feature/model columns
+  src_data/              data loading, PIT hardening και OHLCV validation
+  targets/               target builders και label generation
+  utils/                 config loader, validation, schemas και shared utils
+tests/                   unit/integration tests
+```
+
+## Κεντρική ροή experiment
+
+1. Φόρτωση YAML και validation.
+2. Φόρτωση OHLCV ή panel data.
+3. Point-in-time hardening και data validation.
+4. Feature generation.
+5. Target generation και model training, όταν υπάρχει model block.
+6. Signal generation.
+7. Backtest/evaluation.
+8. Monitoring, execution outputs και artifact writing.
+
+Το stable entrypoint είναι:
 
 ```bash
-docker compose --env-file .env run --rm app <command>
+python -m src.experiments.runner path/to/experiment.yaml
 ```
 
-### VSCode Dev Container
-
-For full VSCode integration (Run/Debug, testing, Jupyter, extensions) directly in Docker:
-
-1. Install the VSCode extension **Dev Containers** (`ms-vscode-remote.remote-containers`).
-2. Open the project in VSCode.
-3. Run: `Dev Containers: Reopen in Container`.
-
-The container uses `.devcontainer/devcontainer.json` and auto-configures:
-
-* Python interpreter: `/usr/local/bin/python`
-* Pytest discovery under `tests/`
-* Jupyter support
-* Essential extensions (Python, Pylance, Debugpy, Jupyter, Docker, YAML)
-
----
-
-## ⚙️ Config-Based Experiments
-
-Για αναλυτικό ελληνικό οδηγό σχετικά με YAML structure, features, signals, targets, models,
-parameter discovery και επέκταση registries, δες το
-[`docs/yaml_experiments_guide_gr.md`](docs/yaml_experiments_guide_gr.md).
-
-Define experiments as fully self-contained YAML files under `config/experiments/`. Each tracked experiment should include its own data/model/signal/backtest/runtime blocks explicitly. Load and run:
+Προγραμματιστικά:
 
 ```python
-from src.utils.config import load_experiment_config
-cfg = load_experiment_config("config/experiments/btcusd_1h_dukas_xgboost_triple_barrier_garch_long_oos.yaml")
-# then: load/persist raw snapshots, build features, train model with time-aware splits,
-# map signals, optionally construct portfolio weights, run backtest, save artifacts
+from src.experiments.runner import run_experiment
+
+result = run_experiment("config/experiments/lab/feature_signal_target_lab.yaml")
+print(result.evaluation["primary_summary"])
 ```
 
-If you want the typed resolved object used by the orchestration layer:
+## Features και helpers
 
-```python
-from src.utils.config import load_experiment_config_typed
-typed_cfg = load_experiment_config_typed("config/experiments/btcusd_1h_dukas_xgboost_triple_barrier_garch_long_oos.yaml")
+Κανόνας του repo: τα raw feature modules παράγουν μόνο raw/βασικές στήλες.
+Παράγωγες στήλες όπως ratios, distances, slopes, flags, crossings,
+rolling z-scores και clipping πρέπει να δηλώνονται με helpers μέσα στο ίδιο
+feature step.
+
+Παράδειγμα:
+
+```yaml
+features:
+  - step: atr
+    params:
+      high_col: high
+      low_col: low
+      close_col: close
+      window: 14
+      atr_col: atr_14
+    transforms:
+      ratio:
+        params:
+          numerator_col: atr_14
+          denominator_col: close
+          output_col: atr_over_price_14
 ```
 
-Keep secrets out of Git: store API keys in env vars and reference them with `data.api_key_env`.
+Αυτό κρατά το feature space καθαρό: παράγονται μόνο οι στήλες που ζητάει το
+experiment, χωρίς άχρηστα default diagnostics.
 
-Key config blocks now supported:
+## Registries
 
-* `data.symbol` or `data.symbols` for single-asset vs multi-asset runs
-* `data.storage` for raw/processed dataset snapshots (`live`, `live_or_cached`, `cached_only`)
-* `model.kind` for `lightgbm_clf`, `logistic_regression_clf`, `sarimax_forecaster`, `garch_forecaster`, and `tft_forecaster`
-* `portfolio` for signal-based or mean-variance portfolio construction
-* `monitoring` for feature drift reports
-* `execution` for paper-order export at the latest timestamp
+Τα components λύνονται από registries:
 
-Architecture boundary:
+- `src/features/registry.py`
+- `src/signals/registry.py`
+- `src/targets/registry.py`
+- `src/models/registry.py`
+- `src/pipelines/registry.py`
 
-* `src/models/` contains estimator-specific fold engines such as SARIMAX, GARCH and TFT.
-* `src/targets/` contains canonical target builders and label helpers.
-* `src/experiments/support/` contains experiment metrics/diagnostics and strict OOS support helpers.
-* `src/experiments/orchestration/` contains the end-to-end run stages: data, features, models, backtest, reporting, execution and artifacts.
-* `src/utils/config_*.py` contains loader/defaults/validation/schema modules, while `src/utils/config.py` stays as a stable façade.
-* Tracked experiment YAMLs are fully self-contained; config inheritance via `extends` is no longer supported.
-* `src/intraday/` centralizes intraday-safe defaults such as `normalize_daily=false` guards and annualization inference.
+Για να προσθέσεις νέο component, γράφεις καθαρό module στο σωστό package,
+προσθέτεις registry entry, validation/tests και μετά το χρησιμοποιείς από YAML.
 
-## MT5 Demo Execution Bot
+## Κύρια docs
 
-The repository includes a terminal MT5 demo execution runner under `src/execution/`.
-It reuses the configured experiment feature and signal pipeline, then applies hard demo
-and risk guards before any order can be submitted.
+- [Κέντρο τεκμηρίωσης](docs/index.md)
+- [Quickstart στα ελληνικά](docs/quickstart_gr.md)
+- [Αρχιτεκτονική](docs/architecture.md)
+- [Οδηγός YAML experiments](docs/yaml_experiments_guide_gr.md)
+- [Feature catalog](docs/catalog/features.md)
+- [Signal catalog](docs/catalog/signals.md)
+- [Target catalog](docs/catalog/targets.md)
 
-Default behavior is dry-run only:
+## Κανόνες ποιότητας
+
+- Δεν εισάγουμε lookahead bias ή data leakage.
+- Δεν κάνουμε fit scalers/encoders σε όλο το dataset πριν από split.
+- Δεν αλλάζουμε runtime defaults σιωπηλά.
+- Κάθε νέο feature πρέπει να είναι causal ή να σημειώνεται ρητά ως diagnostic.
+- Τα configs πρέπει να είναι self-contained και αναπαράξιμα.
+- Τα tests πρέπει να καλύπτουν contract, missing columns και causality όπου
+  υπάρχει κίνδυνος leakage.
+
+## MT5 demo execution
+
+Υπάρχει demo execution runner για MetaTrader 5:
 
 ```bash
 python scripts/run_mt5_demo_bot.py --config config/execution/mt5_demo.yaml --once
 ```
 
-For continuous polling:
+Η default συμπεριφορά είναι dry-run. Πραγματικό `order_send` επιτρέπεται μόνο
+με explicit demo config, verified demo account και safety gates. Τα credentials
+διαβάζονται από environment variables και δεν πρέπει να μπαίνουν σε Git.
 
-```bash
-python scripts/run_mt5_demo_bot.py --config config/execution/mt5_demo.yaml --loop --sleep-seconds 30
-```
+Περισσότερα στο [project workflow](docs/project_workflow_gr.md).
 
-To allow real MT5 `order_send` on a verified FTMO demo account, use the explicit demo-order
-config and do not pass `--dry-run`:
+## License
 
-```bash
-python scripts/run_mt5_demo_bot.py --config config/execution/mt5_ftmo_demo_order.yaml --once
-```
-
-For the continuous FTMO demo challenge runner:
-
-```bash
-python scripts/run_mt5_demo_bot.py --config config/execution/mt5_ftmo_demo_order.yaml --loop --sleep-seconds 30
-```
-
-This still only sends a buy order when the latest closed M30 candle has `signal_side == 1`
-and every position/risk/spread/demo guard passes.
-
-MT5 credentials are read only from environment variables and passwords are never logged:
-
-```bash
-export MT5_LOGIN=12345678
-export MT5_PASSWORD='...'
-export MT5_SERVER='FTMO-Demo'
-```
-
-Install the optional MT5 package in the Python environment that can access the local
-MetaTrader terminal:
-
-```bash
-pip install MetaTrader5
-```
-
-The current Docker image is Linux-based. It can run research, tests and dry-run code paths,
-but it cannot perform actual MT5 `order_send` unless you run an environment that can load the
-Windows MT5 Python wheel and access a locally installed MetaTrader 5 terminal. Use the host
-Windows Python environment, a Windows VM, or a Windows container/runner for live FTMO demo
-execution.
-
-Safety gates:
-
-* checked-in config uses `execution.mode: dry_run` and `safety.dry_run_default: true`
-* FTMO demo-order config uses `execution.mode: demo_mt5` and `safety.dry_run_default: false`
-* `order_send` is only reachable when `execution.mode: demo_mt5` and `safety.dry_run_default: false`
-* the account must be verifiably demo when `safety.require_demo_account: true`
-* the bot refuses duplicate positions for its magic number
-* risk guards cover daily loss, total drawdown, max positions, per-symbol positions, spread, optional hours, weekends, and `STOP_TRADING`
-* logs are written to `logs/mt5_demo/` as JSONL streams for signals, orders, fills, rejected orders, account equity, spread and slippage fields
-
-The default symbol mapping lives in `config/execution/mt5_demo.yaml`. Adjust broker symbol
-suffixes there, for example `SPX500 -> US500.cash`, without changing strategy configs.
-
----
-
-## 📐 Modeling Approach
-
-The framework supports and compares multiple modeling paradigms:
-
-### Statistical Models
-
-* ARIMA / SARIMAX
-* VAR
-* GARCH-style volatility models
-
-### Machine Learning
-
-* Linear & regularized models
-* Tree-based models (e.g. gradient boosting)
-* Feature importance & explainability analysis
-
-### Deep Learning
-
-* LSTM / temporal CNNs
-* Sequence-to-signal architectures
-* Strict walk-forward training loops
-
-### Reinforcement Learning
-
-* Custom trading environments
-* Risk-aware reward functions
-* Policy evaluation under transaction costs
-
-Implemented model path today:
-
-* LightGBM classifier with time-aware OOS predictions
-* Logistic regression classifier with the same anti-leakage split framework
-* SARIMAX fold engine under `src/models/` with experiment-layer walk-forward / purged OOS assembly
-* GARCH(1,1) fold engine under `src/models/` with causal roll-forward volatility updates
-* TFT-style transformer fold engine under `src/models/` with quantile outputs and experiment-layer OOS assembly
-
-Planned / future model families:
-
-* VAR
-* LSTM / temporal CNNs
-* RL agents
-
-All implemented models:
-
-* operate on **lagged, causal features**
-* are evaluated **out-of-sample**
-* are benchmarked against naive baselines
-* are trained with **purged / embargoed time-series CV** when labels overlap
-
----
-
-## 🧪 Evaluation & Backtesting
-
-Evaluation follows strict time-series principles:
-
-* ❌ No random train/test splits
-* ✅ Walk-forward / expanding window validation
-* ✅ Purged / embargoed split support
-* ✅ Explicit transaction costs & slippage
-* ✅ Capital-aware performance accounting
-* ✅ **Point-in-time alignment** (avoid lookahead & survivorship leakage)
-* ✅ **Strict OOS reporting** (fold-level diagnostics + primary OOS summary)
-* ✅ Multi-asset portfolio backtests with constraints
-
-### Key Metrics
-
-* Cumulative & annualized returns
-* Sharpe / Sortino ratios
-* Maximum drawdown
-* Profit factor
-* Turnover & stability diagnostics
-
----
-
-## 🛡️ Risk Management
-
-Risk is modeled explicitly via:
-
-* position sizing rules
-* volatility scaling
-* exposure limits
-* drawdown-aware constraints
-* liquidity-aware cost/impact models
-
-In RL settings, **risk-adjusted reward functions** are used instead of raw returns.
-
----
-
-## 🔍 Explainability & Diagnostics
-
-Where applicable, the framework includes:
-
-* feature importance analysis
-* regime-conditional performance
-* failure mode diagnostics
-* model vs baseline attribution
-* data quality & drift monitoring reports
-* latest paper-order export for downstream execution workflows
-
-The goal is not just performance, but **understanding**.
-
----
-
-## 🚧 Disclaimer
-
-This repository is intended **solely for research and educational purposes**.
-
-It does **not** constitute financial advice and is **not** designed for live trading without extensive validation, monitoring, and compliance considerations.
-
----
-
-## 📌 Future Extensions
-
-* Broker / OMS adapters for real live execution
-* Advanced regime detection
-* Model ensemble & meta-learning
-* Alternative data/NLP pipeline (news, filings, embeddings)
-* Richer feature lineage / catalog metadata
-* Production monitoring dashboards & alerting
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License.
-Copyright (c) 2026 FOIVOS GEORGIOS AMPATZIS.
-
-See `/Users/foivosampatzis/Projects/personal/systematic_trading_framework/LICENSE` for details.
-
----
-
-## 👤 Author
-
-Quantitative Research & Machine Learning Engineer
-Focus areas: systematic trading, time-series modeling, and ML-driven alpha research.
+Δες το [LICENSE](LICENSE).

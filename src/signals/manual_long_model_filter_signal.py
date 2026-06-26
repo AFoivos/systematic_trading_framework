@@ -41,58 +41,77 @@ def manual_long_model_filter_signal(
     signal_col: str | None = None,
 ) -> pd.Series:
     """
-    Filter manual long candidates with an out-of-sample model probability.
+    Apply the registered ``manual_long_model_filter`` signal transformation.
     
-    The model is only a long-entry filter. It cannot create trades without a manual candidate,
-    cannot flip direction, and cannot emit short exposure.
+    This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         signals:
           kind: manual_long_model_filter
-          params: {}
+          params:
+            prob_col: pred_prob
+            candidate_col: manual_long_candidate
+            base_signal_col: manual_vol_adjusted_candidate
+            threshold: 0.55
+            gate_col: null
+            gate_cols_any: null
+            min_signal_abs: 0.0
+            expected_value_col: null
+            min_expected_value_r: null
+            profit_barrier_r: 1.0
+            stop_barrier_r: 1.0
+            volatility_col: null
+            round_trip_cost_return: 0.0
+            cost_buffer_r: 0.0
+            signal_col: null
+          output_cols:
+            - manual_long_candidate
+            - configured by signal_col
     
     Required input columns
     ----------------------
     prob_col:
-        Input column configured by ``prob_col``. Default: ``pred_prob``.
-    candidate_col:
-        Input column configured by ``candidate_col``. Default: ``manual_long_candidate``.
+        Input dataframe column configured by ``prob_col``. Default: ``pred_prob``.
+    gate_col:
+        Input dataframe column configured by ``gate_col``. Default: ``null``.
+    expected_value_col:
+        Input dataframe column configured by ``expected_value_col``. Default: ``null``.
     volatility_col:
-        Optional input column configured by ``volatility_col``; used when a value is provided.
+        Input dataframe column configured by ``volatility_col``. Default: ``null``.
     
     Parameters
     ----------
     prob_col:
-        Input dataframe column name consumed by the component. Default: ``pred_prob``.
+        Input dataframe column configured by ``prob_col``. Default: ``pred_prob``.
     candidate_col:
-        Input dataframe column name consumed by the component. Default: ``manual_long_candidate``.
+        Output dataframe column configured by ``candidate_col``. Default: ``manual_long_candidate``.
     base_signal_col:
-        Output column name emitted by the component. Default: ``manual_vol_adjusted_candidate``.
+        Input dataframe column configured by ``base_signal_col``. Default: ``manual_vol_adjusted_candidate``.
     threshold:
-        Numeric threshold controlling the component decision rule. Default: ``0.55``.
+        Numeric threshold used by this signal. Default: ``0.55``.
     gate_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``gate_col``. Default: ``null``.
     gate_cols_any:
-        Configuration value used by the registered component. Default: ``None``.
+        Configuration parameter accepted by this signal. Default: ``null``.
     min_signal_abs:
-        Configuration value used by the registered component. Default: ``0.0``.
+        Configuration parameter accepted by this signal. Default: ``0.0``.
     expected_value_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``expected_value_col``. Default: ``null``.
     min_expected_value_r:
-        Configuration value used by the registered component. Default: ``None``.
+        Configuration parameter accepted by this signal. Default: ``null``.
     profit_barrier_r:
-        Configuration value used by the registered component. Default: ``1.0``.
+        Configuration parameter accepted by this signal. Default: ``1.0``.
     stop_barrier_r:
-        Configuration value used by the registered component. Default: ``1.0``.
+        Configuration parameter accepted by this signal. Default: ``1.0``.
     volatility_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``volatility_col``. Default: ``null``.
     round_trip_cost_return:
-        Configuration value used by the registered component. Default: ``0.0``.
+        Configuration parameter accepted by this signal. Default: ``0.0``.
     cost_buffer_r:
-        Configuration value used by the registered component. Default: ``0.0``.
+        Configuration parameter accepted by this signal. Default: ``0.0``.
     signal_col:
-        Output column name emitted by the component. Default: ``None``.
+        Output dataframe column configured by ``signal_col``. Default: ``null``.
     """
     output_col = str(signal_col or "model_filtered_long_signal")
     threshold_value = float(threshold)

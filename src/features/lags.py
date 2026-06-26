@@ -12,31 +12,33 @@ def add_lagged_features(
     prefix: str = "lag",
 ) -> pd.DataFrame:
     """
-    Add lagged versions of specified columns.
+    Apply the registered ``lags`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: lags
             params:
-              cols: [close]
+              cols: <required>
+              lags: [1, 2, 5]
+              prefix: lag
     
     Required input columns
     ----------------------
-    None fixed by signature:
-        Required dataframe columns are resolved from configuration or from
-        upstream feature/target/signal stages at runtime.
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
     
     Parameters
     ----------
-    df : pd.DataFrame
-        Input dataframe (will not be modified).
-    cols : iterable of str
-        Column names to lag.
-    lags : sequence of int, default (1, 2, 5)
-        Lags in periods.
-    prefix : str
-        Prefix for new lag columns.
+    cols:
+        Configuration parameter accepted by this feature.
+    lags:
+        Configuration parameter accepted by this feature. Default: ``[1, 2, 5]``.
+    prefix:
+        Configuration parameter accepted by this feature. Default: ``lag``.
     """
 
     out = df.copy()

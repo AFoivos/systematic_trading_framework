@@ -69,25 +69,17 @@ def add_volatility_of_volatility(
         f"volatility_of_volatility_{volatility_col}_{window}",
         field="output_col",
     )
-    rising_name = _resolve_output_col(
-        rising_col,
-        f"volatility_of_volatility_{volatility_col}_{window}_rising",
-        field="rising_col",
-    )
-    high_name = _resolve_output_col(
-        high_vov_col,
-        f"volatility_of_volatility_{volatility_col}_{window}_high",
-        field="high_vov_col",
-    )
+    for field, value in (("rising_col", rising_col), ("high_vov_col", high_vov_col)):
+        if value is not None:
+            _resolve_output_col(value, "unused", field=field)
 
     out = df.copy()
     volatility = _clean_numeric(out[volatility_col])
     vov = volatility.rolling(window=window, min_periods=window).std(ddof=0)
-    high_baseline_window = mean_window if mean_window is not None else window
-    vov_high_baseline = vov.rolling(window=high_baseline_window, min_periods=high_baseline_window).mean()
 
     out[vov_name] = vov
-    if mean_window is not None:
+    vov_mean = None
+    if mean_window is not None and (mean_col is not None or ratio_col is not None):
         mean_name = _resolve_output_col(
             mean_col,
             f"volatility_of_volatility_{volatility_col}_{window}_mean_{mean_window}",
@@ -99,13 +91,19 @@ def add_volatility_of_volatility(
             field="ratio_col",
         )
         vov_mean = vov.rolling(window=mean_window, min_periods=mean_window).mean()
-        out[mean_name] = vov_mean
-        out[ratio_name] = vov / vov_mean.where(vov_mean.abs() > 0.0, np.nan)
+        if mean_col is not None:
+            out[mean_name] = vov_mean
+        if ratio_col is not None:
+            out[ratio_name] = vov / vov_mean.where(vov_mean.abs() > 0.0, np.nan)
 
-    out[high_name] = (
-        vov.notna() & vov_high_baseline.notna() & (vov > multiplier * vov_high_baseline)
-    ).astype("int8")
-    out[rising_name] = ((vov > vov.shift(1)) & vov.notna() & vov.shift(1).notna()).astype("int8")
+    if high_vov_col is not None:
+        high_baseline_window = mean_window if mean_window is not None else window
+        vov_high_baseline = vov.rolling(window=high_baseline_window, min_periods=high_baseline_window).mean()
+        out[high_vov_col] = (
+            vov.notna() & vov_high_baseline.notna() & (vov > multiplier * vov_high_baseline)
+        ).astype("int8")
+    if rising_col is not None:
+        out[rising_col] = ((vov > vov.shift(1)) & vov.notna() & vov.shift(1).notna()).astype("int8")
     return out
 
 

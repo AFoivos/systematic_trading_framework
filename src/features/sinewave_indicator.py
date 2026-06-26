@@ -22,31 +22,39 @@ def add_sinewave_indicator(
     lead_output_col: str | None = None,
 ) -> pd.DataFrame:
     """
-    Add Ehlers' causal sinewave and lead sine cycle indicators.
+    Apply the registered ``sinewave_indicator`` feature transformation.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: sinewave_indicator
-            params: {}
+            params:
+              price_col: close
+              lead_degrees: 45.0
+              output_col: null
+              lead_output_col: null
+          output_cols:
+            - configured by output_col
     
     Required input columns
     ----------------------
-    phase:
-        Required dataframe column read directly by this component.
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
+    lead_output_col:
+        Input dataframe column configured by ``lead_output_col``. Default: ``null``.
     
     Parameters
     ----------
     price_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``price_col``. Default: ``close``.
     lead_degrees:
-        Configuration value used by the registered component. Default: ``45.0``.
+        Configuration parameter accepted by this feature. Default: ``45.0``.
     output_col:
-        Output column name emitted by the component. Default: ``None``.
+        Output dataframe column configured by ``output_col``. Default: ``null``.
     lead_output_col:
-        Output column name emitted by the component. Default: ``None``.
+        Input dataframe column configured by ``lead_output_col``. Default: ``null``.
     """
     require_columns(df, [price_col], feature="sinewave indicator")
     lead = validate_float(lead_degrees, name="lead_degrees")

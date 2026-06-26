@@ -184,104 +184,141 @@ def add_indicator_pullback_features(
     inplace: bool = False,
 ) -> pd.DataFrame:
     """
-    Add causal derived features used by the indicator/model adaptive pullback strategy.
+    Apply the registered ``indicator_pullback`` feature transformation.
     
-    All rolling statistics use the current row and historical rows only. The function does not
-    shift features forward and does not inspect future bars.
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         features:
           - step: indicator_pullback
-            params: {}
+            params:
+              asset: null
+              asset_vocab: null
+              asset_aliases: null
+              open_col: open
+              high_col: high
+              low_col: low
+              close_col: close
+              ema_fast_period: 20
+              ema_mid_period: 50
+              ema_slow_period: 100
+              ema_fast_col: null
+              ema_mid_col: null
+              ema_slow_col: null
+              atr_period: 14
+              atr_col: null
+              atr_pct_col: atr_pct
+              atr_pct_rank_window: 100
+              macd_hist_col: macd_hist
+              rsi_period: 14
+              rsi_col: null
+              stoch_k_col: stoch_rsi_k
+              stoch_d_col: stoch_rsi_d
+              bollinger_bandwidth_col: bollinger_bandwidth
+              bollinger_percent_b_col: bollinger_percent_b
+              realized_vol_windows: [10, 20]
+              return_windows: [1, 2, 3, 6]
+              rolling_return_windows: [4, 8]
+              bb_bandwidth_rank_window: 100
+              include_asset_id: true
+              inplace: false
+          output_cols:
+            - configured by atr_col
     
     Required input columns
     ----------------------
-    return_1:
-        Required dataframe column read directly by this component.
     open_col:
-        Input column configured by ``open_col``. Default: ``open``.
+        Input dataframe column configured by ``open_col``. Default: ``open``.
     high_col:
-        Input column configured by ``high_col``. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input column configured by ``low_col``. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
     close_col:
-        Input column configured by ``close_col``. Default: ``close``.
+        Input dataframe column configured by ``close_col``. Default: ``close``.
+    ema_fast_col:
+        Input dataframe column configured by ``ema_fast_col``. Default: ``null``.
+    ema_mid_col:
+        Input dataframe column configured by ``ema_mid_col``. Default: ``null``.
+    ema_slow_col:
+        Input dataframe column configured by ``ema_slow_col``. Default: ``null``.
     atr_pct_col:
-        Input column configured by ``atr_pct_col``. Default: ``atr_pct``.
+        Input dataframe column configured by ``atr_pct_col``. Default: ``atr_pct``.
     macd_hist_col:
-        Input column configured by ``macd_hist_col``. Default: ``macd_hist``.
+        Input dataframe column configured by ``macd_hist_col``. Default: ``macd_hist``.
+    rsi_col:
+        Input dataframe column configured by ``rsi_col``. Default: ``null``.
     stoch_k_col:
-        Input column configured by ``stoch_k_col``. Default: ``stoch_rsi_k``.
+        Input dataframe column configured by ``stoch_k_col``. Default: ``stoch_rsi_k``.
     stoch_d_col:
-        Input column configured by ``stoch_d_col``. Default: ``stoch_rsi_d``.
+        Input dataframe column configured by ``stoch_d_col``. Default: ``stoch_rsi_d``.
     bollinger_bandwidth_col:
-        Input column configured by ``bollinger_bandwidth_col``. Default: ``bollinger_bandwidth``.
+        Input dataframe column configured by ``bollinger_bandwidth_col``. Default: ``bollinger_bandwidth``.
     bollinger_percent_b_col:
-        Input column configured by ``bollinger_percent_b_col``. Default: ``bollinger_percent_b``.
+        Input dataframe column configured by ``bollinger_percent_b_col``. Default: ``bollinger_percent_b``.
     
     Parameters
     ----------
     asset:
-        Optional asset identifier used in multi-asset orchestration metadata.
+        Configuration parameter accepted by this feature. Default: ``null``.
     asset_vocab:
-        Configuration value used by the registered component. Default: ``None``.
+        Configuration parameter accepted by this feature. Default: ``null``.
     asset_aliases:
-        Configuration value used by the registered component. Default: ``None``.
+        Configuration parameter accepted by this feature. Default: ``null``.
     open_col:
-        Input dataframe column name consumed by the component. Default: ``open``.
+        Input dataframe column configured by ``open_col``. Default: ``open``.
     high_col:
-        Input dataframe column name consumed by the component. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input dataframe column name consumed by the component. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
     close_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``close_col``. Default: ``close``.
     ema_fast_period:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``20``.
+        Configuration parameter accepted by this feature. Default: ``20``.
     ema_mid_period:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``50``.
+        Configuration parameter accepted by this feature. Default: ``50``.
     ema_slow_period:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``100``.
+        Configuration parameter accepted by this feature. Default: ``100``.
     ema_fast_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``ema_fast_col``. Default: ``null``.
     ema_mid_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``ema_mid_col``. Default: ``null``.
     ema_slow_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``ema_slow_col``. Default: ``null``.
     atr_period:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``14``.
+        Configuration parameter accepted by this feature. Default: ``14``.
     atr_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Output dataframe column configured by ``atr_col``. Default: ``null``.
     atr_pct_col:
-        Input dataframe column name consumed by the component. Default: ``atr_pct``.
+        Input dataframe column configured by ``atr_pct_col``. Default: ``atr_pct``.
     atr_pct_rank_window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``100``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``100``.
     macd_hist_col:
-        Input dataframe column name consumed by the component. Default: ``macd_hist``.
+        Input dataframe column configured by ``macd_hist_col``. Default: ``macd_hist``.
     rsi_period:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``14``.
+        Configuration parameter accepted by this feature. Default: ``14``.
     rsi_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Input dataframe column configured by ``rsi_col``. Default: ``null``.
     stoch_k_col:
-        Input dataframe column name consumed by the component. Default: ``stoch_rsi_k``.
+        Input dataframe column configured by ``stoch_k_col``. Default: ``stoch_rsi_k``.
     stoch_d_col:
-        Input dataframe column name consumed by the component. Default: ``stoch_rsi_d``.
+        Input dataframe column configured by ``stoch_d_col``. Default: ``stoch_rsi_d``.
     bollinger_bandwidth_col:
-        Input dataframe column name consumed by the component. Default: ``bollinger_bandwidth``.
+        Input dataframe column configured by ``bollinger_bandwidth_col``. Default: ``bollinger_bandwidth``.
     bollinger_percent_b_col:
-        Input dataframe column name consumed by the component. Default: ``bollinger_percent_b``.
+        Input dataframe column configured by ``bollinger_percent_b_col``. Default: ``bollinger_percent_b``.
     realized_vol_windows:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``(10, 20)``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``[10, 20]``.
     return_windows:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``(1, 2, 3, 6)``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``[1, 2, 3, 6]``.
     rolling_return_windows:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``(4, 8)``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``[4, 8]``.
     bb_bandwidth_rank_window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``100``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``100``.
     include_asset_id:
-        Configuration value used by the registered component. Default: ``True``.
+        Configuration parameter accepted by this feature. Default: ``true``.
     inplace:
-        Configuration value used by the registered component. Default: ``False``.
+        Boolean switch controlling optional feature behavior. Default: ``false``.
     """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("df must be a pandas DataFrame.")

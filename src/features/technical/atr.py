@@ -23,45 +23,58 @@ def add_atr_features(
     """
     Apply the registered ``atr`` feature transformation.
     
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
     YAML declaration::
     
         features:
           - step: atr
-            params: {}
+            params:
+              high_col: high
+              low_col: low
+              close_col: close
+              window: 14
+              windows: null
+              method: wilder
+              add_over_price: false
+              atr_col: null
+              over_price_col: null
+              inplace: false
+          output_cols:
+            - configured by atr_col
+            - configured by over_price_col
     
     Required input columns
     ----------------------
     high_col:
-        Input column configured by ``high_col``. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input column configured by ``low_col``. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
     close_col:
-        Input column configured by ``close_col``. Default: ``close``.
+        Input dataframe column configured by ``close_col``. Default: ``close``.
     
     Parameters
     ----------
     high_col:
-        Input dataframe column name consumed by the component. Default: ``high``.
+        Input dataframe column configured by ``high_col``. Default: ``high``.
     low_col:
-        Input dataframe column name consumed by the component. Default: ``low``.
+        Input dataframe column configured by ``low_col``. Default: ``low``.
     close_col:
-        Input dataframe column name consumed by the component. Default: ``close``.
+        Input dataframe column configured by ``close_col``. Default: ``close``.
     window:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``14``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``14``.
     windows:
-        Lookback, forecast horizon, or bar-count parameter used by the component. Default: ``None``.
+        Trailing lookback or forecast horizon controlling this feature. Default: ``null``.
     method:
-        Mode selector that controls the registered component behavior. Default: ``wilder``.
+        Configuration parameter accepted by this feature. Default: ``wilder``.
     add_over_price:
-        No longer supported. Derived price-normalized ATR output must be
-        declared with a nested normalization/transform helper. Default:
-        ``False``.
+        Boolean switch controlling optional feature behavior. Default: ``false``.
     atr_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Output dataframe column configured by ``atr_col``. Default: ``null``.
     over_price_col:
-        Input dataframe column name consumed by the component. Default: ``None``.
+        Output dataframe column configured by ``over_price_col``. Default: ``null``.
     inplace:
-        Configuration value used by the registered component. Default: ``False``.
+        Boolean switch controlling optional feature behavior. Default: ``false``.
     """
     missing = [c for c in (high_col, low_col, close_col) if c not in df.columns]
     if missing:
@@ -122,6 +135,41 @@ def compute_atr(
     window: int = 14,
     method: str = "wilder",
 ) -> pd.Series:
+    """
+    Compute the ``compute_atr`` feature value.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: compute_atr
+            params:
+              high: <required>
+              low: <required>
+              close: <required>
+              window: 14
+              method: wilder
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    high:
+        Configuration parameter accepted by this feature.
+    low:
+        Configuration parameter accepted by this feature.
+    close:
+        Configuration parameter accepted by this feature.
+    window:
+        Trailing lookback or forecast horizon controlling this feature. Default: ``14``.
+    method:
+        Configuration parameter accepted by this feature. Default: ``wilder``.
+    """
     tr = compute_true_range(high, low, close)
     if method == "wilder":
         atr = tr.ewm(alpha=1 / window, adjust=False).mean()

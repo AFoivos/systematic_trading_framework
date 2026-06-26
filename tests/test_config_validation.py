@@ -165,12 +165,33 @@ def test_validate_stc_roofing_hilbert_feature_and_signal_params() -> None:
                     "amplitude_col": "hilbert_amplitude",
                     "phase_col": "hilbert_phase",
                     "instantaneous_frequency_col": "hilbert_instantaneous_frequency",
-                    "dominant_cycle_col": "hilbert_dominant_cycle",
-                    "cycle_ok_col": "hilbert_cycle_ok",
-                    "amplitude_rising_col": "hilbert_amplitude_rising",
                     "min_cycle": 10,
                     "max_cycle": 48,
                     "amplitude_slope_bars": 3,
+                },
+                "transforms": {
+                    "reciprocal": {
+                        "params": {
+                            "source_col": "hilbert_instantaneous_frequency",
+                            "use_abs": True,
+                            "output_col": "hilbert_dominant_cycle",
+                        }
+                    },
+                    "between_flag": {
+                        "params": {
+                            "source_col": "hilbert_dominant_cycle",
+                            "lower": 10.0,
+                            "upper": 48.0,
+                            "output_col": "hilbert_cycle_ok",
+                        }
+                    },
+                    "rising_flag": {
+                        "params": {
+                            "source_col": "hilbert_amplitude",
+                            "periods": 3,
+                            "output_col": "hilbert_amplitude_rising",
+                        }
+                    },
                 },
             },
         ]

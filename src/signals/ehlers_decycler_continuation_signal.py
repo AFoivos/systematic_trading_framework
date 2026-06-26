@@ -140,26 +140,47 @@ def ehlers_decycler_continuation_feature(df: pd.DataFrame, **params: Any) -> pd.
 def ehlers_decycler_continuation_signal(df: pd.DataFrame, **params: Any) -> pd.DataFrame:
     """
     Apply the registered ``ehlers_decycler_continuation`` signal transformation.
-
+    
+    This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
     YAML declaration::
-
+    
         signals:
           kind: ehlers_decycler_continuation
           params:
             decycler_osc_col: decycler_oscillator_30_60
             decycler_ratio_col: ehlers_decycler_over_close
-
+            decycler_osc_min: 0.45
+            decycler_ratio_max: 0.994
+            entry_mode: state
+            signal_col: signal_side
+            candidate_col: signal_candidate
+          output_cols:
+            - signal_candidate
+    
     Required input columns
     ----------------------
     decycler_osc_col:
-        Input dataframe column configured by ``decycler_osc_col``.
+        Input dataframe column configured by ``decycler_osc_col``. Default: ``decycler_oscillator_30_60``.
     decycler_ratio_col:
-        Input dataframe column configured by ``decycler_ratio_col``.
-
+        Input dataframe column configured by ``decycler_ratio_col``. Default: ``ehlers_decycler_over_close``.
+    
     Parameters
     ----------
-    **params:
-        Additional keyword parameters accepted from YAML ``signals.params``.
+    decycler_osc_col:
+        Input dataframe column configured by ``decycler_osc_col``. Default: ``decycler_oscillator_30_60``.
+    decycler_ratio_col:
+        Input dataframe column configured by ``decycler_ratio_col``. Default: ``ehlers_decycler_over_close``.
+    decycler_osc_min:
+        Numeric threshold used by this signal. Default: ``0.45``.
+    decycler_ratio_max:
+        Numeric threshold used by this signal. Default: ``0.994``.
+    entry_mode:
+        Mode selector controlling how this signal is applied. Default: ``state``.
+    signal_col:
+        Input dataframe column configured by ``signal_col``. Default: ``signal_side``.
+    candidate_col:
+        Output dataframe column configured by ``candidate_col``. Default: ``signal_candidate``.
     """
     out, _ = build_ehlers_decycler_continuation_signal(df, params)
     return out

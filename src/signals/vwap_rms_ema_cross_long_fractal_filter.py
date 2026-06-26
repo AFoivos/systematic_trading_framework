@@ -148,22 +148,100 @@ def vwap_rms_ema_cross_long_fractal_filter_signal(df: pd.DataFrame, **params: An
     """
     Apply the registered ``vwap_rms_ema_cross_long_fractal_filter`` signal transformation.
     
+    This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
     YAML declaration::
     
         signals:
           kind: vwap_rms_ema_cross_long_fractal_filter
-          params: {}
+          params:
+            ema_mid_col: ema_50
+            ema_slow_col: ema_96
+            ema_mid_rms_col: ema_50__root_mean_square
+            vwap_rms_col: vwap_40__root_mean_square
+            ppo_col: ppo_12_36
+            ppo_signal_col: ppo_signal_9
+            ppo_hist_min: 0.0002
+            fractal_col: fractal_dimension_128
+            fractal_max: 1.45
+            regime_col: ema_50_above_ema_96
+            cross_up_col: vwap_40_rms_cross_above_ema_50_rms
+            ppo_hist_col: ppo_hist_12_36_9
+            ppo_hist_positive_col: ppo_hist_12_36_9_positive
+            ppo_above_signal_col: ppo_12_36_above_ppo_signal_9
+            fractal_ok_col: fractal_dimension_128_trend_ok
+            long_setup_col: vwap_40_rms_ema_50_cross_long_fractal_setup
+            signal_col: signal_side
+            candidate_col: signal_candidate
+          output_cols:
+            - signal_side
+            - signal_candidate
     
     Required input columns
     ----------------------
-    None fixed by signature:
-        Required dataframe columns are resolved from configuration or from
-        upstream feature/target/signal stages at runtime.
+    ema_mid_col:
+        Input dataframe column configured by ``ema_mid_col``. Default: ``ema_50``.
+    ema_slow_col:
+        Input dataframe column configured by ``ema_slow_col``. Default: ``ema_96``.
+    ema_mid_rms_col:
+        Input dataframe column configured by ``ema_mid_rms_col``. Default: ``ema_50__root_mean_square``.
+    vwap_rms_col:
+        Input dataframe column configured by ``vwap_rms_col``. Default: ``vwap_40__root_mean_square``.
+    ppo_col:
+        Input dataframe column configured by ``ppo_col``. Default: ``ppo_12_36``.
+    fractal_col:
+        Input dataframe column configured by ``fractal_col``. Default: ``fractal_dimension_128``.
+    regime_col:
+        Input dataframe column configured by ``regime_col``. Default: ``ema_50_above_ema_96``.
+    cross_up_col:
+        Input dataframe column configured by ``cross_up_col``. Default: ``vwap_40_rms_cross_above_ema_50_rms``.
+    ppo_hist_col:
+        Input dataframe column configured by ``ppo_hist_col``. Default: ``ppo_hist_12_36_9``.
+    ppo_hist_positive_col:
+        Input dataframe column configured by ``ppo_hist_positive_col``. Default: ``ppo_hist_12_36_9_positive``.
+    fractal_ok_col:
+        Input dataframe column configured by ``fractal_ok_col``. Default: ``fractal_dimension_128_trend_ok``.
+    long_setup_col:
+        Input dataframe column configured by ``long_setup_col``. Default: ``vwap_40_rms_ema_50_cross_long_fractal_setup``.
     
     Parameters
     ----------
-    params:
-        Additional keyword parameters accepted from YAML ``params``.
+    ema_mid_col:
+        Input dataframe column configured by ``ema_mid_col``. Default: ``ema_50``.
+    ema_slow_col:
+        Input dataframe column configured by ``ema_slow_col``. Default: ``ema_96``.
+    ema_mid_rms_col:
+        Input dataframe column configured by ``ema_mid_rms_col``. Default: ``ema_50__root_mean_square``.
+    vwap_rms_col:
+        Input dataframe column configured by ``vwap_rms_col``. Default: ``vwap_40__root_mean_square``.
+    ppo_col:
+        Input dataframe column configured by ``ppo_col``. Default: ``ppo_12_36``.
+    ppo_signal_col:
+        Input dataframe column configured by ``ppo_signal_col``. Default: ``ppo_signal_9``.
+    ppo_hist_min:
+        Numeric threshold used by this signal. Default: ``0.0002``.
+    fractal_col:
+        Input dataframe column configured by ``fractal_col``. Default: ``fractal_dimension_128``.
+    fractal_max:
+        Numeric threshold used by this signal. Default: ``1.45``.
+    regime_col:
+        Input dataframe column configured by ``regime_col``. Default: ``ema_50_above_ema_96``.
+    cross_up_col:
+        Input dataframe column configured by ``cross_up_col``. Default: ``vwap_40_rms_cross_above_ema_50_rms``.
+    ppo_hist_col:
+        Input dataframe column configured by ``ppo_hist_col``. Default: ``ppo_hist_12_36_9``.
+    ppo_hist_positive_col:
+        Input dataframe column configured by ``ppo_hist_positive_col``. Default: ``ppo_hist_12_36_9_positive``.
+    ppo_above_signal_col:
+        Input dataframe column configured by ``ppo_above_signal_col``. Default: ``ppo_12_36_above_ppo_signal_9``.
+    fractal_ok_col:
+        Input dataframe column configured by ``fractal_ok_col``. Default: ``fractal_dimension_128_trend_ok``.
+    long_setup_col:
+        Input dataframe column configured by ``long_setup_col``. Default: ``vwap_40_rms_ema_50_cross_long_fractal_setup``.
+    signal_col:
+        Output dataframe column configured by ``signal_col``. Default: ``signal_side``.
+    candidate_col:
+        Output dataframe column configured by ``candidate_col``. Default: ``signal_candidate``.
     """
     out, _ = build_vwap_rms_ema_cross_long_fractal_filter_signal(df, params)
     return out

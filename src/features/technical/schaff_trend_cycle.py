@@ -19,21 +19,23 @@ def add_schaff_trend_cycle_features(
     short_cross_level: float = 75.0,
     stc_col: str = "stc",
     stc_signal_col: str = "stc_signal",
-    cross_up_col: str = "stc_cross_up_25",
-    cross_down_col: str = "stc_cross_down_75",
-    rising_col: str = "stc_rising",
-    falling_col: str = "stc_falling",
+    cross_up_col: str | None = None,
+    cross_down_col: str | None = None,
+    rising_col: str | None = None,
+    falling_col: str | None = None,
     inplace: bool = False,
 ) -> pd.DataFrame:
     """
-    Add a causal Schaff Trend Cycle feature set.
-    
+    Apply the registered ``schaff_trend_cycle`` feature transformation.
+
     The implementation follows the common STC construction: EMA fast/slow
     oscillator, trailing stochastic normalization, and two causal EMA smoothing
-    passes. All rolling windows are trailing windows.
-    
+    passes. The raw feature writes only STC and its signal line. Cross-up,
+    cross-down, rising, and falling flags are derived signals and should be
+    produced with helpers when needed.
+
     YAML declaration::
-    
+
         features:
           - step: schaff_trend_cycle
             params:
@@ -46,34 +48,40 @@ def add_schaff_trend_cycle_features(
               short_cross_level: 75.0
               stc_col: stc
               stc_signal_col: stc_signal
-              cross_up_col: stc_cross_up_25
-              cross_down_col: stc_cross_down_75
-              rising_col: stc_rising
-              falling_col: stc_falling
               inplace: false
-            output_cols:
-              - stc
-              - stc_signal
-              - stc_cross_up_25
-              - stc_cross_down_75
-              - stc_rising
-              - stc_falling
-    
+            transforms:
+              crossing_flag:
+                items:
+                  - source_col: stc
+                    threshold: 25.0
+                    direction: up
+                    output_col: stc_cross_up_25
+                  - source_col: stc
+                    threshold: 75.0
+                    direction: down
+                    output_col: stc_cross_down_75
+              rising_flag:
+                source_col: stc
+                periods: 1
+                output_col: stc_rising
+              difference:
+                source_col: stc
+                periods: 1
+                output_col: stc_delta_1
+              threshold_flag:
+                source_col: stc_delta_1
+                threshold: 0.0
+                op: lt
+                output_col: stc_falling
+          output_cols:
+            - stc
+            - stc_signal
+
     Required input columns
     ----------------------
     price_col:
-        Input column configured by ``price_col``. Default: ``close``.
-    stc_col:
-        Input column configured by ``stc_col``. Default: ``stc``.
-    cross_up_col:
-        Input column configured by ``cross_up_col``. Default: ``stc_cross_up_25``.
-    cross_down_col:
-        Input column configured by ``cross_down_col``. Default: ``stc_cross_down_75``.
-    rising_col:
-        Input column configured by ``rising_col``. Default: ``stc_rising``.
-    falling_col:
-        Input column configured by ``falling_col``. Default: ``stc_falling``.
-    
+        Price input column.
+
     Parameters
     ----------
     price_col:
@@ -95,13 +103,16 @@ def add_schaff_trend_cycle_features(
     stc_signal_col:
         Output column for the smoothed STC signal line.
     cross_up_col:
-        Output boolean column that is true when STC crosses above long_cross_level.
+        Deprecated derived output. Use ``transforms.crossing_flag`` with
+        ``direction: up``.
     cross_down_col:
-        Output boolean column that is true when STC crosses below short_cross_level.
+        Deprecated derived output. Use ``transforms.crossing_flag`` with
+        ``direction: down``.
     rising_col:
-        Output boolean column that is true when STC is rising versus the previous bar.
+        Deprecated derived output. Use ``transforms.rising_flag``.
     falling_col:
-        Output boolean column that is true when STC is falling versus the previous bar.
+        Deprecated derived output. Use ``transforms.difference`` followed by
+        ``transforms.threshold_flag`` with ``op: lt``.
     inplace:
         If true, add the columns directly to the input DataFrame.
         If false, return a copied DataFrame with the new columns.
@@ -117,13 +128,12 @@ def add_schaff_trend_cycle_features(
         long_cross_level=long_cross_level,
         short_cross_level=short_cross_level,
     )
-    _validate_output_cols(
-        stc_col,
-        stc_signal_col,
-        cross_up_col,
-        cross_down_col,
-        rising_col,
-        falling_col,
+    _validate_output_cols(stc_col, stc_signal_col)
+    _reject_derived_outputs(
+        cross_up_col=cross_up_col,
+        cross_down_col=cross_down_col,
+        rising_col=rising_col,
+        falling_col=falling_col,
     )
 
     out = df if inplace else df.copy()
@@ -133,10 +143,6 @@ def add_schaff_trend_cycle_features(
 
     out[stc_col] = stc
     out[stc_signal_col] = stc_signal
-    out[cross_up_col] = stc.shift(1).le(float(long_cross_level)) & stc.gt(float(long_cross_level))
-    out[cross_down_col] = stc.shift(1).ge(float(short_cross_level)) & stc.lt(float(short_cross_level))
-    out[rising_col] = stc.gt(stc.shift(1))
-    out[falling_col] = stc.lt(stc.shift(1))
     return out
 
 
@@ -148,6 +154,41 @@ def compute_schaff_trend_cycle(
     cycle: int = 10,
     smooth: int = 3,
 ) -> pd.Series:
+    """
+    Compute the ``compute_schaff_trend_cycle`` feature value.
+    
+    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+    
+    YAML declaration::
+    
+        features:
+          - step: compute_schaff_trend_cycle
+            params:
+              close: <required>
+              fast: 23
+              slow: 50
+              cycle: 10
+              smooth: 3
+    
+    Required input columns
+    ----------------------
+    Direct inputs:
+        This callable operates on supplied Series/arrays directly or resolves
+        dataframe inputs from the configuration shown above at runtime.
+    
+    Parameters
+    ----------
+    close:
+        Configuration parameter accepted by this feature.
+    fast:
+        Trailing lookback or forecast horizon controlling this feature. Default: ``23``.
+    slow:
+        Trailing lookback or forecast horizon controlling this feature. Default: ``50``.
+    cycle:
+        Configuration parameter accepted by this feature. Default: ``10``.
+    smooth:
+        Configuration parameter accepted by this feature. Default: ``3``.
+    """
     if not isinstance(close, pd.Series):
         raise TypeError("close must be a pandas Series.")
     _validate_params(
@@ -208,6 +249,28 @@ def _validate_output_cols(*columns: str) -> None:
             raise ValueError("STC output columns must be non-empty strings.")
     if len(set(columns)) != len(columns):
         raise ValueError("STC output columns must be unique.")
+
+
+def _reject_derived_outputs(
+    *,
+    cross_up_col: str | None,
+    cross_down_col: str | None,
+    rising_col: str | None,
+    falling_col: str | None,
+) -> None:
+    requested = {
+        "cross_up_col": cross_up_col,
+        "cross_down_col": cross_down_col,
+        "rising_col": rising_col,
+        "falling_col": falling_col,
+    }
+    enabled = [name for name, value in requested.items() if value is not None]
+    if enabled:
+        raise ValueError(
+            "STC derived outputs are no longer produced by schaff_trend_cycle "
+            f"({', '.join(enabled)} requested). Use transforms.crossing_flag, "
+            "transforms.rising_flag, transforms.difference, and transforms.threshold_flag."
+        )
 
 
 __all__ = [

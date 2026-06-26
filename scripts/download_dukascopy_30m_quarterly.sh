@@ -156,8 +156,9 @@ while [ "$YEAR" -le "${END_DATE%%-*}" ]; do
         download_one "$FRAMEWORK_SYMBOL" "$INSTRUMENT" "$FILE_SYMBOL" "$PRICE_TYPE" "$QUARTER_LABEL" "$FROM_DATE" "$TO_DATE" "$OUT_DIR"
       done
     done <<'INSTRUMENTS'
-XAUUSD|xauusd|xauusd
-US100|usatechidxusd|us100
+US30|usa30idxusd|us30
+SPX500|usa500idxusd|spx500
+GER40|deuidxeur|ger40
 INSTRUMENTS
 
     echo

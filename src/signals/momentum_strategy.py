@@ -15,33 +15,40 @@ def momentum_strategy(
     mode: str = "long_short_hold",
 ) -> pd.Series:
     """
-    Apply the registered ``momentum`` signal transformation.
+    Apply the registered ``momentum_strategy`` signal transformation.
+    
+    This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         signals:
-          kind: momentum
+          kind: momentum_strategy
           params:
-            momentum_col: momentum_20
+            momentum_col: <required>
+            long_threshold: 0.0
+            short_threshold: null
+            signal_col: null
+            mode: long_short_hold
+          output_cols:
+            - configured by signal_col
     
     Required input columns
     ----------------------
-    None fixed by signature:
-        Required dataframe columns are resolved from configuration or from
-        upstream feature/target/signal stages at runtime.
+    momentum_col:
+        Input dataframe column configured by ``momentum_col``.
     
     Parameters
     ----------
     momentum_col:
-        Input dataframe column name consumed by the component.
+        Input dataframe column configured by ``momentum_col``.
     long_threshold:
-        Numeric threshold controlling the component decision rule. Default: ``0.0``.
+        Numeric threshold used by this signal. Default: ``0.0``.
     short_threshold:
-        Numeric threshold controlling the component decision rule. Default: ``None``.
+        Numeric threshold used by this signal. Default: ``null``.
     signal_col:
-        Output column name emitted by the component. Default: ``None``.
+        Output dataframe column configured by ``signal_col``. Default: ``null``.
     mode:
-        Mode selector that controls the registered component behavior. Default: ``long_short_hold``.
+        Mode selector controlling how this signal is applied. Default: ``long_short_hold``.
     """
     output_col = resolve_signal_output_name(
         signal_col=signal_col,
