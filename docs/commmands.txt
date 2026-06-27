@@ -66,3 +66,9 @@ python scripts/prepare_dukascopy_30m_bid_ask_mid.py \
 .\.venv\Scripts\python.exe scripts\run_mt5_demo_bot.py --config config\execution\mt5_ftmo_demo_order.yaml --loop --sleep-seconds 30
 
 Stop-Process -Id
+
+
+*****************************************MPC SERVER********************************************
+
+docker compose up -d mcp
+ngrok http 8765
