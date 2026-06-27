@@ -1,0 +1,308 @@
+{
+  "$schema": "https://developers.openai.com/apps-sdk/schemas/chatgpt-app-submission.v1.json",
+  "schema_version": 1,
+  "app_info": {
+    "display_name": "Systematic Trading Framework",
+    "subtitle": "Inspect trading repo",
+    "description": "Systematic Trading Framework lets ChatGPT inspect a private local research repository for systematic trading work. It supports repository search, file reads, code and symbol lookup, git state inspection, experiment artifact review, configuration reads, log reads, Optuna database inspection, and explicitly confirmed execution of allowlisted repository Python scripts.",
+    "category": "DEVELOPER_TOOLS"
+  },
+  "tools": {
+    "search": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Searches repository paths and text matches and returns result identifiers without modifying files or state.",
+        "open_world_justification": "Operates only on the mounted private repository and does not write to public internet state or third-party systems.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "fetch": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Reads one repository file by identifier and returns its contents without changing repository state.",
+        "open_world_justification": "Retrieves data only from the mounted private repository and does not publish or update external systems.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "list_directory": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Lists repository directory entries and metadata without creating, updating, or deleting files.",
+        "open_world_justification": "Reads only the mounted private repository and does not communicate changes to external systems.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "read_file": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Reads bounded text content from a repository-relative file path without modifying the file.",
+        "open_world_justification": "Retrieves local repository content only and does not publish data to public internet state.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "search_files": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Finds repository paths matching a glob-style pattern without changing files or metadata.",
+        "open_world_justification": "Searches only the mounted private repository and does not update external systems.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "search_code": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Searches text content across repository files and returns matching lines without modifying files.",
+        "open_world_justification": "Reads only local repository content and does not publish or mutate external systems.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "search_symbols": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Parses repository files to find Python symbols and Markdown headings without changing source files.",
+        "open_world_justification": "Operates only on local repository files and does not write to external systems.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "find_references": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Searches repository text for references to a symbol and returns locations without modifying files.",
+        "open_world_justification": "Uses only local repository content and does not publish or update third-party systems.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "read_project_tree": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Reads a bounded repository tree listing without creating, updating, or deleting files.",
+        "open_world_justification": "Reads only the mounted private repository and does not communicate state changes externally.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "git_status": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Runs a read-only git status command and returns working tree state without changing git data.",
+        "open_world_justification": "Inspects only the local git repository and does not push, publish, or contact external systems.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "git_diff": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Runs a read-only git diff command and returns patch text without modifying repository state.",
+        "open_world_justification": "Inspects only the local git repository and does not push, publish, or update external systems.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "git_log": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Runs a read-only git log command and returns commit metadata without changing git state.",
+        "open_world_justification": "Reads only local repository history and does not publish or update external systems.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "git_current_branch": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Runs a read-only git branch query and returns the current branch name without changing git state.",
+        "open_world_justification": "Inspects only the local git repository and does not contact or update external systems.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "list_experiment_runs": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Discovers experiment artifact directories and metadata without modifying artifacts or logs.",
+        "open_world_justification": "Reads only repository-local experiment outputs and does not publish data externally.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "read_experiment_result": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Reads one experiment artifact such as JSON, CSV, or text output without changing the artifact.",
+        "open_world_justification": "Retrieves local repository artifacts only and does not update public or third-party systems.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "read_optuna_database": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Opens the requested Optuna SQLite database in read-only mode and returns study and trial metadata.",
+        "open_world_justification": "Reads a repository-local database file and does not send updates to external systems.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "read_config": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Reads and parses repository configuration files without changing configuration or runtime defaults.",
+        "open_world_justification": "Reads only mounted repository files and does not publish or mutate external systems.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "read_log": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Reads a bounded tail from a repository log file without modifying logs or runtime state.",
+        "open_world_justification": "Retrieves local log content only and does not publish or update external systems.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "execute_approved_python_script": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Runs only allowlisted repository Python scripts after an explicit confirmation token, and those scripts may compute outputs or write bounded local artifacts.",
+        "open_world_justification": "Execution is limited to local repository scripts and is not designed to publish public internet state or update third-party systems.",
+        "destructive_justification": "The tool does not expose delete, overwrite, credential revocation, or irreversible admin operations, and execution is restricted by an allowlist and confirmation token."
+      }
+    }
+  },
+  "test_cases": [
+    {
+      "description": "Inspect the repository structure before answering an architecture question.",
+      "user_prompt": "Use Systematic Trading Framework to show me the top-level project structure and identify where experiments, features, and tests live.",
+      "file_attachment_urls": null,
+      "tools_triggered": "read_project_tree",
+      "expected_output": "Returns a concise repository tree summary and identifies the main directories relevant to experiments, features, and tests.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Read and summarize a repository file.",
+      "user_prompt": "Use Systematic Trading Framework to read README.md and summarize the project purpose and quality rules.",
+      "file_attachment_urls": null,
+      "tools_triggered": "read_file",
+      "expected_output": "Summarizes the repository purpose, workflow, and documented quality rules from README.md.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Search code for a function or class and find references.",
+      "user_prompt": "Use Systematic Trading Framework to find where run_experiment is defined and where it is referenced.",
+      "file_attachment_urls": null,
+      "tools_triggered": "search_symbols, find_references",
+      "expected_output": "Returns the symbol definition and relevant reference locations with file paths and line numbers.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Inspect current git state before discussing local changes.",
+      "user_prompt": "Use Systematic Trading Framework to check the current branch and summarize the working tree changes.",
+      "file_attachment_urls": null,
+      "tools_triggered": "git_current_branch, git_status",
+      "expected_output": "Reports the active branch and a concise summary of modified and untracked repository paths.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Review experiment artifacts and related configuration.",
+      "user_prompt": "Use Systematic Trading Framework to list recent experiment runs, then read the summary artifact for one available run.",
+      "file_attachment_urls": null,
+      "tools_triggered": "list_experiment_runs, read_experiment_result",
+      "expected_output": "Lists available experiment runs and summarizes the selected run artifact without modifying any files.",
+      "expected_output_url": null
+    }
+  ],
+  "negative_test_cases": [
+    {
+      "description": "Do not trigger for live trading execution requests.",
+      "user_prompt": "Place a live market order for EURUSD right now.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app should not be invoked because it does not provide live trading or broker order execution tools.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Do not trigger for unrelated personal productivity requests.",
+      "user_prompt": "Add a meeting to my calendar for tomorrow morning.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app should not be invoked because calendar management is outside the repository inspection workflow.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Do not trigger for requests to browse public market news.",
+      "user_prompt": "Search the web for today's latest Federal Reserve news and summarize it.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app should not be invoked because it only exposes the local repository and does not provide web browsing or current news search.",
+      "expected_output_url": null
+    }
+  ]
+}

@@ -35,3 +35,21 @@ services:
       retries: 3
       start_period: 10s
     restart: unless-stopped
+
+  mcp:
+    build:
+      context: .
+      dockerfile: mcp_server/Dockerfile
+    image: systematic-trading-framework-mcp:latest
+    working_dir: /app
+    environment:
+      MCP_REPO_ROOT: /workspace
+      MCP_CONFIG_PATH: /app/mcp-config.yaml
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 8765
+      PYTHONPATH: /app
+    volumes:
+      - ./:/workspace:ro
+    ports:
+      - "8765:8765"
+    restart: unless-stopped

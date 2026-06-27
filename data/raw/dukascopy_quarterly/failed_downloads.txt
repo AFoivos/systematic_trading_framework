@@ -7,3 +7,5 @@
 2019_Q2|SPX500|usa500idxusd|ask|2019-04-01|2019-07-01|exit_status=1
 2020_Q3|SPX500|usa500idxusd|bid|2020-07-01|2020-10-01|exit_status=1
 2021_Q2|GER40|deuidxeur|bid|2021-04-01|2021-07-01|exit_status=1
+2025_Q3|GER40|deuidxeur|bid|2025-07-01|2025-10-01|exit_status=1
+2025_Q3|GER40|deuidxeur|ask|2025-07-01|2025-10-01|exit_status=1

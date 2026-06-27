@@ -1,0 +1,16 @@
+host: 0.0.0.0
+port: 8765
+
+limits:
+  max_read_bytes: 1000000
+  max_search_results: 200
+  max_tree_entries: 5000
+  script_timeout_seconds: 120
+
+# Repository-relative Python scripts that may be executed by the MCP tool after
+# the caller provides confirmation="RUN_APPROVED_REPOSITORY_SCRIPT".
+approved_python_scripts:
+  - scripts/merge_dukascopy_eurusd_m15_monthly.py
+  - scripts/merge_dukascopy_quarterly_30m.py
+  - scripts/prepare_dukascopy_30m_bid_ask_mid.py
+  - scripts/prepare_dukascopy_ftmo_mid.py
