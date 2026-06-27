@@ -5,9 +5,17 @@ from collections.abc import Callable, Mapping
 import pandas as pd
 
 from .normalizations.atr_distances import add_atr_distance_features
+from .normalizations.atr_scaled_distance import add_atr_scaled_distance_features
+from .normalizations.range_position import add_range_position_features
+from .normalizations.realized_vol_percentile import add_realized_vol_percentile_features
 from .normalizations.returns import add_return_features
+from .normalizations.robust_zscore import add_robust_zscore_features
+from .normalizations.rolling_beta_residual import add_rolling_beta_residual_features
+from .normalizations.rolling_percent_rank import add_rolling_percent_rank_features
 from .normalizations.rolling_zscores import add_rolling_zscore_features
 from .normalizations.volatility import add_volatility_normalization_features
+from .normalizations.volatility_scaled_return import add_volatility_scaled_return_features
+from .normalizations.volume_relative import add_volume_relative_features
 from .difference import add_difference_transform
 from .flags import (
     add_between_flag_transform,
@@ -51,7 +59,15 @@ TRANSFORM_HELPERS: Mapping[str, HelperFn] = {
 NORMALIZATION_HELPERS: Mapping[str, HelperFn] = {
     "returns": add_return_features,
     "atr_distances": add_atr_distance_features,
+    "atr_scaled_distance": add_atr_scaled_distance_features,
+    "range_position": add_range_position_features,
+    "realized_vol_percentile": add_realized_vol_percentile_features,
+    "robust_zscore": add_robust_zscore_features,
+    "rolling_beta_residual": add_rolling_beta_residual_features,
+    "rolling_percent_rank": add_rolling_percent_rank_features,
     "volatility": add_volatility_normalization_features,
+    "volatility_scaled_return": add_volatility_scaled_return_features,
+    "volume_relative": add_volume_relative_features,
     "rolling_zscores": add_rolling_zscore_features,
 }
 

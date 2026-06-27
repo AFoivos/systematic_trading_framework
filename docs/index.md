@@ -22,6 +22,9 @@
   pipeline.
 - [Feature catalog](catalog/features.md): διαθέσιμα feature steps και causal
   υποθέσεις.
+- [Feature normalization playbook](feature_normalization_playbook_gr.md):
+  ελληνικό playbook για normalizations, helpers και feature combinations με
+  προτεραιότητα χρήσης.
 - [Signal catalog](catalog/signals.md): διαθέσιμα signal builders.
 - [Target catalog](catalog/targets.md): targets/labels και forecast horizons.
 - [Execution source audit](execution_source_audit.md): audit για execution

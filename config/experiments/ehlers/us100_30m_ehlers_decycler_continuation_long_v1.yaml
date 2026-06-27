@@ -105,7 +105,13 @@ features:
     price_col: close
     window: 96
     output_col: rolling_r2_96
-    slope_col: rolling_r2_slope_96
+  transforms:
+    rolling_linear_regression:
+      source_col: close
+      window: 96
+      slope_col: rolling_r2_slope_96
+      intercept_col: null
+      r2_col: null
 - step: atr
   params:
     high_col: high
@@ -118,6 +124,13 @@ features:
     add_over_price: false
     atr_col: atr_14
   transforms:
+    slope:
+      enabled: true
+      items:
+      - source_col: ehlers_supersmoother_10
+        window: 2
+        shift: 0
+        output_col: ehlers_supersmoother_10_slope
     ratio:
       enabled: true
       items:
@@ -139,13 +152,6 @@ features:
       - numerator_col: decycler
         denominator_col: close
         output_col: ehlers_decycler_over_close
-    slope:
-      enabled: true
-      items:
-      - source_col: ehlers_supersmoother_10
-        window: 2
-        shift: 0
-        output_col: ehlers_supersmoother_10_slope
     rolling_zscore:
       enabled: true
       items:
@@ -164,8 +170,8 @@ signals:
   params:
     decycler_osc_col: decycler_oscillator_30_60
     decycler_ratio_col: ehlers_decycler_over_close
-    decycler_osc_min: 0.45
-    decycler_ratio_max: 0.994
+    decycler_osc_min: 0.10
+    decycler_ratio_max: 0.990
     entry_mode: state
     signal_col: signal_side
     candidate_col: signal_candidate
@@ -209,7 +215,7 @@ backtest:
   take_profit_r: 3.0
   stop_loss_r: 2.0
   risk_per_trade: 0.003
-  max_holding_bars: 16
+  max_holding_bars: 24
   dynamic_exits: {}
 portfolio:
   enabled: false

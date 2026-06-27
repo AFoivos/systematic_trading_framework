@@ -20,7 +20,11 @@ validation.
   `rolling_std.py`, `rolling_sum.py`, `rolling_linear_regression.py`,
   `rms.py`, `slope.py`, `rolling_clip.py`, `rolling_zscore.py`
 - `src/features/helpers/normalizations/`: trading normalizations όπως
-  `returns.py`, `atr_distances.py`, `volatility.py`, `rolling_zscores.py`
+  `returns.py`, `atr_distances.py`, `volatility.py`, `rolling_zscores.py`,
+  `rolling_percent_rank.py`, `robust_zscore.py`,
+  `volatility_scaled_return.py`, `atr_scaled_distance.py`,
+  `range_position.py`, `realized_vol_percentile.py`, `volume_relative.py`,
+  `rolling_beta_residual.py`
 - `src/features/helpers/apply.py`: εφαρμόζει τα helper blocks μετά από κάθε raw
   feature step
 - `src/features/helpers/registry.py`: registry για transform helpers και
@@ -219,6 +223,45 @@ features:
 - `atr_distances`: ATR-normalized distances ανά ζεύγος columns
 - `volatility`: `atr_pct` και rolling ATR percentile
 - `rolling_zscores`: z-scores για λίστα columns με optional shifted stats
+- `rolling_percent_rank`: percentile rank του current value έναντι prior
+  trailing window.
+- `robust_zscore`: rolling median/MAD z-score με shifted stats by default.
+- `volatility_scaled_return`: `return / volatility`.
+- `atr_scaled_distance`: `(base - reference) / ATR`.
+- `range_position`: θέση τιμής μέσα στο trailing high-low range.
+- `realized_vol_percentile`: percentile rank για realized volatility column.
+- `volume_relative`: `volume / rolling_mean(volume)` και optional volume
+  z-score.
+- `rolling_beta_residual`: single-factor rolling beta residual έναντι
+  benchmark returns.
+
+Παράδειγμα trading normalizations:
+
+```yaml
+features:
+  - step: returns
+    normalizations:
+      rolling_percent_rank:
+        params:
+          source_col: close_logret_1
+          window: 252
+          output_col: close_logret_1_percent_rank_252
+      robust_zscore:
+        params:
+          source_col: close_logret_1
+          window: 252
+          output_col: close_logret_1_robust_z_252
+      volatility_scaled_return:
+        params:
+          return_col: close_logret_1
+          volatility_col: vol_rolling_96
+          output_col: close_logret_1_over_vol_96
+      volume_relative:
+        params:
+          volume_col: volume
+          window: 96
+          output_col: volume_relative_96
+```
 
 ## Robust scaler στα models
 

@@ -209,7 +209,69 @@ def build_ehlers_semiscalp_long_signal(
 
 
 def ehlers_semiscalp_long_feature(df: pd.DataFrame, **params: Any) -> pd.DataFrame:
-    """Apply the setup during the feature stage for model-based workflows."""
+    """
+    Apply the registered ``ehlers_semiscalp_long`` feature-compatible transformation.
+
+    This compatibility feature applies the same causal long-only Ehlers
+    semi-scalp setup used by the signal registry, but exposes the generated
+    setup, signal, and candidate columns during feature/model setup.
+
+    YAML declaration::
+
+        features:
+          - step: ehlers_semiscalp_long
+            params:
+              entry_mode: transition
+              require_mama_rising: false
+              roofing_trigger_mode: rising
+              price_col: close
+              mama_col: mama
+              fama_col: fama
+              decycler_col: decycler
+              roofing_col: roofing_filter_48_10
+              laguerre_col: laguerre_rsi
+              fisher_col: fisher_transform
+              hilbert_amplitude_col: hilbert_amplitude_64
+              dominant_cycle_period_col: dominant_cycle_period
+              amplitude_lookback: 100
+              laguerre_min: 0.5
+              min_cycle_period: 10.0
+              max_cycle_period: 48.0
+              use_cycle_period_filter: false
+              signal_col: signal_side
+              candidate_col: signal_candidate
+          output_cols:
+            - signal_side
+            - signal_candidate
+
+    Required input columns
+    ----------------------
+    price_col:
+        Price column used for decycler trend permission.
+    mama_col:
+        MAMA trend column.
+    fama_col:
+        FAMA trend column.
+    decycler_col:
+        Decycler trend estimate column.
+    roofing_col:
+        Roofing filter column.
+    laguerre_col:
+        Laguerre RSI confirmation column.
+    fisher_col:
+        Fisher transform confirmation column.
+    hilbert_amplitude_col:
+        Hilbert amplitude column used for active-cycle filtering.
+    dominant_cycle_period_col:
+        Dominant cycle period column, required only when
+        ``use_cycle_period_filter`` is true.
+
+    Parameters
+    ----------
+    params:
+        Additional keyword parameters accepted from YAML ``params``. Supported
+        keys match ``ehlers_semiscalp_long`` signal parameters.
+    """
     out, _ = build_ehlers_semiscalp_long_signal(df, params)
     return out
 

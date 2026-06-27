@@ -287,9 +287,7 @@ def test_transform_series_runs_nested_transform_on_all_parent_feature_outputs(mo
 
     assert {
         "close_sma_4",
-        "close_over_sma_4",
         "close_sma_4__root_mean_square",
-        "close_over_sma_4__root_mean_square",
     }.issubset(
         {series.series_id for series in response.series}
     )

@@ -22,6 +22,7 @@ from src.features import (
     add_volatility_features,
     add_vwap_features,
 )
+from src.features.helpers import compute_ratio
 from src.features.technical.ema import compute_ema
 from src.features.technical.ppo import add_ppo_features
 from src.features.technical.trend import add_trend_features, add_trend_regime_features
@@ -205,7 +206,11 @@ def _ensure_column(df: pd.DataFrame, column: str, *, active: set[str]) -> pd.Dat
                 annualization_factor=None,
             )
         elif atr_match:
-            out = add_atr_features(out, windows=[int(atr_match.group(1))])
+            window = int(atr_match.group(1))
+            out = add_atr_features(out, windows=[window])
+            if column.startswith("atr_over_price_"):
+                out = out.copy()
+                out[column] = compute_ratio(out[f"atr_{window}"], out["close"], subtract=0.0)
         elif adx_match:
             out = add_adx_features(out, windows=[int(adx_match.group(1))])
         elif rsi_match:
@@ -219,9 +224,17 @@ def _ensure_column(df: pd.DataFrame, column: str, *, active: set[str]) -> pd.Dat
             out = _ensure_column(out, returns_col, active=active)
             out = add_return_momentum_features(out, returns_col=returns_col, windows=[int(window)])
         elif sma_match:
-            out = add_trend_features(out, sma_windows=[int(sma_match.group(1))], ema_spans=[])
+            window = int(sma_match.group(1))
+            out = add_trend_features(out, sma_windows=[window], ema_spans=[])
+            if column.startswith("close_over_sma_"):
+                out = out.copy()
+                out[column] = compute_ratio(out["close"], out[f"close_sma_{window}"], subtract=1.0)
         elif ema_match:
-            out = add_trend_features(out, sma_windows=[], ema_spans=[int(ema_match.group(1))])
+            span = int(ema_match.group(1))
+            out = add_trend_features(out, sma_windows=[], ema_spans=[span])
+            if column.startswith("close_over_ema_"):
+                out = out.copy()
+                out[column] = compute_ratio(out["close"], out[f"close_ema_{span}"], subtract=1.0)
         elif ema_alias_match:
             out = out.copy()
             out[column] = compute_ema(out["close"].astype(float), span=int(ema_alias_match.group(1)))

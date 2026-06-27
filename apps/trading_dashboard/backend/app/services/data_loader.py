@@ -150,6 +150,12 @@ class DataLoader:
         for path in sorted(root.rglob("*")):
             if not path.is_file() or path.name.startswith(".") or path.suffix.lower() not in SUPPORTED_DATA_SUFFIXES:
                 continue
+            try:
+                columns = _read_columns(path)
+            except (pd.errors.EmptyDataError, DataSchemaError, OSError, ValueError):
+                continue
+            if not columns:
+                continue
             metadata_path = _metadata_path_for_dataset(path)
             metadata = _safe_load_json(metadata_path)
             fallback_name = path.parent.name if path.name in {"dataset.csv", "dataset.parquet"} else path.name
@@ -166,7 +172,7 @@ class DataLoader:
                     assets=assets,
                     timeframe=_extract_timeframe_from_metadata(metadata, fallback_name),
                     format=path.suffix.lower().lstrip("."),
-                    columns=_read_columns(path),
+                    columns=columns,
                     metadata_path=metadata_path if metadata_path.exists() else None,
                 )
             )

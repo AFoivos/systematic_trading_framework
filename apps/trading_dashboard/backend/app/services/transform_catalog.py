@@ -99,6 +99,7 @@ from src.features import (  # noqa: E402
 from src.features.technical.trend import add_trend_features, add_trend_regime_features  # noqa: E402
 from src.signals.registry import SIGNAL_REGISTRY as EXPERIMENT_SIGNAL_REGISTRY  # noqa: E402
 from src.signals import (  # noqa: E402
+    ehlers_decycler_continuation_feature,
     ehlers_semiscalp_long_feature,
     ema_stoch_rsi_pullback_signal,
     indicator_model_adaptive_pullback_signal,
@@ -150,6 +151,7 @@ FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
     "opening_range_breakout": add_opening_range_breakout_features,
     "swing_extrema_context": swing_extrema_context,
     "roc_long_only_conditions": roc_long_only_conditions_signal,
+    "ehlers_decycler_continuation": ehlers_decycler_continuation_feature,
     "ema_stoch_rsi_pullback": ema_stoch_rsi_pullback_signal,
     "indicator_pullback": add_indicator_pullback_features,
     "indicator_model_adaptive_pullback": indicator_model_adaptive_pullback_signal,
@@ -888,6 +890,19 @@ def _definitions_from_registry(
     return definitions
 
 
+def _feature_docstring(name: str, fn: BuilderFn) -> str | None:
+    docstring = _docstring(fn)
+    if docstring is None or f"step: {name}" in docstring:
+        return docstring
+    return (
+        f"{docstring}\n\n"
+        "Dashboard feature catalog compatibility YAML declaration::\n\n"
+        "    features:\n"
+        f"      - step: {name}\n"
+        "        params: {}\n"
+    )
+
+
 def feature_builders() -> list[BuilderDefinition]:
     definitions: list[BuilderDefinition] = []
     for name in sorted(FEATURE_REGISTRY):
@@ -910,7 +925,7 @@ def feature_builders() -> list[BuilderDefinition]:
                     },
                     option_overrides=FEATURE_PARAM_OPTIONS.get(name),
                 ),
-                docstring=_docstring(fn),
+                docstring=_feature_docstring(name, fn),
                 metadata=feature_meta,
             )
         )

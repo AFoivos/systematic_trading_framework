@@ -132,7 +132,42 @@ def build_ehlers_decycler_continuation_signal(
 
 
 def ehlers_decycler_continuation_feature(df: pd.DataFrame, **params: Any) -> pd.DataFrame:
-    """Apply the decycler continuation rule during feature/model setup."""
+    """
+    Apply the registered ``ehlers_decycler_continuation`` feature-compatible transformation.
+
+    This compatibility feature applies the same long-only Ehlers decycler
+    continuation rule used by the signal registry, but exposes the result as a
+    feature/model setup step for older experiment and dashboard configurations.
+
+    YAML declaration::
+
+        features:
+          - step: ehlers_decycler_continuation
+            params:
+              decycler_osc_col: decycler_oscillator_30_60
+              decycler_ratio_col: ehlers_decycler_over_close
+              decycler_osc_min: 0.45
+              decycler_ratio_max: 0.994
+              entry_mode: state
+              signal_col: signal_side
+              candidate_col: signal_candidate
+          output_cols:
+            - signal_side
+            - signal_candidate
+
+    Required input columns
+    ----------------------
+    decycler_osc_col:
+        Decycler oscillator column.
+    decycler_ratio_col:
+        Decycler divided by close or equivalent ratio helper output.
+
+    Parameters
+    ----------
+    params:
+        Additional keyword parameters accepted from YAML ``params``. Supported
+        keys match ``ehlers_decycler_continuation`` signal parameters.
+    """
     out, _ = build_ehlers_decycler_continuation_signal(df, params)
     return out
 

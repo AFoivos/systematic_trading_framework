@@ -105,7 +105,13 @@ features:
     price_col: close
     window: 96
     output_col: rolling_r2_96
-    slope_col: rolling_r2_slope_96
+  transforms:
+    rolling_linear_regression:
+      source_col: close
+      window: 96
+      slope_col: rolling_r2_slope_96
+      intercept_col: null
+      r2_col: null
 - step: atr
   params:
     high_col: high
@@ -118,6 +124,13 @@ features:
     add_over_price: false
     atr_col: atr_14
   transforms:
+    slope:
+      enabled: true
+      items:
+      - source_col: ehlers_supersmoother_10
+        window: 2
+        shift: 0
+        output_col: ehlers_supersmoother_10_slope
     ratio:
       enabled: true
       items:
@@ -139,13 +152,6 @@ features:
       - numerator_col: decycler
         denominator_col: close
         output_col: ehlers_decycler_over_close
-    slope:
-      enabled: true
-      items:
-      - source_col: ehlers_supersmoother_10
-        window: 2
-        shift: 0
-        output_col: ehlers_supersmoother_10_slope
     rolling_zscore:
       enabled: true
       items:

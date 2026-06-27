@@ -128,7 +128,9 @@ orders προστατεύονται από explicit safety gates.
    `rolling_mean`, `rolling_std`, `rolling_sum`, `rolling_zscore`,
    `rolling_clip`, `rolling_linear_regression`, `rms`, `slope`.
 3. Normalization helpers, π.χ. `returns`, `atr_distances`, `volatility`,
-   `rolling_zscores`.
+   `rolling_zscores`, `rolling_percent_rank`, `robust_zscore`,
+   `volatility_scaled_return`, `atr_scaled_distance`, `range_position`,
+   `realized_vol_percentile`, `volume_relative`, `rolling_beta_residual`.
 
 Raw feature modules δεν πρέπει να παράγουν derived helper columns by default.
 Παράγωγα columns δηλώνονται στο YAML με `transforms` ή `normalizations`.

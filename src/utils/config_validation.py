@@ -90,7 +90,20 @@ _FEATURE_TRANSFORM_HELPERS = {
     "slope",
     "threshold_flag",
 }
-_FEATURE_NORMALIZATION_HELPERS = {"returns", "atr_distances", "volatility", "rolling_zscores"}
+_FEATURE_NORMALIZATION_HELPERS = {
+    "atr_distances",
+    "atr_scaled_distance",
+    "range_position",
+    "realized_vol_percentile",
+    "returns",
+    "robust_zscore",
+    "rolling_beta_residual",
+    "rolling_percent_rank",
+    "rolling_zscores",
+    "volatility",
+    "volatility_scaled_return",
+    "volume_relative",
+}
 _TARGET_OUTPUT_KEYS = {
     "label_col",
     "fwd_col",
@@ -1223,6 +1236,32 @@ def _validate_feature_normalization_params(kind: str, params: dict[str, Any], *,
     elif kind == "atr_distances":
         _validate_optional_string(params.get("atr_col"), field=f"{field}.atr_col")
         _validate_pairs(params.get("pairs", []), field=f"{field}.pairs")
+    elif kind == "atr_scaled_distance":
+        for key in ("base_col", "ref_col", "atr_col"):
+            if not isinstance(params.get(key), str) or not params.get(key, "").strip():
+                raise ConfigValidationError(f"{field}.{key} must be a non-empty string.")
+        _validate_optional_string(params.get("output_col"), field=f"{field}.output_col")
+        if "eps" in params and _finite_number(params["eps"], field=f"{field}.eps") < 0.0:
+            raise ConfigValidationError(f"{field}.eps must be >= 0.")
+    elif kind == "range_position":
+        for key in ("value_col", "high_col", "low_col", "output_col"):
+            _validate_optional_string(params.get(key), field=f"{field}.{key}")
+        _positive_int(params.get("window", 20), field=f"{field}.window")
+        if int(params.get("window", 20)) <= 1:
+            raise ConfigValidationError(f"{field}.window must be > 1.")
+        if "clip" in params:
+            _validate_bool(params["clip"], field=f"{field}.clip")
+    elif kind == "realized_vol_percentile":
+        if not isinstance(params.get("volatility_col"), str) or not params.get("volatility_col", "").strip():
+            raise ConfigValidationError(f"{field}.volatility_col must be a non-empty string.")
+        _validate_optional_string(params.get("output_col"), field=f"{field}.output_col")
+        _positive_int(params.get("window", 252), field=f"{field}.window")
+        if int(params.get("window", 252)) <= 1:
+            raise ConfigValidationError(f"{field}.window must be > 1.")
+        if params.get("min_periods") is not None:
+            _positive_int(params["min_periods"], field=f"{field}.min_periods")
+        if "shift_window" in params:
+            _validate_bool(params["shift_window"], field=f"{field}.shift_window")
     elif kind == "volatility":
         for key in ("close_col", "atr_col"):
             _validate_optional_string(params.get(key), field=f"{field}.{key}")
@@ -1233,6 +1272,56 @@ def _validate_feature_normalization_params(kind: str, params: dict[str, Any], *,
             _positive_int(params["percentile_window"], field=f"{field}.percentile_window")
             if int(params["percentile_window"]) <= 1:
                 raise ConfigValidationError(f"{field}.percentile_window must be > 1.")
+    elif kind == "volatility_scaled_return":
+        for key in ("return_col", "volatility_col"):
+            if not isinstance(params.get(key), str) or not params.get(key, "").strip():
+                raise ConfigValidationError(f"{field}.{key} must be a non-empty string.")
+        _validate_optional_string(params.get("output_col"), field=f"{field}.output_col")
+        if "eps" in params and _finite_number(params["eps"], field=f"{field}.eps") < 0.0:
+            raise ConfigValidationError(f"{field}.eps must be >= 0.")
+    elif kind == "volume_relative":
+        for key in ("volume_col", "output_col", "zscore_col"):
+            _validate_optional_string(params.get(key), field=f"{field}.{key}")
+        _positive_int(params.get("window", 96), field=f"{field}.window")
+        if int(params.get("window", 96)) <= 1:
+            raise ConfigValidationError(f"{field}.window must be > 1.")
+        if params.get("min_periods") is not None:
+            _positive_int(params["min_periods"], field=f"{field}.min_periods")
+        if "shift_stats" in params:
+            _validate_bool(params["shift_stats"], field=f"{field}.shift_stats")
+        if "eps" in params and _finite_number(params["eps"], field=f"{field}.eps") < 0.0:
+            raise ConfigValidationError(f"{field}.eps must be >= 0.")
+    elif kind in {"rolling_percent_rank", "robust_zscore"}:
+        if not isinstance(params.get("source_col"), str) or not params.get("source_col", "").strip():
+            raise ConfigValidationError(f"{field}.source_col must be a non-empty string.")
+        _validate_optional_string(params.get("output_col"), field=f"{field}.output_col")
+        _positive_int(params.get("window", 252), field=f"{field}.window")
+        if int(params.get("window", 252)) <= 1:
+            raise ConfigValidationError(f"{field}.window must be > 1.")
+        if params.get("min_periods") is not None:
+            _positive_int(params["min_periods"], field=f"{field}.min_periods")
+        if kind == "rolling_percent_rank" and "shift_window" in params:
+            _validate_bool(params["shift_window"], field=f"{field}.shift_window")
+        if kind == "robust_zscore":
+            if "shift_stats" in params:
+                _validate_bool(params["shift_stats"], field=f"{field}.shift_stats")
+            if "mad_scale" in params and _finite_number(params["mad_scale"], field=f"{field}.mad_scale") <= 0.0:
+                raise ConfigValidationError(f"{field}.mad_scale must be > 0.")
+    elif kind == "rolling_beta_residual":
+        for key in ("asset_return_col", "benchmark_return_col"):
+            if not isinstance(params.get(key), str) or not params.get(key, "").strip():
+                raise ConfigValidationError(f"{field}.{key} must be a non-empty string.")
+        for key in ("residual_col", "beta_col", "alpha_col"):
+            _validate_optional_string(params.get(key), field=f"{field}.{key}")
+        _positive_int(params.get("window", 252), field=f"{field}.window")
+        if int(params.get("window", 252)) <= 1:
+            raise ConfigValidationError(f"{field}.window must be > 1.")
+        if params.get("min_periods") is not None:
+            _positive_int(params["min_periods"], field=f"{field}.min_periods")
+        if "shift_stats" in params:
+            _validate_bool(params["shift_stats"], field=f"{field}.shift_stats")
+        if "eps" in params and _finite_number(params["eps"], field=f"{field}.eps") < 0.0:
+            raise ConfigValidationError(f"{field}.eps must be >= 0.")
     elif kind == "rolling_zscores":
         columns = params.get("columns")
         if not isinstance(columns, list) or not columns:

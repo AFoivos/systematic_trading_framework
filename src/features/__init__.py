@@ -13,6 +13,14 @@ from .volatility import (
     compute_ewma_vol,
     add_volatility_features,
 )
+from .transforms import (
+    ROLLING_STAT_MODES,
+    TSFRESH_ROLLING_CALCULATORS,
+    add_feature_transforms,
+    compute_rolling_stat_transform,
+    compute_rolling_zscore_transform,
+    compute_tsfresh_rolling_transform,
+)
 from .lags import add_lagged_features
 from .helpers import (
     add_between_flag_transform,
@@ -129,6 +137,12 @@ __all__ = [
     "compute_rolling_vol",
     "compute_ewma_vol",
     "add_volatility_features",
+    "ROLLING_STAT_MODES",
+    "TSFRESH_ROLLING_CALCULATORS",
+    "add_feature_transforms",
+    "compute_rolling_stat_transform",
+    "compute_rolling_zscore_transform",
+    "compute_tsfresh_rolling_transform",
     "add_crossing_flag_transform",
     "add_between_flag_transform",
     "add_difference_transform",

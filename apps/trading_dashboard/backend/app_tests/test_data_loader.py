@@ -231,6 +231,27 @@ def test_discovers_supported_files_anywhere_under_data_tree(tmp_path: Path) -> N
     assert loader.load_ohlcv(dataset_id=dataset.id)[0]["close"] == 1.255
 
 
+def test_discovery_skips_empty_supported_files(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    source_dir = tmp_path / "data" / "raw" / "dukascopy_quarterly"
+    source_dir.mkdir(parents=True)
+    (source_dir / "spx500_30m_bid.csv").write_text("", encoding="utf-8")
+    (source_dir / "xauusd_30m.csv").write_text(
+        "\n".join(
+            [
+                "timestamp,open,high,low,close,volume",
+                "2025-01-01 00:00:00,1,2,0.5,1.5,10",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    loader = DataLoader(paths)
+    datasets = loader.discover_datasets()
+
+    assert [dataset.id for dataset in datasets] == ["data/raw/dukascopy_quarterly/xauusd_30m.csv"]
+
+
 def test_ohlcv_loader_raises_clear_error_for_missing_volume(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
     source_dir = tmp_path / "data" / "raw" / "example"
