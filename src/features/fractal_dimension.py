@@ -25,8 +25,8 @@ def add_fractal_dimension(
               price_col: close
               window: 128
               output_col: null
-          output_cols:
-            - configured by output_col
+            output_cols:
+              - configured by output_col
     
     Required input columns
     ----------------------

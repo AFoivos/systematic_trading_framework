@@ -163,8 +163,8 @@ def add_shock_context_features(
               post_shock_active_bars: 1
               use_log_returns: true
               inplace: false
-          output_cols:
-            - configured by atr_col
+            output_cols:
+              - configured by atr_col
     
     Required input columns
     ----------------------

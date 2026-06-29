@@ -330,11 +330,11 @@ def c1_trend_pullback_vwap_signal(df: pd.DataFrame, **params: Any) -> pd.DataFra
             short_candidate_strict_col: c1_short_candidate_strict
             signal_col: signal_side
             candidate_col: signal_candidate
-          output_cols:
-            - c1_long_candidate
-            - c1_short_candidate
-            - signal_side
-            - signal_candidate
+            output_cols:
+              - c1_long_candidate
+              - c1_short_candidate
+              - signal_side
+              - signal_candidate
     
     Required input columns
     ----------------------

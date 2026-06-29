@@ -44,8 +44,8 @@ def dense_return_forecast_signal(
             volatility_floor: 1e-12
             signed_cost_adjustment: true
             clip: null
-          output_cols:
-            - expected_net_return
+            output_cols:
+              - expected_net_return
     
     Required input columns
     ----------------------

@@ -1,6 +1,6 @@
 # Οδηγός YAML Experiments
 
-Τελευταία ενημέρωση: 2026-06-27
+Τελευταία ενημέρωση: 2026-06-29
 
 ## Βασική αρχή
 
@@ -29,6 +29,13 @@ validation.
   feature step
 - `src/features/helpers/registry.py`: registry για transform helpers και
   normalization helpers
+
+Για πλήρη κατηγοριοποιημένη ερμηνεία κάθε helper, δες το
+[`catalog/helpers.md`](catalog/helpers.md). Για πλήρη κατηγοριοποιημένη
+ερμηνεία των raw feature steps, δες το [`catalog/features.md`](catalog/features.md).
+Για το ίδιο επίπεδο ανάλυσης σε signals, targets και models, δες τα
+[`catalog/signals.md`](catalog/signals.md), [`catalog/targets.md`](catalog/targets.md)
+και [`catalog/models.md`](catalog/models.md).
 
 ## Σειρά εκτέλεσης
 
@@ -273,54 +280,3 @@ model:
   preprocessing:
     scaler: robust
 ```
-
-Έγκυρες τιμές είναι `none`, `standard`, `robust`. Ο scaler γίνεται fit μόνο στο
-train fold και εφαρμόζεται στο αντίστοιχο test fold.
-
-## Migration κανόνες
-
-- `trend.add_ratios` μένει `false` και τα ratios πάνε σε `transforms.ratio`.
-- `vwap.add_distance` μένει `false` και το distance γίνεται `transforms.ratio`.
-- `atr.add_over_price` μένει `false` και το normalized ATR γίνεται
-  `transforms.ratio` ή `normalizations.volatility`.
-- `roofing_filter` δεν παράγει πλέον `slope`, `positive/negative` ή
-  `cross_*` columns. Χρησιμοποίησε `difference`, `threshold_flag` και
-  `crossing_flag`.
-- `hilbert_transform` δεν παράγει πλέον `dominant_cycle`, `cycle_ok` ή
-  `amplitude_rising`. Χρησιμοποίησε `reciprocal`, `between_flag` και
-  `rising_flag`.
-- `schaff_trend_cycle` δεν παράγει πλέον `cross_up`, `cross_down`, `rising`,
-  `falling`. Χρησιμοποίησε `crossing_flag`, `rising_flag` και
-  `difference` + `threshold_flag`.
-- `rolling_r2_trend_quality` παράγει default μόνο R2. `slope`, `intercept`,
-  `rising` και `ok` είναι explicit opt-in ή γίνονται με
-  `rolling_linear_regression`, `rising_flag`, `threshold_flag`.
-- `volatility_of_volatility` παράγει default μόνο vol-of-vol. Mean, ratio,
-  rising και high flags είναι explicit opt-in ή γίνονται με helpers.
-- `trend_slope_volatility` κρατά core slope/volatility/ratio, αλλά
-  `positive`, `rising`, `strong` flags είναι explicit opt-in ή helpers.
-- Παλιό `rolling_stat` με `root_mean_square` γίνεται `transforms.rms`.
-- Παλιό `rolling_stat` με `slope` γίνεται `transforms.slope`.
-- Δεν δημιουργείται `tsfresh_rolling.py`.
-
-## Πίνακας νέου τρόπου υπολογισμού μη raw columns
-
-| Παλιό/non-raw column | Νέος τρόπος |
-|---|---|
-| `returns.py` feature step | `normalizations.returns` |
-| `zscore_momentum.py` | `rolling_zscore` με `source_col=close`, `shift=0`, `ddof=0` |
-| ROC/price momentum pattern | `normalizations.returns`, `ratio` ή dedicated raw `roc` όπου χρειάζεται compatibility |
-| ATR/VWAP ratios/distances | raw `atr`/`vwap` + `transforms.ratio` |
-| `roofing_filter_*_slope` | `difference` |
-| roofing positive/negative flags | `threshold_flag` |
-| roofing zero crosses | `crossing_flag` |
-| Hilbert dominant cycle | `reciprocal` με `use_abs: true` |
-| Hilbert cycle range flag | `between_flag` |
-| Hilbert amplitude rising | `rising_flag` |
-| STC crosses | `crossing_flag` |
-| STC rising | `rising_flag` |
-| STC falling | `difference` + `threshold_flag(op=lt, threshold=0)` |
-| rolling R2 slope/intercept/R2 set | `rolling_linear_regression` |
-| rolling R2 rising/quality flags | `rising_flag`, `threshold_flag` |
-| volatility-of-volatility mean/ratio/high/rising | `rolling_mean`, `ratio`, `threshold_flag`, `rising_flag` |
-| trend slope ratio flags | `threshold_flag`, `rising_flag` |

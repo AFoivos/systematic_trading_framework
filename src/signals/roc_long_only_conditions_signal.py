@@ -103,8 +103,8 @@ def roc_long_only_conditions_signal(
             vol_adjusted_col: manual_vol_adjusted_signal
             short_signal_col: short_signal
             combined_signal_col: combined_signal
-          output_cols:
-            - configured by signal_col
+            output_cols:
+              - configured by signal_col
     
     Required input columns
     ----------------------

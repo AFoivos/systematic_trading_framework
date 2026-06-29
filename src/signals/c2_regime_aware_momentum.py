@@ -317,19 +317,19 @@ def c2_regime_aware_momentum_signal(df: pd.DataFrame, **params: Any) -> pd.DataF
             zscore_long_pass_col: c2_zscore_long_pass
             zscore_short_pass_col: c2_zscore_short_pass
             volatility_pass_col: c2_volatility_regime_pass
-          output_cols:
-            - c2_long_candidate
-            - c2_short_candidate
-            - c2_signal
-            - c2_signal_candidate
-            - c2_adx_pass
-            - c2_ppo_long_pass
-            - c2_ppo_short_pass
-            - c2_roc_long_pass
-            - c2_roc_short_pass
-            - c2_zscore_long_pass
-            - c2_zscore_short_pass
-            - c2_volatility_regime_pass
+            output_cols:
+              - c2_long_candidate
+              - c2_short_candidate
+              - c2_signal
+              - c2_signal_candidate
+              - c2_adx_pass
+              - c2_ppo_long_pass
+              - c2_ppo_short_pass
+              - c2_roc_long_pass
+              - c2_roc_short_pass
+              - c2_zscore_long_pass
+              - c2_zscore_short_pass
+              - c2_volatility_regime_pass
     
     Required input columns
     ----------------------

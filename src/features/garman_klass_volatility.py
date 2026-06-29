@@ -31,8 +31,8 @@ def add_garman_klass_volatility(
               close_col: close
               window: 20
               output_col: null
-          output_cols:
-            - configured by output_col
+            output_cols:
+              - configured by output_col
     
     Required input columns
     ----------------------

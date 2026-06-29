@@ -1,6 +1,6 @@
-# Feature Catalog
+# Κατάλογος Features
 
-Τελευταία ενημέρωση: 2026-06-27
+Τελευταία ενημέρωση: 2026-06-29
 
 Αυτό το αρχείο τεκμηριώνει τα feature steps που είναι διαθέσιμα μέσω του
 `FEATURE_REGISTRY` στο `src/features/registry.py`. Όλα τα features πρέπει να
@@ -23,6 +23,183 @@ diagnostic/research column δεν πρέπει να μπει σε model features
 - Τα raw feature steps δεν πρέπει να γεμίζουν το dataframe με derived helper
   columns by default. Ratios, lags, slopes, flags, crossings, z-scores και
   rolling aggregations δηλώνονται ως helpers στο YAML.
+
+## Πώς διαβάζεις τις τιμές
+
+Κάθε feature πρέπει να απαντάει σε μία πρακτική ερώτηση: τι κατάσταση της αγοράς
+βλέπω στο κλείσιμο του bar `t`; Η ερμηνεία δεν είναι ίδια για όλα τα features:
+
+- Signed features, όπως returns, ROC, slopes και distances, διαβάζονται γύρω
+  από το μηδέν. Θετική τιμή σημαίνει ανοδική/πάνω από reference κατάσταση,
+  αρνητική τιμή σημαίνει καθοδική/κάτω από reference κατάσταση.
+- Bounded oscillators, όπως RSI, Stochastic, MFI και STC, έχουν γνωστά ranges,
+  συνήθως `0-100` ή `-1..1`. Η πληροφορία έρχεται από τη θέση μέσα στο range
+  και από crossings, όχι από raw price scale.
+- Risk/volatility features είναι μη αρνητικά. Υψηλή τιμή σημαίνει περισσότερο
+  θόρυβο, μεγαλύτερα candles, μεγαλύτερα stop distances ή λιγότερη σταθερότητα.
+- Percentile/rank features διαβάζονται σε `[0, 1]`: `0.90` σημαίνει ότι η τιμή
+  είναι υψηλότερη από περίπου το 90% της πρόσφατης ιστορίας.
+- Z-score features διαβάζονται σε standard deviations: `2.0` είναι πολύ υψηλή
+  θετική απόκλιση, `-2.0` πολύ χαμηλή αρνητική απόκλιση, `0` κοντά στη rolling
+  ισορροπία.
+- Binary flags έχουν τιμές `0/1`. Το `1` σημαίνει ότι η συνθήκη ισχύει στο
+  τρέχον κλειστό bar. Για execution πρέπει να υπάρχει next-bar/open convention
+  ή άλλο explicit lag.
+
+## Κατηγορίες feature steps
+
+Οι παρακάτω κατηγορίες είναι ο πρακτικός χάρτης ανάγνωσης του
+`FEATURE_REGISTRY`. Οι αναλυτικές ενότητες ανά feature πιο κάτω κρατούν τα outputs,
+λεπτομέρειες τύπων και causality notes. Οι πίνακες εδώ εξηγούν τι μετρά το
+κάθε feature, πώς μεταφράζονται οι τιμές του και δίνουν σύντομο παράδειγμα.
+
+### 1. Τιμή, αποδόσεις και μνήμη
+
+Αυτά τα features περιγράφουν την πρόσφατη κίνηση της τιμής χωρίς να προσπαθούν
+να βγάλουν regime από μόνα τους. Είναι η βάση για momentum, reversal και
+triple-barrier labels.
+
+| Feature | Τι μετρά | Τι πληροφορία δίνουν οι τιμές | Παράδειγμα |
+|---|---|---|---|
+| `returns` | Απλή ή λογαριθμική μεταβολή του close. | `> 0` σημαίνει ανοδικό bar/horizon, `< 0` καθοδικό, κοντά στο `0` μικρή καθαρή κίνηση. | Αν `close` πάει από `100` σε `101`, `close_ret=0.01`, δηλαδή +1%. |
+| `lags` | Παλαιότερες τιμές ήδη υπαρχουσών columns. | Η τιμή διαβάζεται όπως η αρχική column, αλλά αφορά `t-lag`. Δίνει μνήμη σε tabular model. | `lag_close_ret_1=0.004` σημαίνει ότι το προηγούμενο bar είχε +0.4% return. |
+| `roc` | Rate of Change, δηλαδή cumulative return σε συγκεκριμένο lookback. | Θετικό ROC δείχνει πρόσφατο ανοδικό momentum, αρνητικό ROC πρόσφατη πτώση. Μεγάλο απόλυτο ROC δείχνει έντονη κίνηση. | `roc_12=0.025` σημαίνει ότι το close είναι 2.5% πάνω από 12 bars πριν. |
+| `price_momentum` | Κίνηση τιμής σε price units ή horizon-specific momentum. | Θετικό σημαίνει ανοδική μετατόπιση, αρνητικό καθοδική. Επειδή είναι price-scale, θέλει normalization για multi-asset model. | Στον US100, `price_momentum_8=45` είναι +45 μονάδες σε 8 bars, αλλά δεν συγκρίνεται άμεσα με XAUUSD. |
+| `return_momentum` | Άθροισμα ή συσσώρευση returns σε rolling horizon. | Θετικό σημαίνει drift υπέρ long, αρνητικό υπέρ short/reversal. Μεγάλη απόλυτη τιμή σημαίνει έντονο move. | `return_mom_8=0.012` σημαίνει περίπου +1.2% cumulative return σε 8 bars. |
+| `zscore_momentum` | Απόσταση της τιμής από rolling mean σε rolling standard deviations. | `0` κοντά στην ισορροπία, `> 1` πάνω από το πρόσφατο μέσο, `> 2` extreme θετική απόκλιση, `< -2` extreme αρνητική απόκλιση. | `zscore_momentum_96=2.3` δείχνει ότι η τιμή είναι πολύ ψηλά σε σχέση με τις τελευταίες 96 παρατηρήσεις. |
+
+### 2. Μεταβλητότητα, ρίσκο και σταθερότητα regime
+
+Αυτά τα features δεν λένε κατεύθυνση. Λένε πόσο μεγάλο είναι το risk/noise και
+αν το περιβάλλον είναι ήρεμο, εκρηκτικό ή ασταθές.
+
+| Feature | Τι μετρά | Τι πληροφορία δίνουν οι τιμές | Παράδειγμα |
+|---|---|---|---|
+| `volatility` | Rolling ή EWMA standard deviation των returns. | Υψηλή τιμή σημαίνει μεγαλύτερη realized risk και πιο ασταθή επόμενα outcomes. Χαμηλή τιμή σημαίνει compressed/quiet περιβάλλον. | `vol_rolling_96=0.008` σημαίνει περίπου 0.8% rolling return volatility στο επιλεγμένο timeframe. |
+| `atr` | Average True Range, δηλαδή absolute intrabar/gap range volatility. | Υψηλό ATR σημαίνει μεγάλα candles και μεγαλύτερα stop distances. Δεν δείχνει long ή short κατεύθυνση. | `atr_14=18` στον index σημαίνει μέσο true range 18 μονάδες. Με helper `atr_14_pct=0.006` γίνεται 0.6% του close. |
+| `vol_normalized_momentum` | Momentum διαιρεμένο με volatility. | Θετικό και μεγάλο σημαίνει momentum ισχυρό σε σχέση με τον θόρυβο. Κοντά στο `0` σημαίνει αδύναμο drift. | `vol_norm_mom_16=1.4` δείχνει ανοδικό move περίπου 1.4 μονάδων volatility. |
+| `volatility_regime` | Σχετική θέση τρέχουσας volatility απέναντι σε baseline/history. | Τιμές `> 1` ή high flags δείχνουν υψηλότερο από το σύνηθες risk. Τιμές `< 1` ή low flags δείχνουν quiet regime. | `volatility_regime=1.35` σημαίνει volatility περίπου 35% πάνω από baseline. |
+| `volatility_of_volatility` | Πόσο μεταβάλλεται η ίδια η volatility. | Υψηλή τιμή σημαίνει ότι το risk regime αλλάζει γρήγορα, άρα fixed thresholds και position sizing είναι λιγότερο αξιόπιστα. | `vov_atr_96_ratio_192=1.4` σημαίνει ότι η vol-of-vol είναι 40% πάνω από το δικό της baseline. |
+| `parkinson_volatility` | Volatility από high-low range. | Υψηλές τιμές δείχνουν μεγάλα intrabar ranges, ακόμη και αν close-to-close return φαίνεται μικρό. | Αν ένα bar κάνει μεγάλο high-low αλλά κλείσει κοντά στο open, το Parkinson volatility θα το δει καλύτερα από close return. |
+| `garman_klass_volatility` | OHLC volatility από open/high/low/close ranges. | Υψηλή τιμή δείχνει έντονη intrabar κίνηση με καλύτερη χρήση του OHLC shape. | Σε assets με reliable OHLC, `garman_klass_vol_20` μπορεί να πιάσει intraday risk που δεν φαίνεται στο close-only volatility. |
+| `yang_zhang_volatility` | Volatility που συνδυάζει overnight/open-close και range components. | Υψηλή τιμή δείχνει συνολικό risk μαζί με gaps/session opens. Χρήσιμη όταν τα opens έχουν πληροφορία. | Σε index CFD με session gaps, υψηλό `yang_zhang_vol_20` δείχνει ότι τα gaps συμμετέχουν ουσιαστικά στο risk. |
+
+### 3. Τάση, anchors και market structure
+
+Αυτά τα features απαντούν αν υπάρχει directional structure, πού είναι η τιμή σε
+σχέση με reference levels και αν το trend είναι καθαρό ή θορυβώδες.
+
+| Feature | Τι μετρά | Τι πληροφορία δίνουν οι τιμές | Παράδειγμα |
+|---|---|---|---|
+| `trend` | SMA/EMA anchors. | Raw MA level είναι price-scale. Η χρήσιμη πληροφορία είναι η απόσταση `close - MA` ή `close / MA - 1`: θετική πάνω από trend anchor, αρνητική κάτω. | `close_over_ema_50=0.012` σημαίνει close 1.2% πάνω από EMA 50. |
+| `trend_regime` | Discrete κατάσταση από σχέσεις price/SMA και short/long SMA. | `1` συνήθως bullish/uptrend, `-1` bearish/downtrend, `0` ουδέτερο ή insufficient data. | `close_trend_state_sma_20_100=1` σημαίνει ότι ο γρήγορος SMA είναι πάνω από τον αργό. |
+| `adx` | Directional movement strength με `+DI`, `-DI` και ADX. | Υψηλό ADX σημαίνει ισχυρή directional δομή, όχι απαραίτητα long. Το long/short bias έρχεται από `+DI` vs `-DI`. | `adx_14=32` και `plus_di_14 > minus_di_14` δείχνουν ισχυρότερο ανοδικό directional pressure. |
+| `bollinger` | Rolling mean, bands, band width και `%B`. | `%B > 1` είναι πάνω από upper band, `%B < 0` κάτω από lower band, `0.5` στο μέσο. Μεγάλο width δείχνει volatility expansion. | `bb_percent_b_20_2=1.15` σημαίνει close πάνω από το upper band, πιθανό overextension ή breakout. |
+| `vwap` | Rolling volume-weighted fair-value anchor. | Close πάνω από VWAP δείχνει τιμή πάνω από πρόσφατη volume-weighted consensus. Απόσταση από VWAP θέλει ratio ή ATR scaling. | `close_over_vwap_20=0.004` σημαίνει close 0.4% πάνω από rolling VWAP. |
+| `rolling_r2_trend_quality` | Πόσο καλά η πρόσφατη τιμή εξηγείται από ευθεία γραμμή. | `R2` κοντά στο `1` σημαίνει καθαρό linear trend, κοντά στο `0` σημαίνει chop/noise. Δεν λέει direction χωρίς slope. | `rolling_r2_96=0.78` δείχνει καθαρότερη τάση από `0.18`. |
+| `trend_slope_volatility` | Trend slope κανονικοποιημένο με volatility. | Θετικό σημαίνει ανοδική κλίση, αρνητικό καθοδική. Απόλυτη τιμή `> 1` δείχνει slope μεγάλη σε σχέση με το noise. | `trend_slope_vol_ratio_96=1.25` σημαίνει ανοδικό trend ισχυρότερο από το τρέχον volatility unit. |
+| `support_resistance` | Rolling support/resistance από πρόσφατα min/max levels. | Μικρή απόσταση από support/resistance δείχνει κοντινό structural level. Breakout flags δείχνουν υπέρβαση level. | `(close - support) / ATR = 0.3` σημαίνει close μόλις 0.3 ATR πάνω από support. |
+| `support_resistance_v2` | Confirmed pivots, ages, touches και breakout/retest context. | Περισσότερα touches/νεότερα levels δείχνουν πιο σχετικό structure. Breakout/retest flags δείχνουν event state. | `resistance_touch_count=4` και μικρή ATR distance δείχνουν σημαντικό nearby resistance. |
+| `multi_timeframe` | Higher-timeframe returns/trend/volatility ευθυγραμμισμένα στο base timeframe. | Θετικό HTF trend score ενισχύει long setups, αρνητικό ενισχύει short. Volatility/ATR HTF δίνει μεγαλύτερο regime context. | `mtf_4h_trend_score=1` σε 30m run σημαίνει ότι το 4h context είναι ανοδικό. |
+| `opening_range_breakout` | Session opening range, breakout distance και candidates. | Breakout πάνω από range δείχνει long pressure, κάτω από range short pressure. Range/ATR λέει αν το opening range είναι μεγάλο ή συμπιεσμένο. | `orb_breakout_distance_atr=0.8` σημαίνει breakout 0.8 ATR έξω από το opening range. |
+| `swing_extrema_context` | Confirmed swing highs/lows και αποστάσεις από pivots. | Κοντινή απόσταση σε swing high/low δείχνει structure που μπορεί να επηρεάσει stops, breakouts ή reversals. | `distance_to_last_swing_high_atr=0.5` σημαίνει resistance περίπου μισό ATR πάνω. |
+
+### 4. Ταλαντωτές, momentum timing και pullbacks
+
+Αυτά τα features βοηθούν στο timing. Συνήθως είναι bounded ή semi-bounded και
+είναι πιο χρήσιμα με crossings, centered values και flags.
+
+| Feature | Τι μετρά | Τι πληροφορία δίνουν οι τιμές | Παράδειγμα |
+|---|---|---|---|
+| `macd` | Διαφορά fast/slow EMA, signal και histogram. | Θετικό MACD/hist δείχνει ανοδική momentum απόκλιση, αρνητικό καθοδική. Raw MACD είναι price-scale και θέλει normalization. | `macd_hist_12_26_9 > 0` μετά από cross μπορεί να δείξει ανοδική επιτάχυνση. |
+| `ppo` | MACD ως ποσοστό του slow EMA. | Θετικό PPO δείχνει fast EMA πάνω από slow EMA σε scale-free μορφή. Αρνητικό δείχνει bearish momentum. | `ppo_12_26=0.006` σημαίνει fast EMA περίπου 0.6% πάνω από slow EMA. |
+| `mfi` | Money Flow Index, RSI-like oscillator με volume. | `> 80` συχνά overbought/strong inflow, `< 20` oversold/outflow. Το `50` είναι ουδέτερο κέντρο. | `mfi_14=82` μαζί με high relative volume δείχνει έντονη participation. |
+| `rsi` | Relative strength ανοδικών έναντι καθοδικών κινήσεων. | `> 70` overbought/strong momentum, `< 30` oversold, γύρω από `50` ουδέτερο. Η χρήση εξαρτάται από trend regime. | `rsi_14=28` κοντά σε support μπορεί να στηρίξει mean-reversion setup. |
+| `stochastic` | Θέση close μέσα στο πρόσφατο high-low range. | `%K` κοντά στο `100` σημαίνει close κοντά στο range high, κοντά στο `0` κοντά στο range low. | `stoch_k=92` δείχνει ότι το close βρίσκεται πολύ κοντά στο πρόσφατο υψηλό. |
+| `stochastic_rsi` | Stochastic normalization του RSI. | Πιο ευαίσθητο timing από RSI. Κοντά στο `100` σημαίνει RSI near its recent max, κοντά στο `0` near recent min. | `stoch_rsi_k` cross πάνω από `20` μπορεί να δείξει έξοδο από oversold RSI state. |
+| `indicator_pullback` | Pullback diagnostics από συνδυασμό indicators. | Flags/scores δείχνουν αν υπάρχει pullback setup και σε ποια πλευρά. Distances πρέπει να είναι normalized. | `pullback_score=3` μπορεί να σημαίνει ότι πέρασαν τρεις από τις configured pullback συνθήκες. |
+
+### 5. Sessions, regimes, shocks και εξωτερικό context
+
+Αυτά τα features δεν είναι κλασικά indicators. Περιγράφουν πότε βρισκόμαστε,
+τι regime επικρατεί ή αν συνέβη abnormal event.
+
+| Feature | Τι μετρά | Τι πληροφορία δίνουν οι τιμές | Παράδειγμα |
+|---|---|---|---|
+| `session_context` | Ώρα, ημέρα, session και intraday calendar flags. | Binary flags `1` δείχνουν ενεργό session/παράθυρο. Cyclical encodings δείχνουν θέση μέσα στην ημέρα/εβδομάδα. | `session_ny_cash=1` σημαίνει ότι το bar ανήκει στο NY cash window. |
+| `regime_context` | Volatility ratios, return z-scores, trend states και άλλα market state summaries. | High vol ratio δείχνει stress/expansion. Trend state δείχνει directional context. Abs-return z δείχνει shockiness. | `regime_vol_ratio_z_24_168=2.1` δείχνει πολύ αυξημένη short-term volatility έναντι long baseline. |
+| `shock_context` | Abnormal return/ATR shocks και active shock windows. | Shock flag `1` σημαίνει πρόσφατη υπερβολική κίνηση. Strength μεγαλύτερη σημαίνει πιο ακραίο event. | `shock_active=1` και `shock_atr_multiple=2.4` σημαίνει πρόσφατο move 2.4 ATR. |
+| `macro_context` | Lagged ή aligned macro/exogenous variables. | Η ερμηνεία εξαρτάται από τη macro column. Η κρίσιμη πληροφορία είναι αν είναι διαθέσιμη point-in-time και με σωστό lag. | `dxy_ret_1=0.004` μπορεί να δώσει USD context σε FX/metal strategy, μόνο αν το timestamp availability είναι σωστό. |
+| `hmm_regime` | Latent regime labels/probabilities από Hidden Markov Model. | Label `0/1/2` δεν έχει φυσική σημασία χωρίς profiling. Probabilities κοντά στο `1` δείχνουν confidence στο αντίστοιχο latent state. | Αν state `2` έχει ιστορικά high-vol negative returns, `hmm_state=2` διαβάζεται ως risk-off μόνο μετά από post-fit ανάλυση. |
+
+### 6. Ehlers, κύκλοι και adaptive filters
+
+Αυτά τα features προσπαθούν να χωρίσουν trend/cycle/noise ή να εκτιμήσουν phase
+και dominant period. Τα price-like outputs συνήθως χρειάζονται `/ ATR`,
+`/ close`, z-score ή percent rank πριν μπουν σε multi-asset model.
+
+| Feature | Τι μετρά | Τι πληροφορία δίνουν οι τιμές | Παράδειγμα |
+|---|---|---|---|
+| `ehlers_ml_long_candidate` | Deterministic Ehlers long candidate και supporting state. | Candidate flag `1` σημαίνει ότι οι configured Ehlers συνθήκες συμφωνούν για long setup. Supporting distances δείχνουν ποιότητα setup. | `ehlers_ml_candidate=1` μπορεί να γίνει side candidate για meta-labeling. |
+| `mama` | MESA Adaptive Moving Average. | Close πάνω από MAMA ή MAMA πάνω από FAMA δείχνει adaptive bullish trend context. Raw MAMA είναι price-level. | `(close - mama) / ATR = 0.7` δείχνει close 0.7 ATR πάνω από adaptive average. |
+| `fama` | Slower companion line του MAMA. | MAMA-FAMA spread θετικό δείχνει adaptive uptrend confirmation, αρνητικό downtrend. | `(mama - fama) / ATR = 0.4` δείχνει θετικό adaptive spread. |
+| `dominant_cycle_period` | Εκτιμώμενο μήκος κυρίαρχου cycle. | Μεγαλύτερη τιμή σημαίνει πιο αργός κύκλος, μικρότερη πιο γρήγορος. Out-of-range τιμές συχνά γίνονται filter. | `dominant_cycle_period=34` σημαίνει εκτιμώμενος κύκλος περίπου 34 bars. |
+| `dominant_cycle_phase` | Θέση μέσα στον εκτιμώμενο κύκλο. | Phase near turning zones μπορεί να βοηθήσει timing. Καλύτερα να μετατρέπεται σε sin/cos ή να συνδυάζεται με sinewave. | Phase που περνά συγκεκριμένο όριο μπορεί να σηματοδοτεί αλλαγή cycle segment. |
+| `instantaneous_trendline` | Low-lag Ehlers trendline και optional trigger. | Close πάνω από trendline ή trigger cross δείχνει θετικό trend timing. Distance θέλει ATR scaling. | `close_minus_itl_over_atr=0.5` σημαίνει close μισό ATR πάνω από trendline. |
+| `fisher_transform` | Fisher transform σε rolling-normalized price. | Θετικές τιμές δείχνουν upper normalized state, αρνητικές lower. Μεγάλα απόλυτα values τονίζουν extremes. | Fisher cross πάνω από `0` μετά από αρνητικό extreme μπορεί να δείξει reversal timing. |
+| `inverse_fisher_transform` | Bounded nonlinear transform, συνήθως `tanh`-like. | Τιμές κοντά στο `1` δείχνουν θετικό extreme, κοντά στο `-1` αρνητικό extreme, κοντά στο `0` ουδέτερο. | `inverse_fisher=0.85` δείχνει έντονα θετικό oscillator state. |
+| `sinewave_indicator` | Sine και lead-sine από cycle phase. | Cross sine/lead-sine δίνει cycle turning context. Τιμές σε `[-1, 1]` δείχνουν phase position. | Sine cross πάνω από lead-sine μπορεί να δηλώνει ανοδική cycle στροφή. |
+| `cyber_cycle` | Detrended cycle oscillator. | Θετικό/αρνητικό δείχνει cycle side. Μεγάλη απόλυτη τιμή δείχνει ισχυρό cycle component, αλλά θέλει scaling. | `cyber_cycle` crossing πάνω από `0` μπορεί να γίνει event flag. |
+| `decycler` | Smooth trend component με reduced cycle. | Close πάνω από decycler δείχνει τιμή πάνω από smooth trend. Raw level είναι price-scale. | `(close - decycler) / ATR = -0.6` δείχνει close 0.6 ATR κάτω από decycler. |
+| `decycler_oscillator` | Spread fast/slow decyclers normalized by price. | Θετικό δείχνει fast trend πάνω από slow, αρνητικό το αντίθετο. | `decycler_oscillator=0.9` δείχνει θετικό continuation pressure. |
+| `laguerre_rsi` | Laguerre-smoothed RSI. | Σε `0-1`, κοντά στο `1` overbought/strong, κοντά στο `0` oversold/weak. Σε percent mode διαβάζεται `0-100`. | `laguerre_rsi=0.18` δείχνει low/oversold oscillator state. |
+| `frama` | Fractal Adaptive Moving Average και optional diagnostics. | Close-FRAMA distance δείχνει trend displacement. Alpha/fractal diagnostics δείχνουν αν το filter αντιδρά γρήγορα ή αργά. | `(close - frama) / ATR = 1.1` δείχνει close πάνω από adaptive average κατά 1.1 ATR. |
+| `center_of_gravity` | Ehlers Center of Gravity oscillator. | Θετικό/αρνητικό και crossings δίνουν short-term turning context. | COG cross από αρνητικό σε θετικό μπορεί να δείξει ανοδική βραχυπρόθεσμη στροφή. |
+| `even_better_sinewave` | Bounded Ehlers cycle oscillator. | Κοντά στο `1` θετικό cycle extreme, κοντά στο `-1` αρνητικό, γύρω από `0` transition. | `even_better_sinewave=-0.9` δείχνει αρνητικό cycle extreme. |
+| `autocorrelation_periodogram` | Dominant period και optional power μέσω autocorrelation. | Period δείχνει εκτιμώμενο cycle length. Power υψηλό σημαίνει πιο αξιόπιστη periodic δομή. | `period=28` και high power δείχνουν δυνατό κύκλο περίπου 28 bars. |
+| `homodyne_discriminator` | MESA cycle period estimate από phase dynamics. | Υψηλότερη τιμή σημαίνει πιο αργός cycle, χαμηλότερη πιο γρήγορος. Θέλει bounds. | `homodyne_discriminator=18` μπορεί να οδηγήσει adaptive lookback 18 bars. |
+| `hilbert_transform` | Amplitude, phase και instantaneous frequency από trailing Hilbert endpoint. | Μεγάλη amplitude δείχνει δυνατό cycle component. Frequency υψηλότερη σημαίνει πιο γρήγορο cycle. Phase δείχνει timing. | `1 / abs(hilbert_frequency_64)=24` δείχνει dominant cycle περίπου 24 bars. |
+| `roofing_filter` | Band-pass filtered price/cycle component. | Θετικό/αρνητικό δείχνει cycle side. Crossings στο `0` δείχνουν transitions. Θέλει ATR/z-score scaling. | `roofing_filter_48_10_cross_up=1` σημαίνει πέρασμα πάνω από το μηδέν στο τρέχον bar. |
+| `schaff_trend_cycle` | MACD + stochastic cycle oscillator. | Σε `0-100`, υψηλές τιμές δείχνουν bullish/overbought trend-cycle state, χαμηλές bearish/oversold. Crossings βοηθούν timing. | `stc=82` δείχνει δυνατό bullish state αλλά όχι απαραίτητα fresh entry χωρίς cross/slope. |
+| `supersmoother` | Ehlers low-pass smooth filter. | Ως raw level είναι smoothed price. Η χρήσιμη πληροφορία είναι distance/slope σε ATR units. | `supersmoother_slope_atr=0.25` δείχνει ήπια ανοδική smooth slope. |
+
+### 7. Πολυπλοκότητα, entropy και fractal κατάσταση
+
+Αυτά τα features λένε αν η αγορά είναι persistent, rough, chaotic ή πιο
+δομημένη. Δεν δίνουν από μόνα τους side.
+
+| Feature | Τι μετρά | Τι πληροφορία δίνουν οι τιμές | Παράδειγμα |
+|---|---|---|---|
+| `hurst_exponent` | Persistence/anti-persistence της πρόσφατης χρονοσειράς. | `> 0.5` δείχνει persistence/trendiness, `< 0.5` anti-persistence/mean reversion, γύρω από `0.5` random-walk-like. | `hurst_256=0.62` υποστηρίζει momentum regime περισσότερο από reversal. |
+| `fractal_dimension` | Roughness/choppiness της price path. | Υψηλότερη fractal dimension σημαίνει πιο rough/choppy κίνηση. Χαμηλότερη δείχνει πιο smooth path. | `fractal_dimension_128` σε υψηλό percentile μπορεί να κόψει trend-following entries. |
+| `shannon_entropy` | Διασπορά/αβεβαιότητα της πρόσφατης κατανομής. | Υψηλή entropy σημαίνει πιο απρόβλεπτο/dispersed περιβάλλον. Χαμηλή σημαίνει πιο συγκεντρωμένη συμπεριφορά. | High entropy μαζί με χαμηλό ADX δείχνει noisy chop. |
+| `permutation_entropy` | Ποικιλία ordinal/rank patterns. | Υψηλή τιμή δείχνει πολλά διαφορετικά patterns και λιγότερη απλή δομή. Χαμηλή δείχνει πιο επαναλαμβανόμενη σειρά. | `permutation_entropy` κοντά στο upper percentile μπορεί να λειτουργήσει ως no-trade filter για cycle setups. |
+
+### 8. Όγκος και order-flow
+
+Αυτά τα features μετρούν participation, flow pressure και liquidity stress.
+Θέλουν αξιόπιστα volume/order-flow inputs. Σε FX/CFD tick volume, η ερμηνεία
+είναι proxy και πρέπει να επιβεβαιώνεται ανά provider.
+
+| Feature | Τι μετρά | Τι πληροφορία δίνουν οι τιμές | Παράδειγμα |
+|---|---|---|---|
+| `volume_features` | Volume z-score και volume/range ή volume/ATR context. | Υψηλό z-score/relative volume δείχνει abnormal participation. Χαμηλό δείχνει αδύναμη συμμετοχή. | `volume_z_96=2.4` σημαίνει volume πάνω από το πρόσφατο baseline κατά 2.4 std. |
+| `vpin` | Proxy για informed/toxic flow από volume imbalance. | Υψηλό VPIN δείχνει persistent imbalance και πιθανό liquidity stress. Χαμηλό δείχνει πιο balanced flow. | `vpin_50` στο 90ο percentile μπορεί να κόψει mean-reversion entries λόγω adverse flow. |
+| `order_flow_imbalance` | Buy/sell ή bid/ask imbalance, raw ή rolling. | Θετικό δείχνει buy pressure, αρνητικό sell pressure. Μεγάλη απόλυτη τιμή δείχνει έντονη ανισορροπία. | `order_flow_imbalance=0.35` μπορεί να σημαίνει 35% καθαρό buy imbalance αν είναι normalized. |
+
+### 9. Candidate και compatibility feature steps
+
+Τα παρακάτω παράγουν candidate/signal-like state. Είναι χρήσιμα για
+meta-labeling και diagnostics, αλλά πρέπει να διαβάζονται με execution lag.
+
+| Step | Τι μετρά | Τι πληροφορία δίνουν οι τιμές | Παράδειγμα |
+|---|---|---|---|
+| `roc_long_only_conditions` | Rule-based long-only condition score. | `manual_conviction_score` μετρά πόσες συνθήκες πέρασαν. Candidate `1` σημαίνει ότι το score και τα gates επιτρέπουν long. | Αν `min_score_required=4` και score `5`, το long candidate ενεργοποιείται εκτός αν weekend/macro gate το κόψει. |
+| `ehlers_semiscalp_long` | Compatibility long candidate από Ehlers semiscalp logic. | `signal_candidate=1` σημαίνει ότι οι configured setup flags συμφωνούν για long-only setup. | Χρήσιμο ως side input για triple-barrier meta-label. |
+| `ehlers_decycler_continuation` | Compatibility decycler continuation candidate. | Candidate `1` δείχνει continuation setup σύμφωνα με decycler logic. | Μπαίνει ως candidate, όχι ως ανεξάρτητο target. |
+| `ema_stoch_rsi_pullback` | EMA + StochRSI pullback candidate. | Side/candidate columns δείχνουν αν υπάρχει long/short pullback setup. | `candidate_long=1` όταν trend και oscillator pullback συνθήκες περνούν. |
+| `indicator_model_adaptive_pullback` | Indicator-only adaptive pullback candidate. | Candidate/score columns δείχνουν setup state πριν από model filtering. | Score υψηλότερο σημαίνει περισσότερη συμφωνία indicators. |
+| `vwap_rms_ema_cross_long` | VWAP/RMS/EMA cross long candidate με confirmations. | Candidate `1` σημαίνει ότι cross/regime/confirmation logic πέρασε. | Χρήσιμο για long-only execution parity tests ή meta-labeling. |
 
 ## Raw features και helpers
 

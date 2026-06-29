@@ -29,8 +29,8 @@ def momentum_strategy(
             short_threshold: null
             signal_col: null
             mode: long_short_hold
-          output_cols:
-            - configured by signal_col
+            output_cols:
+              - configured by signal_col
     
     Required input columns
     ----------------------

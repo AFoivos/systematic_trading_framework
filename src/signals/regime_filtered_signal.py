@@ -26,8 +26,8 @@ def regime_filtered_signal(
             regime_col: <required>
             signal_col: null
             active_value: 1.0
-          output_cols:
-            - configured by signal_col
+            output_cols:
+              - configured by signal_col
     
     Required input columns
     ----------------------

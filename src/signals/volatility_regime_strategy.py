@@ -27,8 +27,8 @@ def volatility_regime_strategy(
             quantile: 0.5
             signal_col: null
             mode: long_short_hold
-          output_cols:
-            - configured by signal_col
+            output_cols:
+              - configured by signal_col
     
     Required input columns
     ----------------------

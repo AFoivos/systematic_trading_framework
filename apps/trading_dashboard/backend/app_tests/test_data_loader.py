@@ -80,6 +80,29 @@ def test_load_series_applies_tail_limit_to_match_candle_window(tmp_path: Path) -
     assert [point["value"] for point in series["rsi_14"]] == [55.0, 60.0]
 
 
+def test_load_ohlcv_applies_tail_limit_before_response_conversion(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    source_dir = tmp_path / "data" / "raw" / "dukascopy_30m_clean"
+    source_dir.mkdir(parents=True)
+    (source_dir / "xauusd_30m.csv").write_text(
+        "\n".join(
+            [
+                "timestamp,open,high,low,close,volume",
+                "2024-01-01 00:00:00,1.0,1.2,0.9,1.1,100",
+                "2024-01-01 00:30:00,1.1,1.3,1.0,1.2,120",
+                "2024-01-01 01:00:00,1.2,1.4,1.1,1.3,130",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    loader = DataLoader(paths)
+    candles = loader.load_ohlcv(dataset_id="data/raw/dukascopy_30m_clean/xauusd_30m.csv", limit=2)
+
+    assert [candle["time"] for candle in candles] == ["2024-01-01T00:30:00Z", "2024-01-01T01:00:00Z"]
+    assert [candle["close"] for candle in candles] == [1.2, 1.3]
+
+
 def test_catalogs_are_inferred_from_processed_snapshot_columns(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
     snapshot_dir = tmp_path / "data" / "processed" / "processed" / "demo_snapshot"

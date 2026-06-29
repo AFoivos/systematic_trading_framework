@@ -13,6 +13,12 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from app.schemas.transforms import TransformSeriesRequest, TransformStepConfig
 from app.services import transform_catalog
+from src.features.registry import (
+    FEATURE_COMPATIBILITY_REGISTRY,
+    FEATURE_REGISTRY as CANONICAL_FEATURE_REGISTRY,
+)
+from src.signals.registry import SIGNAL_REGISTRY as CANONICAL_SIGNAL_REGISTRY
+from src.targets.registry import TARGET_REGISTRY as CANONICAL_TARGET_REGISTRY
 from src.utils.config_kinds import FEATURE_KINDS, SIGNAL_KINDS
 
 
@@ -44,6 +50,21 @@ def _builder_default_params(name: str) -> dict[str, object]:
     return {param.name: param.default_value for param in builders[name].parameters}
 
 
+def test_dashboard_builder_catalogs_track_canonical_registries() -> None:
+    feature_by_name = {builder.name: builder for builder in transform_catalog.feature_builders()}
+    signal_by_name = {builder.name: builder for builder in transform_catalog.signal_builders()}
+    target_by_name = {builder.name: builder for builder in transform_catalog.target_builders()}
+
+    assert set(CANONICAL_FEATURE_REGISTRY).issubset(feature_by_name)
+    assert set(FEATURE_COMPATIBILITY_REGISTRY).issubset(feature_by_name)
+    assert set(CANONICAL_SIGNAL_REGISTRY).issubset(signal_by_name)
+    assert set(CANONICAL_TARGET_REGISTRY).issubset(target_by_name)
+    assert "feature_transforms" in feature_by_name
+    assert "classifier" in target_by_name
+    assert transform_catalog.get_feature_fn("trend_regime") is CANONICAL_FEATURE_REGISTRY["trend_regime"]
+    assert transform_catalog.get_signal_fn("regime_filtered") is CANONICAL_SIGNAL_REGISTRY["regime_filtered"]
+
+
 def test_builder_catalog_exposes_registered_feature_signal_and_target_defaults() -> None:
     feature_by_name = {builder.name: builder for builder in transform_catalog.feature_builders()}
     signal_by_name = {builder.name: builder for builder in transform_catalog.signal_builders()}
@@ -66,6 +87,8 @@ def test_builder_catalog_exposes_registered_feature_signal_and_target_defaults()
     canonical_signal_kinds = {name for name in SIGNAL_KINDS if not name.endswith("_signal")}
     assert canonical_signal_kinds.issubset(signal_by_name)
     assert "forward_return" in target_by_name
+    assert "future_return_regression" in target_by_name
+    assert "directional_triple_barrier" in target_by_name
 
     for name, builder in feature_by_name.items():
         assert "YAML declaration::" in (builder.docstring or "")
@@ -136,6 +159,17 @@ def test_builder_catalog_exposes_registered_feature_signal_and_target_defaults()
 
     forward_return_params = {param.name: param for param in target_by_name["forward_return"].parameters}
     assert forward_return_params["horizon"].default_value == 1
+
+    future_return_params = {param.name: param for param in target_by_name["future_return_regression"].parameters}
+    assert future_return_params["horizon_bars"].default_value == 1
+    assert future_return_params["fwd_col"].default_value == "target_future_return_1"
+    assert future_return_params["normalize_by_volatility"].kind == "boolean"
+
+    directional_params = {param.name: param for param in target_by_name["directional_triple_barrier"].parameters}
+    assert directional_params["direction_col"].default_value == "direction"
+    assert directional_params["profit_barrier_r"].default_value == 1.4
+    assert directional_params["neutral_label"].options == ["drop", "profit", "stop"]
+    assert directional_params["tie_break"].options == ["closest_to_open", "profit", "stop"]
 
 
 def test_transform_series_runs_existing_builders_without_writing_artifacts(monkeypatch) -> None:
@@ -292,6 +326,25 @@ def test_transform_series_runs_nested_transform_on_all_parent_feature_outputs(mo
         {series.series_id for series in response.series}
     )
     assert response.steps[0].metadata["materialized_prerequisites"] == []
+
+
+def test_transform_series_runs_canonical_trend_regime_default(monkeypatch) -> None:
+    _install_fake_loader(monkeypatch, _ohlcv_frame(periods=80))
+
+    response = transform_catalog.run_transform_series(
+        TransformSeriesRequest(
+            asset="XAUUSD",
+            features=[
+                TransformStepConfig(
+                    step="trend_regime",
+                    params=_builder_default_params("trend_regime"),
+                ),
+            ],
+        )
+    )
+
+    assert {series.series_id for series in response.series} == {"trend_regime"}
+    assert response.steps[0].output_columns == ["trend_regime"]
 
 
 def test_transform_series_runs_quant_trend_volatility_builders_from_ui_defaults(monkeypatch) -> None:

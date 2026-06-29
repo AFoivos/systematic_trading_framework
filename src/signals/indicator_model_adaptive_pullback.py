@@ -465,9 +465,9 @@ def indicator_model_adaptive_pullback_signal(
             signal_name_col: signal_name
             score_col: signal_score
             signal_name: indicator_model_adaptive_pullback
-          output_cols:
-            - signal
-            - signal_candidate
+            output_cols:
+              - signal
+              - signal_candidate
     
     Required input columns
     ----------------------

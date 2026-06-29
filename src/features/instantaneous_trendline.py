@@ -37,8 +37,8 @@ def add_instantaneous_trendline(
               output_col: null
               trigger_col: null
               add_trigger: true
-          output_cols:
-            - configured by output_col
+            output_cols:
+              - configured by output_col
     
     Required input columns
     ----------------------

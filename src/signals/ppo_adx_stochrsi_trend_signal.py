@@ -531,8 +531,8 @@ def ppo_adx_stochrsi_trend_signal(
             atr_take_profit_short_col: atr_take_profit_short
             atr_trailing_stop_long_col: atr_trailing_stop_long
             atr_trailing_stop_short_col: atr_trailing_stop_short
-          output_cols:
-            - signal
+            output_cols:
+              - signal
     
     Required input columns
     ----------------------

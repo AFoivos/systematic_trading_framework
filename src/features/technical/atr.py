@@ -40,9 +40,9 @@ def add_atr_features(
               atr_col: null
               over_price_col: null
               inplace: false
-          output_cols:
-            - configured by atr_col
-            - configured by over_price_col
+            output_cols:
+              - configured by atr_col
+              - configured by over_price_col
     
     Required input columns
     ----------------------

@@ -37,8 +37,8 @@ def add_volatility_regime(
               lower_quantile: 0.33
               upper_quantile: 0.67
               output_col: null
-          output_cols:
-            - configured by output_col
+            output_cols:
+              - configured by output_col
     
     Required input columns
     ----------------------

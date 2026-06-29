@@ -197,8 +197,8 @@ def resolve_output_col(output_col: str | None, default: str) -> str:
             params:
               output_col: <required>
               default: <required>
-          output_cols:
-            - configured by output_col
+            output_cols:
+              - configured by output_col
     
     Required input columns
     ----------------------

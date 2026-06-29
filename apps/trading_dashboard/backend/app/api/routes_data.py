@@ -34,8 +34,9 @@ def get_ohlcv(
             dataset_id=dataset_id,
             start=start,
             end=end,
+            limit=limit,
         )
-        return candles[-limit:] if limit else candles
+        return candles
     except Exception as exc:
         raise_http_error(exc)
         return []

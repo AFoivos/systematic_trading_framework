@@ -65,9 +65,9 @@ def manual_long_model_filter_signal(
             round_trip_cost_return: 0.0
             cost_buffer_r: 0.0
             signal_col: null
-          output_cols:
-            - manual_long_candidate
-            - configured by signal_col
+            output_cols:
+              - manual_long_candidate
+              - configured by signal_col
     
     Required input columns
     ----------------------

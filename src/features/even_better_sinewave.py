@@ -29,8 +29,8 @@ def add_even_better_sinewave(
               smoothing_period: 10
               power_window: 3
               output_col: null
-          output_cols:
-            - configured by output_col
+            output_cols:
+              - configured by output_col
     
     Required input columns
     ----------------------

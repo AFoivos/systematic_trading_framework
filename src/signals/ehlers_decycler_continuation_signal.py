@@ -151,9 +151,9 @@ def ehlers_decycler_continuation_feature(df: pd.DataFrame, **params: Any) -> pd.
               entry_mode: state
               signal_col: signal_side
               candidate_col: signal_candidate
-          output_cols:
-            - signal_side
-            - signal_candidate
+            output_cols:
+              - signal_side
+              - signal_candidate
 
     Required input columns
     ----------------------
@@ -190,8 +190,8 @@ def ehlers_decycler_continuation_signal(df: pd.DataFrame, **params: Any) -> pd.D
             entry_mode: state
             signal_col: signal_side
             candidate_col: signal_candidate
-          output_cols:
-            - signal_candidate
+            output_cols:
+              - signal_candidate
     
     Required input columns
     ----------------------

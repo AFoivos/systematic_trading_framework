@@ -240,9 +240,9 @@ def ehlers_semiscalp_long_feature(df: pd.DataFrame, **params: Any) -> pd.DataFra
               use_cycle_period_filter: false
               signal_col: signal_side
               candidate_col: signal_candidate
-          output_cols:
-            - signal_side
-            - signal_candidate
+            output_cols:
+              - signal_side
+              - signal_candidate
 
     Required input columns
     ----------------------
@@ -306,9 +306,9 @@ def ehlers_semiscalp_long_signal(df: pd.DataFrame, **params: Any) -> pd.DataFram
             use_cycle_period_filter: false
             signal_col: signal_side
             candidate_col: signal_candidate
-          output_cols:
-            - signal_side
-            - signal_candidate
+            output_cols:
+              - signal_side
+              - signal_candidate
     
     Required input columns
     ----------------------

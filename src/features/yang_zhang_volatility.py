@@ -43,10 +43,10 @@ def add_yang_zhang_volatility(
               ratio_col: null
               rising_col: null
               high_vol_regime_col: null
-          output_cols:
-            - configured by output_col
-            - configured by ratio_col
-            - configured by rising_col
+            output_cols:
+              - configured by output_col
+              - configured by ratio_col
+              - configured by rising_col
     
     Required input columns
     ----------------------

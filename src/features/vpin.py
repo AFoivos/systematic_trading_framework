@@ -33,8 +33,8 @@ def add_vpin(
               window: 50
               bucket_volume: null
               output_col: null
-          output_cols:
-            - configured by output_col
+            output_cols:
+              - configured by output_col
     
     Required input columns
     ----------------------

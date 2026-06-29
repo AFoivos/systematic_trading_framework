@@ -45,8 +45,8 @@ def add_roofing_filter(
               cross_up_zero_col: null
               cross_down_zero_col: null
               add_derived: false
-          output_cols:
-            - configured by output_col
+            output_cols:
+              - configured by output_col
     
     Required input columns
     ----------------------

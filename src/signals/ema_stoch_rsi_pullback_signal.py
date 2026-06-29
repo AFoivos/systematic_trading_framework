@@ -334,8 +334,8 @@ def ema_stoch_rsi_pullback_signal(
             side_col: signal_side
             candidate_col: signal_candidate
             signal_col: null
-          output_cols:
-            - configured by signal_col
+            output_cols:
+              - configured by signal_col
     
     Required input columns
     ----------------------

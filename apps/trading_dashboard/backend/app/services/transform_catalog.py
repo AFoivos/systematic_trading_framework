@@ -27,90 +27,14 @@ PROJECT_ROOT = get_paths().project_root
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.features import (  # noqa: E402
-    TSFRESH_ROLLING_CALCULATORS,
-    add_adx_features,
-    add_autocorrelation_periodogram,
-    add_atr_features,
-    add_bollinger_features,
-    add_center_of_gravity,
-    add_close_returns,
-    add_cyber_cycle,
-    add_decycler,
-    add_decycler_oscillator,
-    add_dominant_cycle_period,
-    add_dominant_cycle_phase,
-    add_even_better_sinewave,
-    ehlers_ml_long_candidate_feature,
-    add_fama,
-    add_feature_transforms,
-    add_fisher_transform,
-    add_fractal_dimension,
-    add_frama,
-    add_garman_klass_volatility,
-    add_hilbert_transform,
-    add_homodyne_discriminator,
-    add_hmm_regime,
-    add_hurst_exponent,
-    add_instantaneous_trendline,
-    add_indicator_pullback_features,
-    add_inverse_fisher_transform,
-    add_lagged_features,
-    add_laguerre_rsi,
-    add_macd_features,
-    add_macro_context_features,
-    add_mama,
-    add_mfi_features,
-    add_multi_timeframe_features,
-    add_opening_range_breakout_features,
-    add_order_flow_imbalance,
-    add_parkinson_volatility,
-    add_permutation_entropy,
-    add_ppo_features,
-    add_price_momentum_features,
-    add_regime_context_features,
-    add_return_momentum_features,
-    add_roofing_filter,
-    add_rolling_r2_trend_quality,
-    add_schaff_trend_cycle_features,
-    add_roc_features,
-    add_rsi_features,
-    add_session_context_features,
-    add_shannon_entropy,
-    add_shock_context_features,
-    add_sinewave_indicator,
-    add_supersmoother,
-    add_stochastic_features,
-    add_stochastic_rsi_features,
-    add_support_resistance_features,
-    add_support_resistance_v2_features,
-    add_trend_slope_volatility,
-    add_volatility_of_volatility,
-    add_volatility_regime,
-    add_vol_normalized_momentum_features,
-    add_volatility_features,
-    add_volume_features,
-    add_vpin,
-    add_vwap_features,
-    add_yang_zhang_volatility,
-    add_zscore_momentum,
-    swing_extrema_context,
+from src.features import TSFRESH_ROLLING_CALCULATORS, add_feature_transforms  # noqa: E402
+from src.features.registry import (  # noqa: E402
+    FEATURE_COMPATIBILITY_REGISTRY as EXPERIMENT_FEATURE_COMPATIBILITY_REGISTRY,
+    FEATURE_REGISTRY as EXPERIMENT_FEATURE_REGISTRY,
 )
-from src.features.technical.trend import add_trend_features, add_trend_regime_features  # noqa: E402
 from src.signals.registry import SIGNAL_REGISTRY as EXPERIMENT_SIGNAL_REGISTRY  # noqa: E402
-from src.signals import (  # noqa: E402
-    ehlers_decycler_continuation_feature,
-    ehlers_semiscalp_long_feature,
-    ema_stoch_rsi_pullback_signal,
-    indicator_model_adaptive_pullback_signal,
-    regime_filtered_signal,
-    roc_long_only_conditions_signal,
-    vwap_rms_ema_cross_long_signal,
-)
 from src.targets.classifier import build_classifier_target  # noqa: E402
-from src.targets.forward_return import build_forward_return_target  # noqa: E402
-from src.targets.r_multiple import build_r_multiple_target  # noqa: E402
-from src.targets.triple_barrier import build_triple_barrier_target  # noqa: E402
+from src.targets.registry import TARGET_REGISTRY as EXPERIMENT_TARGET_REGISTRY  # noqa: E402
 from app.services.transform_dependencies import call_with_materialized_dependencies  # noqa: E402
 
 
@@ -119,95 +43,18 @@ FeatureFn = Callable[..., pd.DataFrame]
 SignalFn = Callable[..., pd.DataFrame | pd.Series]
 
 FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
-    "returns": add_close_returns,
-    "volatility": add_volatility_features,
-    "trend": add_trend_features,
-    "trend_regime": add_trend_regime_features,
-    "lags": add_lagged_features,
-    "bollinger": add_bollinger_features,
-    "macd": add_macd_features,
-    "ppo": add_ppo_features,
-    "roc": add_roc_features,
-    "atr": add_atr_features,
-    "adx": add_adx_features,
-    "volume_features": add_volume_features,
-    "vwap": add_vwap_features,
-    "mfi": add_mfi_features,
-    "rsi": add_rsi_features,
-    "stochastic": add_stochastic_features,
-    "stochastic_rsi": add_stochastic_rsi_features,
-    "price_momentum": add_price_momentum_features,
-    "return_momentum": add_return_momentum_features,
-    "vol_normalized_momentum": add_vol_normalized_momentum_features,
-    "session_context": add_session_context_features,
-    "regime_context": add_regime_context_features,
-    "shock_context": add_shock_context_features,
-    "hmm_regime": add_hmm_regime,
-    "support_resistance": add_support_resistance_features,
-    "support_resistance_v2": add_support_resistance_v2_features,
-    "macro_context": add_macro_context_features,
+    **dict(EXPERIMENT_FEATURE_REGISTRY),
     "feature_transforms": add_feature_transforms,
-    "multi_timeframe": add_multi_timeframe_features,
-    "opening_range_breakout": add_opening_range_breakout_features,
-    "swing_extrema_context": swing_extrema_context,
-    "roc_long_only_conditions": roc_long_only_conditions_signal,
-    "ehlers_decycler_continuation": ehlers_decycler_continuation_feature,
-    "ema_stoch_rsi_pullback": ema_stoch_rsi_pullback_signal,
-    "indicator_pullback": add_indicator_pullback_features,
-    "indicator_model_adaptive_pullback": indicator_model_adaptive_pullback_signal,
-    "ehlers_semiscalp_long": ehlers_semiscalp_long_feature,
-    "ehlers_ml_long_candidate": ehlers_ml_long_candidate_feature,
-    "mama": add_mama,
-    "fama": add_fama,
-    "dominant_cycle_period": add_dominant_cycle_period,
-    "dominant_cycle_phase": add_dominant_cycle_phase,
-    "instantaneous_trendline": add_instantaneous_trendline,
-    "fisher_transform": add_fisher_transform,
-    "inverse_fisher_transform": add_inverse_fisher_transform,
-    "sinewave_indicator": add_sinewave_indicator,
-    "cyber_cycle": add_cyber_cycle,
-    "decycler": add_decycler,
-    "decycler_oscillator": add_decycler_oscillator,
-    "laguerre_rsi": add_laguerre_rsi,
-    "frama": add_frama,
-    "center_of_gravity": add_center_of_gravity,
-    "even_better_sinewave": add_even_better_sinewave,
-    "autocorrelation_periodogram": add_autocorrelation_periodogram,
-    "homodyne_discriminator": add_homodyne_discriminator,
-    "parkinson_volatility": add_parkinson_volatility,
-    "garman_klass_volatility": add_garman_klass_volatility,
-    "yang_zhang_volatility": add_yang_zhang_volatility,
-    "hurst_exponent": add_hurst_exponent,
-    "fractal_dimension": add_fractal_dimension,
-    "zscore_momentum": add_zscore_momentum,
-    "rolling_r2_trend_quality": add_rolling_r2_trend_quality,
-    "trend_slope_volatility": add_trend_slope_volatility,
-    "volatility_of_volatility": add_volatility_of_volatility,
-    "volatility_regime": add_volatility_regime,
-    "hilbert_transform": add_hilbert_transform,
-    "roofing_filter": add_roofing_filter,
-    "schaff_trend_cycle": add_schaff_trend_cycle_features,
-    "supersmoother": add_supersmoother,
-    "shannon_entropy": add_shannon_entropy,
-    "permutation_entropy": add_permutation_entropy,
-    "vpin": add_vpin,
-    "order_flow_imbalance": add_order_flow_imbalance,
-    "vwap_rms_ema_cross_long": vwap_rms_ema_cross_long_signal,
+    **dict(EXPERIMENT_FEATURE_COMPATIBILITY_REGISTRY),
 }
 
-SIGNAL_REGISTRY: Mapping[str, SignalFn] = {
-    **{
-        name: fn
-        for name, fn in EXPERIMENT_SIGNAL_REGISTRY.items()
-        if not (name.endswith("_signal") and name.removesuffix("_signal") in EXPERIMENT_SIGNAL_REGISTRY)
-    },
-    "regime_filtered": regime_filtered_signal,
-}
+SIGNAL_REGISTRY: Mapping[str, SignalFn] = dict(EXPERIMENT_SIGNAL_REGISTRY)
 
-TARGET_REGISTRY: dict[str, Callable[[pd.DataFrame, dict[str, Any] | None], tuple[pd.DataFrame, str, str, dict[str, Any]]]] = {
-    "forward_return": build_forward_return_target,
-    "triple_barrier": build_triple_barrier_target,
-    "r_multiple": build_r_multiple_target,
+TARGET_REGISTRY: Mapping[
+    str,
+    Callable[[pd.DataFrame, dict[str, Any] | None], tuple[pd.DataFrame, str, str, dict[str, Any]]],
+] = {
+    **dict(EXPERIMENT_TARGET_REGISTRY),
     "classifier": build_classifier_target,
 }
 
@@ -221,6 +68,22 @@ TARGET_PARAM_DEFAULTS: dict[str, dict[str, Any]] = {
         "label_col": "label",
         "threshold": 0.0,
         "quantiles": None,
+    },
+    "future_return_regression": {
+        "price_col": "close",
+        "returns_col": None,
+        "returns_type": "simple",
+        "horizon_bars": 1,
+        "horizon": 1,
+        "raw_fwd_col": "target_future_return_raw_1",
+        "fwd_col": "target_future_return_1",
+        "target_col": "target_future_return_1",
+        "label_col": "target_future_return_1",
+        "normalize_by_volatility": False,
+        "volatility_col": "atr_14",
+        "volatility_floor": 1e-12,
+        "normalizer_col": None,
+        "clip": None,
     },
     "triple_barrier": {
         "price_col": "close",
@@ -246,6 +109,41 @@ TARGET_PARAM_DEFAULTS: dict[str, dict[str, Any]] = {
         "add_r_multiple": False,
         "r_col": "tb_event_r",
         "oriented_r_col": "tb_oriented_r",
+        "r_clip": None,
+    },
+    "directional_triple_barrier": {
+        "price_col": "close",
+        "open_col": "open",
+        "high_col": "high",
+        "low_col": "low",
+        "direction_col": "direction",
+        "side_col": None,
+        "candidate_col": None,
+        "volatility_col": "atr_14",
+        "label_col": "label",
+        "event_ret_col": "dtb_event_ret",
+        "fwd_col": "dtb_event_ret",
+        "candidate_out_col": "label_candidate",
+        "r_col": "dtb_event_r",
+        "oriented_r_col": "dtb_oriented_r",
+        "hit_step_col": "label_hit_step",
+        "hit_type_col": "label_hit_type",
+        "upper_barrier_col": "label_upper_barrier",
+        "lower_barrier_col": "label_lower_barrier",
+        "meta_side_col": "label_meta_side",
+        "oriented_ret_col": "label_oriented_ret",
+        "profit_barrier_r": 1.4,
+        "stop_barrier_r": 1.0,
+        "upper_mult": 1.4,
+        "lower_mult": 1.0,
+        "vertical_barrier_bars": 4,
+        "max_holding": 4,
+        "horizon": 4,
+        "min_vol": 1e-12,
+        "neutral_label": "drop",
+        "tie_break": "closest_to_open",
+        "entry_price_mode": "current_close",
+        "add_r_multiple": False,
         "r_clip": None,
     },
     "r_multiple": {
@@ -297,6 +195,12 @@ PARAM_OPTIONS: dict[str, list[Any]] = {
     "stop_mode": ["volatility_stop", "fixed_return"],
     "kind": ["forward_return", "triple_barrier", "r_multiple"],
     "timestamp_convention": ["bar_close", "bar_start"],
+}
+TARGET_PARAM_OPTIONS: dict[str, dict[str, list[Any]]] = {
+    "directional_triple_barrier": {
+        "neutral_label": ["drop", "profit", "stop"],
+        "tie_break": ["closest_to_open", "profit", "stop"],
+    }
 }
 
 SKIPPED_RUNTIME_PARAMETERS = {"df"}
@@ -472,6 +376,9 @@ FEATURE_PARAM_DEFAULTS: dict[str, dict[str, Any]] = {
     },
 }
 FEATURE_PARAM_OPTIONS: dict[str, dict[str, list[Any]]] = {
+    "trend_regime": {
+        "method": ["ema", "sma_legacy"],
+    },
     "hmm_regime": {
         "mode": ["expanding", "static_train"],
         "covariance_type": ["diag", "full", "tied", "spherical"],
@@ -743,6 +650,7 @@ def _parameter_definitions(
 
 def _target_parameter_definitions(name: str) -> list[ParameterDefinition]:
     params = TARGET_PARAM_DEFAULTS.get(name, {})
+    option_overrides = TARGET_PARAM_OPTIONS.get(name, {})
     definitions: list[ParameterDefinition] = []
     for key, default in params.items():
         definitions.append(
@@ -751,7 +659,7 @@ def _target_parameter_definitions(name: str) -> list[ParameterDefinition]:
                 kind=_infer_kind(default, inspect._empty),
                 required=False,
                 default_value=_safe_value(default),
-                options=PARAM_OPTIONS.get(key),
+                options=option_overrides.get(key, PARAM_OPTIONS.get(key)),
             )
         )
     return definitions
@@ -892,14 +800,19 @@ def _definitions_from_registry(
 
 def _feature_docstring(name: str, fn: BuilderFn) -> str | None:
     docstring = _docstring(fn)
-    if docstring is None or f"step: {name}" in docstring:
-        return docstring
-    return (
-        f"{docstring}\n\n"
+    compatibility_declaration = (
         "Dashboard feature catalog compatibility YAML declaration::\n\n"
         "    features:\n"
         f"      - step: {name}\n"
         "        params: {}\n"
+    )
+    if docstring is None:
+        return compatibility_declaration
+    if f"step: {name}" in docstring:
+        return docstring
+    return (
+        f"{docstring}\n\n"
+        f"{compatibility_declaration}"
     )
 
 

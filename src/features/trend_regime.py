@@ -39,8 +39,8 @@ def add_trend_regime(
               base_sma_for_sign: null
               short_sma: null
               long_sma: null
-          output_cols:
-            - configured by output_col
+            output_cols:
+              - configured by output_col
     
     Required input columns
     ----------------------

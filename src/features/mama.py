@@ -26,8 +26,8 @@ def add_mama(
               fast_limit: 0.5
               slow_limit: 0.05
               output_col: null
-          output_cols:
-            - configured by output_col
+            output_cols:
+              - configured by output_col
     
     Required input columns
     ----------------------

@@ -28,9 +28,9 @@ def orb_candidate_side_signal(
             side_col: orb_side
             signal_col: signal_orb_side
             mode: long_short
-          output_cols:
-            - orb_candidate
-            - signal_orb_side
+            output_cols:
+              - orb_candidate
+              - signal_orb_side
     
     Required input columns
     ----------------------

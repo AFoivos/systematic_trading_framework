@@ -39,9 +39,9 @@ def add_vwap_features(
               vwap_col: null
               distance_col: null
               inplace: false
-          output_cols:
-            - configured by vwap_col
-            - configured by distance_col
+            output_cols:
+              - configured by vwap_col
+              - configured by distance_col
     
     Required input columns
     ----------------------

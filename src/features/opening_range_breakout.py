@@ -641,8 +641,8 @@ def add_opening_range_breakout_features(
               use_extended_trade_until: false
               asset_col: asset
               asset: null
-          output_cols:
-            - atr_24
+            output_cols:
+              - atr_24
     
     Required input columns
     ----------------------

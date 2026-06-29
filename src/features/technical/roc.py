@@ -29,8 +29,8 @@ def add_roc_features(
               window: null
               output_col: null
               inplace: false
-          output_cols:
-            - configured by output_col
+            output_cols:
+              - configured by output_col
     
     Required input columns
     ----------------------

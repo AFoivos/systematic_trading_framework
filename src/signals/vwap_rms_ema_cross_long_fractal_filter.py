@@ -173,9 +173,9 @@ def vwap_rms_ema_cross_long_fractal_filter_signal(df: pd.DataFrame, **params: An
             long_setup_col: vwap_40_rms_ema_50_cross_long_fractal_setup
             signal_col: signal_side
             candidate_col: signal_candidate
-          output_cols:
-            - signal_side
-            - signal_candidate
+            output_cols:
+              - signal_side
+              - signal_candidate
     
     Required input columns
     ----------------------

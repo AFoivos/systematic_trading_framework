@@ -282,6 +282,10 @@ function asString(value: unknown, fallback: string): string {
   return typeof value === "string" && value.length > 0 ? value : fallback;
 }
 
+function hasConfiguredValue(value: unknown): boolean {
+  return value !== null && value !== undefined && value !== "";
+}
+
 function asBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
@@ -384,6 +388,11 @@ function deriveFeatureOutputColumns(stepName: string, params: Record<string, unk
         ])
       ]);
     case "trend_regime": {
+      const method = asString(params.method, "ema");
+      const legacySma = method === "sma_legacy" || ["base_sma_for_sign", "short_sma", "long_sma"].some((key) => hasConfiguredValue(params[key]));
+      if (!legacySma) {
+        return [outputOrParam(params, "output_col", "trend_regime")];
+      }
       const base = asInteger(params.base_sma_for_sign, 50);
       const short = asInteger(params.short_sma, 20);
       const long = asInteger(params.long_sma, 50);

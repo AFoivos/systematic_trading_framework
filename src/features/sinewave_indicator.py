@@ -35,8 +35,8 @@ def add_sinewave_indicator(
               lead_degrees: 45.0
               output_col: null
               lead_output_col: null
-          output_cols:
-            - configured by output_col
+            output_cols:
+              - configured by output_col
     
     Required input columns
     ----------------------

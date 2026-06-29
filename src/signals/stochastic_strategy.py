@@ -29,8 +29,8 @@ def stochastic_strategy(
             sell_level: 80.0
             signal_col: null
             mode: long_short_hold
-          output_cols:
-            - configured by signal_col
+            output_cols:
+              - configured by signal_col
     
     Required input columns
     ----------------------

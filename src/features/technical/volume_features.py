@@ -33,8 +33,8 @@ def add_volume_features(
               atr_window: 14
               vol_z_window: 20
               inplace: false
-          output_cols:
-            - configured by atr_col
+            output_cols:
+              - configured by atr_col
     
     Required input columns
     ----------------------

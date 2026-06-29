@@ -52,8 +52,8 @@ def add_hmm_regime(
               probability_prefix: hmm_regime_prob
               standardize: false
               standardize_eps: 1e-12
-          output_cols:
-            - configured by output_col
+            output_cols:
+              - configured by output_col
     
     Required input columns
     ----------------------

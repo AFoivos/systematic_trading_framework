@@ -24,8 +24,8 @@ def add_zscore_momentum(
               price_col: close
               window: 20
               output_col: null
-          output_cols:
-            - configured by output_col
+            output_cols:
+              - configured by output_col
     
     Required input columns
     ----------------------

@@ -73,9 +73,9 @@ def add_schaff_trend_cycle_features(
                 threshold: 0.0
                 op: lt
                 output_col: stc_falling
-          output_cols:
-            - stc
-            - stc_signal
+            output_cols:
+              - stc
+              - stc_signal
 
     Required input columns
     ----------------------

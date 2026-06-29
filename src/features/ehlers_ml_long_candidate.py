@@ -78,9 +78,9 @@ def ehlers_ml_long_candidate_feature(
               slope_bars: 1
               candidate_col: ehlers_ml_candidate
               side_col: signal_side
-          output_cols:
-            - configured by atr_col
-            - ehlers_ml_candidate
+            output_cols:
+              - configured by atr_col
+              - ehlers_ml_candidate
     
     Required input columns
     ----------------------

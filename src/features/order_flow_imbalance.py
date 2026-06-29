@@ -37,8 +37,8 @@ def add_order_flow_imbalance(
               window: 1
               normalize: false
               output_col: null
-          output_cols:
-            - configured by output_col
+            output_cols:
+              - configured by output_col
     
     Required input columns
     ----------------------

@@ -23,8 +23,8 @@ def resolve_signal_output_name(
           params:
             signal_col: <required>
             default: <required>
-          output_cols:
-            - configured by signal_col
+            output_cols:
+              - configured by signal_col
     
     Required input columns
     ----------------------

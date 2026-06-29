@@ -42,9 +42,9 @@ def add_fisher_transform(
               output_col: null
               signal_col: null
               add_signal: true
-          output_cols:
-            - configured by output_col
-            - configured by signal_col
+            output_cols:
+              - configured by output_col
+              - configured by signal_col
     
     Required input columns
     ----------------------

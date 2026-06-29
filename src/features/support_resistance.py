@@ -40,8 +40,8 @@ def add_support_resistance_features(
               include_pct_distance: true
               include_atr_distance: true
               inplace: false
-          output_cols:
-            - configured by atr_col
+            output_cols:
+              - configured by atr_col
     
     Required input columns
     ----------------------

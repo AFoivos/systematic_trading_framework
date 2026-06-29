@@ -29,8 +29,8 @@ def forecast_vol_adjusted_signal(
             signal_col: null
             clip: 1.0
             vol_floor: 1e-06
-          output_cols:
-            - configured by signal_col
+            output_cols:
+              - configured by signal_col
     
     Required input columns
     ----------------------

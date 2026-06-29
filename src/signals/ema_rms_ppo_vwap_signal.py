@@ -285,11 +285,11 @@ def ema_rms_ppo_vwap_signal(df: pd.DataFrame, **params: Any) -> pd.DataFrame:
             ppo_hist_col: ppo_hist
             long_setup_col: ema_rms_long_setup
             short_setup_col: ema_rms_short_setup
-          output_cols:
-            - atr_14
-            - vwap_20
-            - signal_side
-            - signal_candidate
+            output_cols:
+              - atr_14
+              - vwap_20
+              - signal_side
+              - signal_candidate
     
     Required input columns
     ----------------------

@@ -43,13 +43,13 @@ def add_trend_slope_volatility(
               rising_col: null
               strong_trend_col: null
               strong_threshold: 1.0
-          output_cols:
-            - configured by slope_col
-            - configured by volatility_used_col
-            - configured by slope_vol_ratio_col
-            - configured by positive_col
-            - configured by rising_col
-            - configured by strong_trend_col
+            output_cols:
+              - configured by slope_col
+              - configured by volatility_used_col
+              - configured by slope_vol_ratio_col
+              - configured by positive_col
+              - configured by rising_col
+              - configured by strong_trend_col
     
     Required input columns
     ----------------------

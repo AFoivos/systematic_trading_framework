@@ -58,8 +58,8 @@ def add_support_resistance_v2_features(
               touch_tolerance_atr: 0.25
               breakout_tolerance_atr: 0.05
               inplace: false
-          output_cols:
-            - configured by atr_col
+            output_cols:
+              - configured by atr_col
     
     Required input columns
     ----------------------

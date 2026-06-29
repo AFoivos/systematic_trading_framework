@@ -223,8 +223,8 @@ def add_indicator_pullback_features(
               bb_bandwidth_rank_window: 100
               include_asset_id: true
               inplace: false
-          output_cols:
-            - configured by atr_col
+            output_cols:
+              - configured by atr_col
     
     Required input columns
     ----------------------

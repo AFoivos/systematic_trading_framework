@@ -1,6 +1,6 @@
 # Κέντρο τεκμηρίωσης
 
-Τελευταία ενημέρωση: 2026-06-27
+Τελευταία ενημέρωση: 2026-06-29
 
 Αυτός είναι ο κεντρικός χάρτης τεκμηρίωσης του repo. Αν χρησιμοποιείς πρώτη
 φορά το framework, ξεκίνα από το quickstart και μετά πέρασε στον οδηγό YAML.
@@ -20,26 +20,21 @@
 
 - [Αρχιτεκτονική](architecture.md): package boundaries, registries και canonical
   pipeline.
-- [Feature catalog](catalog/features.md): διαθέσιμα feature steps και causal
-  υποθέσεις.
+- [Κατάλογος features](catalog/features.md): διαθέσιμα feature steps και causal
+  υποθέσεις, χωρισμένα σε οικογένειες με ερμηνεία τιμών.
+- [Κατάλογος helpers](catalog/helpers.md): διαθέσιμα transform και normalization
+  helpers, με κατηγορίες, παραδείγματα και πρακτική ερμηνεία outputs.
 - [Feature normalization playbook](feature_normalization_playbook_gr.md):
   ελληνικό playbook για normalizations, helpers και feature combinations με
   προτεραιότητα χρήσης.
-- [Signal catalog](catalog/signals.md): διαθέσιμα signal builders.
-- [Target catalog](catalog/targets.md): targets/labels και forecast horizons.
+- [Signal catalog](catalog/signals.md): διαθέσιμα signal builders, χωρισμένα σε
+  κατηγορίες με ερμηνεία τιμών και παραδείγματα.
+- [Target catalog](catalog/targets.md): targets/labels, forecast horizons,
+  barrier outcomes και R-multiple ερμηνεία.
+- [Model catalog](catalog/models.md): classifiers, forecasters, sequence models,
+  feature discovery και RL policies με ερμηνεία outputs.
 - [Execution source audit](execution_source_audit.md): audit για execution
   πηγές και runtime assumptions.
-
-## Strategy και experiment notes
-
-- [C1 30m trend pullback VWAP](experiments/c1_30m_trend_pullback_vwap.md)
-- [Opening range breakout για XAU/indices](strategies/opening_range_breakout_xau_indices.md)
-- [Trading dashboard assumptions](trading_dashboard_assumptions.md)
-
-## Reports
-
-- [FTMO Optuna meta plan](reports/ftmo_optuna_meta_v1_plan.md)
-- [FTMO triple-barrier upgrade review](reports/ftmo_triple_barrier_upgrade_review.md)
 
 ## Βασικός κανόνας ανάγνωσης
 

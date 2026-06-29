@@ -60,10 +60,10 @@ def add_hilbert_transform(
                 source_col: hilbert_amplitude_64
                 periods: 3
                 output_col: hilbert_amplitude_rising_64
-          output_cols:
-            - hilbert_amplitude_64
-            - hilbert_phase_64
-            - hilbert_instantaneous_frequency_64
+            output_cols:
+              - hilbert_amplitude_64
+              - hilbert_phase_64
+              - hilbert_instantaneous_frequency_64
 
     Required input columns
     ----------------------

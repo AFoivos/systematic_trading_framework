@@ -27,8 +27,8 @@ def add_laguerre_rsi(
               gamma: 0.5
               output_col: null
               as_percent: false
-          output_cols:
-            - configured by output_col
+            output_cols:
+              - configured by output_col
     
     Required input columns
     ----------------------

@@ -22,8 +22,8 @@ def add_dominant_cycle_phase(
             params:
               price_col: close
               output_col: null
-          output_cols:
-            - configured by output_col
+            output_cols:
+              - configured by output_col
     
     Required input columns
     ----------------------

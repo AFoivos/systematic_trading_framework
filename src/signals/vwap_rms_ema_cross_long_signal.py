@@ -284,9 +284,9 @@ def vwap_rms_ema_cross_long_signal(df: pd.DataFrame, **params: Any) -> pd.DataFr
             short_setup_col: vwap_rms_ema_cross_short_setup
             signal_col: signal_side
             candidate_col: signal_candidate
-          output_cols:
-            - signal_side
-            - signal_candidate
+            output_cols:
+              - signal_side
+              - signal_candidate
     
     Required input columns
     ----------------------

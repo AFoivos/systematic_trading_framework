@@ -173,8 +173,8 @@ def build_ehlers_cycle_long_signal(
             acp_ratio_threshold: 0.15
             roofing_filter_threshold: 0.0
             decycler_osc_threshold: 0.0
-          output_cols:
-            - cycle_signal
+            output_cols:
+              - cycle_signal
 
     Required input columns
     ----------------------
@@ -377,8 +377,8 @@ def ehlers_cycle_long_signal(df: pd.DataFrame, **params: Any) -> pd.DataFrame:
             acp_ratio_threshold: 0.15
             roofing_filter_threshold: 0.0
             decycler_osc_threshold: 0.0
-          output_cols:
-            - cycle_signal
+            output_cols:
+              - cycle_signal
     
     Required input columns
     ----------------------

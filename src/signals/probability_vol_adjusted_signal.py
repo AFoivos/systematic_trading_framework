@@ -47,8 +47,8 @@ def probability_vol_adjusted_signal(
             top_quantile: null
             top_quantile_window: null
             max_trade_rate: null
-          output_cols:
-            - configured by signal_col
+            output_cols:
+              - configured by signal_col
     
     Required input columns
     ----------------------

@@ -433,18 +433,18 @@ def stc_roofing_hilbert_signal(df: pd.DataFrame, **params: Any) -> pd.DataFrame:
             zscore_short_pass_col: stc_roofing_zscore_short_pass
             adx_pass_col: stc_roofing_adx_pass
             volatility_pass_col: stc_roofing_volatility_pass
-          output_cols:
-            - stc_roofing_long_candidate
-            - stc_roofing_short_candidate
-            - stc_roofing_signal
-            - stc_roofing_signal_candidate
-            - stc_roofing_hilbert_long_candidate
-            - stc_roofing_hilbert_short_candidate
-            - stc_roofing_hilbert_pass
-            - stc_roofing_zscore_long_pass
-            - stc_roofing_zscore_short_pass
-            - stc_roofing_adx_pass
-            - stc_roofing_volatility_pass
+            output_cols:
+              - stc_roofing_long_candidate
+              - stc_roofing_short_candidate
+              - stc_roofing_signal
+              - stc_roofing_signal_candidate
+              - stc_roofing_hilbert_long_candidate
+              - stc_roofing_hilbert_short_candidate
+              - stc_roofing_hilbert_pass
+              - stc_roofing_zscore_long_pass
+              - stc_roofing_zscore_short_pass
+              - stc_roofing_adx_pass
+              - stc_roofing_volatility_pass
     
     Required input columns
     ----------------------

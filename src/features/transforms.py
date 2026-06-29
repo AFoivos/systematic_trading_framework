@@ -164,8 +164,8 @@ def add_feature_transforms(
                   window: 48
                   shift: 0
                   output_col: close_logret__root_mean_square
-          output_cols:
-            - close_logret__root_mean_square
+            output_cols:
+              - close_logret__root_mean_square
 
     Required input columns
     ----------------------

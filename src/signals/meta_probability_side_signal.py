@@ -45,9 +45,9 @@ def meta_probability_side_signal(
             stop_barrier_r: 1.0
             clip: 1.0
             mode: long_short
-          output_cols:
-            - configured by candidate_col
-            - configured by signal_col
+            output_cols:
+              - configured by candidate_col
+              - configured by signal_col
     
     Required input columns
     ----------------------

@@ -25,8 +25,8 @@ def add_supersmoother(
               price_col: close
               period: 10
               output_col: null
-          output_cols:
-            - configured by output_col
+            output_cols:
+              - configured by output_col
     
     Required input columns
     ----------------------

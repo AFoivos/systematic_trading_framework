@@ -29,8 +29,8 @@ def add_shannon_entropy(
               bins: 10
               normalize: true
               output_col: null
-          output_cols:
-            - configured by output_col
+            output_cols:
+              - configured by output_col
     
     Required input columns
     ----------------------

@@ -249,9 +249,9 @@ def ehlers_continuation_short_signal(df: pd.DataFrame, **params: Any) -> pd.Data
             entry_col: ehlers_continuation_short_entry
             signal_col: ehlers_continuation_signal
             candidate_col: ehlers_continuation_candidate
-          output_cols:
-            - ehlers_continuation_signal
-            - ehlers_continuation_candidate
+            output_cols:
+              - ehlers_continuation_signal
+              - ehlers_continuation_candidate
     
     Required input columns
     ----------------------
