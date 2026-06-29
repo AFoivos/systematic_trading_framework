@@ -81,6 +81,46 @@ def normalize_dynamic_exit_config(dynamic_exits: Mapping[str, Any] | None) -> di
     return out
 
 
+def normalize_partial_exit_config(partial_exits: Mapping[str, Any] | None) -> dict[str, Any]:
+    cfg = dict(partial_exits or {})
+    enabled = bool(cfg.get("enabled", False))
+    disabled_defaults: dict[str, Any] = {"enabled": False, "rules": []}
+    if not enabled:
+        return disabled_defaults
+
+    raw_rules = cfg.get("rules", []) or []
+    if not isinstance(raw_rules, list):
+        raise ValueError("partial_exits.rules must be a list.")
+
+    rules: list[dict[str, Any]] = []
+    total_fraction = 0.0
+    for idx, raw_rule in enumerate(raw_rules):
+        if not isinstance(raw_rule, Mapping):
+            raise ValueError(f"partial_exits.rules[{idx}] must be a mapping.")
+        trigger_r = float(raw_rule.get("trigger_r"))
+        fraction = float(raw_rule.get("fraction"))
+        exit_price = str(raw_rule.get("exit_price", "trigger"))
+        if not np.isfinite(trigger_r) or trigger_r <= 0.0:
+            raise ValueError(f"partial_exits.rules[{idx}].trigger_r must be > 0.")
+        if not np.isfinite(fraction) or not 0.0 < fraction < 1.0:
+            raise ValueError(f"partial_exits.rules[{idx}].fraction must be in (0, 1).")
+        if exit_price not in {"trigger", "close", "next_open"}:
+            raise ValueError(f"partial_exits.rules[{idx}].exit_price must be one of: trigger, close, next_open.")
+        total_fraction += fraction
+        rules.append(
+            {
+                "trigger_r": float(trigger_r),
+                "fraction": float(fraction),
+                "exit_price": exit_price,
+            }
+        )
+
+    if total_fraction >= 1.0:
+        raise ValueError("partial_exits.rules fractions must sum to < 1.0.")
+    rules.sort(key=lambda rule: float(rule["trigger_r"]))
+    return {"enabled": True, "rules": rules}
+
+
 def _exit_on_price_mode(
     *,
     mode: str,
@@ -91,6 +131,19 @@ def _exit_on_price_mode(
     if mode == "next_open" and current_idx + 1 < len(opens):
         return current_idx + 1, float(opens[current_idx + 1])
     return current_idx, float(closes[current_idx])
+
+
+def _partial_exit_price(
+    *,
+    mode: str,
+    trigger_price: float,
+    current_idx: int,
+    opens: np.ndarray,
+    closes: np.ndarray,
+) -> tuple[int, float]:
+    if mode == "trigger":
+        return current_idx, float(trigger_price)
+    return _exit_on_price_mode(mode=mode, current_idx=current_idx, opens=opens, closes=closes)
 
 
 def _double_touch_exit(
@@ -127,6 +180,7 @@ def simulate_long_trade_path(
     initial_stop_price: float,
     take_profit_price: float,
     dynamic_exits: Mapping[str, Any] | None = None,
+    partial_exits: Mapping[str, Any] | None = None,
     volatility: np.ndarray | None = None,
     tie_break: str = "conservative",
     legacy_same_bar_stop_reason: bool = False,
@@ -154,6 +208,10 @@ def simulate_long_trade_path(
         raise ValueError("take_profit_price must be above entry_price for a long trade.")
 
     dynamic_cfg = normalize_dynamic_exit_config(dynamic_exits)
+    partial_cfg = normalize_partial_exit_config(partial_exits)
+    partial_rules = list(partial_cfg["rules"]) if partial_cfg["enabled"] else []
+    partial_rule_fired = [False] * len(partial_rules)
+    partial_exit_events: list[dict[str, Any]] = []
     effective_stop_price = stop
     stop_reason = "stop_loss"
     breakeven_activated = False
@@ -204,6 +262,12 @@ def simulate_long_trade_path(
 
         stop_hit = bar_low <= effective_stop_price
         take_profit_hit = bar_high >= take_profit
+        partial_rule_hits = [
+            (rule_idx, rule, entry + float(rule["trigger_r"]) * risk_distance)
+            for rule_idx, rule in enumerate(partial_rules)
+            if not partial_rule_fired[rule_idx]
+            and bar_high >= entry + float(rule["trigger_r"]) * risk_distance
+        ]
         if stop_hit and take_profit_hit:
             exit_idx = idx
             raw_exit_price, exit_reason = _double_touch_exit(
@@ -222,10 +286,48 @@ def simulate_long_trade_path(
             exit_reason = stop_reason
             break
         if take_profit_hit:
+            for rule_idx, rule, trigger_price in partial_rule_hits:
+                partial_idx, partial_price = _partial_exit_price(
+                    mode=str(rule["exit_price"]),
+                    trigger_price=trigger_price,
+                    current_idx=idx,
+                    opens=opens,
+                    closes=closes,
+                )
+                if partial_idx > idx:
+                    continue
+                partial_rule_fired[rule_idx] = True
+                partial_exit_events.append(
+                    {
+                        "rule_index": int(rule_idx),
+                        "trigger_r": float(rule["trigger_r"]),
+                        "fraction": float(rule["fraction"]),
+                        "exit_idx": int(partial_idx),
+                        "raw_exit_price": float(partial_price),
+                    }
+                )
             exit_idx = idx
             raw_exit_price = take_profit
             exit_reason = "take_profit"
             break
+        for rule_idx, rule, trigger_price in partial_rule_hits:
+            partial_idx, partial_price = _partial_exit_price(
+                mode=str(rule["exit_price"]),
+                trigger_price=trigger_price,
+                current_idx=idx,
+                opens=opens,
+                closes=closes,
+            )
+            partial_rule_fired[rule_idx] = True
+            partial_exit_events.append(
+                {
+                    "rule_index": int(rule_idx),
+                    "trigger_r": float(rule["trigger_r"]),
+                    "fraction": float(rule["fraction"]),
+                    "exit_idx": int(partial_idx),
+                    "raw_exit_price": float(partial_price),
+                }
+            )
 
         signal_off = dynamic_cfg["signal_off_exit"]
         if signal_off["enabled"] and bars_held >= signal_off["min_bars_held"] and signals is not None:
@@ -270,6 +372,7 @@ def simulate_long_trade_path(
         "breakeven_activated": bool(breakeven_activated),
         "profit_lock_activated": bool(profit_lock_activated),
         "effective_stop_price": float(effective_stop_price),
+        "partial_exits": partial_exit_events,
     }
 
 
@@ -286,6 +389,7 @@ def simulate_short_trade_path(
     initial_stop_price: float,
     take_profit_price: float,
     dynamic_exits: Mapping[str, Any] | None = None,
+    partial_exits: Mapping[str, Any] | None = None,
     volatility: np.ndarray | None = None,
     tie_break: str = "conservative",
     legacy_same_bar_stop_reason: bool = False,
@@ -310,6 +414,10 @@ def simulate_short_trade_path(
         raise ValueError("take_profit_price must be below entry_price for a short trade.")
 
     dynamic_cfg = normalize_dynamic_exit_config(dynamic_exits)
+    partial_cfg = normalize_partial_exit_config(partial_exits)
+    partial_rules = list(partial_cfg["rules"]) if partial_cfg["enabled"] else []
+    partial_rule_fired = [False] * len(partial_rules)
+    partial_exit_events: list[dict[str, Any]] = []
     effective_stop_price = stop
     stop_reason = "stop_loss"
     breakeven_activated = False
@@ -360,6 +468,12 @@ def simulate_short_trade_path(
 
         stop_hit = bar_high >= effective_stop_price
         take_profit_hit = bar_low <= take_profit
+        partial_rule_hits = [
+            (rule_idx, rule, entry - float(rule["trigger_r"]) * risk_distance)
+            for rule_idx, rule in enumerate(partial_rules)
+            if not partial_rule_fired[rule_idx]
+            and bar_low <= entry - float(rule["trigger_r"]) * risk_distance
+        ]
         if stop_hit and take_profit_hit:
             exit_idx = idx
             raw_exit_price, exit_reason = _double_touch_exit(
@@ -378,10 +492,48 @@ def simulate_short_trade_path(
             exit_reason = stop_reason
             break
         if take_profit_hit:
+            for rule_idx, rule, trigger_price in partial_rule_hits:
+                partial_idx, partial_price = _partial_exit_price(
+                    mode=str(rule["exit_price"]),
+                    trigger_price=trigger_price,
+                    current_idx=idx,
+                    opens=opens,
+                    closes=closes,
+                )
+                if partial_idx > idx:
+                    continue
+                partial_rule_fired[rule_idx] = True
+                partial_exit_events.append(
+                    {
+                        "rule_index": int(rule_idx),
+                        "trigger_r": float(rule["trigger_r"]),
+                        "fraction": float(rule["fraction"]),
+                        "exit_idx": int(partial_idx),
+                        "raw_exit_price": float(partial_price),
+                    }
+                )
             exit_idx = idx
             raw_exit_price = take_profit
             exit_reason = "take_profit"
             break
+        for rule_idx, rule, trigger_price in partial_rule_hits:
+            partial_idx, partial_price = _partial_exit_price(
+                mode=str(rule["exit_price"]),
+                trigger_price=trigger_price,
+                current_idx=idx,
+                opens=opens,
+                closes=closes,
+            )
+            partial_rule_fired[rule_idx] = True
+            partial_exit_events.append(
+                {
+                    "rule_index": int(rule_idx),
+                    "trigger_r": float(rule["trigger_r"]),
+                    "fraction": float(rule["fraction"]),
+                    "exit_idx": int(partial_idx),
+                    "raw_exit_price": float(partial_price),
+                }
+            )
 
         signal_off = dynamic_cfg["signal_off_exit"]
         if signal_off["enabled"] and bars_held >= signal_off["min_bars_held"] and signals is not None:
@@ -426,7 +578,13 @@ def simulate_short_trade_path(
         "breakeven_activated": bool(breakeven_activated),
         "profit_lock_activated": bool(profit_lock_activated),
         "effective_stop_price": float(effective_stop_price),
+        "partial_exits": partial_exit_events,
     }
 
 
-__all__ = ["normalize_dynamic_exit_config", "simulate_long_trade_path", "simulate_short_trade_path"]
+__all__ = [
+    "normalize_dynamic_exit_config",
+    "normalize_partial_exit_config",
+    "simulate_long_trade_path",
+    "simulate_short_trade_path",
+]

@@ -422,6 +422,7 @@ class BacktestConfig:
     max_holding_bars: int | None = None
     asset_params: dict[str, Any] = field(default_factory=dict)
     dynamic_exits: dict[str, Any] = field(default_factory=dict)
+    partial_exits: dict[str, Any] = field(default_factory=dict)
     allow_short: bool = False
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -456,6 +457,7 @@ class BacktestConfig:
             "max_holding_bars",
             "asset_params",
             "dynamic_exits",
+            "partial_exits",
             "allow_short",
         }
         max_holding_bars = data.get("max_holding_bars")
@@ -509,6 +511,7 @@ class BacktestConfig:
             max_holding_bars=int(max_holding_bars) if max_holding_bars is not None else None,
             asset_params=dict(data.get("asset_params", {}) or {}),
             dynamic_exits=dict(data.get("dynamic_exits", {}) or {}),
+            partial_exits=dict(data.get("partial_exits", {}) or {}),
             allow_short=bool(data.get("allow_short", False)),
             extra=_extras(data, known),
         )
@@ -543,6 +546,7 @@ class BacktestConfig:
             "max_holding_bars": self.max_holding_bars,
             "asset_params": dict(self.asset_params),
             "dynamic_exits": dict(self.dynamic_exits),
+            "partial_exits": dict(self.partial_exits),
             "allow_short": self.allow_short,
         }
         return payload | dict(self.extra)

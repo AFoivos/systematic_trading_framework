@@ -1,0 +1,254 @@
+strategy:
+  name: us100_30m_ehlers_trend_pullback_continuation_target_lab_v1
+  timeframe: 30m
+  assets: [US100]
+  description: Target lab for Ehlers trend pullback continuation candidates using candidate_expected_r labels.
+data:
+  source: dukascopy_csv
+  interval: 30m
+  start: null
+  end: null
+  alignment: inner
+  pit:
+    timestamp_alignment:
+      source_timezone: UTC
+      output_timezone: UTC
+      normalize_daily: false
+      duplicate_policy: last
+    corporate_actions:
+      policy: none
+      adj_close_col: adj_close
+    universe_snapshot:
+      inactive_policy: raise
+  symbol: US100
+  storage:
+    mode: cached_only
+    dataset_id: us100_30m_ehlers_trend_pullback_continuation_target_lab_v1
+    save_raw: false
+    save_processed: true
+    load_path: data/raw/dukascopy_30m_clean/us100_30m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed
+features:
+- step: returns
+  params:
+    log: false
+    col_name: close_ret
+- step: trend
+  params:
+    price_col: close
+    sma_windows: []
+    ema_spans: [50]
+    ema_col_template: ema_50
+    add_ratios: false
+- step: trend
+  params:
+    price_col: close
+    sma_windows: []
+    ema_spans: [100]
+    ema_col_template: ema_100
+    add_ratios: false
+- step: mama
+  params:
+    price_col: close
+    fast_limit: 0.5
+    slow_limit: 0.05
+    output_col: mama
+- step: fama
+  params:
+    price_col: close
+    fast_limit: 0.5
+    slow_limit: 0.05
+    output_col: fama
+- step: supersmoother
+  params:
+    price_col: close
+    period: 10
+    output_col: supersmoother_10
+- step: vwap
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    volume_col: volume
+    window: 20
+    windows: [20]
+    vwap_col: vwap_20
+    add_distance: false
+- step: roofing_filter
+  params:
+    price_col: close
+    high_pass_period: 48
+    low_pass_period: 10
+    output_col: roofing_filter_48_10
+  transforms:
+    difference:
+      params:
+        source_col: roofing_filter_48_10
+        periods: 1
+        output_col: roofing_filter_48_10_slope
+- step: decycler_oscillator
+  params:
+    price_col: close
+    fast_period: 30
+    slow_period: 60
+    output_col: decycler_oscillator_30_60
+- step: stochastic_rsi
+  params:
+    price_col: close
+    rsi_period: 14
+    stoch_period: 14
+    k_period: 3
+    d_period: 3
+    prefix: stoch_rsi
+- step: rolling_r2_trend_quality
+  params:
+    price_col: close
+    window: 96
+    output_col: rolling_r2_96
+- step: atr
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    window: 14
+    windows: [14]
+    method: wilder
+    atr_col: atr_14
+    add_over_price: false
+  transforms:
+    ratio:
+      items:
+      - numerator_col: atr_14
+        denominator_col: close
+        output_col: atr_over_price_14
+    rolling_zscore:
+      params:
+        source_col: atr_over_price_14
+        window: 252
+        shift: 1
+        output_col: atr_over_price_z_252
+  normalizations:
+    atr_scaled_distance:
+      items:
+      - base_col: close
+        ref_col: vwap_20
+        atr_col: atr_14
+        output_col: close_minus_vwap_20_over_atr_14
+      - base_col: close
+        ref_col: supersmoother_10
+        atr_col: atr_14
+        output_col: close_minus_supersmoother_10_over_atr_14
+      - base_col: close
+        ref_col: ema_50
+        atr_col: atr_14
+        output_col: close_minus_ema_50_over_atr_14
+model:
+  kind: none
+signals:
+  kind: ehlers_trend_pullback_continuation_long
+  params:
+    entry_mode: transition
+    entry_delay_bars: 0
+    long_only: true
+    require_trend_slope_positive: false
+    require_acp_power: false
+    require_hilbert_amplitude: false
+    require_hilbert_cycle_ok: false
+    avoid_near_resistance: false
+    avoid_shock_active: true
+    require_session_allowed: false
+    signal_col: signal_side
+    candidate_col: signal_candidate
+target:
+  kind: candidate_expected_r
+  candidate_col: signal_candidate
+  side_col: signal_side
+  side: long_only
+  entry_price_mode: next_open
+  open_col: open
+  high_col: high
+  low_col: low
+  close_col: close
+  price_col: close
+  volatility_col: atr_over_price_14
+  stop_mode: volatility_stop
+  stop_loss_r: 1.5
+  take_profit_r: 2.5
+  max_holding_bars: 16
+  target_r_min: 0.75
+  clip_r: [-2.0, 3.0]
+  tie_break: conservative
+  allow_partial_horizon: false
+  label_col: label
+  trade_r_col: target_trade_r
+  trade_r_clipped_col: target_trade_r_clipped
+  event_ret_col: target_event_ret
+  candidate_out_col: target_candidate
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+risk:
+  cost_per_turnover: 0.00015
+  slippage_per_turnover: 0.0001
+  target_vol: null
+  max_leverage: 1.0
+  sizing: {}
+  dd_guard:
+    enabled: false
+  portfolio_guard: {}
+  drawdown_sizing: {}
+  vol_col: null
+backtest:
+  engine: manual_barrier
+  signal_col: signal_side
+  returns_col: close_ret
+  returns_type: simple
+  subset: full
+  periods_per_year: 12096
+  missing_return_policy: raise_if_exposed
+  allow_short: false
+  long_only: true
+  stop_mode: volatility_stop
+  vol_col: atr_over_price_14
+  open_col: open
+  high_col: high
+  low_col: low
+  close_col: close
+  take_profit_r: 2.5
+  stop_loss_r: 1.5
+  risk_per_trade: 0.003
+  max_holding_bars: 16
+  dynamic_exits: {}
+portfolio:
+  enabled: false
+  construction: signal_weights
+  long_short: false
+  gross_target: 1.0
+monitoring:
+  enabled: true
+  psi_threshold: 0.2
+  n_bins: 10
+diagnostics:
+  enabled: true
+  robustness:
+    enabled: true
+    cost_multipliers: [2.0, 3.0, 5.0]
+    entry_delay_bars: [1, 2]
+    walk_forward_frequency: YE
+execution:
+  enabled: false
+  mode: paper
+  capital: 100000.0
+  price_col: close
+logging:
+  enabled: true
+  run_name: us100_30m_ehlers_trend_pullback_continuation_target_lab_v1
+  output_dir: logs/experiments
+  stage_tails:
+    enabled: false
+  execution_source_audit:
+    enabled: true

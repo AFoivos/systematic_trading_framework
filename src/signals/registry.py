@@ -15,6 +15,7 @@ from .ehlers_continuation_long_signal import ehlers_continuation_long_signal
 from .ehlers_continuation_short_signal import ehlers_continuation_short_signal
 from .ehlers_decycler_continuation_signal import ehlers_decycler_continuation_signal
 from .ehlers_semiscalp_long_signal import ehlers_semiscalp_long_signal
+from .ehlers_trend_pullback_continuation_long_signal import ehlers_trend_pullback_continuation_long_signal
 from .ema_rms_ppo_vwap_signal import ema_rms_ppo_vwap_signal
 from .ema_stoch_rsi_pullback_signal import ema_stoch_rsi_pullback_signal
 from .forecast_threshold_signal import forecast_threshold_signal
@@ -48,6 +49,7 @@ _SIGNAL_COMPONENTS: tuple[tuple[str, SignalFn], ...] = (
     ("ehlers_continuation_short", ehlers_continuation_short_signal),
     ("ehlers_decycler_continuation", ehlers_decycler_continuation_signal),
     ("ehlers_semiscalp_long", ehlers_semiscalp_long_signal),
+    ("ehlers_trend_pullback_continuation_long", ehlers_trend_pullback_continuation_long_signal),
     ("trend_state", trend_state_signal),
     ("ema_rms_ppo_vwap", ema_rms_ppo_vwap_signal),
     ("probability_threshold", probabilistic_signal),

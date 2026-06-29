@@ -21,10 +21,12 @@ from src.experiments.optuna_search import (
     extract_objective_value,
     get_nested_value,
     load_search_space_yaml,
+    load_optuna_spec_yaml,
     normalize_objective_spec,
     normalize_pruning_spec,
     optimize_experiment,
     prepare_trial_config,
+    sample_trial_parameters,
     score_experiment_result,
     validate_search_space_feature_contract,
     write_study_report,
@@ -787,6 +789,32 @@ search_space:
     assert len(search_space) == 1
     assert search_space[0].name == "upper"
     assert search_space[0].path == "signals.params.upper"
+
+
+def test_us100_ehlers_tp_long_optuna_spec_materializes_trial_config() -> None:
+    optuna_cfg_path = Path("config/optuna/us100_30m_ehlers_tp_long_signal_backtest_v1_optuna.yaml")
+    spec = load_optuna_spec_yaml(optuna_cfg_path)
+    search_space = spec["search_space"]
+    base_cfg = load_experiment_config(spec["base_config"])
+
+    validate_search_space_feature_contract(base_cfg, search_space)
+    trial_params = sample_trial_parameters(_FakeTrial(), search_space)
+    trial_cfg = prepare_trial_config(
+        base_cfg,
+        trial_params=trial_params,
+        search_space=search_space,
+        logging_enabled=False,
+    )
+
+    assert spec["study"]["sampler"] == "tpe"
+    assert spec["study"]["seed"] == 42
+    assert spec["study"]["n_trials"] == 500
+    assert str(spec["study"]["storage"]).startswith("sqlite:///logs/optuna/")
+    assert trial_cfg["model"]["kind"] == "none"
+    assert trial_cfg["signals"]["kind"] == "ehlers_trend_pullback_continuation_long"
+    assert trial_cfg["backtest"]["dynamic_exits"]["enabled"] is False
+    assert trial_cfg["signals"]["params"]["entry_delay_bars"] in {0, 1, 2}
+    validate_resolved_config(trial_cfg)
 
 
 def test_repo_shock_meta_optuna_yaml_matches_base_config_contract() -> None:

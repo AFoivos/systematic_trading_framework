@@ -10,6 +10,19 @@ from .git_tools import git_current_branch as git_current_branch_impl
 from .git_tools import git_diff as git_diff_impl
 from .git_tools import git_log as git_log_impl
 from .git_tools import git_status as git_status_impl
+from .introspection_tools import compare_experiment_runs as compare_experiment_runs_impl
+from .introspection_tools import docs_registry_sync_check as docs_registry_sync_check_impl
+from .introspection_tools import feature_lineage as feature_lineage_impl
+from .introspection_tools import inspect_component as inspect_component_impl
+from .introspection_tools import inspect_config as inspect_config_impl
+from .introspection_tools import leakage_audit_config as leakage_audit_config_impl
+from .introspection_tools import list_recent_runs_with_metrics as list_recent_runs_with_metrics_impl
+from .introspection_tools import registry_inventory as registry_inventory_impl
+from .introspection_tools import repo_overview_summary as repo_overview_summary_impl
+from .introspection_tools import review_current_changes as review_current_changes_impl
+from .introspection_tools import run_pytest as run_pytest_impl
+from .introspection_tools import suggest_tests_for_change as suggest_tests_for_change_impl
+from .introspection_tools import target_signal_compatibility_check as target_signal_compatibility_check_impl
 from .project_tools import (
     execute_approved_python_script as execute_approved_python_script_impl,
 )
@@ -159,6 +172,84 @@ def read_log(path: str, tail_lines: int = 200) -> dict[str, Any]:
 def execute_approved_python_script(script: str, args: list[str] | None = None, confirmation: str | None = None, timeout_seconds: int | None = None) -> dict[str, Any]:
     """Use this only when the user explicitly confirms running an allowlisted Python script."""
     return execute_approved_python_script_impl(CONFIG, script=script, args=args, confirmation=confirmation, timeout_seconds=timeout_seconds)
+
+
+@mcp.tool(annotations=READ_ONLY)
+def repo_overview_summary() -> dict[str, Any]:
+    """Use this for a compact repository health, registry, git, and recent-run overview."""
+    return repo_overview_summary_impl(CONFIG)
+
+
+@mcp.tool(annotations=READ_ONLY)
+def registry_inventory() -> dict[str, Any]:
+    """Use this to inspect canonical component registries without importing project modules."""
+    return registry_inventory_impl(CONFIG)
+
+
+@mcp.tool(annotations=READ_ONLY)
+def inspect_component(name: str, component_type: str | None = None) -> dict[str, Any]:
+    """Use this to locate one registered component, its implementation, references, docs, and tests."""
+    return inspect_component_impl(CONFIG, name=name, component_type=component_type)
+
+
+@mcp.tool(annotations=READ_ONLY)
+def docs_registry_sync_check() -> dict[str, Any]:
+    """Use this to compare registry component names with docs/catalog files."""
+    return docs_registry_sync_check_impl(CONFIG)
+
+
+@mcp.tool(annotations=READ_ONLY)
+def inspect_config(path: str) -> dict[str, Any]:
+    """Use this to statically summarize a YAML or JSON experiment config without executing it."""
+    return inspect_config_impl(CONFIG, path=path)
+
+
+@mcp.tool(annotations=READ_ONLY)
+def feature_lineage(path: str) -> dict[str, Any]:
+    """Use this to infer approximate feature, target, model, prediction, and signal lineage from a config."""
+    return feature_lineage_impl(CONFIG, path=path)
+
+
+@mcp.tool(annotations=READ_ONLY)
+def leakage_audit_config(path: str) -> dict[str, Any]:
+    """Use this for static leakage and temporal-causality checks on an experiment config."""
+    return leakage_audit_config_impl(CONFIG, path=path)
+
+
+@mcp.tool(annotations=READ_ONLY)
+def target_signal_compatibility_check(path: str) -> dict[str, Any]:
+    """Use this to check semantic compatibility among target, model outputs, signal inputs, and execution timing."""
+    return target_signal_compatibility_check_impl(CONFIG, path=path)
+
+
+@mcp.tool(annotations=READ_ONLY)
+def list_recent_runs_with_metrics(root: str = "logs", max_runs: int = 20) -> dict[str, Any]:
+    """Use this to list recent experiment runs with defensive metric and artifact summaries."""
+    return list_recent_runs_with_metrics_impl(CONFIG, root=root, max_runs=max_runs)
+
+
+@mcp.tool(annotations=READ_ONLY)
+def compare_experiment_runs(run_ids: list[str]) -> dict[str, Any]:
+    """Use this to compare available metrics, config paths, and artifacts across experiment run directories."""
+    return compare_experiment_runs_impl(CONFIG, run_ids=run_ids)
+
+
+@mcp.tool(annotations=READ_ONLY)
+def review_current_changes() -> dict[str, Any]:
+    """Use this to review current git changes for likely missing companion changes and leakage risks."""
+    return review_current_changes_impl(CONFIG)
+
+
+@mcp.tool(annotations=READ_ONLY)
+def suggest_tests_for_change(path: str | None = None) -> dict[str, Any]:
+    """Use this to suggest targeted tests and validation checks for a path or current git diff."""
+    return suggest_tests_for_change_impl(CONFIG, path=path)
+
+
+@mcp.tool(annotations=SCRIPT_RUNNER)
+def run_pytest(paths: list[str] | None = None, confirmation: str | None = None, timeout_seconds: int | None = None) -> dict[str, Any]:
+    """Use this only when the user explicitly confirms running pytest under tests/ or mcp_server/tests/."""
+    return run_pytest_impl(CONFIG, paths=paths, confirmation=confirmation, timeout_seconds=timeout_seconds)
 
 
 if __name__ == "__main__":

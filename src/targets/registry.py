@@ -7,6 +7,7 @@ import pandas as pd
 
 from src.utils.registry import build_registry, get_registered_component, registry_names
 
+from .candidate_expected_r import build_candidate_expected_r_target
 from .directional_triple_barrier import build_directional_triple_barrier_target
 from .forward_return import build_forward_return_target
 from .future_return_regression import build_future_return_regression_target
@@ -22,6 +23,7 @@ _TARGET_COMPONENTS: tuple[tuple[str, TargetBuilder], ...] = (
     ("triple_barrier", build_triple_barrier_target),
     ("directional_triple_barrier", build_directional_triple_barrier_target),
     ("r_multiple", build_r_multiple_target),
+    ("candidate_expected_r", build_candidate_expected_r_target),
 )
 
 

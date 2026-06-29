@@ -185,6 +185,10 @@ def _simulate_barrier_event(
     chosen_type: str | None = None
     chosen_idx: int | None = None
     exit_price: float | None = None
+    path_mfe = -np.inf
+    path_mae = np.inf
+    time_to_mfe = 0
+    time_to_mae = 0
     horizon_end = (
         len(frame)
         if vertical_barrier_bars is None
@@ -192,6 +196,18 @@ def _simulate_barrier_event(
     )
 
     for step_idx in range(signal_idx + 1, horizon_end):
+        if side > 0.0:
+            bar_mfe = (float(highs[step_idx]) - entry_price) / risk_distance
+            bar_mae = (float(lows[step_idx]) - entry_price) / risk_distance
+        else:
+            bar_mfe = (entry_price - float(lows[step_idx])) / risk_distance
+            bar_mae = (entry_price - float(highs[step_idx])) / risk_distance
+        if np.isfinite(bar_mfe) and bar_mfe > path_mfe:
+            path_mfe = float(bar_mfe)
+            time_to_mfe = int(step_idx - signal_idx)
+        if np.isfinite(bar_mae) and bar_mae < path_mae:
+            path_mae = float(bar_mae)
+            time_to_mae = int(step_idx - signal_idx)
         if side > 0.0:
             hit_profit = bool(highs[step_idx] >= profit_level)
             hit_stop = bool(lows[step_idx] <= stop_level)
@@ -247,6 +263,10 @@ def _simulate_barrier_event(
             else "vertical"
         ),
         "bars_held": int(chosen_idx - signal_idx),
+        "max_favorable_r": float(path_mfe) if np.isfinite(path_mfe) else np.nan,
+        "max_adverse_r": float(path_mae) if np.isfinite(path_mae) else np.nan,
+        "time_to_mfe": int(time_to_mfe),
+        "time_to_mae": int(time_to_mae),
     }
 
 
@@ -765,6 +785,10 @@ def run_portfolio_barrier_backtest(
                 "hit_type": event["hit_type"],
                 "hit_step": int(event["bars_held"]),
                 "bars_held": int(event["bars_held"]),
+                "max_favorable_r": float(event["max_favorable_r"]),
+                "max_adverse_r": float(event["max_adverse_r"]),
+                "time_to_mfe": int(event["time_to_mfe"]),
+                "time_to_mae": int(event["time_to_mae"]),
                 "gross_return": pnl["gross_return"],
                 "net_return": pnl["net_return"],
                 "realized_r": pnl["realized_r"],

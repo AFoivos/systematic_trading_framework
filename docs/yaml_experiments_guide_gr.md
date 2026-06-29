@@ -12,6 +12,39 @@ distance, slope, lag, crossing flag, threshold flag, rolling z-score ή clipping
 `tsfresh_rolling.py` helper και το `tsfresh_rolling` απορρίπτεται από το YAML
 validation.
 
+## Trade Path Diagnostics
+
+Τα trade lifecycle diagnostics είναι reporting/artifact layer και δεν μπαίνουν
+ποτέ στο feature selection. Όταν το top-level `diagnostics.enabled` είναι
+`true`, το `diagnostics.trade_path.enabled` γίνεται αυτόματα `true`, εκτός αν
+δοθεί explicit opt-out.
+
+```yaml
+diagnostics:
+  enabled: true
+  # trade_path auto-enabled by default
+  trade_path:
+    thresholds_r: [0.5, 1.0, 1.5, 2.0]
+    include_counterfactuals: true
+    plots:
+      enabled: true
+```
+
+Για explicit opt-out:
+
+```yaml
+diagnostics:
+  enabled: true
+  trade_path:
+    enabled: false
+```
+
+Τα νέα outputs γράφονται κάτω από `report_assets/` όταν υπάρχουν αρκετά trade
+metadata: `trades_enriched.csv`, `trade_paths.parquet` ή fallback
+`trade_paths.csv`, `probability_trade_quality.csv`,
+`counterfactual_exit_summary.csv` και diagnostic JSON warnings. Τα legacy
+`trade_diagnostics_*.html` δεν παράγονται πλέον.
+
 ## Νέα δομή φακέλων
 
 - `src/features/technical/`: raw indicators όπως `trend`, `atr`, `vwap`, `ppo`

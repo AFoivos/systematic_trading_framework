@@ -10,9 +10,11 @@ def _run(
     df: pd.DataFrame,
     *,
     dynamic_exits: dict | None = None,
+    partial_exits: dict | None = None,
     take_profit_r: float = 3.0,
     max_holding_bars: int = 12,
     allow_short: bool = False,
+    cost_per_unit_turnover: float = 0.0,
 ):
     return run_manual_barrier_backtest(
         df,
@@ -21,10 +23,11 @@ def _run(
         stop_loss_r=1.0,
         risk_per_trade=0.01,
         max_holding_bars=max_holding_bars,
-        cost_per_unit_turnover=0.0,
+        cost_per_unit_turnover=cost_per_unit_turnover,
         slippage_per_unit_turnover=0.0,
         periods_per_year=48,
         dynamic_exits=dynamic_exits,
+        partial_exits=partial_exits,
         allow_short=allow_short,
     )
 
@@ -153,6 +156,91 @@ def test_manual_barrier_dynamic_disabled_preserves_legacy_behavior() -> None:
         assert disabled_trade[col] == legacy_trade[col]
 
 
+def test_manual_barrier_partial_absent_and_disabled_preserve_legacy_behavior() -> None:
+    df = _frame(5)
+    df.loc[df.index[1], ["high", "low", "close"]] = [101.5, 99.8, 101.0]
+
+    legacy = _run(df, take_profit_r=1.0, max_holding_bars=3)
+    disabled = _run(
+        df,
+        take_profit_r=1.0,
+        max_holding_bars=3,
+        partial_exits={"enabled": False, "rules": [{"trigger_r": 0.5, "fraction": 0.5}]},
+    )
+
+    pd.testing.assert_series_equal(legacy.returns, disabled.returns)
+    pd.testing.assert_series_equal(legacy.gross_returns, disabled.gross_returns)
+    pd.testing.assert_series_equal(legacy.costs, disabled.costs)
+    pd.testing.assert_series_equal(legacy.positions, disabled.positions)
+    pd.testing.assert_series_equal(legacy.turnover, disabled.turnover)
+    pd.testing.assert_frame_equal(legacy.trades, disabled.trades)
+
+
+def test_manual_barrier_partial_long_then_take_profit_weights_returns_and_costs() -> None:
+    df = _frame(5, signal=[1.0, 0.0, 0.0, 0.0, 0.0])
+    df.loc[df.index[1], ["high", "low", "close"]] = [100.6, 100.0, 100.4]
+    df.loc[df.index[2], ["high", "low", "close"]] = [102.2, 100.8, 102.0]
+
+    result = _run(
+        df,
+        take_profit_r=2.0,
+        max_holding_bars=4,
+        cost_per_unit_turnover=0.001,
+        partial_exits={"enabled": True, "rules": [{"trigger_r": 0.5, "fraction": 0.5, "exit_price": "trigger"}]},
+    )
+
+    trade = result.trades.iloc[0]
+    assert trade["exit_reason"] == "take_profit"
+    assert trade["partial_exit_count"] == 1
+    assert trade["partial_exit_fraction_total"] == pytest.approx(0.5)
+    assert trade["remaining_fraction"] == pytest.approx(0.5)
+    assert trade["partial_exit_realized_r"] == pytest.approx(0.25)
+    assert trade["gross_return"] == pytest.approx(0.0125)
+    assert trade["cost_paid"] == pytest.approx(0.002)
+    assert trade["net_return"] == pytest.approx(0.0105)
+    assert trade["trade_r"] == pytest.approx(1.05)
+    assert result.turnover.sum() == pytest.approx(2.0)
+    assert result.costs.sum() == pytest.approx(0.002)
+    assert result.gross_returns.sum() == pytest.approx(0.0125)
+
+
+def test_manual_barrier_partial_long_then_stop_reduces_loss_and_keeps_stop_reason() -> None:
+    df = _frame(5, signal=[1.0, 0.0, 0.0, 0.0, 0.0])
+    df.loc[df.index[1], ["high", "low", "close"]] = [100.6, 100.0, 100.4]
+    df.loc[df.index[2], ["high", "low", "close"]] = [100.2, 98.8, 99.0]
+
+    result = _run(
+        df,
+        take_profit_r=2.0,
+        max_holding_bars=4,
+        partial_exits={"enabled": True, "rules": [{"trigger_r": 0.5, "fraction": 0.5, "exit_price": "trigger"}]},
+    )
+
+    trade = result.trades.iloc[0]
+    assert trade["exit_reason"] == "stop_loss"
+    assert trade["partial_exit_count"] == 1
+    assert trade["gross_return"] == pytest.approx(-0.0025)
+    assert trade["trade_r"] == pytest.approx(-0.25)
+    assert trade["trade_r"] > -1.0
+
+
+def test_manual_barrier_partial_same_bar_stop_trigger_is_stop_first() -> None:
+    df = _frame(4, signal=[1.0, 0.0, 0.0, 0.0])
+    df.loc[df.index[1], ["high", "low", "close"]] = [100.6, 98.9, 99.2]
+
+    result = _run(
+        df,
+        take_profit_r=2.0,
+        max_holding_bars=3,
+        partial_exits={"enabled": True, "rules": [{"trigger_r": 0.5, "fraction": 0.5, "exit_price": "trigger"}]},
+    )
+
+    trade = result.trades.iloc[0]
+    assert trade["exit_reason"] == "stop_loss"
+    assert "partial_exit_count" not in result.trades.columns
+    assert trade["trade_r"] == pytest.approx(-1.0)
+
+
 def test_manual_barrier_dynamic_exits_never_create_short_or_flip() -> None:
     df = _frame(8, signal=[1.0, -1.0, -1.0, 0.0, 1.0, -1.0, 0.0, 0.0])
 
@@ -210,3 +298,24 @@ def test_manual_barrier_short_take_profit_records_positive_return() -> None:
     assert trade["exit_reason"] == "take_profit"
     assert trade["trade_r"] == pytest.approx(1.0)
     assert result.returns.loc[df.index[1]] == pytest.approx(0.01)
+
+
+def test_manual_barrier_short_partial_then_take_profit_weights_returns() -> None:
+    df = _frame(5, signal=[-1.0, 0.0, 0.0, 0.0, 0.0])
+    df.loc[df.index[1], ["open", "high", "low", "close"]] = [100.0, 100.1, 99.4, 99.6]
+    df.loc[df.index[2], ["high", "low", "close"]] = [99.2, 97.8, 98.0]
+
+    result = _run(
+        df,
+        take_profit_r=2.0,
+        max_holding_bars=4,
+        allow_short=True,
+        partial_exits={"enabled": True, "rules": [{"trigger_r": 0.5, "fraction": 0.5, "exit_price": "trigger"}]},
+    )
+
+    trade = result.trades.iloc[0]
+    assert trade["side"] == "short"
+    assert trade["exit_reason"] == "take_profit"
+    assert trade["partial_exit_count"] == 1
+    assert trade["gross_return"] == pytest.approx(0.0125)
+    assert trade["trade_r"] == pytest.approx(1.25)

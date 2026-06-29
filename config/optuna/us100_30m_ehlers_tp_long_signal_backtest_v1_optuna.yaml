@@ -1,0 +1,137 @@
+base_config: config/experiments/ehlers_trend_pullback_continuation_long/us100_30m_ehlers_trend_pullback_continuation_long_v1.yaml
+
+study:
+  study_name: us100_30m_ehlers_tp_long_signal_backtest_v1
+  storage: sqlite:///logs/optuna/us100_30m_ehlers_tp_long_signal_backtest_v1.db
+  load_if_exists: true
+  sampler: tpe
+  seed: 42
+  n_trials: 150
+  timeout: null
+  n_jobs: 1
+  logging_enabled: true
+  catch_exceptions: true
+
+report:
+  enabled: true
+  output_dir: logs/experiments
+  run_name: us100_30m_ehlers_tp_long_signal_backtest_v1_optuna
+
+objective:
+  metric_path: evaluation.primary_summary.sharpe
+  direction: maximize
+  failure_score: -1000000000000.0
+  base_metric_weight: 1.0
+  stability_weight: 0.0
+  fold_summary_path: evaluation.fold_backtest_summaries
+  constraints:
+  - metric_path: evaluation.primary_summary.profit_factor
+    op: lt
+    threshold: 0.95
+    penalty: 5.0
+    missing_penalty: 5.0
+  - metric_path: evaluation.primary_summary.cumulative_return
+    op: lt
+    threshold: -0.02
+    penalty: 5.0
+    missing_penalty: 5.0
+  - metric_path: evaluation.primary_summary.max_drawdown
+    op: lt
+    threshold: -0.12
+    penalty: 5.0
+    missing_penalty: 5.0
+  - metric_path: derived.trade_count
+    op: lt
+    threshold: 150.0
+    penalty: 5.0
+    missing_penalty: 5.0
+  - metric_path: evaluation.primary_summary.cost_to_gross_pnl
+    op: gt
+    threshold: 1.50
+    penalty: 5.0
+    missing_penalty: 5.0
+  - metric_path: evaluation.primary_summary.robustness_cost_x2_profit_factor
+    op: lt
+    threshold: 0.80
+    penalty: 5.0
+    missing_penalty: 5.0
+  - metric_path: evaluation.primary_summary.robustness_delay_1_bars_profit_factor
+    op: lt
+    threshold: 0.80
+    penalty: 5.0
+    missing_penalty: 5.0
+
+pruning:
+  enabled: false
+  metric_path: evaluation.primary_summary.sharpe
+  direction: maximize
+  stage_filter: []
+  pruner: none
+  n_startup_trials: 10
+  n_warmup_steps: 1
+  interval_steps: 1
+
+search_space:
+- name: entry_delay_bars
+  path: signals.params.entry_delay_bars
+  kind: categorical
+  choices: [0, 1, 2]
+- name: min_trend_slope_vol_ratio
+  path: signals.params.min_trend_slope_vol_ratio
+  kind: categorical
+  choices: [0.35, 0.50, 0.65, 0.75, 0.90, 1.00, 1.25, 1.50]
+- name: require_acp_power
+  path: signals.params.require_acp_power
+  kind: bool
+- name: min_acp_power
+  path: signals.params.min_acp_power
+  kind: categorical
+  choices: [0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.40]
+- name: require_hilbert_amplitude
+  path: signals.params.require_hilbert_amplitude
+  kind: bool
+- name: min_hilbert_amplitude_z
+  path: signals.params.min_hilbert_amplitude_z
+  kind: categorical
+  choices: [-0.25, 0.00, 0.10, 0.25, 0.40, 0.50, 0.75, 1.00]
+- name: require_hilbert_cycle_ok
+  path: signals.params.require_hilbert_cycle_ok
+  kind: bool
+- name: min_rolling_r2
+  path: signals.params.min_rolling_r2
+  kind: categorical
+  choices: [0.20, 0.30, 0.35, 0.45, 0.55, 0.65]
+- name: max_atr_z
+  path: signals.params.max_atr_z
+  kind: categorical
+  choices: [1.00, 1.25, 1.50, 1.75, 2.00, 2.50]
+- name: max_abs_vwap_distance_atr
+  path: signals.params.max_abs_vwap_distance_atr
+  kind: categorical
+  choices: [0.50, 0.75, 1.00, 1.25, 1.50]
+- name: max_abs_supersmoother_distance_atr
+  path: signals.params.max_abs_supersmoother_distance_atr
+  kind: categorical
+  choices: [0.50, 0.75, 1.00, 1.25, 1.50]
+- name: max_abs_ema_distance_atr
+  path: signals.params.max_abs_ema_distance_atr
+  kind: categorical
+  choices: [0.75, 1.00, 1.25, 1.50, 2.00]
+- name: require_laguerre_rising
+  path: signals.params.require_laguerre_rising
+  kind: bool
+- name: avoid_near_resistance
+  path: signals.params.avoid_near_resistance
+  kind: bool
+- name: take_profit_r
+  path: backtest.take_profit_r
+  kind: categorical
+  choices: [0.50, 0.75, 1.00, 1.25, 1.50, 1.75, 2.00, 2.25, 2.50, 3.00]
+- name: stop_loss_r
+  path: backtest.stop_loss_r
+  kind: categorical
+  choices: [1.25, 1.50, 1.75, 2.00]
+- name: max_holding_bars
+  path: backtest.max_holding_bars
+  kind: categorical
+  choices: [8, 10, 12, 16, 20, 24]

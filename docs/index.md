@@ -27,12 +27,19 @@
 - [Feature normalization playbook](feature_normalization_playbook_gr.md):
   ελληνικό playbook για normalizations, helpers και feature combinations με
   προτεραιότητα χρήσης.
+<<<<<<< HEAD
 - [Signal catalog](catalog/signals.md): διαθέσιμα signal builders, χωρισμένα σε
   κατηγορίες με ερμηνεία τιμών και παραδείγματα.
 - [Target catalog](catalog/targets.md): targets/labels, forecast horizons,
   barrier outcomes και R-multiple ερμηνεία.
 - [Model catalog](catalog/models.md): classifiers, forecasters, sequence models,
   feature discovery και RL policies με ερμηνεία outputs.
+=======
+- [Signal catalog](catalog/signals.md): διαθέσιμα signal builders.
+- [Target catalog](catalog/targets.md): targets/labels και forecast horizons.
+- [Model catalog](catalog/models.md): model kinds, outputs, split contracts και
+  leakage guardrails.
+>>>>>>> rescue-sycnh
 - [Execution source audit](execution_source_audit.md): audit για execution
   πηγές και runtime assumptions.
 

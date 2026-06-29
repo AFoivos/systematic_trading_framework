@@ -184,6 +184,7 @@ prediction. In-sample probability μέσα σε trading signal είναι leakag
 
 Τι μετρά:
 
+<<<<<<< HEAD
 - Μετατρέπει classifier probability σε discrete long/short/flat signal.
 - Με `base_signal_col`, λειτουργεί ως model filter πάνω σε ήδη υπάρχον signal.
 
@@ -752,3 +753,54 @@ signals:
 - Θέλεις sizing και όχι on/off trades; χρησιμοποίησε
   `probability_conviction`, `probability_vol_adjusted`,
   `dense_return_forecast` ή `forecast_vol_adjusted`.
+=======
+- Το default threshold είναι shifted, άρα το current volatility δεν επηρεάζει
+  το δικό του regime cutoff.
+
+## ehlers_trend_pullback_continuation_long
+
+Regime-aware Ehlers pullback continuation long-only primary candidate
+generator.
+
+Inputs:
+
+- Trend/regime: `ema_fast_col`, `ema_slow_col`, `mama_col`, `fama_col`,
+  `decycler_osc_col`, `rolling_r2_col`, optional `trend_slope_vol_ratio_col`.
+- Volatility: `atr_z_col`, with `atr_pct_col`/`vov_ratio_col` available as
+  explicit config references for diagnostics or future filters.
+- Pullback/value: ATR-normalized distances to VWAP, SuperSmoother and optional
+  EMA, for example `close_minus_vwap_20_over_atr_14`.
+- Timing: `roofing_col`, `roofing_slope_col`, `stoch_rsi_k_col`,
+  `stoch_rsi_d_col`, optional Laguerre RSI rising filter.
+- Optional cycle/structure gates: ACP power, Hilbert amplitude z-score,
+  Hilbert cycle-ok flag, near-resistance, shock-active and session flags.
+
+Outputs:
+
+- `signal_col`, default `signal_side`, with `1` for long and `0` for flat.
+- `candidate_col`, default `signal_candidate`, for raw accepted candidates.
+- `state_col` and `entry_col` for state/transition diagnostics.
+- Condition diagnostics:
+  `ehlers_tp_cond_ema_regime`, `ehlers_tp_cond_mama_fama`,
+  `ehlers_tp_cond_decycler`, `ehlers_tp_cond_rolling_r2`,
+  `ehlers_tp_cond_volatility`, `ehlers_tp_cond_pullback`,
+  `ehlers_tp_cond_roofing`, `ehlers_tp_cond_stoch_rsi`,
+  `ehlers_tp_cond_cycle`, `ehlers_tp_cond_avoid`, and `ehlers_tp_score`.
+
+Χρησιμότητα:
+
+- Primary rule-based candidate generator for future meta-labeling workflows.
+- Separates deterministic setup generation from later model filtering: the
+  signal proposes a long candidate, while a future model can learn whether that
+  candidate should be executed.
+- Useful as a rules-only baseline before introducing classifier probabilities.
+
+Causality:
+
+- Δεν κάνει feature engineering πέρα από lightweight condition diagnostics.
+- Όλα τα ratios, slopes, z-scores, flags και ATR distances πρέπει να έχουν
+  παραχθεί ήδη από feature helpers στο YAML.
+- Το transition mode χρησιμοποιεί μόνο current και previous state. Το optional
+  Laguerre rising check συγκρίνει `t` με `t-1`.
+- Το `entry_delay_bars` μεταθέτει μόνο το final signal, όχι το raw state logic.
+>>>>>>> rescue-sycnh

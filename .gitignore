@@ -143,3 +143,5 @@ tests/*
 !tests/execution/*.py
 !tests/backtesting/
 !tests/backtesting/*.py
+!tests/trade_path/
+!tests/trade_path/*.py

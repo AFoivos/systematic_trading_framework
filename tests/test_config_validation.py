@@ -22,6 +22,7 @@ from src.utils.config_validation import (
     validate_signals_block,
     validate_standalone_target_block,
 )
+from src.utils.config_defaults import default_diagnostics_block
 
 
 def test_dukascopy_30m_tft_feature_config_loads() -> None:
@@ -491,6 +492,130 @@ def test_validate_portfolio_barrier_bot_controls() -> None:
                     "enabled": True,
                     "gross_cap_values": [0.0],
                 },
+            }
+        )
+
+
+def _manual_barrier_backtest_block(**overrides: object) -> dict[str, object]:
+    block: dict[str, object] = {
+        "engine": "manual_barrier",
+        "returns_col": "close_ret",
+        "signal_col": "signal",
+        "periods_per_year": 12096,
+        "returns_type": "simple",
+        "missing_return_policy": "raise_if_exposed",
+        "subset": "full",
+        "open_col": "open",
+        "high_col": "high",
+        "low_col": "low",
+        "close_col": "close",
+        "take_profit_r": 2.0,
+        "stop_loss_r": 1.5,
+        "risk_per_trade": 0.01,
+        "max_holding_bars": 12,
+        "dynamic_exits": {"enabled": False},
+    }
+    block.update(overrides)
+    return block
+
+
+@pytest.mark.parametrize(
+    "partial_exits,match",
+    [
+        (
+            {"enabled": True, "rules": [{"trigger_r": 0.0, "fraction": 0.5, "exit_price": "trigger"}]},
+            "trigger_r",
+        ),
+        (
+            {"enabled": True, "rules": [{"trigger_r": 0.5, "fraction": 0.0, "exit_price": "trigger"}]},
+            "fraction",
+        ),
+        (
+            {"enabled": True, "rules": [{"trigger_r": 0.5, "fraction": 1.0, "exit_price": "trigger"}]},
+            "fraction",
+        ),
+        (
+            {
+                "enabled": True,
+                "rules": [
+                    {"trigger_r": 0.5, "fraction": 0.5, "exit_price": "trigger"},
+                    {"trigger_r": 1.0, "fraction": 0.5, "exit_price": "trigger"},
+                ],
+            },
+            "sum",
+        ),
+        (
+            {"enabled": True, "rules": [{"trigger_r": 0.5, "fraction": 0.5, "exit_price": "bad"}]},
+            "exit_price",
+        ),
+    ],
+)
+def test_validate_manual_barrier_partial_exits_rejects_invalid_configs(
+    partial_exits: dict[str, object],
+    match: str,
+) -> None:
+    with pytest.raises(ConfigValidationError, match=match):
+        validate_backtest_block(_manual_barrier_backtest_block(partial_exits=partial_exits))
+
+
+def test_validate_manual_barrier_partial_exits_accepts_valid_config() -> None:
+    validate_backtest_block(
+        _manual_barrier_backtest_block(
+            partial_exits={
+                "enabled": True,
+                "rules": [{"trigger_r": 0.5, "fraction": 0.5, "exit_price": "trigger"}],
+            }
+        )
+    )
+
+
+def test_trade_path_diagnostics_defaults_follow_top_level_enabled_flag() -> None:
+    disabled = default_diagnostics_block({"enabled": False})
+    enabled = default_diagnostics_block({"enabled": True})
+    explicit_opt_out = default_diagnostics_block(
+        {
+            "enabled": True,
+            "trade_path": {"enabled": False},
+        }
+    )
+
+    assert disabled["trade_path"]["enabled"] is False
+    assert enabled["trade_path"]["enabled"] is True
+    assert explicit_opt_out["trade_path"]["enabled"] is False
+    assert enabled["trade_path"]["include_counterfactuals"] is True
+    assert enabled["trade_path"]["plots"]["max_path_points"] == 200000
+
+
+def test_validate_trade_path_diagnostics_rejects_invalid_values() -> None:
+    with pytest.raises(ConfigValidationError, match="thresholds_r"):
+        validate_diagnostics_block(
+            {
+                "enabled": True,
+                "trade_path": {"enabled": True, "thresholds_r": [0.5, 0.0]},
+            }
+        )
+
+    with pytest.raises(ConfigValidationError, match="bars_held_buckets"):
+        validate_diagnostics_block(
+            {
+                "enabled": True,
+                "trade_path": {"enabled": True, "bars_held_buckets": [1, 4, 2]},
+            }
+        )
+
+    with pytest.raises(ConfigValidationError, match="include_counterfactuals"):
+        validate_diagnostics_block(
+            {
+                "enabled": True,
+                "trade_path": {"enabled": True, "include_counterfactuals": "yes"},
+            }
+        )
+
+    with pytest.raises(ConfigValidationError, match="plots.enabled"):
+        validate_diagnostics_block(
+            {
+                "enabled": True,
+                "trade_path": {"enabled": True, "plots": {"enabled": "yes"}},
             }
         )
 
