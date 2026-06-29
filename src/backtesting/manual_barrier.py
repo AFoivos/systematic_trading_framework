@@ -8,6 +8,7 @@ import pandas as pd
 from src.backtesting.engine import BacktestResult
 from src.utils.trade_path import (
     normalize_dynamic_exit_config,
+    normalize_partial_exit_config,
     simulate_long_trade_path,
     simulate_short_trade_path,
 )
@@ -68,6 +69,29 @@ def _apply_mark_to_market_trade_path(
         previous_price = mark_price
 
 
+def _leg_raw_return(*, is_short: bool, entry_price: float, exit_price: float) -> float:
+    if is_short:
+        return 1.0 - float(exit_price) / float(entry_price)
+    return float(exit_price) / float(entry_price) - 1.0
+
+
+def _leg_slippage_adjusted_return(
+    *,
+    is_short: bool,
+    entry_price: float,
+    exit_price: float,
+    slippage_per_unit_turnover: float,
+) -> float:
+    slip = float(slippage_per_unit_turnover)
+    if is_short:
+        adjusted_entry = float(entry_price) * (1.0 - slip)
+        adjusted_exit = float(exit_price) * (1.0 + slip)
+        return 1.0 - adjusted_exit / adjusted_entry
+    adjusted_entry = float(entry_price) * (1.0 + slip)
+    adjusted_exit = float(exit_price) * (1.0 - slip)
+    return adjusted_exit / adjusted_entry - 1.0
+
+
 def run_manual_barrier_backtest(
     df: pd.DataFrame,
     *,
@@ -85,6 +109,7 @@ def run_manual_barrier_backtest(
     max_leverage: float = 1.0,
     periods_per_year: int = 252,
     dynamic_exits: dict[str, Any] | None = None,
+    partial_exits: dict[str, Any] | None = None,
     allow_short: bool = False,
     stop_mode: str = "fixed_return",
     vol_col: str | None = None,
@@ -100,6 +125,9 @@ def run_manual_barrier_backtest(
 
     Dynamic exits are opt-in. With `dynamic_exits.enabled=false` or no dynamic exit config, the
     engine keeps the legacy stop/take-profit/max-holding behavior.
+
+    Partial exits are also opt-in. With `partial_exits.enabled=false` or no partial-exit config,
+    the legacy single-exit accounting path is preserved.
 
     With ``stop_mode="volatility_stop"``, ``vol_col`` must contain a positive point-in-time
     volatility or ATR-over-price estimate. Stop and take-profit distances are then computed as
@@ -119,6 +147,8 @@ def run_manual_barrier_backtest(
     if float(cost_per_unit_turnover) < 0.0 or float(slippage_per_unit_turnover) < 0.0:
         raise ValueError("cost_per_unit_turnover and slippage_per_unit_turnover must be >= 0.")
     dynamic_cfg = normalize_dynamic_exit_config(dynamic_exits)
+    partial_cfg = normalize_partial_exit_config(partial_exits)
+    partial_enabled = bool(partial_cfg.get("enabled", False))
     needs_volatility = stop_mode == "volatility_stop" or bool(dynamic_cfg["atr_trailing"]["enabled"])
     if needs_volatility and (vol_col is None or not str(vol_col).strip()):
         raise ValueError("vol_col is required for volatility_stop or dynamic_exits.atr_trailing.")
@@ -149,6 +179,7 @@ def run_manual_barrier_backtest(
     gross_returns = pd.Series(0.0, index=index, name="gross_returns", dtype=float)
     costs = pd.Series(0.0, index=index, name="costs", dtype=float)
     positions = pd.Series(0.0, index=index, name="positions", dtype=float)
+    turnover_events = pd.Series(0.0, index=index, name="turnover", dtype=float)
     mark_to_market_returns = pd.Series(0.0, index=index, name="mark_to_market_returns", dtype=float)
     trades: list[dict[str, Any]] = []
 
@@ -201,6 +232,7 @@ def run_manual_barrier_backtest(
                 initial_stop_price=stop_price,
                 take_profit_price=take_profit_price,
                 dynamic_exits=dynamic_cfg,
+                partial_exits=partial_cfg,
                 volatility=volatility,
                 tie_break="conservative",
                 legacy_same_bar_stop_reason=not bool(dynamic_cfg.get("enabled", False)),
@@ -220,6 +252,7 @@ def run_manual_barrier_backtest(
                 initial_stop_price=stop_price,
                 take_profit_price=take_profit_price,
                 dynamic_exits=dynamic_cfg,
+                partial_exits=partial_cfg,
                 volatility=volatility,
                 tie_break="conservative",
                 legacy_same_bar_stop_reason=not bool(dynamic_cfg.get("enabled", False)),
@@ -233,26 +266,139 @@ def run_manual_barrier_backtest(
         bars_held = int(path["bars_held"])
 
         slip = float(slippage_per_unit_turnover)
-        if is_short:
-            entry_price = entry_open * (1.0 - slip)
-            exit_price = raw_exit_price * (1.0 + slip)
-            gross_before_cost = size * (1.0 - raw_exit_price / entry_open)
-            gross_after_slippage = size * (1.0 - exit_price / entry_price)
+        entry_price = entry_open * (1.0 - slip) if is_short else entry_open * (1.0 + slip)
+        exit_price = raw_exit_price * (1.0 + slip) if is_short else raw_exit_price * (1.0 - slip)
+        partial_events = list(path.get("partial_exits", []) or []) if partial_enabled else []
+        if partial_events:
+            partial_fraction_total = float(sum(float(event["fraction"]) for event in partial_events))
+            remaining_fraction = max(1.0 - partial_fraction_total, 0.0)
+            exit_legs = [
+                {
+                    "fraction": float(event["fraction"]),
+                    "exit_idx": int(event["exit_idx"]),
+                    "raw_exit_price": float(event["raw_exit_price"]),
+                    "trigger_r": float(event["trigger_r"]),
+                }
+                for event in partial_events
+            ]
+            if remaining_fraction > 1e-12:
+                exit_legs.append(
+                    {
+                        "fraction": remaining_fraction,
+                        "exit_idx": exit_idx,
+                        "raw_exit_price": raw_exit_price,
+                        "trigger_r": np.nan,
+                    }
+                )
+            else:
+                exit_reason = "partial_exit_complete"
+            gross_before_cost = 0.0
+            gross_after_slippage = 0.0
+            exit_turnover_fraction = 0.0
+            for leg in exit_legs:
+                leg_fraction = float(leg["fraction"])
+                leg_return = _leg_raw_return(
+                    is_short=is_short,
+                    entry_price=entry_open,
+                    exit_price=float(leg["raw_exit_price"]),
+                )
+                leg_slipped_return = _leg_slippage_adjusted_return(
+                    is_short=is_short,
+                    entry_price=entry_open,
+                    exit_price=float(leg["raw_exit_price"]),
+                    slippage_per_unit_turnover=slip,
+                )
+                gross_before_cost += size * leg_fraction * leg_return
+                gross_after_slippage += size * leg_fraction * leg_slipped_return
+                exit_turnover_fraction += leg_fraction
+            slippage_drag = max(gross_before_cost - gross_after_slippage, 0.0)
+            fixed_cost = size * (1.0 + exit_turnover_fraction) * float(cost_per_unit_turnover)
+            total_cost = fixed_cost + slippage_drag
+            net_return = gross_before_cost - total_cost
         else:
-            entry_price = entry_open * (1.0 + slip)
-            exit_price = raw_exit_price * (1.0 - slip)
-            gross_before_cost = size * (raw_exit_price / entry_open - 1.0)
-            gross_after_slippage = size * (exit_price / entry_price - 1.0)
-        slippage_drag = max(gross_before_cost - gross_after_slippage, 0.0)
-        fixed_cost = size * 2.0 * float(cost_per_unit_turnover)
-        total_cost = fixed_cost + slippage_drag
-        net_return = gross_before_cost - total_cost
+            if is_short:
+                gross_before_cost = size * (1.0 - raw_exit_price / entry_open)
+                gross_after_slippage = size * (1.0 - exit_price / entry_price)
+            else:
+                gross_before_cost = size * (raw_exit_price / entry_open - 1.0)
+                gross_after_slippage = size * (exit_price / entry_price - 1.0)
+            slippage_drag = max(gross_before_cost - gross_after_slippage, 0.0)
+            fixed_cost = size * 2.0 * float(cost_per_unit_turnover)
+            total_cost = fixed_cost + slippage_drag
+            net_return = gross_before_cost - total_cost
         risk_capital = max(size * stop_distance_pct, 1e-12)
         trade_r = net_return / risk_capital
+        partial_realized_r = (
+            sum(
+                float(event["fraction"])
+                * _leg_raw_return(
+                    is_short=is_short,
+                    entry_price=entry_open,
+                    exit_price=float(event["raw_exit_price"]),
+                )
+                / stop_distance_pct
+                for event in partial_events
+            )
+            if partial_events
+            else 0.0
+        )
 
-        gross_returns.iloc[exit_idx] += gross_before_cost
-        costs.iloc[exit_idx] += total_cost
-        net_returns.iloc[exit_idx] += net_return
+        if partial_events:
+            turnover_events.iloc[entry_idx] += size
+            entry_fixed_cost = size * float(cost_per_unit_turnover)
+            costs.iloc[entry_idx] += entry_fixed_cost
+            net_returns.iloc[entry_idx] -= entry_fixed_cost
+            for event in partial_events:
+                event_idx = int(event["exit_idx"])
+                event_fraction = float(event["fraction"])
+                event_price = float(event["raw_exit_price"])
+                turnover_events.iloc[event_idx] += size * event_fraction
+                event_gross = size * event_fraction * _leg_raw_return(
+                    is_short=is_short,
+                    entry_price=entry_open,
+                    exit_price=event_price,
+                )
+                event_slipped = size * event_fraction * _leg_slippage_adjusted_return(
+                    is_short=is_short,
+                    entry_price=entry_open,
+                    exit_price=event_price,
+                    slippage_per_unit_turnover=slip,
+                )
+                event_cost = size * event_fraction * float(cost_per_unit_turnover) + max(
+                    event_gross - event_slipped,
+                    0.0,
+                )
+                gross_returns.iloc[event_idx] += event_gross
+                costs.iloc[event_idx] += event_cost
+                net_returns.iloc[event_idx] += event_gross - event_cost
+            final_fraction = max(1.0 - sum(float(event["fraction"]) for event in partial_events), 0.0)
+            if final_fraction > 1e-12:
+                turnover_events.iloc[exit_idx] += size * final_fraction
+                final_gross = size * final_fraction * _leg_raw_return(
+                    is_short=is_short,
+                    entry_price=entry_open,
+                    exit_price=raw_exit_price,
+                )
+                final_slipped = size * final_fraction * _leg_slippage_adjusted_return(
+                    is_short=is_short,
+                    entry_price=entry_open,
+                    exit_price=raw_exit_price,
+                    slippage_per_unit_turnover=slip,
+                )
+                final_cost = size * final_fraction * float(cost_per_unit_turnover) + max(
+                    final_gross - final_slipped,
+                    0.0,
+                )
+                gross_returns.iloc[exit_idx] += final_gross
+                costs.iloc[exit_idx] += final_cost
+                net_returns.iloc[exit_idx] += final_gross - final_cost
+        else:
+            gross_returns.iloc[exit_idx] += gross_before_cost
+            costs.iloc[exit_idx] += total_cost
+            net_returns.iloc[exit_idx] += net_return
+            if partial_enabled:
+                turnover_events.iloc[entry_idx] += size
+                turnover_events.iloc[exit_idx] += size
         _apply_mark_to_market_trade_path(
             mark_to_market_returns,
             closes=closes,
@@ -265,40 +411,74 @@ def run_manual_barrier_backtest(
             total_cost=total_cost,
         )
         if exit_idx > entry_idx:
-            positions.iloc[entry_idx:exit_idx] = -size if is_short else size
+            if partial_events:
+                signed_size = -size if is_short else size
+                remaining_position = signed_size
+                segment_start = entry_idx
+                for event in sorted(partial_events, key=lambda item: (int(item["exit_idx"]), int(item["rule_index"]))):
+                    event_idx = int(event["exit_idx"])
+                    if event_idx > segment_start:
+                        positions.iloc[segment_start:event_idx] = remaining_position
+                    remaining_position -= signed_size * float(event["fraction"])
+                    segment_start = max(segment_start, event_idx)
+                if exit_idx > segment_start:
+                    positions.iloc[segment_start:exit_idx] = remaining_position
+            else:
+                positions.iloc[entry_idx:exit_idx] = -size if is_short else size
 
-        trades.append(
-            {
-                "signal_timestamp": index[i],
-                "entry_timestamp": index[entry_idx],
-                "exit_timestamp": index[exit_idx],
-                "side": "short" if is_short else "long",
-                "signal": raw_signal,
-                "entry_price": entry_price,
-                "exit_price": exit_price,
-                "raw_entry_price": entry_open,
-                "raw_exit_price": raw_exit_price,
-                "take_profit_price": take_profit_price,
-                "stop_loss_price": stop_price,
-                "target_price": take_profit_price,
-                "position_size": size,
-                "gross_return": gross_before_cost,
-                "cost_paid": total_cost,
-                "net_return": net_return,
-                "trade_r": trade_r,
-                "bars_held": int(bars_held),
-                "exit_reason": exit_reason,
-                "max_favorable_r": float(path["max_favorable_r"]),
-                "max_adverse_r": float(path["max_adverse_r"]),
-                "breakeven_activated": bool(path["breakeven_activated"]),
-                "profit_lock_activated": bool(path["profit_lock_activated"]),
-                "effective_stop_price": float(path["effective_stop_price"]),
-                "stop_mode": stop_mode,
-            }
-        )
+        trade_record = {
+            "signal_timestamp": index[i],
+            "entry_timestamp": index[entry_idx],
+            "exit_timestamp": index[exit_idx],
+            "side": "short" if is_short else "long",
+            "signal": raw_signal,
+            "entry_price": entry_price,
+            "exit_price": exit_price,
+            "raw_entry_price": entry_open,
+            "raw_exit_price": raw_exit_price,
+            "take_profit_price": take_profit_price,
+            "stop_loss_price": stop_price,
+            "target_price": take_profit_price,
+            "position_size": size,
+            "gross_return": gross_before_cost,
+            "cost_paid": total_cost,
+            "net_return": net_return,
+            "trade_r": trade_r,
+            "bars_held": int(bars_held),
+            "exit_reason": exit_reason,
+            "max_favorable_r": float(path["max_favorable_r"]),
+            "max_adverse_r": float(path["max_adverse_r"]),
+            "breakeven_activated": bool(path["breakeven_activated"]),
+            "profit_lock_activated": bool(path["profit_lock_activated"]),
+            "effective_stop_price": float(path["effective_stop_price"]),
+            "stop_mode": stop_mode,
+        }
+        if partial_events:
+            partial_fraction_total = float(sum(float(event["fraction"]) for event in partial_events))
+            remaining_fraction = max(1.0 - partial_fraction_total, 0.0)
+            partial_trigger_rs = [float(event["trigger_r"]) for event in partial_events]
+            partial_prices = [float(event["raw_exit_price"]) for event in partial_events]
+            partial_bars = [int(event["exit_idx"]) - entry_idx + 1 for event in partial_events]
+            trade_record.update(
+                {
+                    "partial_exit_count": int(len(partial_events)),
+                    "partial_exit_fraction_total": partial_fraction_total,
+                    "partial_exit_realized_r": float(partial_realized_r),
+                    "partial_exit_avg_r": (
+                        float(partial_realized_r / partial_fraction_total)
+                        if partial_fraction_total > 0.0
+                        else np.nan
+                    ),
+                    "remaining_fraction": float(remaining_fraction),
+                    "partial_exit_trigger_rs": ",".join(str(value) for value in partial_trigger_rs),
+                    "partial_exit_prices": ",".join(str(value) for value in partial_prices),
+                    "partial_exit_bars": ",".join(str(value) for value in partial_bars),
+                }
+            )
+        trades.append(trade_record)
         i = exit_idx + 1
 
-    turnover = (positions - positions.shift(1).fillna(0.0)).abs()
+    turnover = turnover_events if partial_enabled else (positions - positions.shift(1).fillna(0.0)).abs()
     turnover.name = "turnover"
     equity_curve = (1.0 + net_returns).cumprod()
     equity_curve.name = "equity"

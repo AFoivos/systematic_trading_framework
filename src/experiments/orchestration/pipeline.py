@@ -8,7 +8,10 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
-from src.experiments.orchestration.artifacts import save_artifacts
+from src.experiments.orchestration.artifacts import (
+    enrich_evaluation_with_trade_path_diagnostics,
+    save_artifacts,
+)
 from src.experiments.orchestration.backtest_stage import (
     build_robustness_diagnostics,
     run_portfolio_backtest,
@@ -252,6 +255,14 @@ def run_experiment_pipeline(
                 periods_per_year=cfg["backtest"].get("periods_per_year", 252),
                 backtest_cfg=dict(cfg.get("backtest", {}) or {}),
             )
+
+        evaluation, _trade_path_context = enrich_evaluation_with_trade_path_diagnostics(
+            cfg=cfg,
+            data=(asset_frames if is_portfolio else next(iter(asset_frames.values()))),
+            performance=performance,
+            model_meta=model_meta,
+            evaluation=evaluation,
+        )
 
         robustness = build_robustness_diagnostics(
             asset_frames,

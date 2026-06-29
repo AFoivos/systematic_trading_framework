@@ -306,6 +306,10 @@ def _dict_metric_rows(payload: dict[str, Any], *, prefix: str | None = None) -> 
     return rows
 
 
+def _scalar_metric_rows(payload: dict[str, Any]) -> list[list[Any]]:
+    return [[key, value] for key, value in payload.items() if not isinstance(value, (dict, list))]
+
+
 def _performance_breakdown_rows(section: dict[str, Any]) -> list[list[Any]]:
     rows: list[list[Any]] = []
     for group_name, buckets in sorted(section.items()):
@@ -1033,7 +1037,8 @@ def build_experiment_report_markdown(
             )
 
     if trade_diagnostics:
-        trade_rows = _dict_metric_rows(trade_diagnostics)
+        trade_path_diagnostics = _safe_meta_dict(trade_diagnostics.get("trade_path"))
+        trade_rows = _scalar_metric_rows({k: v for k, v in trade_diagnostics.items() if k != "trade_path"})
         if trade_rows:
             lines.extend(
                 [
@@ -1042,6 +1047,74 @@ def build_experiment_report_markdown(
                     _markdown_table(["Metric", "Value"], trade_rows),
                 ]
             )
+        if trade_path_diagnostics:
+            lines.extend(["", "## Trade Path Diagnostics"])
+            sections = [
+                ("Losing Trades Could-Have-Been-Profitable", "could_have_been_profitable"),
+                ("Capture / Giveback", "capture_giveback"),
+                ("MAE Before Win", "mae_before_win"),
+                ("Conditional Probabilities", "conditional_probabilities"),
+                ("Timing Diagnostics", "timing"),
+                ("Counterfactual Exits", "counterfactual"),
+            ]
+            for title, key in sections:
+                payload = _safe_meta_dict(trade_path_diagnostics.get(key))
+                rows = _dict_metric_rows(payload)
+                if rows:
+                    lines.extend([f"### {title}", _markdown_table(["Metric", "Value"], rows)])
+            target_candidates = _safe_meta_dict(trade_path_diagnostics.get("target_candidates"))
+            if target_candidates:
+                rows = _dict_metric_rows(target_candidates)
+                if rows:
+                    lines.extend(["### Target / Candidate Trade Diagnostics", _markdown_table(["Metric", "Value"], rows)])
+            exit_quality = _safe_meta_dict(trade_path_diagnostics.get("exit_reason_quality"))
+            if exit_quality:
+                rows = []
+                for reason, payload in sorted(exit_quality.items()):
+                    metrics = _safe_meta_dict(payload)
+                    rows.append(
+                        [
+                            reason,
+                            metrics.get("trade_count"),
+                            metrics.get("avg_r"),
+                            metrics.get("median_r"),
+                            metrics.get("win_rate"),
+                            metrics.get("avg_mfe_r"),
+                            metrics.get("avg_mae_r"),
+                            metrics.get("avg_giveback_r"),
+                            metrics.get("avg_bars_held"),
+                            metrics.get("profit_factor"),
+                            metrics.get("stop_after_positive_rate"),
+                            metrics.get("stop_after_0_5r_rate"),
+                            metrics.get("stop_after_1r_rate"),
+                        ]
+                    )
+                lines.extend(
+                    [
+                        "### Exit Reason Quality",
+                        _markdown_table(
+                            [
+                                "Exit Reason",
+                                "Trades",
+                                "Avg R",
+                                "Median R",
+                                "Win Rate",
+                                "Avg MFE",
+                                "Avg MAE",
+                                "Avg Giveback",
+                                "Avg Bars",
+                                "Profit Factor",
+                                "Stop After +",
+                                "Stop After 0.5R",
+                                "Stop After 1R",
+                            ],
+                            rows,
+                        ),
+                    ]
+                )
+            warnings_rows = [[warning] for warning in list(trade_path_diagnostics.get("warnings", []) or [])]
+            if warnings_rows:
+                lines.extend(["### Diagnostic Warnings", _markdown_table(["Warning"], warnings_rows)])
 
     if baseline_diagnostics:
         primary_rows = _dict_metric_rows(_safe_meta_dict(baseline_diagnostics.get("primary")))

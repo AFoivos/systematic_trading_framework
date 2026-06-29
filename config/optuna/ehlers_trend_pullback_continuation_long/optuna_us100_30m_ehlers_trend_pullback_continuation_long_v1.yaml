@@ -1,0 +1,103 @@
+base_config: config/experiments/ehlers_trend_pullback_continuation_long/us100_30m_ehlers_trend_pullback_continuation_long_v1.yaml
+study:
+  study_name: optuna_us100_30m_ehlers_trend_pullback_continuation_long_v1
+  storage: null
+  load_if_exists: false
+  sampler: tpe
+  seed: 7
+  n_trials: 100
+  timeout: null
+  n_jobs: 1
+  logging_enabled: true
+  catch_exceptions: true
+report:
+  enabled: true
+  output_dir: logs/experiments
+  run_name: optuna_us100_30m_ehlers_trend_pullback_continuation_long_v1
+objective:
+  metric_path: evaluation.primary_summary.sharpe
+  direction: maximize
+  failure_score: -1000000000000.0
+  base_metric_weight: 1.0
+  stability_weight: 0.0
+  fold_summary_path: evaluation.fold_backtest_summaries
+  constraints:
+  - metric_path: evaluation.primary_summary.profit_factor
+    op: lt
+    threshold: 1.05
+    penalty: 10.0
+    missing_penalty: 10.0
+  - metric_path: evaluation.primary_summary.cost_to_gross_pnl
+    op: gt
+    threshold: 0.8
+    penalty: 5.0
+    missing_penalty: 5.0
+  - metric_path: derived.entry_count
+    op: lt
+    threshold: 80.0
+    penalty: 3.0
+    missing_penalty: 3.0
+pruning:
+  enabled: false
+  metric_path: evaluation.primary_summary.sharpe
+  direction: maximize
+  stage_filter: []
+  pruner: none
+  n_startup_trials: 10
+  n_warmup_steps: 1
+  interval_steps: 1
+search_space:
+- name: min_rolling_r2
+  path: signals.params.min_rolling_r2
+  kind: float
+  low: 0.20
+  high: 0.65
+  step: 0.05
+- name: max_atr_z
+  path: signals.params.max_atr_z
+  kind: float
+  low: 0.75
+  high: 2.25
+  step: 0.25
+- name: max_abs_vwap_distance_atr
+  path: signals.params.max_abs_vwap_distance_atr
+  kind: float
+  low: 0.50
+  high: 1.50
+  step: 0.10
+- name: max_abs_supersmoother_distance_atr
+  path: signals.params.max_abs_supersmoother_distance_atr
+  kind: float
+  low: 0.50
+  high: 1.50
+  step: 0.10
+- name: pullback_mode
+  path: signals.params.pullback_mode
+  kind: categorical
+  choices: [any, vwap, supersmoother, ema]
+- name: require_roofing_slope_positive
+  path: signals.params.require_roofing_slope_positive
+  kind: categorical
+  choices: [true, false]
+- name: entry_mode
+  path: signals.params.entry_mode
+  kind: categorical
+  choices: [state, transition]
+- name: take_profit_r
+  path: backtest.take_profit_r
+  kind: float
+  low: 1.5
+  high: 4.0
+  step: 0.25
+- name: stop_loss_r
+  path: backtest.stop_loss_r
+  kind: float
+  low: 1.0
+  high: 2.5
+  step: 0.25
+- name: max_holding_bars
+  path: backtest.max_holding_bars
+  kind: int
+  low: 8
+  high: 32
+  step: 4

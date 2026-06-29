@@ -27,6 +27,8 @@
   προτεραιότητα χρήσης.
 - [Signal catalog](catalog/signals.md): διαθέσιμα signal builders.
 - [Target catalog](catalog/targets.md): targets/labels και forecast horizons.
+- [Model catalog](catalog/models.md): model kinds, outputs, split contracts και
+  leakage guardrails.
 - [Execution source audit](execution_source_audit.md): audit για execution
   πηγές και runtime assumptions.
 

@@ -207,4 +207,5 @@ signals:
 - [Feature catalog](catalog/features.md)
 - [Signal catalog](catalog/signals.md)
 - [Target catalog](catalog/targets.md)
+- [Model catalog](catalog/models.md)
 - [Οδηγός YAML experiments](yaml_experiments_guide_gr.md)

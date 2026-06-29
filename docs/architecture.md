@@ -90,6 +90,11 @@ signals, models, experiments ή backtesting.
 ### `src/backtesting`, `src/risk`, `src/portfolio`, `src/evaluation`
 
 Ιδιοκτήτες για εκτέλεση backtest, sizing/costs/constraints και metrics.
+Τα executed trade path fields, όπως realized R, MFE/MAE, bars held και exit
+reason, ανήκουν στο `src/backtesting`. Τα reusable trade lifecycle summaries και
+counterfactual diagnostics ανήκουν στο `src/evaluation` και γράφονται από το
+orchestration/artifact layer. Αυτά τα diagnostics είναι reporting/EDA outputs και
+δεν πρέπει να χρησιμοποιούνται ως model features.
 
 ### `src/execution`
 

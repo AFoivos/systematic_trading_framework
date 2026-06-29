@@ -289,6 +289,7 @@ def default_monitoring_block(monitoring: dict[str, Any]) -> dict[str, Any]:
 def default_diagnostics_block(diagnostics: dict[str, Any]) -> dict[str, Any]:
     diagnostics = dict(diagnostics) if diagnostics else {}
     diagnostics.setdefault("enabled", False)
+    diagnostics_enabled = bool(diagnostics.get("enabled", False))
     model = dict(diagnostics.get("model", {}) or {})
     model.setdefault("enabled", False)
     shap_cfg = dict(model.get("shap", {}) or {})
@@ -317,6 +318,22 @@ def default_diagnostics_block(diagnostics: dict[str, Any]) -> dict[str, Any]:
     robustness.setdefault("gross_cap_values", [])
     robustness.setdefault("cost_filter_max_cost_r_values", [])
     diagnostics["robustness"] = robustness
+    trade_path = dict(diagnostics.get("trade_path", {}) or {})
+    trade_path.setdefault("enabled", diagnostics_enabled)
+    trade_path.setdefault("include_executed_trades", True)
+    trade_path.setdefault("include_target_trades", True)
+    trade_path.setdefault("include_probability_quality", True)
+    trade_path.setdefault("include_counterfactuals", True)
+    trade_path.setdefault("write_trade_paths", True)
+    trade_path.setdefault("write_probability_quality", True)
+    trade_path.setdefault("thresholds_r", [0.5, 1.0, 1.5, 2.0])
+    trade_path.setdefault("bars_held_buckets", [1, 2, 4, 8, 16])
+    plots = dict(trade_path.get("plots", {}) or {})
+    plots.setdefault("enabled", True)
+    plots.setdefault("max_trades", 500)
+    plots.setdefault("max_path_points", 200000)
+    trade_path["plots"] = plots
+    diagnostics["trade_path"] = trade_path
     return diagnostics
 
 

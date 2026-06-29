@@ -112,6 +112,7 @@ _TARGET_OUTPUT_KEYS = {
     "r_col",
     "oriented_r_col",
     "trade_r_col",
+    "trade_r_clipped_col",
     "entry_price_col",
     "exit_price_col",
     "stop_price_col",
@@ -120,6 +121,10 @@ _TARGET_OUTPUT_KEYS = {
     "bars_held_col",
     "hit_step_col",
     "hit_type_col",
+    "mfe_r_col",
+    "mae_r_col",
+    "time_to_mfe_col",
+    "time_to_mae_col",
     "upper_barrier_col",
     "lower_barrier_col",
     "meta_side_col",
@@ -2023,6 +2028,78 @@ def _validate_r_multiple_target_block(target: dict[str, Any]) -> None:
             raise ConfigValidationError("model.target.diagnostic_feature_cols must be a list[str].")
 
 
+def _validate_candidate_expected_r_target_block(target: dict[str, Any]) -> None:
+    _validate_string_mapping(
+        target.get("outputs"),
+        field="model.target.outputs",
+        allowed_keys=_TARGET_OUTPUT_KEYS,
+    )
+    for key in (
+        "candidate_col",
+        "side_col",
+        "candidate_out_col",
+        "label_col",
+        "fwd_col",
+        "event_ret_col",
+        "trade_r_col",
+        "trade_r_clipped_col",
+        "entry_price_col",
+        "exit_price_col",
+        "stop_price_col",
+        "take_profit_price_col",
+        "exit_reason_col",
+        "bars_held_col",
+        "hit_step_col",
+        "hit_type_col",
+        "mfe_r_col",
+        "mae_r_col",
+        "time_to_mfe_col",
+        "time_to_mae_col",
+        "price_col",
+        "open_col",
+        "high_col",
+        "low_col",
+        "close_col",
+        "volatility_col",
+    ):
+        if key in target and target[key] is not None and not isinstance(target[key], str):
+            raise ConfigValidationError(f"model.target.{key} must be a string or null.")
+    side = str(target.get("side", "long_only"))
+    if side != "long_only":
+        raise ConfigValidationError("model.target.side must be 'long_only'.")
+    entry_price_mode = str(target.get("entry_price_mode", "next_open"))
+    if entry_price_mode not in {"next_open", "current_close"}:
+        raise ConfigValidationError("model.target.entry_price_mode must be one of: next_open, current_close.")
+    stop_mode = str(target.get("stop_mode", "volatility_stop"))
+    if stop_mode not in {"volatility_stop", "fixed_return"}:
+        raise ConfigValidationError("model.target.stop_mode must be one of: volatility_stop, fixed_return.")
+    tie_break = str(target.get("tie_break", "conservative"))
+    if tie_break not in {"conservative", "take_profit", "stop_loss", "closest_to_open"}:
+        raise ConfigValidationError(
+            "model.target.tie_break must be one of: conservative, take_profit, stop_loss, closest_to_open."
+        )
+    for key, default in (
+        ("target_r_min", 0.75),
+        ("take_profit_r", 2.5),
+        ("stop_loss_r", 1.5),
+        ("stop_loss_return", 0.005),
+    ):
+        value = _finite_number(target.get(key, default), field=f"model.target.{key}")
+        if key != "target_r_min" and value <= 0:
+            raise ConfigValidationError(f"model.target.{key} must be > 0.")
+    if "max_holding_bars" in target and target["max_holding_bars"] is not None:
+        _positive_int(target["max_holding_bars"], field="model.target.max_holding_bars")
+    clip_r = target.get("clip_r", [-2.0, 3.0])
+    if not isinstance(clip_r, list) or len(clip_r) != 2:
+        raise ConfigValidationError("model.target.clip_r must be a two-element list.")
+    clip_low = _finite_number(clip_r[0], field="model.target.clip_r[0]")
+    clip_high = _finite_number(clip_r[1], field="model.target.clip_r[1]")
+    if clip_low > clip_high:
+        raise ConfigValidationError("model.target.clip_r[0] must be <= model.target.clip_r[1].")
+    if "allow_partial_horizon" in target and not isinstance(target.get("allow_partial_horizon"), bool):
+        raise ConfigValidationError("model.target.allow_partial_horizon must be boolean.")
+
+
 def validate_model_block(model: dict[str, Any]) -> None:
     if "kind" not in model:
         raise ConfigValidationError("model.kind is required.")
@@ -2051,12 +2128,16 @@ def validate_model_block(model: dict[str, Any]) -> None:
                 allowed_keys=_TARGET_OUTPUT_KEYS,
             )
             target_kind = target_for_validation.get("kind", "forward_return")
-            if target_kind != "r_multiple":
+            if target_kind not in {"r_multiple", "candidate_expected_r"}:
                 raise ConfigValidationError(
-                    "model.kind='none' currently supports only model.target.kind='r_multiple' "
+                    "model.kind='none' currently supports only model.target.kind='r_multiple' or "
+                    "'candidate_expected_r' "
                     "for target-only diagnostics."
                 )
-            _validate_r_multiple_target_block(target_for_validation)
+            if target_kind == "r_multiple":
+                _validate_r_multiple_target_block(target_for_validation)
+            else:
+                _validate_candidate_expected_r_target_block(target_for_validation)
         return
 
     if model["kind"] != "none":
@@ -2112,6 +2193,13 @@ def validate_model_block(model: dict[str, Any]) -> None:
                         "or model.kind='none' target-only diagnostics."
                     )
                 _validate_r_multiple_target_block(target)
+            if target_kind == "candidate_expected_r":
+                if model["kind"] not in _CLASSIFIER_MODEL_KINDS:
+                    raise ConfigValidationError(
+                        "model.target.kind='candidate_expected_r' is currently supported only for classifiers "
+                        "or model.kind='none' target-only diagnostics."
+                    )
+                _validate_candidate_expected_r_target_block(target)
             if target_kind in {"triple_barrier", "directional_triple_barrier"} and model["kind"] not in _CLASSIFIER_MODEL_KINDS:
                 if model["kind"] not in _EMBEDDING_MODEL_KINDS and model["kind"] not in _FORECASTER_MODEL_KINDS:
                     raise ConfigValidationError(
@@ -3367,6 +3455,8 @@ def validate_backtest_block(backtest: dict[str, Any]) -> None:
             _positive_int(max_holding_bars, field="backtest.max_holding_bars")
         dynamic_exits = backtest.get("dynamic_exits", {}) or {}
         _validate_dynamic_exits_block(dynamic_exits)
+        partial_exits = backtest.get("partial_exits", {}) or {}
+        _validate_partial_exits_block(partial_exits)
         atr_trailing_enabled = bool(dict(dynamic_exits).get("enabled", False)) and bool(
             dict(dict(dynamic_exits).get("atr_trailing", {}) or {}).get("enabled", False)
         )
@@ -3475,6 +3565,38 @@ def _validate_dynamic_exits_block(dynamic_exits: Any) -> None:
             elif expected is str:
                 if value not in {"close", "next_open"}:
                     raise ConfigValidationError(f"{field} must be 'close' or 'next_open'.")
+
+
+def _validate_partial_exits_block(partial_exits: Any) -> None:
+    if partial_exits in ({}, None):
+        return
+    if not isinstance(partial_exits, dict):
+        raise ConfigValidationError("backtest.partial_exits must be a mapping when provided.")
+    if "enabled" in partial_exits and not isinstance(partial_exits.get("enabled"), bool):
+        raise ConfigValidationError("backtest.partial_exits.enabled must be boolean.")
+    enabled = bool(partial_exits.get("enabled", False))
+    raw_rules = partial_exits.get("rules", []) or []
+    if not enabled:
+        return
+    if not isinstance(raw_rules, list):
+        raise ConfigValidationError("backtest.partial_exits.rules must be a list.")
+    total_fraction = 0.0
+    for idx, raw_rule in enumerate(raw_rules):
+        field = f"backtest.partial_exits.rules[{idx}]"
+        if not isinstance(raw_rule, dict):
+            raise ConfigValidationError(f"{field} must be a mapping.")
+        trigger_r = _finite_number(raw_rule.get("trigger_r"), field=f"{field}.trigger_r")
+        if trigger_r <= 0.0:
+            raise ConfigValidationError(f"{field}.trigger_r must be > 0.")
+        fraction = _finite_number(raw_rule.get("fraction"), field=f"{field}.fraction")
+        if not 0.0 < fraction < 1.0:
+            raise ConfigValidationError(f"{field}.fraction must be in (0, 1).")
+        total_fraction += fraction
+        exit_price = raw_rule.get("exit_price", "trigger")
+        if exit_price not in {"trigger", "close", "next_open"}:
+            raise ConfigValidationError(f"{field}.exit_price must be one of: trigger, close, next_open.")
+    if total_fraction >= 1.0:
+        raise ConfigValidationError("backtest.partial_exits.rules fractions must sum to < 1.0.")
 
 
 def validate_portfolio_block(portfolio: dict[str, Any]) -> None:
@@ -3680,6 +3802,44 @@ def validate_diagnostics_block(diagnostics: dict[str, Any]) -> None:
         field="diagnostics.robustness.max_gap_multiple",
     ) <= 1.0:
         raise ConfigValidationError("diagnostics.robustness.max_gap_multiple must be > 1.")
+
+    trade_path = diagnostics.get("trade_path", {})
+    if not isinstance(trade_path, dict):
+        raise ConfigValidationError("diagnostics.trade_path must be a mapping.")
+    for key in (
+        "enabled",
+        "include_executed_trades",
+        "include_target_trades",
+        "include_probability_quality",
+        "include_counterfactuals",
+        "write_trade_paths",
+        "write_probability_quality",
+    ):
+        if not isinstance(trade_path.get(key, False), bool):
+            raise ConfigValidationError(f"diagnostics.trade_path.{key} must be boolean.")
+    thresholds = trade_path.get("thresholds_r", [0.5, 1.0, 1.5, 2.0])
+    if not isinstance(thresholds, list) or not thresholds:
+        raise ConfigValidationError("diagnostics.trade_path.thresholds_r must be a non-empty list.")
+    for idx, item in enumerate(thresholds):
+        numeric = _finite_number(item, field=f"diagnostics.trade_path.thresholds_r[{idx}]")
+        if numeric <= 0.0:
+            raise ConfigValidationError("diagnostics.trade_path.thresholds_r values must be > 0.")
+    buckets = trade_path.get("bars_held_buckets", [1, 2, 4, 8, 16])
+    if not isinstance(buckets, list) or not buckets:
+        raise ConfigValidationError("diagnostics.trade_path.bars_held_buckets must be a non-empty list.")
+    previous = 0
+    for idx, item in enumerate(buckets):
+        value = _positive_int(item, field=f"diagnostics.trade_path.bars_held_buckets[{idx}]")
+        if value <= previous:
+            raise ConfigValidationError("diagnostics.trade_path.bars_held_buckets must be strictly increasing.")
+        previous = value
+    plots = trade_path.get("plots", {})
+    if not isinstance(plots, dict):
+        raise ConfigValidationError("diagnostics.trade_path.plots must be a mapping.")
+    if not isinstance(plots.get("enabled", True), bool):
+        raise ConfigValidationError("diagnostics.trade_path.plots.enabled must be boolean.")
+    for key in ("max_trades", "max_path_points"):
+        _positive_int(plots.get(key, 500 if key == "max_trades" else 200000), field=f"diagnostics.trade_path.plots.{key}")
 
 
 def validate_execution_block(execution: dict[str, Any]) -> None:

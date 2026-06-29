@@ -217,6 +217,7 @@ def run_single_asset_backtest(
             max_leverage=float(risk_cfg.get("max_leverage", 1.0)),
             periods_per_year=int(backtest_cfg.get("periods_per_year", 252)),
             dynamic_exits=dict(backtest_cfg.get("dynamic_exits", {}) or {}),
+            partial_exits=dict(backtest_cfg.get("partial_exits", {}) or {}),
             allow_short=bool(backtest_cfg.get("allow_short", False)),
             stop_mode=str(backtest_cfg.get("stop_mode", "fixed_return")),
             vol_col=backtest_cfg.get("vol_col"),
