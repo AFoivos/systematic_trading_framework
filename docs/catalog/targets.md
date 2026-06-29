@@ -331,7 +331,6 @@ Causality:
   υπολογίζεται στο close και εκτελείται στο επόμενο open.
 - Τα R-multiple outputs είναι labels/diagnostics, όχι features.
 
-<<<<<<< HEAD
 ## Παράδειγμα YAML
 
 ```yaml
@@ -366,50 +365,3 @@ target:
   `directional_triple_barrier`.
 - Θέλεις να αξιολογήσεις manual long candidates σε risk units; χρησιμοποίησε
   `r_multiple`.
-=======
-## candidate_expected_r
-
-Candidate-based expected-R target για manual/rule-based candidate signals.
-
-Σε αντίθεση με generic forward return targets, γράφει labels μόνο όταν
-`candidate_col == 1` και απαντά στο trade-level ερώτημα: αν το candidate
-δόθηκε στο close του bar `t` και η είσοδος έγινε στο επόμενο open, πόσα R
-παρήγαγε η διαδρομή με συγκεκριμένο volatility stop, take profit και maximum
-holding;
-
-Διαφορά από triple barrier:
-
-- Είναι long-only και candidate-only by design.
-- Το αποτέλεσμα αποθηκεύεται άμεσα ως realized trade R και clipped trade R.
-- Το target είναι προσανατολισμένο στο quality μιας ήδη προτεινόμενης
-  συναλλαγής, όχι στη γενική κατεύθυνση όλων των bars.
-
-Outputs:
-
-- `label`, binary success label με βάση `target_r_min`.
-- `target_trade_r` και `target_trade_r_clipped`.
-- `target_event_ret`, `target_candidate`, `target_entry_price`,
-  `target_exit_price`, `target_stop_price`, `target_take_profit_price`.
-- `target_exit_reason`, `target_bars_held`, `target_hit_type`,
-  `target_hit_step`.
-- MFE/MAE diagnostics: `target_mfe_r`, `target_mae_r`,
-  `target_time_to_mfe`, `target_time_to_mae`.
-
-Causality:
-
-- Το future OHLC path χρησιμοποιείται μόνο στο target-construction στάδιο.
-- Με `entry_price_mode='next_open'`, το label ταιριάζει σε signal που
-  παράγεται στο close του current bar και εκτελείται στο επόμενο open.
-- Non-candidate rows μένουν unlabeled, με `target_candidate=0`.
-- Τα target output columns δεν πρέπει ποτέ να μπουν σε `model.feature_cols`,
-  `feature_selectors`, signal filters ή execution rules. Είναι labels και
-  diagnostics, άρα θα ήταν leakage αν χρησιμοποιηθούν ως inputs.
-
-Χρησιμότητα:
-
-- Κατάλληλο για το workflow: rule-based primary candidate -> expected-R target
-  -> future meta-labeling/model filter.
-- Επιτρέπει να μελετήσεις winners/losers σε trade units αντί για raw returns.
-- Τα MFE/MAE και exit-reason diagnostics βοηθούν να αξιολογηθεί αν το candidate
-  αποτυγχάνει λόγω stop placement, timing ή insufficient follow-through.
->>>>>>> rescue-sycnh
