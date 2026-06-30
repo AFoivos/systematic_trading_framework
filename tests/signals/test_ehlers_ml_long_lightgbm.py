@@ -165,6 +165,24 @@ def test_stationary_ehlers_features_are_atr_normalized() -> None:
     assert np.isfinite(out["hilbert_amplitude_over_atr"].dropna()).all()
 
 
+def test_candidate_phase_normalization_accepts_radians() -> None:
+    source = _candidate_input(300)
+    radians_source = source.copy()
+    radians_source["dominant_cycle_phase"] = np.deg2rad(source["dominant_cycle_phase"])
+
+    out = ehlers_ml_long_candidate_feature(
+        radians_source,
+        amplitude_lookback=32,
+        dominant_cycle_phase_unit="radians",
+    )
+    expected = (source["dominant_cycle_phase"].mod(360.0) / 360.0).astype("float32")
+
+    pd.testing.assert_series_equal(
+        out["dominant_cycle_phase_normalized"],
+        expected.rename("dominant_cycle_phase_normalized"),
+    )
+
+
 def test_asset_synchronization_uses_common_timestamps() -> None:
     left = _candidate_input(500)
     right = _candidate_input(500).iloc[25:].copy()

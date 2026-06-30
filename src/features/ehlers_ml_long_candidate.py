@@ -26,6 +26,25 @@ def _finite_number(value: float, *, name: str) -> float:
     return float(value)
 
 
+_PHASE_UNIT_ALIASES = {
+    "degrees": "degrees",
+    "degree": "degrees",
+    "deg": "degrees",
+    "radians": "radians",
+    "radian": "radians",
+    "rad": "radians",
+}
+
+
+def _resolve_phase_unit(value: str, *, name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{name} must be one of: degrees, radians.")
+    normalized = value.strip().lower()
+    if normalized not in _PHASE_UNIT_ALIASES:
+        raise ValueError(f"{name} must be one of: degrees, radians.")
+    return _PHASE_UNIT_ALIASES[normalized]
+
+
 def ehlers_ml_long_candidate_feature(
     df: pd.DataFrame,
     *,
@@ -40,6 +59,7 @@ def ehlers_ml_long_candidate_feature(
     frama_col: str = "frama",
     supersmoother_col: str = "supersmoother",
     dominant_cycle_phase_col: str = "dominant_cycle_phase",
+    dominant_cycle_phase_unit: str = "degrees",
     atr_col: str | None = None,
     amplitude_lookback: int = 128,
     amplitude_min_quantile: float = 0.50,
@@ -70,6 +90,7 @@ def ehlers_ml_long_candidate_feature(
               frama_col: frama
               supersmoother_col: supersmoother
               dominant_cycle_phase_col: dominant_cycle_phase
+              dominant_cycle_phase_unit: degrees
               atr_col: null
               amplitude_lookback: 128
               amplitude_min_quantile: 0.5
@@ -106,6 +127,8 @@ def ehlers_ml_long_candidate_feature(
         Input dataframe column configured by ``supersmoother_col``. Default: ``supersmoother``.
     dominant_cycle_phase_col:
         Input dataframe column configured by ``dominant_cycle_phase_col``. Default: ``dominant_cycle_phase``.
+    dominant_cycle_phase_unit:
+        Unit of ``dominant_cycle_phase_col``. Use ``degrees`` or ``radians``.
     side_col:
         Input dataframe column configured by ``side_col``. Default: ``signal_side``.
     
@@ -133,6 +156,9 @@ def ehlers_ml_long_candidate_feature(
         Input dataframe column configured by ``supersmoother_col``. Default: ``supersmoother``.
     dominant_cycle_phase_col:
         Input dataframe column configured by ``dominant_cycle_phase_col``. Default: ``dominant_cycle_phase``.
+    dominant_cycle_phase_unit:
+        Unit of ``dominant_cycle_phase_col`` before normalization. Default:
+        ``degrees``.
     atr_col:
         Output dataframe column configured by ``atr_col``. Default: ``null``.
     amplitude_lookback:
@@ -157,6 +183,7 @@ def ehlers_ml_long_candidate_feature(
     quantile = _finite_number(amplitude_min_quantile, name="amplitude_min_quantile")
     min_period = _finite_number(min_cycle_period, name="min_cycle_period")
     max_period = _finite_number(max_cycle_period, name="max_cycle_period")
+    phase_unit = _resolve_phase_unit(dominant_cycle_phase_unit, name="dominant_cycle_phase_unit")
     if not 0.0 <= quantile <= 1.0:
         raise ValueError("amplitude_min_quantile must be in [0, 1].")
     if min_period <= 0.0 or max_period < min_period:
@@ -195,9 +222,10 @@ def ehlers_ml_long_candidate_feature(
     out["decycler_slope"] = numeric(decycler_col).diff(slope_lag).astype("float32")
     out["frama_slope"] = numeric(frama_col).diff(slope_lag).astype("float32")
     out["supersmoother_slope"] = numeric(supersmoother_col).diff(slope_lag).astype("float32")
-    out["dominant_cycle_phase_normalized"] = (
-        numeric(dominant_cycle_phase_col).mod(360.0) / 360.0
-    ).astype("float32")
+    phase_degrees = numeric(dominant_cycle_phase_col)
+    if phase_unit == "radians":
+        phase_degrees = np.rad2deg(phase_degrees)
+    out["dominant_cycle_phase_normalized"] = (phase_degrees.mod(360.0) / 360.0).astype("float32")
     if atr_col is not None:
         atr = numeric(atr_col).where(lambda values: values.gt(0.0))
         stationary_features = {

@@ -698,6 +698,7 @@ MESA dominant cycle period estimate.
 
 MESA dominant cycle phase estimate.
 
+- Unit: defaults to degrees (`0..360`). Set `unit: radians` to output radians (`0..2*pi`).
 - Output: `dominant_cycle_phase` ή `output_col`.
 - Χρησιμότητα: cycle-position feature για turning-point/cycle regime models.
 - Θεωρία: phase features επιτρέπουν στο μοντέλο να δει πού βρίσκεται η αγορά μέσα στον εκτιμώμενο κύκλο.

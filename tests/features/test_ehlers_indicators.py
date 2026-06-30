@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+import numpy as np
 import pytest
 
 from src.features.autocorrelation_periodogram import add_autocorrelation_periodogram
@@ -63,7 +64,7 @@ FEATURE_CASES = [
         ["dominant_cycle_phase"],
         ["custom_phase"],
         ["close"],
-        {"output_col": ""},
+        {"unit": "turns"},
     ),
     (
         "instantaneous_trendline",
@@ -272,3 +273,13 @@ def test_frama_optional_diagnostics() -> None:
     out = add_frama(synthetic_ohlcv(n=220), add_diagnostics=True)
     assert {"frama_16", "frama_16_alpha", "frama_16_fractal_dimension"}.issubset(out.columns)
     assert_has_finite_values(out["frama_16_alpha"])
+
+
+def test_dominant_cycle_phase_can_output_radians() -> None:
+    df = synthetic_ohlcv(n=220)
+    degrees = add_dominant_cycle_phase(df, output_col="phase_degrees")
+    radians = add_dominant_cycle_phase(df, output_col="phase_radians", unit="rad")
+
+    expected = np.deg2rad(degrees["phase_degrees"].to_numpy(dtype=float))
+    actual = radians["phase_radians"].to_numpy(dtype=float)
+    np.testing.assert_allclose(actual, expected, equal_nan=True)

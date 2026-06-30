@@ -224,6 +224,7 @@ FEATURE_PARAM_DEFAULTS: dict[str, dict[str, Any]] = {
     "dominant_cycle_phase": {
         "price_col": "close",
         "output_col": "dominant_cycle_phase",
+        "unit": "degrees",
     },
     "instantaneous_trendline": {
         "price_col": "close",
@@ -376,6 +377,12 @@ FEATURE_PARAM_DEFAULTS: dict[str, dict[str, Any]] = {
     },
 }
 FEATURE_PARAM_OPTIONS: dict[str, dict[str, list[Any]]] = {
+    "dominant_cycle_phase": {
+        "unit": ["degrees", "radians"],
+    },
+    "ehlers_ml_long_candidate": {
+        "dominant_cycle_phase_unit": ["degrees", "radians"],
+    },
     "trend_regime": {
         "method": ["ema", "sma_legacy"],
     },
@@ -403,7 +410,7 @@ FEATURE_METADATA: dict[str, dict[str, Any]] = {
     },
     "dominant_cycle_phase": {
         "display_name": "Dominant Cycle Phase",
-        "description": "Causal MESA estimate of cycle phase in degrees.",
+        "description": "Causal MESA estimate of cycle phase, in degrees by default or radians when configured.",
         "category": "Ehlers",
     },
     "instantaneous_trendline": {

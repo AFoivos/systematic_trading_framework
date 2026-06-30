@@ -251,6 +251,18 @@ def _finite_number(value: Any, *, field: str) -> float:
     return out
 
 
+def _validate_phase_unit(value: Any, *, field: str) -> None:
+    if not isinstance(value, str) or value.strip().lower() not in {
+        "degrees",
+        "degree",
+        "deg",
+        "radians",
+        "radian",
+        "rad",
+    }:
+        raise ConfigValidationError(f"{field} must be one of: degrees, radians.")
+
+
 def _positive_int(value: Any, *, field: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise ConfigValidationError(f"{field} must be a positive integer.")
@@ -1071,6 +1083,7 @@ def _validate_ehlers_ml_long_candidate_params(params: dict[str, Any], *, field_p
         "frama_col",
         "supersmoother_col",
         "dominant_cycle_phase_col",
+        "dominant_cycle_phase_unit",
         "candidate_col",
         "side_col",
     }
@@ -1081,6 +1094,8 @@ def _validate_ehlers_ml_long_candidate_params(params: dict[str, Any], *, field_p
         not isinstance(params["atr_col"], str) or not params["atr_col"].strip()
     ):
         raise ConfigValidationError(f"{field_prefix}.atr_col must be a non-empty string or null.")
+    if "dominant_cycle_phase_unit" in params:
+        _validate_phase_unit(params["dominant_cycle_phase_unit"], field=f"{field_prefix}.dominant_cycle_phase_unit")
     for key in ("amplitude_lookback", "slope_bars"):
         if key in params:
             _positive_int(params[key], field=f"{field_prefix}.{key}")
@@ -1480,6 +1495,15 @@ def validate_features_block(features: Any) -> None:
                 raise ConfigValidationError("features[].params_by_asset values must be mappings.")
         _validate_string_mapping(step.get("outputs"), field="features[].outputs")
         _validate_feature_helper_blocks(step)
+        if step["step"] == "dominant_cycle_phase":
+            for field_prefix, params in _iter_feature_param_blocks(step):
+                for key in ("price_col", "output_col"):
+                    if key in params and params[key] is not None and (
+                        not isinstance(params[key], str) or not params[key].strip()
+                    ):
+                        raise ConfigValidationError(f"{field_prefix}.{key} must be a non-empty string.")
+                if "unit" in params:
+                    _validate_phase_unit(params["unit"], field=f"{field_prefix}.unit")
         if step["step"] == "roc_long_only_conditions":
             _validate_roc_long_only_conditions_params(step.get("params") or {}, field_prefix="features[].params")
         if step["step"] == "ehlers_semiscalp_long":
