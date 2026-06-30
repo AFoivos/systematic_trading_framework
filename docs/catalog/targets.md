@@ -2,16 +2,33 @@
 
 Τελευταία ενημέρωση: 2026-06-29
 
-Αυτό το αρχείο τεκμηριώνει τα target builders που είναι διαθέσιμα μέσω του
+Αυτό το αρχείο τεκμηριώνει τους target builders που είναι διαθέσιμοι μέσω του
 `TARGET_REGISTRY` στο `src/targets/registry.py`. Το παλιό
-`build_classifier_target` παραμένει compatibility facade, αλλά νέα configs
-πρέπει να δηλώνουν explicit target `kind`.
+`build_classifier_target` παραμένει facade συμβατότητας, αλλά τα νέα configs
+πρέπει να δηλώνουν ρητό target `kind`.
 
-Targets είναι labels για training, evaluation και diagnostics. Από τη φύση τους
-κοιτάνε το μέλλον για να ορίσουν το outcome ενός timestamp. Αυτό είναι σωστό
+Τα targets είναι labels για training, evaluation και diagnostics. Από τη φύση
+τους κοιτάνε το μέλλον για να ορίσουν το outcome ενός timestamp. Αυτό είναι σωστό
 μόνο στο target-construction στάδιο. Οι target output στήλες δεν πρέπει να
 μπαίνουν ποτέ σε features, signals ή filters που υπολογίζονται πριν την
 εκτέλεση.
+
+## Γλωσσάρι target όρων
+
+- Label: η διακριτή απάντηση που μαθαίνει ένας classifier, π.χ. `1` για
+  επιτυχία και `0` για αποτυχία.
+- Outcome: το πραγματικό αποτέλεσμα που μετρήθηκε στο μέλλον, πριν γίνει
+  πιθανή δυαδικοποίηση.
+- Forward return: απόδοση από το timestamp `t` μέχρι `t + horizon`.
+- Horizon: πόσα bars μπροστά κοιτάει το target.
+- Candidate: row όπου υπάρχει υποψήφιο trade/setup. Τα candidate-based targets
+  γράφουν labels μόνο εκεί.
+- Entry: τιμή εισόδου που χρησιμοποιείται στο label simulation. Μπορεί να είναι
+  `current_close` ή `next_open`.
+- Profit/stop/time barrier: επίπεδο κέρδους, stop ή χρονικό όριο που κλείνει
+  το simulated trade path.
+- R-multiple: αποτέλεσμα σε μονάδες αρχικού risk. `+2R` σημαίνει κέρδος δύο
+  φορές το αρχικό ρίσκο, `-1R` σημαίνει πλήρες stop.
 
 ## Πώς διαβάζεις target values
 
@@ -43,6 +60,11 @@ Targets είναι labels για training, evaluation και diagnostics. Από
 | Barrier / trade-path labels | `triple_barrier`, `directional_triple_barrier`, `r_multiple` | Πρώτα χτύπησε profit, stop ή time barrier; Πόσο R κέρδισε ή έχασε το trade; |
 
 ## Fixed-horizon targets
+
+Στα ελληνικά, αυτή η ομάδα είναι τα targets σταθερού ορίζοντα: κοιτούν ακριβώς
+`horizon` bars μπροστά και αγνοούν την ενδιάμεση διαδρομή της τιμής. Είναι
+καθαρά και εύκολα για baseline, αλλά δεν ξέρουν αν στην πορεία θα είχε
+χτυπηθεί stop.
 
 ### `forward_return`
 
@@ -87,7 +109,7 @@ Targets είναι labels για training, evaluation και diagnostics. Από
 - Καλό για classifiers που προβλέπουν "positive return" και regressors που
   προβλέπουν μέγεθος μελλοντικής απόδοσης.
 
-Causality:
+Αιτιότητα:
 
 - Το target κοιτάει μέλλον by design. Δεν πρέπει να γίνει feature.
 - Τα rows χωρίς πλήρη horizon μένουν unlabeled.
@@ -137,13 +159,17 @@ Causality:
 - Το volatility normalization κάνει τις αποδόσεις πιο συγκρίσιμες μεταξύ
   ήρεμων και έντονων regimes.
 
-Causality:
+Αιτιότητα:
 
 - Όπως όλα τα targets, χρησιμοποιεί future prices/returns μόνο για labels.
 - Τα target columns και normalizer diagnostics δεν πρέπει να χρησιμοποιούνται ως
   model features.
 
 ## Barrier και trade-path targets
+
+Αυτή η ομάδα είναι path-dependent: δεν αρκεί η τελική τιμή στο horizon. Μετράει
+ποιο επίπεδο χτυπήθηκε πρώτο μέσα στη διαδρομή, άρα ταιριάζει καλύτερα σε
+πραγματική λογική trade management.
 
 ### `triple_barrier`
 
@@ -207,7 +233,7 @@ Causality:
 - Κατάλληλο για meta-labeling πάνω σε primary candidates.
 - Παράγει diagnostics για barrier levels, event return, hit type και hit timing.
 
-Causality:
+Αιτιότητα:
 
 - Το future OHLC path χρησιμοποιείται μόνο για label construction.
 - Τα barrier, hit και event return columns είναι target diagnostics και δεν
@@ -272,7 +298,7 @@ Causality:
 - Τα `oriented_*` columns κάνουν συγκρίσιμα long και short trades στην ίδια
   κλίμακα.
 
-Causality:
+Αιτιότητα:
 
 - Το `side_col`/`direction_col` και το `candidate_col` πρέπει να είναι causal
   outputs πριν από το target.
@@ -324,7 +350,7 @@ Causality:
 - Επιτρέπει να συγκρίνεις trades με διαφορετικό volatility ή stop distance.
 - Καλό target για model filters πάνω σε manual candidates.
 
-Causality:
+Αιτιότητα:
 
 - Το candidate πρέπει να έχει παραχθεί causally πριν από το target.
 - Με `entry_price_mode = next_open`, το target ταιριάζει σε σήμα που

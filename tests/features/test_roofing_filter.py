@@ -22,7 +22,6 @@ def test_roofing_filter_emits_only_raw_filter_by_default() -> None:
         synthetic_ohlcv(),
         high_pass_period=48,
         low_pass_period=10,
-        slope_bars=3,
         output_col="roofing_filter",
     )
 
@@ -39,8 +38,8 @@ def test_roofing_filter_emits_only_raw_filter_by_default() -> None:
     assert not derived.intersection(out.columns)
 
 
-def test_roofing_filter_rejects_legacy_derived_outputs() -> None:
-    with pytest.raises(ValueError, match="feature transforms"):
+def test_roofing_filter_rejects_legacy_derived_output_params() -> None:
+    with pytest.raises(TypeError, match="unexpected keyword"):
         add_roofing_filter(
             synthetic_ohlcv(),
             high_pass_period=48,

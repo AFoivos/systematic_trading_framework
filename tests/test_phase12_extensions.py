@@ -20,11 +20,9 @@ from src.experiments.registry import (
 )
 from src.features import (
     add_close_returns,
-    add_return_momentum_features,
     add_shock_context_features,
     add_support_resistance_features,
     add_support_resistance_v2_features,
-    add_vol_normalized_momentum_features,
 )
 from src.features.helpers import apply_feature_helpers
 from src.features.regime_context import add_regime_context_features
@@ -66,14 +64,14 @@ def test_registry_contains_phase12_extensions() -> None:
     assert "roc" in FEATURE_REGISTRY
     assert "atr" in FEATURE_REGISTRY
     assert "adx" in FEATURE_REGISTRY
-    assert "volume_features" in FEATURE_REGISTRY
+    assert "volume_features" not in FEATURE_REGISTRY
     assert "mfi" in FEATURE_REGISTRY
     assert "rsi" in FEATURE_REGISTRY
     assert "stochastic" in FEATURE_REGISTRY
     assert "stochastic_rsi" in FEATURE_REGISTRY
     assert "price_momentum" in FEATURE_REGISTRY
-    assert "return_momentum" in FEATURE_REGISTRY
-    assert "vol_normalized_momentum" in FEATURE_REGISTRY
+    assert "return_momentum" not in FEATURE_REGISTRY
+    assert "vol_normalized_momentum" not in FEATURE_REGISTRY
     assert "vwap_rms_ema_cross_long" not in FEATURE_REGISTRY
     assert "vwap_rms_ema_cross_long" in FEATURE_COMPATIBILITY_REGISTRY
     assert "elastic_net_clf" in MODEL_REGISTRY
@@ -414,7 +412,7 @@ def test_tsfresh_rolling_transform_is_no_longer_supported() -> None:
         )
 
 
-def test_vol_normalized_momentum_resolves_vol_window_when_col_is_null() -> None:
+def test_helpers_replace_vol_normalized_momentum_with_existing_volatility() -> None:
     idx = pd.date_range("2024-01-01", periods=4, freq="h")
     df = pd.DataFrame(
         {
@@ -424,13 +422,21 @@ def test_vol_normalized_momentum_resolves_vol_window_when_col_is_null() -> None:
         index=idx,
     )
 
-    out = add_vol_normalized_momentum_features(
+    out = apply_feature_helpers(
         df,
-        returns_col="close_logret",
-        vol_col=None,
-        vol_window=36,
-        windows=[2],
-        eps=0.0,
+        transforms={
+            "rolling_sum": {
+                "source_col": "close_logret",
+                "window": 2,
+                "output_col": "close_logret_mom_2",
+            },
+            "ratio": {
+                "numerator_col": "close_logret_mom_2",
+                "denominator_col": "vol_rolling_36",
+                "eps": 0.0,
+                "output_col": "close_logret_norm_mom_2",
+            },
+        },
     )
 
     expected = df["close_logret"].rolling(window=2).sum() / df["vol_rolling_36"]
@@ -438,17 +444,24 @@ def test_vol_normalized_momentum_resolves_vol_window_when_col_is_null() -> None:
         out["close_logret_norm_mom_2"],
         expected,
         check_names=False,
+        check_dtype=False,
     )
 
 
-def test_return_momentum_auto_computes_missing_close_returns() -> None:
+def test_helpers_replace_return_momentum_after_explicit_returns() -> None:
     idx = pd.date_range("2024-01-01", periods=5, freq="h")
     df = pd.DataFrame({"close": [100.0, 101.0, 99.0, 100.0, 102.0]}, index=idx)
 
-    out = add_return_momentum_features(
-        df,
-        returns_col="close_logret",
-        windows=[2],
+    out = add_close_returns(df, log=True, col_name="close_logret")
+    out = apply_feature_helpers(
+        out,
+        transforms={
+            "rolling_sum": {
+                "source_col": "close_logret",
+                "window": 2,
+                "output_col": "close_logret_mom_2",
+            }
+        },
     )
 
     expected_returns = np.log(df["close"] / df["close"].shift(1))
@@ -457,6 +470,7 @@ def test_return_momentum_auto_computes_missing_close_returns() -> None:
         out["close_logret_mom_2"],
         expected,
         check_names=False,
+        check_dtype=False,
     )
 
 
@@ -482,17 +496,32 @@ def test_apply_feature_steps_volatility_auto_computes_missing_returns_dependency
     assert "vol_rolling_5" in out.columns
 
 
-def test_vol_normalized_momentum_auto_computes_missing_return_and_volatility_inputs() -> None:
+def test_helpers_replace_vol_normalized_momentum_after_explicit_returns_and_volatility() -> None:
     idx = pd.date_range("2024-01-01", periods=6, freq="h")
     df = pd.DataFrame({"close": [100.0, 101.0, 99.0, 100.0, 102.0, 101.0]}, index=idx)
 
-    out = add_vol_normalized_momentum_features(
-        df,
-        returns_col="close_logret",
-        vol_col="vol_rolling_3",
-        vol_window=3,
-        windows=[2],
-        eps=0.0,
+    out = add_close_returns(df, log=True, col_name="close_logret")
+    out = apply_feature_helpers(
+        out,
+        transforms={
+            "rolling_std": {
+                "source_col": "close_logret",
+                "window": 3,
+                "ddof": 1,
+                "output_col": "vol_rolling_3",
+            },
+            "rolling_sum": {
+                "source_col": "close_logret",
+                "window": 2,
+                "output_col": "close_logret_mom_2",
+            },
+            "ratio": {
+                "numerator_col": "close_logret_mom_2",
+                "denominator_col": "vol_rolling_3",
+                "eps": 0.0,
+                "output_col": "close_logret_norm_mom_2",
+            },
+        },
     )
 
     expected_returns = np.log(df["close"] / df["close"].shift(1))
@@ -502,6 +531,7 @@ def test_vol_normalized_momentum_auto_computes_missing_return_and_volatility_inp
         out["close_logret_norm_mom_2"],
         expected,
         check_names=False,
+        check_dtype=False,
     )
 
 
@@ -1374,21 +1404,27 @@ def test_support_resistance_emits_expected_columns() -> None:
         high_col="high",
         low_col="low",
         windows=[24],
-        include_pct_distance=True,
-        include_atr_distance=True,
     )
 
     expected_cols = {
         "support_24",
         "resistance_24",
-        "support_distance_pct_24",
-        "resistance_distance_pct_24",
-        "support_distance_atr_24",
-        "resistance_distance_atr_24",
     }
     assert expected_cols.issubset(df.columns)
+    assert "support_distance_pct_24" not in df.columns
+    assert "support_distance_atr_24" not in df.columns
     assert df["support_24"].notna().sum() > 0
     assert df["resistance_24"].notna().sum() > 0
+
+    with pytest.raises(ValueError, match="helper-derived"):
+        add_support_resistance_features(
+            df,
+            price_col="close",
+            high_col="high",
+            low_col="low",
+            windows=[24],
+            include_pct_distance=True,
+        )
 
 
 def test_support_resistance_v2_emits_expected_columns() -> None:
@@ -1415,9 +1451,9 @@ def test_support_resistance_v2_emits_expected_columns() -> None:
         "sr_v2_breakout_down",
         "sr_v2_retest_resistance",
         "sr_v2_retest_support",
-        "sr_v2_support_distance_atr",
-        "sr_v2_resistance_distance_atr",
     }
     assert expected_cols.issubset(df.columns)
+    assert "sr_v2_support_distance_atr" not in df.columns
+    assert "sr_v2_resistance_distance_atr" not in df.columns
     assert df["sr_v2_resistance_level"].notna().sum() > 0
     assert df["sr_v2_support_level"].notna().sum() > 0

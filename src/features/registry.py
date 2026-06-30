@@ -28,7 +28,6 @@ from .hurst_exponent import add_hurst_exponent
 from .instantaneous_trendline import add_instantaneous_trendline
 from .inverse_fisher_transform import add_inverse_fisher_transform
 from .laguerre_rsi import add_laguerre_rsi
-from .lags import add_lagged_features
 from .macro import add_macro_context_features
 from .mama import add_mama
 from .multi_timeframe import add_multi_timeframe_features
@@ -38,7 +37,6 @@ from .parkinson_volatility import add_parkinson_volatility
 from .permutation_entropy import add_permutation_entropy
 from .regime_context import add_regime_context_features
 from .helpers.normalizations.returns import add_close_returns
-from .rolling_r2_trend_quality import add_rolling_r2_trend_quality
 from .roofing_filter import add_roofing_filter
 from .session_context import add_session_context_features
 from .shannon_entropy import add_shannon_entropy
@@ -55,24 +53,18 @@ from .technical.macd import add_macd_features
 from .technical.mfi import add_mfi_features
 from .technical.ppo import add_ppo_features
 from .technical.price_momentum import add_price_momentum_features
-from .technical.return_momentum import add_return_momentum_features
 from .technical.roc import add_roc_features
 from .technical.rsi import add_rsi_features
 from .technical.schaff_trend_cycle import add_schaff_trend_cycle_features
 from .technical.stochastic import add_stochastic_features
 from .technical.stochastic_rsi import add_stochastic_rsi_features
 from .technical.trend import add_trend_features
-from .technical.vol_normalized_momentum import add_vol_normalized_momentum_features
-from .technical.volume_features import add_volume_features
 from .technical.vwap import add_vwap_features
 from .trend_regime import add_trend_regime
-from .trend_slope_volatility import add_trend_slope_volatility
 from .volatility import add_volatility_features
-from .volatility_of_volatility import add_volatility_of_volatility
 from .volatility_regime import add_volatility_regime
 from .vpin import add_vpin
 from .yang_zhang_volatility import add_yang_zhang_volatility
-from .zscore_momentum import add_zscore_momentum
 
 FeatureFn = Callable[..., pd.DataFrame]
 
@@ -82,22 +74,18 @@ _FEATURE_COMPONENTS: tuple[tuple[str, FeatureFn], ...] = (
     ("volatility", add_volatility_features),
     ("trend", add_trend_features),
     ("trend_regime", add_trend_regime),
-    ("lags", add_lagged_features),
     ("bollinger", add_bollinger_features),
     ("macd", add_macd_features),
     ("ppo", add_ppo_features),
     ("roc", add_roc_features),
     ("atr", add_atr_features),
     ("adx", add_adx_features),
-    ("volume_features", add_volume_features),
     ("vwap", add_vwap_features),
     ("mfi", add_mfi_features),
     ("rsi", add_rsi_features),
     ("stochastic", add_stochastic_features),
     ("stochastic_rsi", add_stochastic_rsi_features),
     ("price_momentum", add_price_momentum_features),
-    ("return_momentum", add_return_momentum_features),
-    ("vol_normalized_momentum", add_vol_normalized_momentum_features),
     ("session_context", add_session_context_features),
     ("regime_context", add_regime_context_features),
     ("shock_context", add_shock_context_features),
@@ -131,10 +119,6 @@ _FEATURE_COMPONENTS: tuple[tuple[str, FeatureFn], ...] = (
     ("yang_zhang_volatility", add_yang_zhang_volatility),
     ("hurst_exponent", add_hurst_exponent),
     ("fractal_dimension", add_fractal_dimension),
-    ("zscore_momentum", add_zscore_momentum),
-    ("rolling_r2_trend_quality", add_rolling_r2_trend_quality),
-    ("trend_slope_volatility", add_trend_slope_volatility),
-    ("volatility_of_volatility", add_volatility_of_volatility),
     ("volatility_regime", add_volatility_regime),
     ("hmm_regime", add_hmm_regime),
     ("hilbert_transform", add_hilbert_transform),

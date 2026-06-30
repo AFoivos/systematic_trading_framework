@@ -11,16 +11,7 @@ def add_roofing_filter(
     price_col: str = "close",
     high_pass_period: int = 48,
     low_pass_period: int = 10,
-    slope_bars: int = 3,
     output_col: str | None = None,
-    slope_col: str | None = None,
-    positive_col: str | None = None,
-    negative_col: str | None = None,
-    slope_positive_col: str | None = None,
-    slope_negative_col: str | None = None,
-    cross_up_zero_col: str | None = None,
-    cross_down_zero_col: str | None = None,
-    add_derived: bool = False,
 ) -> pd.DataFrame:
     """
     Apply the registered ``roofing_filter`` feature transformation.
@@ -35,16 +26,7 @@ def add_roofing_filter(
               price_col: close
               high_pass_period: 48
               low_pass_period: 10
-              slope_bars: 3
               output_col: null
-              slope_col: null
-              positive_col: null
-              negative_col: null
-              slope_positive_col: null
-              slope_negative_col: null
-              cross_up_zero_col: null
-              cross_down_zero_col: null
-              add_derived: false
             output_cols:
               - configured by output_col
     
@@ -61,43 +43,12 @@ def add_roofing_filter(
         Configuration parameter accepted by this feature. Default: ``48``.
     low_pass_period:
         Configuration parameter accepted by this feature. Default: ``10``.
-    slope_bars:
-        Configuration parameter accepted by this feature. Default: ``3``.
     output_col:
         Output dataframe column configured by ``output_col``. Default: ``null``.
-    slope_col:
-        Deprecated. Use ``transforms.difference`` on ``output_col`` instead.
-    positive_col:
-        Deprecated. Use ``transforms.threshold_flag`` on ``output_col`` instead.
-    negative_col:
-        Deprecated. Use ``transforms.threshold_flag`` on ``output_col`` instead.
-    slope_positive_col:
-        Deprecated. Use ``transforms.threshold_flag`` on the helper slope column instead.
-    slope_negative_col:
-        Deprecated. Use ``transforms.threshold_flag`` on the helper slope column instead.
-    cross_up_zero_col:
-        Deprecated. Use ``transforms.crossing_flag`` on ``output_col`` instead.
-    cross_down_zero_col:
-        Deprecated. Use ``transforms.crossing_flag`` on ``output_col`` instead.
-    add_derived:
-        Deprecated. Raw features no longer emit helper-style derived columns.
     """
     _validate_columns(df, [price_col])
     _validate_period(high_pass_period, name="high_pass_period")
     _validate_period(low_pass_period, name="low_pass_period")
-    _validate_slope_bars(slope_bars)
-    if not isinstance(add_derived, bool):
-        raise ValueError("add_derived must be boolean.")
-    _reject_derived_outputs(
-        add_derived=add_derived,
-        slope_col=slope_col,
-        positive_col=positive_col,
-        negative_col=negative_col,
-        slope_positive_col=slope_positive_col,
-        slope_negative_col=slope_negative_col,
-        cross_up_zero_col=cross_up_zero_col,
-        cross_down_zero_col=cross_down_zero_col,
-    )
     if high_pass_period <= low_pass_period:
         raise ValueError("high_pass_period must be greater than low_pass_period.")
     col = _resolve_output_col(output_col, f"roofing_filter_{high_pass_period}_{low_pass_period}")
@@ -145,48 +96,12 @@ def _validate_period(period: int, *, name: str) -> None:
         raise ValueError(f"{name} must be an integer greater than 1.")
 
 
-def _validate_slope_bars(slope_bars: int) -> None:
-    if isinstance(slope_bars, bool) or not isinstance(slope_bars, Integral) or int(slope_bars) <= 0:
-        raise ValueError("slope_bars must be a positive integer.")
-
-
 def _resolve_output_col(output_col: str | None, default: str) -> str:
     if output_col is None:
         return default
     if not isinstance(output_col, str) or not output_col.strip():
         raise ValueError("output_col must be a non-empty string.")
     return output_col
-
-
-def _reject_derived_outputs(
-    *,
-    add_derived: bool,
-    slope_col: str | None,
-    positive_col: str | None,
-    negative_col: str | None,
-    slope_positive_col: str | None,
-    slope_negative_col: str | None,
-    cross_up_zero_col: str | None,
-    cross_down_zero_col: str | None,
-) -> None:
-    requested = {
-        "add_derived": add_derived,
-        "slope_col": slope_col,
-        "positive_col": positive_col,
-        "negative_col": negative_col,
-        "slope_positive_col": slope_positive_col,
-        "slope_negative_col": slope_negative_col,
-        "cross_up_zero_col": cross_up_zero_col,
-        "cross_down_zero_col": cross_down_zero_col,
-    }
-    active = [key for key, value in requested.items() if value not in (False, None)]
-    if active:
-        fields = ", ".join(active)
-        raise ValueError(
-            "roofing_filter no longer emits derived slope/flag/cross columns. "
-            f"Move {fields} to feature transforms using difference, threshold_flag, and crossing_flag helpers."
-        )
-
 
 __all__ = [
     "add_roofing_filter",

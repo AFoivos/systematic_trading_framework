@@ -24,7 +24,6 @@ from .ppo import add_ppo_features
 from .price_momentum import compute_price_momentum
 from .price_momentum import add_price_momentum_features
 from .return_momentum import compute_return_momentum
-from .return_momentum import add_return_momentum_features
 from .roc import compute_roc
 from .roc import add_roc_features
 from .rsi import compute_rsi
@@ -40,7 +39,6 @@ from .trend import add_trend_features
 from .trend_regime_feature import add_trend_regime_features
 from .true_range import compute_true_range
 from .vol_normalized_momentum import compute_vol_normalized_momentum
-from .vol_normalized_momentum import add_vol_normalized_momentum_features
 from .volume_features import compute_volume_over_atr, compute_volume_zscore
 from .volume_features import add_volume_features
 from .vwap import compute_vwap
@@ -58,9 +56,7 @@ __all__ = [
     "compute_price_momentum",
     "add_price_momentum_features",
     "compute_return_momentum",
-    "add_return_momentum_features",
     "compute_vol_normalized_momentum",
-    "add_vol_normalized_momentum_features",
     "add_momentum_features",
     "compute_rsi",
     "add_rsi_features",

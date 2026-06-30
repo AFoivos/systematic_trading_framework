@@ -21,7 +21,6 @@ from .transforms import (
     compute_rolling_zscore_transform,
     compute_tsfresh_rolling_transform,
 )
-from .lags import add_lagged_features
 from .helpers import (
     add_between_flag_transform,
     add_crossing_flag_transform,
@@ -73,13 +72,11 @@ from .technical import (
     add_mfi_features,
     add_ppo_features,
     add_price_momentum_features,
-    add_return_momentum_features,
     add_roc_features,
     add_rsi_features,
     add_schaff_trend_cycle_features,
     add_stochastic_rsi_features,
     add_stochastic_features,
-    add_vol_normalized_momentum_features,
     add_volume_features,
     add_vwap_features,
 )
@@ -109,17 +106,13 @@ from .order_flow_imbalance import add_order_flow_imbalance
 from .parkinson_volatility import add_parkinson_volatility
 from .permutation_entropy import add_permutation_entropy
 from .roofing_filter import add_roofing_filter
-from .rolling_r2_trend_quality import add_rolling_r2_trend_quality
 from .shannon_entropy import add_shannon_entropy
 from .sinewave_indicator import add_sinewave_indicator
 from .supersmoother import add_supersmoother
 from .trend_regime import add_trend_regime
-from .trend_slope_volatility import add_trend_slope_volatility
-from .volatility_of_volatility import add_volatility_of_volatility
 from .volatility_regime import add_volatility_regime
 from .vpin import add_vpin
 from .yang_zhang_volatility import add_yang_zhang_volatility
-from .zscore_momentum import add_zscore_momentum
 from .technical.momentum import add_momentum_features
 from .technical.oscillators import add_oscillator_features
 __all__ = [
@@ -146,7 +139,6 @@ __all__ = [
     "add_crossing_flag_transform",
     "add_between_flag_transform",
     "add_difference_transform",
-    "add_lagged_features",
     "add_lag_transform",
     "add_ratio_transform",
     "add_reciprocal_transform",
@@ -195,8 +187,6 @@ __all__ = [
     "add_stochastic_rsi_features",
     "add_stochastic_features",
     "add_price_momentum_features",
-    "add_return_momentum_features",
-    "add_vol_normalized_momentum_features",
     "add_indicator_features",
     "add_indicator_pullback_features",
     "add_autocorrelation_periodogram",
@@ -225,17 +215,13 @@ __all__ = [
     "add_parkinson_volatility",
     "add_permutation_entropy",
     "add_roofing_filter",
-    "add_rolling_r2_trend_quality",
     "add_shannon_entropy",
     "add_sinewave_indicator",
     "add_supersmoother",
     "add_trend_regime",
-    "add_trend_slope_volatility",
-    "add_volatility_of_volatility",
     "add_volatility_regime",
     "add_vpin",
     "add_yang_zhang_volatility",
-    "add_zscore_momentum",
     "add_momentum_features",
     "add_oscillator_features",
 ]

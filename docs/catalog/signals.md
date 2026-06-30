@@ -51,11 +51,24 @@ prediction. In-sample probability μέσα σε trading signal είναι leakag
 | No-op / diagnostic | `none` | Τρέχεις pipeline χωρίς πραγματικό trading signal ή με explicit flat signal. |
 | Indicator baselines | `trend_state`, `rsi`, `momentum`, `stochastic`, `volatility_regime` | Απλοί κανόνες από ένα βασικό feature ή regime. |
 | Probability και forecast signals | `probability_threshold`, `probability_conviction`, `probability_vol_adjusted`, `meta_probability_side`, `manual_long_model_filter`, `dense_return_forecast`, `forecast_threshold`, `forecast_vol_adjusted` | Μετατροπή model probability ή return forecast σε side, filter ή sizing. |
-| Primary candidate generators | `orb_candidate_side`, `roc_long_only_conditions`, `ema_stoch_rsi_pullback`, `indicator_model_adaptive_pullback`, `ppo_adx_stochrsi_trend`, `stc_roofing_hilbert` | Παράγουν trade candidates από rule logic πριν από model filtering. |
+| Primary candidate generators | `orb_candidate_side`, `roc_long_only_conditions`, `ema_stoch_rsi_pullback`, `indicator_model_adaptive_pullback`, `ppo_adx_stochrsi_trend`, `stc_roofing_hilbert` | Παράγουν υποψήφια trades από rule logic πριν από model filtering. |
 | VWAP / EMA / RMS composite setups | `vwap_rms_ema_cross_long`, `vwap_rms_ema_cross_long_hmm_gate`, `vwap_rms_ema_cross_long_fractal_filter`, `ema_rms_ppo_vwap`, `c1_trend_pullback_vwap`, `c2_regime_aware_momentum` | Συνδυάζουν trend, VWAP/RMS, PPO, volatility/regime και pullback context. |
 | Ehlers / cycle-based setups | `ehlers_continuation_long`, `ehlers_continuation_short`, `ehlers_decycler_continuation`, `ehlers_semiscalp_long` | Χρησιμοποιούν MAMA/FAMA, Roofing, Hilbert, Decycler και cycle context. |
 | Wrapper / filter | `regime_filtered` | Κρατά ένα base signal μόνο όταν ένα regime column είναι ενεργό. |
 | Deprecated aliases | `ehlers_continuation_long_signal`, `ehlers_continuation_short_signal` | Παλιά ονόματα που δείχνουν στα αντίστοιχα Ehlers continuation signals. |
+
+## Γλωσσάρι signal όρων
+
+- Signal: η τελική πρόθεση θέσης ή έκθεσης που μπορεί να διαβαστεί από
+  backtest/execution layer.
+- Candidate: υποψήφιο setup. Δεν είναι υποχρεωτικά τελικό trade, γιατί μπορεί
+  να ακολουθήσει model filter ή regime filter.
+- Side: πλευρά του trade, συνήθως `1` για long και `-1` για short.
+- Entry/exit event: σημαία που ανάβει μόνο στο bar όπου ανοίγει ή κλείνει η
+  λογική θέση.
+- Continuous exposure: αριθμός όπως `0.35` ή `-0.70`, όπου το πρόσημο είναι
+  πλευρά και το μέγεθος είναι conviction/sizing.
+- Filter/gate: συνθήκη που επιτρέπει ή απορρίπτει ένα ήδη υπάρχον signal.
 
 ## No-op και βασικά baselines
 
@@ -347,6 +360,10 @@ prediction. In-sample probability μέσα σε trading signal είναι leakag
   ισχυρότερο, άρα μεγαλύτερο exposure.
 
 ## Primary candidate generators
+
+Στα ελληνικά, αυτή η ενότητα αφορά generators υποψήφιων setups: κανόνες που
+λένε "εδώ υπάρχει πιθανό trade" πριν αποφασίσει ένα meta model ή άλλο φίλτρο αν
+το trade θα εκτελεστεί.
 
 ### `orb_candidate_side`
 
@@ -698,6 +715,9 @@ prediction. In-sample probability μέσα σε trading signal είναι leakag
 
 ## Deprecated aliases
 
+Αυτή η ενότητα κρατά παλιά ονόματα για συμβατότητα. Σε νέα YAML προτίμησε τα
+canonical names που αναφέρονται σε κάθε alias.
+
 ### `ehlers_continuation_long_signal`
 
 Παλαιό όνομα για το long Ehlers continuation signal. Χρησιμοποίησε
@@ -752,4 +772,3 @@ signals:
 - Θέλεις sizing και όχι on/off trades; χρησιμοποίησε
   `probability_conviction`, `probability_vol_adjusted`,
   `dense_return_forecast` ή `forecast_vol_adjusted`.
-

@@ -176,39 +176,12 @@ def test_stochastic_rsi_features_emit_expected_columns_and_values() -> None:
     expected = [
         "stoch_rsi_k",
         "stoch_rsi_d",
-        "stoch_rsi_k_minus_d",
-        "stoch_rsi_cross_up",
-        "stoch_rsi_cross_down",
-        "stoch_rsi_oversold",
-        "stoch_rsi_overbought",
-        "stoch_rsi_slope",
-        "stoch_rsi_recover_from_oversold",
-        "stoch_rsi_fall_from_overbought",
     ]
     assert out.columns[-len(expected) :].tolist() == expected
     assert out["stoch_rsi_k"].dropna().between(0.0, 1.0).all()
     assert out["stoch_rsi_d"].dropna().between(0.0, 1.0).all()
-
-    for column in [
-        "stoch_rsi_cross_up",
-        "stoch_rsi_cross_down",
-        "stoch_rsi_oversold",
-        "stoch_rsi_overbought",
-        "stoch_rsi_recover_from_oversold",
-        "stoch_rsi_fall_from_overbought",
-    ]:
-        assert set(out[column].dropna().unique()).issubset({0, 1})
-
-    pd.testing.assert_series_equal(
-        out["stoch_rsi_k_minus_d"],
-        out["stoch_rsi_k"] - out["stoch_rsi_d"],
-        check_names=False,
-    )
-    pd.testing.assert_series_equal(
-        out["stoch_rsi_slope"],
-        out["stoch_rsi_k"] - out["stoch_rsi_k"].shift(1),
-        check_names=False,
-    )
+    assert "stoch_rsi_cross_up" not in out.columns
+    assert "stoch_rsi_slope" not in out.columns
 
 
 def test_stochastic_rsi_features_are_point_in_time_safe() -> None:
@@ -264,7 +237,7 @@ def test_stochastic_rsi_feature_step_is_yaml_driven_and_flat_price_safe() -> Non
     flat_out = apply_feature_steps(flat, [step])
     assert flat_out["stoch_rsi_k"].isna().all()
     assert flat_out["stoch_rsi_d"].isna().all()
-    assert flat_out["stoch_rsi_cross_up"].eq(0).all()
+    assert "stoch_rsi_cross_up" not in flat_out.columns
 
 
 def test_mfi_saturates_to_100_when_negative_flow_is_zero() -> None:

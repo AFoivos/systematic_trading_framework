@@ -138,6 +138,43 @@ features:
     oversold: 0.2
     overbought: 0.8
     prefix: stoch_rsi
+  transforms:
+    difference:
+      items:
+      - source_col: stoch_rsi_k
+        reference_col: stoch_rsi_d
+        output_col: stoch_rsi_k_minus_d
+      - source_col: stoch_rsi_k
+        periods: 1
+        output_col: stoch_rsi_slope
+    crossing_flag:
+      items:
+      - source_col: stoch_rsi_k_minus_d
+        threshold: 0.0
+        direction: up
+        output_col: stoch_rsi_cross_up
+      - source_col: stoch_rsi_k_minus_d
+        threshold: 0.0
+        direction: down
+        output_col: stoch_rsi_cross_down
+      - source_col: stoch_rsi_k
+        threshold: 0.2
+        direction: up
+        output_col: stoch_rsi_recover_from_oversold
+      - source_col: stoch_rsi_k
+        threshold: 0.8
+        direction: down
+        output_col: stoch_rsi_fall_from_overbought
+    threshold_flag:
+      items:
+      - source_col: stoch_rsi_k
+        threshold: 0.2
+        op: le
+        output_col: stoch_rsi_oversold
+      - source_col: stoch_rsi_k
+        threshold: 0.8
+        op: ge
+        output_col: stoch_rsi_overbought
 - step: roc
   outputs:
     roc_3: roc_3

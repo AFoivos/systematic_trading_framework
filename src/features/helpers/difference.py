@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from .common import non_negative_int, output_column, resolve_configured_column
+from .common import non_negative_int, output_column, require_columns, resolve_configured_column
 
 
 def compute_difference(series: pd.Series, *, periods: int = 1) -> pd.Series:
@@ -41,6 +41,7 @@ def add_difference_transform(
     *,
     source_col: str | None = None,
     source_selector: dict[str, object] | None = None,
+    reference_col: str | None = None,
     output_col: str | None = None,
     periods: int = 1,
     inplace: bool = False,
@@ -65,9 +66,13 @@ def add_difference_transform(
     Parameters
     ----------
     source_col:
-        Input dataframe column to subtract from its lagged value.
+        Input dataframe column to subtract from its lagged value, or from
+        ``reference_col`` when configured.
     source_selector:
         Column selector used when ``source_col`` is not provided.
+    reference_col:
+        Optional column to subtract from ``source_col`` at the same timestamp.
+        When provided, ``periods`` is ignored.
     output_col:
         Output column for the difference.
     periods:
@@ -84,6 +89,13 @@ def add_difference_transform(
         selector_key="source_selector",
         field_prefix="difference",
     )
+    if reference_col is not None:
+        require_columns(out, [source, reference_col], owner="difference")
+        col = output_column(output_col, default=f"{source}_minus_{reference_col}")
+        left = pd.to_numeric(out[source], errors="coerce").astype(float).replace([np.inf, -np.inf], np.nan)
+        right = pd.to_numeric(out[reference_col], errors="coerce").astype(float).replace([np.inf, -np.inf], np.nan)
+        out[col] = (left - right).astype("float32")
+        return out
     resolved_periods = non_negative_int(periods, field="periods")
     col = output_column(output_col, default=f"{source}_diff_{resolved_periods}")
     out[col] = compute_difference(out[source], periods=resolved_periods)

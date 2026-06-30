@@ -58,6 +58,570 @@ backtest έχει leakage.
 | Single-asset RL | `ppo_agent`, `dqn_agent` | Policy για actions σε ένα asset. |
 | Portfolio RL | `ppo_portfolio_agent`, `dqn_portfolio_agent` | Policy για allocation/actions σε πολλά assets. |
 
+## Κοινή δομή YAML για models
+
+Τα περισσότερα model entries δέχονται την ίδια εξωτερική δομή. Οι επιμέρους
+αλγόριθμοι διαβάζουν δικά τους `params`, αλλά τα παρακάτω πεδία έχουν κοινή
+σημασία:
+
+- `kind`: το registry name του model. Παράδειγμα: `lightgbm_clf`. Αν το
+  `kind` είναι λάθος ή δεν υπάρχει στο `MODEL_REGISTRY`, το experiment δεν
+  πρέπει να προχωρήσει σιωπηλά.
+- `target`: ο ορισμός του label/continuous target που θα χτιστεί πριν το fit.
+  Για classifier συνήθως παράγει `label`. Για forecaster παράγει continuous
+  forward return ή path-dependent outcome. Τα target output columns δεν πρέπει
+  να ξαναμπαίνουν στα features.
+- `feature_cols`: explicit λίστα στηλών που θα χρησιμοποιηθούν ως inputs. Είναι
+  η πιο ελεγχόμενη επιλογή όταν θέλεις auditability.
+- `feature_selectors`: κανόνες επιλογής στηλών όταν δεν θέλεις να γράψεις κάθε
+  feature με το χέρι. Χρησιμοποιείται για prefixes/families/profiles. Θέλει
+  προσοχή ώστε να μη μαζέψει target, signal ή prediction columns.
+- `split`: temporal split policy. Συνήθεις τιμές: `time`, `walk_forward`,
+  `purged`. Η έννοια είναι πάντα χρονική, όχι random shuffle. Το train window
+  κόβεται όπου χρειάζεται ώστε το target horizon να μη διαρρέει στο test.
+- `params`: estimator-specific hyperparameters. Αυτά περνάνε στον underlying
+  estimator ή στο neural/RL trainer, με defaults που αναφέρονται παρακάτω.
+- `runtime`: reproducibility/threading controls. Κοινά πεδία:
+  `seed`, `deterministic`, `repro_mode`, `threads`.
+- `preprocessing`: train-only preprocessing για classifiers. Υποστηρίζει
+  `scaler: none`, `standard` ή `robust`. Το scaler fit γίνεται μέσα σε κάθε
+  train fold και εφαρμόζεται στο αντίστοιχο test fold.
+- `calibration`: probability calibration για classifiers. Υποστηρίζεται
+  `method: none` ή `sigmoid`, με `fraction` και `min_rows`.
+- `pred_prob_col`, `pred_ret_col`, `pred_raw_prob_col`, `pred_is_oos_col`,
+  `signal_col`, `action_col`: ονόματα output columns. Η αλλαγή ονόματος είναι
+  χρήσιμη όταν τρέχεις πολλά models στο ίδιο dataframe, αλλά πρέπει να
+  ενημερωθούν και τα downstream signals.
+- `overlay`: optional πρόσθετο fold-level predictor, σήμερα κυρίως `garch`,
+  ώστε ένα classifier/forecaster να γράφει και risk columns όπως `pred_vol`.
+
+Παράδειγμα κοινής δομής:
+
+```yaml
+model:
+  kind: lightgbm_clf
+  target:
+    kind: forward_return
+    horizon: 8
+    threshold: 0.0
+    label_col: label
+    fwd_col: fwd_return
+  feature_selectors:
+    - startswith: ["ema_", "atr_", "rsi_"]
+  split:
+    method: walk_forward
+    train_size: 0.70
+    test_size: 0.10
+  runtime:
+    seed: 7
+    deterministic: true
+    threads: 1
+  params:
+    n_estimators: 300
+    learning_rate: 0.05
+```
+
+Ερμηνεία: το target κοιτάει 8 bars μπροστά για να φτιάξει label, αλλά τα
+features στο row `t` πρέπει να είναι διαθέσιμα στο `t`. Το model fit γίνεται σε
+train folds, γράφει predictions σε OOS test folds και σημαδεύει αυτά τα rows με
+`pred_is_oos = true`.
+
+## Κοινές παράμετροι και γιατί έχουν σημασία
+
+### `target`
+
+- `kind`: επιλέγει target builder. Για binary classification, π.χ.
+  `forward_return` ή `directional_triple_barrier`. Για regression,
+  `future_return_regression`.
+- `horizon` / `horizon_bars`: πόσα bars μπροστά κοιτάει το label. Μεγαλύτερο
+  horizon μειώνει τον θόρυβο ενός bar, αλλά αυξάνει overlap και απαιτεί πιο
+  αυστηρό train trimming.
+- `threshold`: το όριο πάνω από το οποίο ένα forward return γίνεται positive
+  label. Παράδειγμα: `threshold: 0.001` σημαίνει ότι +0.05% δεν είναι επιτυχία,
+  ενώ +0.15% είναι.
+- `label_col`: το όνομα της στήλης label. Αν το αλλάξεις, το model θα
+  εκπαιδευτεί στο νέο όνομα και τα diagnostics θα το αναφέρουν εκεί.
+- `fwd_col`: το όνομα της raw/continuous forward outcome στήλης.
+- `candidate_col`: περιορίζει training/prediction σε candidate rows. Σε
+  meta-labeling αυτό είναι κρίσιμο: το model δεν απαντά "θα ανέβει η αγορά;",
+  αλλά "αξίζει αυτό το candidate trade;".
+- `side_col`: δίνει long/short πλευρά σε directional/meta targets. Χωρίς σωστό
+  `side_col`, ένα meta model μπορεί να μπερδέψει επιτυχές short με αρνητική
+  αγορά αντί με επιτυχές trade.
+
+### `feature_cols` και `feature_selectors`
+
+- `feature_cols`: explicit columns. Παράδειγμα:
+  `["close_logret_1", "atr_pct_14", "rsi_14"]`.
+- `feature_selectors`: κανόνες επιλογής. Παράδειγμα:
+  `- startswith: ["ema_", "stoch_"]`. Είναι πρακτικό για μεγάλα feature sets,
+  αλλά πρέπει να ελέγχεις το resolved feature list στα metadata.
+- `minimum_expected_features`: σε forecasters μπορεί να χρησιμοποιηθεί ως sanity
+  check για να μη γίνει fit με πολύ λίγα features μετά από filters.
+
+### `split`
+
+- `method: time`: ένα χρονικό train/test split.
+- `method: walk_forward`: πολλά chronological folds. Προτιμάται για trading
+  diagnostics γιατί δείχνει stability ανά περίοδο.
+- `method: purged`: split με purging/embargo semantics όπου υποστηρίζεται από
+  τα split utilities.
+- `train_size`, `test_size`, `n_splits`: ελέγχουν μέγεθος folds. Αν το test
+  είναι πολύ μικρό, τα OOS metrics έχουν υψηλή variance.
+- `target_horizon`: δεν το περνάς συνήθως στο split άμεσα. Προκύπτει από το
+  target και χρησιμοποιείται για να κοπούν train rows που θα έβλεπαν μέσα στο
+  test horizon.
+
+### `runtime`
+
+- `seed`: random seed για sklearn/LightGBM/XGBoost/PyTorch όπου εφαρμόζεται.
+  Παράδειγμα: `seed: 7` κάνει τα ίδια folds και ίδια stochastic initialization
+  πιο αναπαραγώγιμα.
+- `deterministic`: ζητά deterministic behavior όπου το backend το υποστηρίζει.
+  Σε neural models μπορεί να μειώσει ταχύτητα αλλά αυξάνει reproducibility.
+- `repro_mode`: `strict` βάζει πιο συντηρητικές ρυθμίσεις, όπως default
+  single-thread όπου δεν ορίζεται `threads`. `relaxed` είναι πιο πρακτικό για
+  γρήγορα πειράματα, αλλά λιγότερο αυστηρό.
+- `threads`: αριθμός threads. `threads: 1` είναι πιο reproducible. Περισσότερα
+  threads είναι γρηγορότερα αλλά μπορεί να αλλάξουν floating-point ordering.
+
+### `preprocessing`
+
+- `scaler: none`: δεν κλιμακώνει features. Συνήθως ΟΚ για tree models.
+- `scaler: standard`: αφαιρεί train mean και διαιρεί με train std ανά fold.
+  Είναι default για `logistic_regression_clf` και `elastic_net_clf`.
+- `scaler: robust`: χρησιμοποιεί robust scaling, πιο ανθεκτικό σε outliers.
+- Σημαντικό: το scaler fit γίνεται μόνο στο train fold. Αν κάνεις scaling σε
+  όλο το dataframe πριν το split, εισάγεις leakage.
+
+### `calibration`
+
+- `method: none`: κρατά raw estimator probability.
+- `method: sigmoid`: κρατά τελευταίο κομμάτι του train fold για sigmoid
+  calibration. Χρήσιμο όταν probabilities είναι overconfident.
+- `fraction`: ποιο ποσοστό του train fold πάει στο calibration window.
+  Παράδειγμα: `0.20` σημαίνει 80% estimator fit και 20% calibration.
+- `min_rows`: ελάχιστα calibration rows. Αν είναι πολύ χαμηλό, το calibrator
+  μπορεί να μάθει θόρυβο αντί για calibration.
+- `pred_raw_prob_col`: αν δοθεί ή αν υπάρχει calibration, κρατά raw probability
+  πριν την calibration.
+
+### Παράμετροι output columns
+
+- `pred_prob_col`: όνομα probability output για classifiers και derived
+  probability για forecasters.
+- `pred_ret_col`: όνομα continuous forecast output για forecasters.
+- `pred_is_oos_col`: boolean στήλη που δείχνει ποια rows είναι out-of-sample.
+- `signal_col`: RL output exposure/action-translated signal. Default:
+  `signal_rl`.
+- `action_col`: raw RL action id/value για single-asset RL. Default:
+  `action_rl`.
+- `prediction_col`: σε παλιότερα configs μπορεί να εμφανίζεται ως γενικό όνομα,
+  αλλά τα τρέχοντα wrappers χρησιμοποιούν τα explicit names παραπάνω.
+
+## Παράμετροι tabular classifiers
+
+Οι classifiers χρησιμοποιούν κοινό anti-leakage pipeline:
+
+- χτίζουν target από το `target`,
+- επιλέγουν features με `feature_cols` ή `feature_selectors`,
+- κάνουν temporal splits,
+- κόβουν train rows που θα έβλεπαν μέσα στο test horizon,
+- κάνουν fit μόνο σε complete train rows,
+- γράφουν `pred_prob` μόνο σε complete/candidate OOS test rows.
+
+### Κοινές classifier παράμετροι
+
+- `target`: binary target definition. Αν είναι candidate-based, οι προβλέψεις
+  γράφονται μόνο σε candidate rows.
+- `feature_cols` / `feature_selectors`: inputs στο estimator.
+- `split.method`: `time`, `walk_forward` ή `purged`.
+- `preprocessing.scaler`: `none`, `standard`, `robust`.
+- `calibration.method`: `none` ή `sigmoid`.
+- `pred_prob_col`: default `pred_prob`.
+- `pred_raw_prob_col`: default `pred_prob_raw` όταν χρειάζεται raw probability.
+- `pred_is_oos_col`: default `pred_is_oos`.
+- `params`: estimator hyperparameters.
+
+### Παράμετροι `logistic_regression_clf`
+
+- `params.max_iter`: default `1000`. Μέγιστος αριθμός optimizer iterations.
+  Αν βλέπεις convergence warnings, αύξησέ το, π.χ. `3000`.
+- `params.solver`: default `lbfgs`. Optimizer του sklearn logistic regression.
+  Για απλό L2 logistic είναι σταθερή επιλογή.
+- `params.C`: inverse regularization strength του sklearn, αν το δηλώσεις.
+  Μικρότερο `C` σημαίνει πιο έντονο shrinkage. Παράδειγμα: `C: 0.2` τιμωρεί
+  μεγάλα coefficients περισσότερο από `C: 1.0`.
+- `params.class_weight`: π.χ. `balanced`. Χρήσιμο σε imbalanced labels, αλλά
+  μπορεί να αλλάξει calibration.
+- `preprocessing.scaler`: default `standard`. Χρειάζεται γιατί το logistic
+  regression είναι ευαίσθητο στην κλίμακα των features.
+
+### Παράμετροι `elastic_net_clf`
+
+- `params.penalty`: πρέπει να είναι `elasticnet`. Αν δοθεί κάτι άλλο, ο κώδικας
+  σηκώνει error.
+- `params.solver`: πρέπει να είναι `saga`, γιατί αυτός υποστηρίζει elastic-net
+  logistic regression στο sklearn.
+- `params.l1_ratio`: default `0.5`. `0.0` μοιάζει με L2, `1.0` μοιάζει με L1.
+  Με `0.8` θα μηδενίσει πιο πολλά coefficients από `0.2`.
+- `params.C`: default `1.0`. Μικρότερο `C` κάνει πιο επιθετικό regularization.
+- `params.max_iter`: default `2000`. Συνήθως χρειάζεται περισσότερο από το
+  απλό logistic λόγω `saga`.
+- `preprocessing.scaler`: default `standard`. Χωρίς scaling, το L1 κομμάτι
+  τιμωρεί δυσανάλογα features με μεγάλη αριθμητική κλίμακα.
+
+### Παράμετροι `lightgbm_clf`
+
+Τα `params` περνάνε σε `LGBMClassifier`. Τα πιο συνηθισμένα:
+
+- `n_estimators`: αριθμός boosting trees. Περισσότερα trees αυξάνουν capacity.
+  Παράδειγμα: `600` μπορεί να πιάσει πιο λεπτές σχέσεις από `100`, αλλά θέλει
+  αυστηρό OOS έλεγχο.
+- `learning_rate`: βήμα κάθε tree. Μικρότερο learning rate συνήθως απαιτεί
+  περισσότερα trees.
+- `num_leaves`: μέγιστος αριθμός leaves ανά tree. Μεγάλο `num_leaves` αυξάνει
+  nonlinear capacity και overfit risk.
+- `max_depth`: μέγιστο βάθος tree. `-1` σημαίνει χωρίς explicit limit.
+- `subsample`: ποσοστό rows ανά boosting iteration. Κάτω από `1.0` προσθέτει
+  stochastic regularization.
+- `colsample_bytree`: ποσοστό features ανά tree. Χρήσιμο όταν έχεις πολλά
+  correlated features.
+- `min_child_samples`: ελάχιστα rows σε leaf. Μεγαλύτερη τιμή κάνει πιο
+  συντηρητικά leaves.
+- `random_state` / `seed`: reproducibility. Αν δεν δοθούν, το runtime resolution
+  βάζει seed από `runtime.seed`.
+- `n_jobs`: threads. Σε `strict` mode γίνεται συνήθως `1` αν δεν οριστεί.
+
+### Παράμετροι `xgboost_clf`
+
+Τα `params` περνάνε σε `XGBClassifier`, με normalization από wrapper:
+
+- `objective`: default `binary:logistic`. Παράγει probability για positive
+  class.
+- `eval_metric`: default `logloss`. Metric που χρησιμοποιεί το XGBoost
+  internally.
+- `tree_method`: default `hist`. Histogram-based training, συνήθως γρήγορο και
+  σταθερό.
+- `n_estimators`: αριθμός trees.
+- `max_depth`: βάθος trees. Μεγαλύτερο βάθος πιάνει interactions αλλά αυξάνει
+  overfit.
+- `learning_rate`: boosting step size.
+- `subsample`: row sampling ratio.
+- `colsample_bytree`: feature sampling ratio.
+- `reg_alpha`: L1 regularization.
+- `reg_lambda`: L2 regularization.
+- `seed` / `random_state`: reproducibility.
+- `num_leaves` και `min_child_samples`: αφαιρούνται αν περαστούν κατά λάθος,
+  γιατί είναι LightGBM-style params και όχι XGBoost params.
+
+## Παράμετροι sequence/event classifier
+
+### `event_transformer_encoder`
+
+Απαιτεί candidate-based target, πρακτικά target με `candidate_col`. Δεν είναι
+γενικός classifier για κάθε row.
+
+- `target.candidate_col`: υποχρεωτικό μέσω target metadata. Ορίζει σε ποια rows
+  υπάρχουν events για training/prediction.
+- `feature_cols` / `feature_selectors`: numeric feature inputs για κάθε bar του
+  sequence.
+- `pred_prob_col`: optional. Αν δοθεί, γράφει classifier head probability. Αν
+  δεν δοθεί, γράφει μόνο embeddings.
+- `pred_is_oos_col`: default `pred_is_oos`.
+- `params.lookback`: default `48`. Πόσα trailing bars μπαίνουν στο sequence που
+  τελειώνει στο event timestamp. Πρέπει να είναι `> 1`.
+- `params.hidden_dim`: default `32`. Transformer hidden width. Πρέπει να
+  διαιρείται από `num_heads`.
+- `params.num_heads`: default `4`. Attention heads. Περισσότερα heads αυξάνουν
+  capacity αλλά απαιτούν μεγαλύτερο `hidden_dim`.
+- `params.num_layers`: default `2`. Πόσα TransformerEncoder layers.
+- `params.dropout`: default `0.1`. Regularization μέσα στο network. Πρέπει να
+  είναι στο `[0, 1)`.
+- `params.epochs`: default `8`. Training passes πάνω στα train event samples.
+- `params.batch_size`: default `64`. Batch size στο DataLoader. Ο κώδικας δεν
+  αφήνει effective batch κάτω από 8.
+- `params.learning_rate`: default `1e-3`. AdamW learning rate.
+- `params.weight_decay`: default `1e-4`. L2-style regularization στο AdamW.
+- `params.embedding_dim`: default ίσο με `hidden_dim`. Πόσες `event_emb_*`
+  στήλες θα γραφτούν.
+- `params.embedding_prefix`: default `event_emb`. Με `embedding_dim: 4` γράφει
+  `event_emb_00` έως `event_emb_03`.
+- `params.min_train_samples`: default `32`. Ελάχιστα sequence samples ανά fold.
+  Αν δεν υπάρχουν, το fold αποτυγχάνει αντί να εκπαιδεύσει άχρηστο model.
+
+Παράδειγμα:
+
+```yaml
+model:
+  kind: event_transformer_encoder
+  target:
+    kind: directional_triple_barrier
+    candidate_col: signal_candidate
+    side_col: signal_side
+    horizon: 16
+  feature_selectors:
+    - startswith: ["ema_", "atr_", "stoch_", "rsi_"]
+  pred_prob_col: event_pred_prob
+  params:
+    lookback: 32
+    hidden_dim: 64
+    num_heads: 4
+    embedding_dim: 16
+```
+
+Ερμηνεία: κάθε candidate παίρνει 32-bar ιστορικό context. Το model γράφει
+πιθανότητα επιτυχίας candidate και 16 embedding columns που μπορούν να
+χρησιμοποιηθούν σε diagnostics ή second-stage models.
+
+## Παράμετροι forecasters/regressors
+
+Οι forecasters χρησιμοποιούν κοινό pipeline που γράφει:
+
+- `pred_ret_col`, default `pred_ret`,
+- `pred_prob_col`, default `pred_prob`, ως μετατροπή forecast σε probability
+  γύρω από το target threshold,
+- `pred_is_oos_col`, default `pred_is_oos`,
+- optional `pred_vol` ή quantile columns, ανά model.
+
+### Κοινές forecaster παράμετροι
+
+- `target`: continuous target. Συνήθως `future_return_regression` ή
+  `forward_return`.
+- `use_features`: default `true`. Αν `false`, statistical forecaster μπορεί να
+  αγνοήσει exogenous features.
+- `feature_cols` / `feature_selectors`: exogenous inputs για models που τα
+  απαιτούν.
+- `pred_ret_col`: output forecast column.
+- `pred_prob_col`: derived probability column. Δεν είναι classifier probability
+  από cross-entropy, αλλά mapping του forecast σε πιθανότητα θετικού outcome.
+- `pred_is_oos_col`: OOS flag.
+- `diagnostics`: optional diagnostics config, π.χ. LightGBM SHAP.
+
+### Παράμετροι `lightgbm_regressor`
+
+Προεπιλεγμένες estimator παράμετροι από το wrapper:
+
+- `n_estimators`: default `300`. Αριθμός boosting trees.
+- `learning_rate`: default `0.03`. Μικρότερο από classifier default γιατί τα
+  regression forecasts είναι συχνά πιο θορυβώδη.
+- `max_depth`: default `-1`. Χωρίς explicit depth limit.
+- `num_leaves`: default `31`. Βασικός έλεγχος tree complexity.
+- `subsample`: default `1.0`. Row sampling.
+- `colsample_bytree`: default `1.0`. Feature sampling.
+- `random_state`: default `7` αν δεν δοθεί από runtime.
+- `n_jobs`: default `1`. Συντηρητικό για reproducibility.
+- `verbosity`: default `-1`. Μειώνει LightGBM logging.
+- `minimum_expected_features`: internal/sanity parameter, δεν περνιέται στον
+  estimator.
+
+Παράδειγμα: αν `pred_ret = 0.004` και το target είναι raw return, η πρόβλεψη
+είναι +0.4%. Αν το target είναι normalized by volatility, τότε `0.004` δεν
+σημαίνει +0.4%, αλλά 0.004 μονάδες του normalized target.
+
+### Παράμετροι `sarimax_forecaster`
+
+- `params.order`: default `(1, 0, 1)`. ARIMA order `(p, d, q)`. `p` είναι AR
+  lags, `d` differencing, `q` moving-average terms.
+- `params.seasonal_order`: default `(0, 0, 0, 0)`. Seasonal `(P, D, Q, s)`.
+  Παράδειγμα: σε intraday data με ημερήσιο κύκλο 48 bars, seasonal period
+  μπορεί να είναι `48`, αν έχει νόημα και αρκετά δεδομένα.
+- `params.trend`: default `c`. Constant trend/intercept.
+- `params.enforce_stationarity`: default `false`. Αν `true`, αναγκάζει
+  stationarity constraints.
+- `params.enforce_invertibility`: default `false`. Αν `true`, αναγκάζει
+  invertibility constraints.
+- `params.maxiter`: default `200`. Μέγιστες optimizer iterations.
+- `params.use_exog`: default `true`. Αν `true`, χρησιμοποιεί resolved feature
+  columns ως exogenous regressors. Αν υπάρχουν missing exog στο test fold,
+  αποτυγχάνει για να μην ευθυγραμμίσει λάθος forecasts.
+- `params.allow_fallback`: default `true`. Αν το SARIMAX fit αποτύχει, γυρίζει
+  σε fallback mean/variance forecast αντί να ρίξει όλο το experiment.
+
+Παράδειγμα: `order: [1, 0, 1]` σημαίνει ότι το forecast χρησιμοποιεί ένα AR lag
+και ένα MA term χωρίς differencing. Αν το forecast γίνεται σχεδόν σταθερό γύρω
+από το train mean, μάλλον δεν υπάρχει αρκετή autocorrelation structure.
+
+### Παράμετροι `garch_forecaster`
+
+- `params.returns_input_col`: default `close_ret` ή `returns_col` αν περαστεί.
+  Είναι η return σειρά πάνω στην οποία fit γίνεται το GARCH.
+- `target.price_col`: default `close` για fallback υπολογισμό returns όταν δεν
+  υπάρχει `returns_input_col`.
+- `params.mean_model`: default `constant`. Επιτρεπτά: `zero`, `constant`,
+  `ar1`.
+- `mean_model: zero`: forecast return mean = 0. Κατάλληλο όταν θες μόνο
+  volatility forecast.
+- `mean_model: constant`: forecast return mean = train mean.
+- `mean_model: ar1`: προσθέτει AR(1) mean term με clipped `phi`.
+- GARCH variance params στο metadata:
+  `omega`, `alpha`, `beta`. Υψηλό `alpha` αντιδρά έντονα στο τελευταίο shock.
+  Υψηλό `beta` κάνει τη volatility πιο persistent.
+
+Παράδειγμα: αν `pred_vol` ανεβαίνει από `0.006` σε `0.018`, το model βλέπει
+τριπλάσιο expected one-step volatility. Αυτό δεν είναι long/short edge, αλλά
+risk state για sizing, filters ή `forecast_vol_adjusted`.
+
+### Κοινές παράμετροι neural forecasters
+
+Ισχύουν για `lstm_forecaster`, `patchtst_forecaster`, `tft_forecaster`, με
+μικρές διαφορές στα defaults:
+
+- `params.lookback`: πόσα trailing bars μπαίνουν στο sequence.
+- `params.hidden_dim`: latent width του network.
+- `params.num_layers`: αριθμός recurrent/transformer layers.
+- `params.num_heads`: attention heads σε transformer-style models. Το
+  `hidden_dim` πρέπει να διαιρείται από το `num_heads`.
+- `params.dropout`: regularization. Πρέπει να είναι στο `[0, 1)`.
+- `params.epochs`: training epochs ανά fold.
+- `params.batch_size`: batch size.
+- `params.learning_rate`: AdamW learning rate.
+- `params.weight_decay`: AdamW regularization.
+- `params.scale_target`: default `true`. Κάνει target scaling μέσα στο train
+  fold και inverse-transform στις predictions. Βοηθά neural optimization χωρίς
+  να αλλάζει την τελική κλίμακα του `pred_ret`.
+- `params.quantiles`: quantile forecasts. Όταν υπάρχουν, γράφει `pred_q10`,
+  `pred_q50`, `pred_q90` κ.λπ. και χρησιμοποιεί median quantile ως `pred_ret`.
+
+### Παράμετροι `lstm_forecaster`
+
+- `lookback`: default `48`.
+- `hidden_dim`: default `32`.
+- `num_layers`: default `2`.
+- `dropout`: default `0.1`; εφαρμόζεται στο LSTM μόνο όταν `num_layers > 1`.
+- `epochs`: default `12`.
+- `batch_size`: default `64`.
+- `learning_rate`: default `1e-3`.
+- `weight_decay`: default `1e-4`.
+- `quantiles`: default κενό. Αν δεν δοθεί, κάνει MSE regression.
+- `scale_target`: default `true`.
+
+### Παράμετροι `patchtst_forecaster`
+
+- `lookback`: default `64`.
+- `patch_len`: default `8`. Πόσα bars περιέχει κάθε patch. Πρέπει να είναι
+  `> 1` και `<= lookback`.
+- `patch_stride`: default `4`. Απόσταση μεταξύ διαδοχικών patches.
+- `hidden_dim`: default `64`.
+- `num_heads`: default `4`.
+- `num_layers`: default `2`.
+- `dropout`: default `0.1`.
+- `epochs`: default `12`.
+- `batch_size`: default `64`.
+- `learning_rate`: default `1e-3`.
+- `weight_decay`: default `1e-4`.
+- `quantiles`: default `[0.1, 0.5, 0.9]`.
+- `scale_target`: default `true`.
+
+Παράδειγμα: με `lookback: 64`, `patch_len: 8`, `patch_stride: 4`, το model
+βλέπει overlapping 8-bar blocks. Έτσι μπορεί να μάθει pattern τύπου
+compression -> expansion που δεν χωράει σε ένα μόνο row.
+
+### Παράμετροι `tft_forecaster`
+
+- `lookback`: default `32`.
+- `hidden_dim`: default `32`.
+- `num_heads`: default `4`.
+- `num_layers`: default `2`.
+- `dropout`: default `0.1`.
+- `epochs`: default `20`.
+- `batch_size`: default `64`.
+- `learning_rate`: default `1e-3`.
+- `weight_decay`: default `1e-4`.
+- `scale_target`: default `true`.
+- `min_train_samples`: default `32`. Κάτω από αυτό το fold αποτυγχάνει.
+- `quantiles`: default `[0.1, 0.5, 0.9]`, πρέπει να είναι μοναδικά και μέσα
+  στο `(0, 1)`.
+
+## Παράμετροι RL models
+
+Τα RL models δεν εκπαιδεύουν supervised label probability. Χρησιμοποιούν
+trading environment, returns, costs και execution constraints για να μάθουν
+policy. Για αυτό τα outputs είναι `signal_rl` και, στα single-asset models,
+`action_rl`.
+
+### Κοινές RL παράμετροι
+
+- `feature_cols` / `feature_selectors`: numeric state features. Απαγορεύονται
+  feature columns που ξεκινούν με `signal_`, `pred_`, `target_`, `action_`, για
+  να μην περάσουν downstream/label πληροφορίες στο state.
+- `backtest.returns_col`: default `close_ret`. Η return στήλη που δίνει reward.
+- `backtest.returns_type`: default `simple`. Επιτρεπτά `simple` ή `log`. Τα log
+  returns μετατρέπονται σε simple μέσα στο RL pipeline.
+- `target.horizon`: default `1` και σήμερα πρέπει να είναι `1`.
+- `env.window_size`: default `32`. Πόσα bars state history μπαίνουν στο
+  observation.
+- `env.execution_lag_bars`: default `1` και σήμερα πρέπει να είναι `1`.
+- `env.max_signal_abs` / `env.max_position`: default `1.0`. Μέγιστη απόλυτη
+  έκθεση. Αν δηλωθούν και τα δύο, πρέπει να ταιριάζουν.
+- `env.action_space`: `continuous` ή `discrete`. Για PPO default είναι
+  `continuous`, για DQN default/απαίτηση είναι `discrete`.
+- `env.position_grid`: default `[-1.0, 0.0, 1.0]` για single-asset discrete
+  actions.
+- `env.reward.cost_per_turnover`: κόστος ανά μονάδα turnover.
+- `env.reward.slippage_per_turnover`: slippage ανά μονάδα turnover.
+- `env.reward.inventory_penalty`: ποινή για διακράτηση exposure.
+- `env.reward.drawdown_penalty`: ποινή drawdown στο reward.
+- `env.reward.switching_penalty`: ποινή συχνής αλλαγής action.
+- `env.min_holding_bars`: ελάχιστα bars πριν αλλάξει θέση.
+- `env.action_hysteresis`: μικρές αλλαγές action αγνοούνται για να μειωθεί
+  churn.
+- `risk.dd_guard.enabled`: ενεργοποιεί drawdown guard.
+- `risk.dd_guard.max_drawdown`: drawdown όριο, default `0.2`.
+- `risk.dd_guard.cooloff_bars`: default `20`. Bars αναμονής μετά από guard.
+- `risk.dd_guard.rearm_drawdown`: optional επίπεδο re-arm.
+- `params`: περνάνε στο Stable-Baselines3 trainer, π.χ. `total_timesteps`,
+  `learning_rate`, `gamma`, `batch_size`, ανά algorithm.
+
+### `ppo_agent`
+
+- Χρησιμοποιεί single-asset PPO.
+- Με `env.action_space: continuous`, η action μετατρέπεται σε continuous
+  exposure μέσα στο `[-max_signal_abs, max_signal_abs]`.
+- Με `env.action_space: discrete`, χρησιμοποιεί `position_grid`, αλλά PPO
+  συνήθως προτιμάται για continuous control.
+
+### `dqn_agent`
+
+- Απαιτεί `env.action_space: discrete`.
+- `action_rl` είναι index στο `position_grid`.
+- `signal_rl` είναι η πραγματική έκθεση μετά το mapping. Παράδειγμα:
+  `position_grid: [-1, 0, 0.5, 1]` και `action_rl = 2` σημαίνει
+  `signal_rl = 0.5`.
+
+### Παράμετροι portfolio RL
+
+- `data_alignment` / `alignment`: default `inner`, και σήμερα απαιτείται
+  `inner`. Όλα τα assets ευθυγραμμίζονται στο κοινό timestamp intersection.
+- `portfolio.asset_groups`: mapping asset -> group. Χρήσιμο για group exposure
+  constraints.
+- `portfolio.long_short`: default `true`. Αν `false`, το environment πρέπει να
+  μη δίνει short weights μετά τα constraints.
+- `portfolio.gross_target`: default `1.0`. Επιθυμητή συνολική gross exposure.
+- `portfolio.constraints.min_weight`: default `-1.0`.
+- `portfolio.constraints.max_weight`: default `1.0`.
+- `portfolio.constraints.max_gross_leverage`: default `1.0`.
+- `portfolio.constraints.target_net_exposure`: default `0.0`.
+- `portfolio.constraints.turnover_limit`: optional cap στο turnover.
+- `portfolio.constraints.group_max_exposure`: optional group caps, π.χ.
+  `{equity_index: 0.8, metals: 0.4}`.
+- `env.action_templates`: για portfolio DQN discrete actions. Πρέπει να έχει
+  shape `[n_actions, n_assets]`.
+
+### `ppo_portfolio_agent`
+
+- Default `env.action_space: continuous`.
+- Η policy βγάζει per-asset signals, τα οποία μετά περνάνε από portfolio
+  constraints. Μην αξιολογείς κάθε asset σαν ανεξάρτητο classifier.
+
+### `dqn_portfolio_agent`
+
+- Απαιτεί `env.action_space: discrete`.
+- Αν δεν δοθούν `action_templates`, φτιάχνονται defaults: flat, all-long,
+  all-short, και single-asset long/short templates.
+- `action_rl` δεν γράφεται per asset όπως στο single-asset wrapper. Το κύριο
+  output είναι per-asset `signal_rl`.
+
 ## Tabular classifiers
 
 ### `logistic_regression_clf`

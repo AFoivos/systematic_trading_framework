@@ -99,12 +99,12 @@ features:
 
 - Τι μετρά: τη σχέση δύο columns ως `numerator / denominator - subtract`, με
   optional `denominator_offset` και προστασία `eps` για μηδενικούς παρονομαστές.
-- Output default: `{numerator}_over_{denominator}`.
+- Προεπιλεγμένη έξοδος: `{numerator}_over_{denominator}`.
 - Πώς διαβάζονται οι τιμές: όταν `subtract: 1.0`, το `0` σημαίνει ισότητα,
   `0.02` σημαίνει 2% πάνω, `-0.02` σημαίνει 2% κάτω. Χωρίς subtract, το `1.0`
   σημαίνει ισότητα.
 - Πληροφορία: μετατρέπει raw price-level σχέση σε scale-free feature.
-- Causality: ασφαλές αν οι δύο input columns είναι point-in-time.
+- Αιτιότητα: ασφαλές αν οι δύο input columns είναι point-in-time.
 
 Παράδειγμα:
 
@@ -124,13 +124,13 @@ transforms:
 
 - Τι μετρά: το αντίστροφο μιας column, `1 / source` ή `1 / abs(source)` όταν
   `use_abs: true`.
-- Output default: `{source}_reciprocal`.
+- Προεπιλεγμένη έξοδος: `{source}_reciprocal`.
 - Πώς διαβάζονται οι τιμές: όσο μεγαλύτερο είναι το source, τόσο μικρότερο το
   reciprocal. Σε frequency features, reciprocal μπορεί να μετατρέψει frequency
   σε period.
 - Πληροφορία: χρήσιμο για inverse volatility, inverse range ή cycle length από
   instantaneous frequency.
-- Causality: point-in-time transform. Τιμές με απόλυτο μέγεθος κάτω από `eps`
+- Αιτιότητα: point-in-time transform. Τιμές με απόλυτο μέγεθος κάτω από `eps`
   γίνονται `NaN`.
 
 Παράδειγμα:
@@ -150,12 +150,13 @@ transforms:
 ### `difference`
 
 - Τι μετρά: μεταβολή μιας column έναντι παλαιότερης τιμής:
-  `source_t - source_{t-periods}`.
-- Output default: `{source}_diff_{periods}`.
+  `source_t - source_{t-periods}`. Με `reference_col`, μετρά διαφορά δύο
+  columns στο ίδιο timestamp: `source_t - reference_t`.
+- Προεπιλεγμένη έξοδος: `{source}_diff_{periods}`.
 - Πώς διαβάζονται οι τιμές: θετικό σημαίνει ότι η column ανέβηκε σε σχέση με
   το lagged σημείο, αρνητικό ότι έπεσε, κοντά στο `0` ότι έμεινε σχεδόν ίδια.
 - Πληροφορία: απλό slope/delta proxy για indicators, filters ή returns.
-- Causality: χρησιμοποιεί current και past values μόνο.
+- Αιτιότητα: χρησιμοποιεί current και past values μόνο.
 
 Παράδειγμα:
 
@@ -173,12 +174,12 @@ transforms:
 ### `lag`
 
 - Τι μετρά: παρελθοντική τιμή μιας column με `source.shift(lag)`.
-- Output default: `{prefix}_{source}_{lag}`, με default `prefix: lag`.
+- Προεπιλεγμένη έξοδος: `{prefix}_{source}_{lag}`, με default `prefix: lag`.
 - Πώς διαβάζονται οι τιμές: ίδια μονάδα με το source, αλλά αφορά `lag` bars
   πριν. Δεν είναι πρόβλεψη, είναι μνήμη.
 - Πληροφορία: βοηθά tabular models να δουν persistence, reversal και state
   history χωρίς sequence model.
-- Causality: ασφαλές, γιατί κοιτά μόνο παρελθόν.
+- Αιτιότητα: ασφαλές, γιατί κοιτά μόνο παρελθόν.
 
 Παράδειγμα:
 
@@ -197,11 +198,11 @@ transforms:
 ### `rolling_mean`
 
 - Τι μετρά: trailing rolling mean μιας column.
-- Output default: `{source}_rolling_mean_{window}`.
+- Προεπιλεγμένη έξοδος: `{source}_rolling_mean_{window}`.
 - Πώς διαβάζονται οι τιμές: είναι το local baseline. Αν το source είναι πάνω
   από το rolling mean, βρίσκεται πάνω από την πρόσφατη μέση κατάσταση.
 - Πληροφορία: baseline για ratios, deviations και regime comparisons.
-- Causality: το rolling window περιλαμβάνει το current closed bar. Με `shift: 1`
+- Αιτιότητα: το rolling window περιλαμβάνει το current closed bar. Με `shift: 1`
   το baseline τελειώνει στο `t-1`.
 
 Παράδειγμα:
@@ -222,11 +223,11 @@ transforms:
 ### `rolling_std`
 
 - Τι μετρά: trailing rolling standard deviation μιας column.
-- Output default: `{source}_rolling_std_{window}`.
+- Προεπιλεγμένη έξοδος: `{source}_rolling_std_{window}`.
 - Πώς διαβάζονται οι τιμές: υψηλή τιμή σημαίνει ότι το source είναι ασταθές ή
   έχει μεγάλη διασπορά στο lookback. Χαμηλή τιμή σημαίνει σταθερότητα.
 - Πληροφορία: volatility-of-feature, dispersion και input για z-score.
-- Causality: trailing window, με optional `shift`.
+- Αιτιότητα: trailing window, με optional `shift`.
 
 Παράδειγμα:
 
@@ -244,12 +245,12 @@ transforms:
 ### `rolling_sum`
 
 - Τι μετρά: trailing άθροισμα μιας column.
-- Output default: `{source}_rolling_sum_{window}`.
+- Προεπιλεγμένη έξοδος: `{source}_rolling_sum_{window}`.
 - Πώς διαβάζονται οι τιμές: σε returns, θετικό sum σημαίνει cumulative upward
   drift, αρνητικό cumulative downward drift. Σε flow columns, δείχνει
   συσσωρευμένη πίεση.
 - Πληροφορία: horizon momentum ή cumulative pressure.
-- Causality: trailing window, με optional `shift`.
+- Αιτιότητα: trailing window, με optional `shift`.
 
 Παράδειγμα:
 
@@ -268,13 +269,13 @@ transforms:
 
 - Τι μετρά: trailing linear regression slope, intercept και `R2` πάνω σε μία
   source column.
-- Outputs default: `{source}_rolling_slope_{window}`,
+- Προεπιλεγμένες έξοδοι: `{source}_rolling_slope_{window}`,
   `{source}_rolling_intercept_{window}`, `{source}_rolling_r2_{window}`.
 - Πώς διαβάζονται οι τιμές: slope θετικό σημαίνει upward fitted trend, αρνητικό
   downward. `R2` κοντά στο `1` σημαίνει καθαρή γραμμική τάση, κοντά στο `0`
   noisy/choppy movement.
 - Πληροφορία: χωρίζει trend direction από trend quality.
-- Causality: trailing window μόνο.
+- Αιτιότητα: trailing window μόνο.
 
 Παράδειγμα:
 
@@ -294,12 +295,12 @@ linear trend.
 ### `rms`
 
 - Τι μετρά: rolling root mean square, δηλαδή μέση ενέργεια/ένταση ενός signal.
-- Output default: `{source}__root_mean_square`.
+- Προεπιλεγμένη έξοδος: `{source}__root_mean_square`.
 - Πώς διαβάζονται οι τιμές: υψηλό RMS σημαίνει ότι το oscillator/return/filter
   έχει μεγάλη ένταση ανεξάρτητα από πρόσημο. Χαμηλό RMS σημαίνει αδύναμο signal.
 - Πληροφορία: strength/energy feature, χρήσιμο για cycle amplitude ή volatility
   of an oscillator.
-- Causality: trailing window, με optional `shift`.
+- Αιτιότητα: trailing window, με optional `shift`.
 
 Παράδειγμα:
 
@@ -317,11 +318,11 @@ transforms:
 ### `slope`
 
 - Τι μετρά: fitted rolling linear slope μέσα σε trailing window.
-- Output default: `{source}_slope_{window}`.
+- Προεπιλεγμένη έξοδος: `{source}_slope_{window}`.
 - Πώς διαβάζονται οι τιμές: θετικό σημαίνει ότι το source ανεβαίνει μέσα στο
   window, αρνητικό ότι πέφτει. Μεγάλη απόλυτη τιμή σημαίνει γρήγορη αλλαγή.
 - Πληροφορία: direction-of-change για indicators, όχι απλά level.
-- Causality: trailing window, με optional `shift`.
+- Αιτιότητα: trailing window, με optional `shift`.
 
 Παράδειγμα:
 
@@ -339,12 +340,12 @@ transforms:
 ### `rolling_zscore`
 
 - Τι μετρά: `(source - rolling_mean) / rolling_std` με default `shift: 1`.
-- Output default: `{source}_zscore_{window}`.
+- Προεπιλεγμένη έξοδος: `{source}_zscore_{window}`.
 - Πώς διαβάζονται οι τιμές: `0` κοντά στο prior rolling baseline, `1` μία
   standard deviation πάνω, `2` πολύ υψηλή θετική απόκλιση, `-2` πολύ χαμηλή.
 - Πληροφορία: κάνει unbounded/level-dependent columns συγκρίσιμες με τη δική
   τους πρόσφατη ιστορία.
-- Causality: default shifted stats, άρα το current value δεν συμμετέχει στο
+- Αιτιότητα: default shifted stats, άρα το current value δεν συμμετέχει στο
   mean/std που το κανονικοποιεί.
 
 Παράδειγμα:
@@ -364,11 +365,11 @@ transforms:
 ### `rolling_clip`
 
 - Τι μετρά: causal clipping μιας column μέσα σε rolling quantile bounds.
-- Output default: `{source}_rollclip_{window}`.
+- Προεπιλεγμένη έξοδος: `{source}_rollclip_{window}`.
 - Πώς διαβάζονται οι τιμές: οι ακραίες τιμές κόβονται στο prior lower/upper
   quantile. Αν δεν είναι ακραία, η τιμή μένει ίδια.
 - Πληροφορία: winsorization για spikes, fat tails και unstable scalers.
-- Causality: default `shift: 1`, άρα τα quantile bounds προέρχονται από prior
+- Αιτιότητα: default `shift: 1`, άρα τα quantile bounds προέρχονται από prior
   history.
 
 Παράδειγμα:
@@ -391,11 +392,11 @@ rolling 99ο percentile.
 
 - Τι μετρά: binary comparison με threshold (`gt`, `ge`, `lt`, `le`, `eq`, `ne`)
   και optional `use_abs`.
-- Output default: `{source}_{op}_{threshold}`.
+- Προεπιλεγμένη έξοδος: `{source}_{op}_{threshold}`.
 - Πώς διαβάζονται οι τιμές: `1` σημαίνει ότι η σύγκριση ισχύει, `0` ότι δεν
   ισχύει ή ότι το source είναι missing.
 - Πληροφορία: μετατρέπει continuous feature σε interpretable gate.
-- Causality: current-bar deterministic flag.
+- Αιτιότητα: current-bar deterministic flag.
 
 Παράδειγμα:
 
@@ -417,12 +418,12 @@ transforms:
 
 - Τι μετρά: αν μια τιμή βρίσκεται μέσα σε range `[lower, upper]`, με
   configurable boundary inclusion.
-- Output default: `{source}_between_{lower}_{upper}`.
+- Προεπιλεγμένη έξοδος: `{source}_between_{lower}_{upper}`.
 - Πώς διαβάζονται οι τιμές: `1` σημαίνει μέσα στο αποδεκτό range, `0` έξω από
   αυτό.
 - Πληροφορία: χρήσιμο για valid cycle periods, neutral oscillator zones ή
   allowed risk regimes.
-- Causality: current-bar deterministic flag.
+- Αιτιότητα: current-bar deterministic flag.
 
 Παράδειγμα:
 
@@ -443,12 +444,12 @@ transforms:
 
 - Τι μετρά: event όταν η τιμή περνά threshold από κάτω προς τα πάνω ή από πάνω
   προς τα κάτω.
-- Output default: `{source}_cross_{direction}_{threshold}`.
+- Προεπιλεγμένη έξοδος: `{source}_cross_{direction}_{threshold}`.
 - Πώς διαβάζονται οι τιμές: `1` μόνο στο bar που έγινε το crossing. Δεν μένει
   ενεργό μετά το event.
 - Πληροφορία: καλύτερο timing signal από static level όταν σε ενδιαφέρει η
   μετάβαση.
-- Causality: χρησιμοποιεί `t` και `t-1`.
+- Αιτιότητα: χρησιμοποιεί `t` και `t-1`.
 
 Παράδειγμα:
 
@@ -468,11 +469,11 @@ transforms:
 ### `rising_flag`
 
 - Τι μετρά: αν `source_t > source_{t-periods}`.
-- Output default: `{source}_rising`.
+- Προεπιλεγμένη έξοδος: `{source}_rising`.
 - Πώς διαβάζονται οι τιμές: `1` σημαίνει ότι το feature ανέβηκε έναντι του
   lagged σημείου, `0` ότι δεν ανέβηκε ή λείπουν δεδομένα.
 - Πληροφορία: απλό trend-of-feature flag.
-- Causality: χρησιμοποιεί μόνο lagged comparison.
+- Αιτιότητα: χρησιμοποιεί μόνο lagged comparison.
 
 Παράδειγμα:
 
@@ -494,12 +495,12 @@ bars πριν.
 
 - Τι μετρά: multi-horizon simple returns και optional log returns από
   `close_col`.
-- Outputs default: `return_{window}` και, όταν `log_returns: true`,
+- Προεπιλεγμένες έξοδοι: `return_{window}` και, όταν `log_returns: true`,
   `log_return_{window}`.
 - Πώς διαβάζονται οι τιμές: θετικό σημαίνει cumulative rise στο window,
   αρνητικό cumulative fall. Log returns αθροίζονται καλύτερα σε horizons.
 - Πληροφορία: μετατρέπει price levels σε scale-free movement.
-- Causality: χρησιμοποιεί `close_t` και `close_{t-window}`.
+- Αιτιότητα: χρησιμοποιεί `close_t` και `close_{t-window}`.
 
 Παράδειγμα:
 
@@ -518,11 +519,11 @@ normalizations:
 
 - Τι μετρά: normalized ATR context, συνήθως `ATR / close` και rolling ATR
   percentile.
-- Outputs default: `{atr_col}_pct` και `{atr_col}_percentile_{window}`.
+- Προεπιλεγμένες έξοδοι: `{atr_col}_pct` και `{atr_col}_percentile_{window}`.
 - Πώς διαβάζονται οι τιμές: `atr_pct=0.006` σημαίνει ATR ίσο με 0.6% του close.
   Percentile `0.90` σημαίνει ATR υψηλότερο από το 90% του trailing window.
 - Πληροφορία: κάνει absolute ATR comparable μεταξύ assets και price levels.
-- Causality: `atr_pct` είναι point-in-time. Το percentile ranking γίνεται μέσα
+- Αιτιότητα: `atr_pct` είναι point-in-time. Το percentile ranking γίνεται μέσα
   στο trailing window του helper.
 
 Παράδειγμα:
@@ -543,12 +544,12 @@ normalizations:
 ### `volatility_scaled_return`
 
 - Τι μετρά: `return / volatility`.
-- Output default: `{return_col}_over_{volatility_col}`.
+- Προεπιλεγμένη έξοδος: `{return_col}_over_{volatility_col}`.
 - Πώς διαβάζονται οι τιμές: θετικό σημαίνει positive return per unit risk,
   αρνητικό negative return per unit risk. Απόλυτη τιμή μεγαλύτερη σημαίνει
   μεγαλύτερη κίνηση σε σχέση με volatility.
 - Πληροφορία: Sharpe-like local movement, συγκρίσιμο μεταξύ regimes.
-- Causality: ασφαλές αν return και volatility inputs είναι PIT.
+- Αιτιότητα: ασφαλές αν return και volatility inputs είναι PIT.
 
 Παράδειγμα:
 
@@ -566,12 +567,12 @@ normalizations:
 ### `atr_distances`
 
 - Τι μετρά: πολλές pairwise αποστάσεις `(base_col - ref_col) / ATR`.
-- Outputs: όνομα από κάθε `pairs[].name`.
+- Έξοδοι: όνομα από κάθε `pairs[].name`.
 - Πώς διαβάζονται οι τιμές: `1.0` σημαίνει ότι το base είναι 1 ATR πάνω από
   το reference, `-0.5` σημαίνει μισό ATR κάτω.
 - Πληροφορία: μετατρέπει price distances σε risk units για stop/target
   geometry και structural levels.
-- Causality: ασφαλές αν base/reference/ATR columns είναι PIT.
+- Αιτιότητα: ασφαλές αν base/reference/ATR columns είναι PIT.
 
 Παράδειγμα:
 
@@ -591,12 +592,12 @@ normalizations:
 ### `atr_scaled_distance`
 
 - Τι μετρά: μία generic απόσταση `(base_col - ref_col) / atr_col`.
-- Output default: `{base_col}_minus_{ref_col}_over_{atr_col}`.
+- Προεπιλεγμένη έξοδος: `{base_col}_minus_{ref_col}_over_{atr_col}`.
 - Πώς διαβάζονται οι τιμές: ίδια ερμηνεία με `atr_distances`, αλλά για ένα
   ζεύγος columns.
 - Πληροφορία: κεντρικό helper για price-like indicators όπως MA, VWAP,
   support/resistance και Ehlers lines.
-- Causality: ασφαλές αν inputs είναι PIT.
+- Αιτιότητα: ασφαλές αν inputs είναι PIT.
 
 Παράδειγμα:
 
@@ -616,11 +617,11 @@ normalizations:
 
 - Τι μετρά: θέση του `value_col` μέσα στο trailing high-low range:
   `(value - rolling_low) / (rolling_high - rolling_low)`.
-- Output default: `{value_col}_range_position_{window}`.
+- Προεπιλεγμένη έξοδος: `{value_col}_range_position_{window}`.
 - Πώς διαβάζονται οι τιμές: `0` κοντά στο rolling low, `1` κοντά στο rolling
   high, `0.5` στο μέσο. Με `clip: true`, οι τιμές περιορίζονται στο `[0, 1]`.
 - Πληροφορία: overextension, close pressure και range location.
-- Causality: trailing high/low window μέχρι το current closed bar.
+- Αιτιότητα: trailing high/low window μέχρι το current closed bar.
 
 Παράδειγμα:
 
@@ -641,11 +642,11 @@ normalizations:
 ### `rolling_percent_rank`
 
 - Τι μετρά: percentile rank της τρέχουσας τιμής απέναντι στο trailing history.
-- Output default: `{source_col}_percent_rank_{window}`.
+- Προεπιλεγμένη έξοδος: `{source_col}_percent_rank_{window}`.
 - Πώς διαβάζονται οι τιμές: `0.95` σημαίνει ότι η τρέχουσα τιμή είναι πάνω από
   περίπου το 95% της prior ιστορίας. `0.05` σημαίνει πολύ χαμηλή τιμή.
 - Πληροφορία: non-parametric regime position, robust σε outliers.
-- Causality: default `shift_window: true`, άρα η τρέχουσα τιμή κατατάσσεται
+- Αιτιότητα: default `shift_window: true`, άρα η τρέχουσα τιμή κατατάσσεται
   απέναντι σε ιστορία που τελειώνει στο `t-1`.
 
 Παράδειγμα:
@@ -665,11 +666,11 @@ normalizations:
 ### `realized_vol_percentile`
 
 - Τι μετρά: percentile rank μιας realized volatility column.
-- Output default: `{volatility_col}_percentile_{window}`.
+- Προεπιλεγμένη έξοδος: `{volatility_col}_percentile_{window}`.
 - Πώς διαβάζονται οι τιμές: ίδια με `rolling_percent_rank`, αλλά το όνομα και
   η πρόθεση είναι συγκεκριμένα για volatility.
 - Πληροφορία: high/low volatility regime χωρίς να βασίζεται σε raw vol scale.
-- Causality: wrapper πάνω στο `rolling_percent_rank`, με default shifted
+- Αιτιότητα: wrapper πάνω στο `rolling_percent_rank`, με default shifted
   history.
 
 Παράδειγμα:
@@ -688,11 +689,11 @@ normalizations:
 ### `robust_zscore`
 
 - Τι μετρά: `(x - rolling_median) / (MAD * mad_scale)`.
-- Output default: `{source_col}_robust_zscore_{window}`.
+- Προεπιλεγμένη έξοδος: `{source_col}_robust_zscore_{window}`.
 - Πώς διαβάζονται οι τιμές: όπως z-score, αλλά με median/MAD. `2` σημαίνει
   υψηλή θετική απόκλιση, `-2` υψηλή αρνητική απόκλιση.
 - Πληροφορία: standardized surprise που αντέχει καλύτερα fat tails και spikes.
-- Causality: default `shift_stats: true`.
+- Αιτιότητα: default `shift_stats: true`.
 
 Παράδειγμα:
 
@@ -711,11 +712,11 @@ median/MAD history.
 ### `rolling_zscores`
 
 - Τι μετρά: rolling mean/std z-score για πολλές columns μαζί.
-- Outputs default: `{col}_zscore_{window}` για κάθε column.
+- Προεπιλεγμένες έξοδοι: `{col}_zscore_{window}` για κάθε column.
 - Πώς διαβάζονται οι τιμές: `0` baseline, `> 2` high positive outlier,
   `< -2` high negative outlier.
 - Πληροφορία: γρήγορο batch normalization για πολλά unbounded features.
-- Causality: default `shift_stats: true`.
+- Αιτιότητα: default `shift_stats: true`.
 
 Παράδειγμα:
 
@@ -734,11 +735,11 @@ normalizations:
 
 - Τι μετρά: `volume / rolling_mean(volume)` και optional shifted volume
   z-score όταν δοθεί `zscore_col`.
-- Output default: `{volume_col}_relative_{window}`.
+- Προεπιλεγμένη έξοδος: `{volume_col}_relative_{window}`.
 - Πώς διαβάζονται οι τιμές: `1.0` σημαίνει normal volume, `2.0` διπλάσιο από
   το baseline, `0.5` μισό από το baseline.
 - Πληροφορία: abnormal participation/liquidity context.
-- Causality: default `shift_stats: true`.
+- Αιτιότητα: default `shift_stats: true`.
 
 Παράδειγμα:
 
@@ -759,12 +760,12 @@ average.
 
 - Τι μετρά: residual του asset return αφού αφαιρεθεί trailing single-factor
   alpha/beta σχέση με benchmark return.
-- Output default: `{asset_return_col}_residual_vs_{benchmark_return_col}_{window}`.
+- Προεπιλεγμένη έξοδος: `{asset_return_col}_residual_vs_{benchmark_return_col}_{window}`.
 - Πώς διαβάζονται οι τιμές: θετικό residual σημαίνει ότι το asset υπεραπέδωσε
   σε σχέση με ό,τι εξηγεί το benchmark beta. Αρνητικό σημαίνει underperformance.
 - Πληροφορία: idiosyncratic move, χρήσιμο για index/asset baskets και
   cross-asset normalization.
-- Causality: default `shift_stats: true`, άρα beta/alpha εκτιμώνται μέχρι `t-1`.
+- Αιτιότητα: default `shift_stats: true`, άρα beta/alpha εκτιμώνται μέχρι `t-1`.
 
 Παράδειγμα:
 

@@ -169,27 +169,10 @@ def compute_stochastic_rsi(
     raw = ((rsi - lowest_rsi) / rsi_range).clip(lower=0.0, upper=1.0)
     k = raw.rolling(window=k_period, min_periods=k_period).mean().clip(lower=0.0, upper=1.0)
     d = k.rolling(window=d_period, min_periods=d_period).mean().clip(lower=0.0, upper=1.0)
-    k_minus_d = k - d
-    slope = k - k.shift(1)
-    cross_up = ((k.shift(1) <= d.shift(1)) & (k > d)).astype(int)
-    cross_down = ((k.shift(1) >= d.shift(1)) & (k < d)).astype(int)
-    oversold_flag = (k <= float(oversold)).astype(int)
-    overbought_flag = (k >= float(overbought)).astype(int)
-    recover_from_oversold = ((k.shift(1) <= float(oversold)) & (k > float(oversold))).astype(int)
-    fall_from_overbought = ((k.shift(1) >= float(overbought)) & (k < float(overbought))).astype(int)
-
     return pd.DataFrame(
         {
             f"{prefix}_k": k,
             f"{prefix}_d": d,
-            f"{prefix}_k_minus_d": k_minus_d,
-            f"{prefix}_cross_up": cross_up,
-            f"{prefix}_cross_down": cross_down,
-            f"{prefix}_oversold": oversold_flag,
-            f"{prefix}_overbought": overbought_flag,
-            f"{prefix}_slope": slope,
-            f"{prefix}_recover_from_oversold": recover_from_oversold,
-            f"{prefix}_fall_from_overbought": fall_from_overbought,
         },
         index=prices.index,
     )

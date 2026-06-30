@@ -207,8 +207,6 @@ def add_support_resistance_v2_features(
     out["sr_v2_retest_resistance"] = resistance_retest.astype("float32")
     out["sr_v2_retest_support"] = support_retest.astype("float32")
 
-    out["sr_v2_support_distance_atr"] = ((close - support_level) / atr).astype("float32")
-    out["sr_v2_resistance_distance_atr"] = ((resistance_level - close) / atr).astype("float32")
     return out
 
 
