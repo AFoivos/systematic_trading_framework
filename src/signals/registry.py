@@ -28,6 +28,7 @@ from .orb_candidate_side_signal import orb_candidate_side_signal
 from .ppo_adx_stochrsi_trend_signal import ppo_adx_stochrsi_trend_signal
 from .probabilistic_signal import probabilistic_signal
 from .probability_vol_adjusted_signal import probability_vol_adjusted_signal
+from .quote_flow_scalp_router_signal import quote_flow_scalp_router_signal
 from .regime_filtered_signal import regime_filtered_signal
 from .roc_long_only_conditions_signal import roc_long_only_conditions_signal
 from .rsi_strategy import rsi_strategy
@@ -58,6 +59,7 @@ _SIGNAL_COMPONENTS: tuple[tuple[str, SignalFn], ...] = (
     ("meta_probability_side", meta_probability_side_signal),
     ("orb_candidate_side", orb_candidate_side_signal),
     ("ppo_adx_stochrsi_trend", ppo_adx_stochrsi_trend_signal),
+    ("quote_flow_scalp_router", quote_flow_scalp_router_signal),
     ("roc_long_only_conditions", roc_long_only_conditions_signal),
     ("ema_stoch_rsi_pullback", ema_stoch_rsi_pullback_signal),
     ("indicator_model_adaptive_pullback", indicator_model_adaptive_pullback_signal),

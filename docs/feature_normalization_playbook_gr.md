@@ -167,6 +167,7 @@ features = scale-free state when the candidate appeared
 ### P3: specialized/exogenous/flow features
 
 - `volume_features`
+- `scalp_microstructure_proxy`
 - `vpin`
 - `order_flow_imbalance`
 - `macro_context`
@@ -253,6 +254,7 @@ features = scale-free state when the candidate appeared
 | P1 | `supersmoother` | Ehlers low-lag smoothing | Smooth price/trend level | Good anchor for slope/distance | `(close-ss)/ATR`, `slope/ATR`, `ss/close`, crossing | `decycler`, `roofing_filter` |
 | P2 | `shannon_entropy` | Distribution entropy over window | Uncertainty/randomness | High entropy often means noisy edge | percent rank, zscore, flags high/low | `hurst_exponent`, `fractal_dimension` |
 | P2 | `permutation_entropy` | Ordinal pattern entropy | Complexity of ordering | Robust nonlinear regime signal | percent rank, zscore, flags | `shannon_entropy`, `volatility_regime` |
+| P3 | `scalp_microstructure_proxy` | Bid/ask mid, spread, candle geometry, signed-volume proxy | Liquidity stress, candle pressure, proxy participation side | Κεντρικό για quote/spread-aware scalp setups όταν δεν υπάρχουν real aggressor ticks | spread percent rank/zscore, wick/body/range `/ ATR`, `volume_relative`, OFI zscore, VPIN rank | `vwap`, `support_resistance_v2`, `order_flow_imbalance`, `vpin` |
 | P3 | `vpin` | Volume-synchronized probability of informed trading | Order-flow imbalance proxy | Good for toxic flow/liquidity risk | percent rank, zscore, volume-relative interaction | `volume_relative`, `order_flow_imbalance` |
 | P3 | `order_flow_imbalance` | Bid/ask or proxy flow imbalance | Buy/sell pressure | Direct microstructure signal when real columns exist | zscore, percent rank, rolling sum, clip | `vpin`, `volume_relative`, `shock_context` |
 

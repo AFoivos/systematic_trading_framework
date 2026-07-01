@@ -239,6 +239,8 @@ def train_forward_classifier(
     train_label_distributions: list[dict[str, Any]] = []
     eval_label_distributions: list[dict[str, Any]] = []
     total_train_rows_dropped_missing = 0
+    total_train_rows_not_labeled = 0
+    total_train_rows_without_fit = 0
     total_test_rows_missing_features = 0
     total_test_rows_not_candidates = 0
     total_test_rows_without_prediction = 0
@@ -284,12 +286,19 @@ def train_forward_classifier(
                 high_value=quantile_high_value,
                 )
 
-        train_fit = train_df.dropna(subset=feature_cols + [label_col])
+        train_features = train_df[feature_cols]
+        train_feature_complete_mask = train_features.notna().all(axis=1)
+        train_labeled_mask = train_df[label_col].notna()
+        train_fit = train_df.loc[train_feature_complete_mask & train_labeled_mask]
         if train_fit.empty:
             raise ValueError(f"Fold {split.fold} has no train rows after dropping NaNs in features/labels.")
         train_availability = summarize_feature_availability(train_df, feature_cols)
-        train_rows_dropped_missing = int(len(train_df) - len(train_fit))
+        train_rows_dropped_missing = int((~train_feature_complete_mask).sum())
+        train_rows_not_labeled = int((train_feature_complete_mask & ~train_labeled_mask).sum())
+        train_rows_without_fit = int(len(train_df) - len(train_fit))
         total_train_rows_dropped_missing += train_rows_dropped_missing
+        total_train_rows_not_labeled += train_rows_not_labeled
+        total_train_rows_without_fit += train_rows_without_fit
 
         estimator_fit, calibration_fit, fold_calibration_meta = _split_fit_and_calibration_rows(
             train_fit,
@@ -449,6 +458,8 @@ def train_forward_classifier(
                 "train_rows_raw": int(len(train_df)),
                 "train_rows": int(len(train_fit)),
                 "train_rows_dropped_missing": train_rows_dropped_missing,
+                "train_rows_not_labeled": train_rows_not_labeled,
+                "train_rows_without_fit": train_rows_without_fit,
                 "train_feature_availability": train_availability,
                 "test_rows": int(len(split.test_idx)),
                 "test_pred_rows": pred_rows,
@@ -535,6 +546,8 @@ def train_forward_classifier(
         "prediction_diagnostics": prediction_diagnostics,
         "missing_value_diagnostics": {
             "train_rows_dropped_missing": int(total_train_rows_dropped_missing),
+            "train_rows_not_labeled": int(total_train_rows_not_labeled),
+            "train_rows_without_fit": int(total_train_rows_without_fit),
             "test_rows_missing_features": int(total_test_rows_missing_features),
             "test_rows_not_candidates": int(total_test_rows_not_candidates),
             "test_rows_without_prediction": int(total_test_rows_without_prediction),

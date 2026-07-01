@@ -84,6 +84,7 @@ Canonical feature steps:
 - `permutation_entropy`
 - `vpin`
 - `order_flow_imbalance`
+- `scalp_microstructure_proxy`
 
 Feature-compatible legacy signal steps:
 
@@ -131,6 +132,7 @@ Canonical signal kinds:
 - `vwap_rms_ema_cross_long_hmm_gate`
 - `vwap_rms_ema_cross_long`
 - `regime_filtered`
+- `quote_flow_scalp_router`
 
 Deprecated signal aliases:
 

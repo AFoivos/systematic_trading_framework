@@ -245,9 +245,9 @@ def test_execution_output_handles_empty_portfolio_weights() -> None:
     assert orders.empty
 
 
-def test_runner_completion_output_omits_artifact_inventory(capsys: pytest.CaptureFixture[str]) -> None:
+def test_runner_completion_output_includes_condensed_run_payload(capsys: pytest.CaptureFixture[str]) -> None:
     """
-    CLI completion rendering should keep artifact creation silent in stdout.
+    CLI completion rendering should expose useful diagnostics without dumping raw fold payloads.
     """
     result = runner_mod.ExperimentResult(
         config={},
@@ -262,9 +262,23 @@ def test_runner_completion_output_omits_artifact_inventory(capsys: pytest.Captur
             summary={},
         ),
         model=None,
-        model_meta={},
-        evaluation={"primary_summary": {"net_pnl": 0.123, "sharpe": 1.5}},
-        monitoring={},
+        model_meta={
+            "model_kind": "xgboost_clf",
+            "n_folds": 2,
+            "train_rows": 100,
+            "test_pred_rows": 20,
+            "oos_classification_summary": {"evaluation_rows": 20, "roc_auc": 0.6},
+            "prediction_diagnostics": {
+                "oos_rows": 50,
+                "predicted_rows": 20,
+                "oos_prediction_coverage": 0.4,
+                "probability_distribution": {"median": 0.55, "max": 0.8},
+            },
+            "missing_value_diagnostics": {"train_rows_dropped_missing": 1, "train_rows_not_labeled": 9},
+            "folds": [{"feature_importance": [{"feature": "too_verbose"}]}],
+        },
+        evaluation={"primary_summary": {"net_pnl": 0.123, "sharpe": 1.5}, "oos_rows": 50},
+        monitoring={"asset_count": 1, "feature_count": 3, "drifted_feature_count": 0},
         execution={},
         artifacts={"run_dir": "/tmp/demo", "report": "/tmp/demo/report.md"},
     )
@@ -275,8 +289,16 @@ def test_runner_completion_output_omits_artifact_inventory(capsys: pytest.Captur
     assert "Experiment completed" in captured.out
     assert "Primary summary:" in captured.out
     assert "net_pnl: 0.123" in captured.out
-    assert "Artifacts:" not in captured.out
-    assert "run_dir:" not in captured.out
+    assert "Evaluation context:" in captured.out
+    assert "Model overview:" in captured.out
+    assert "OOS classification:" in captured.out
+    assert "Prediction diagnostics:" in captured.out
+    assert "Missing/value diagnostics:" in captured.out
+    assert "Monitoring:" in captured.out
+    assert "Artifacts:" in captured.out
+    assert "run_dir: /tmp/demo" in captured.out
+    assert "feature_importance" not in captured.out
+    assert "too_verbose" not in captured.out
 
 
 def test_load_experiment_config_resolves_enabled_model_and_signal_catalogs(tmp_path: Path) -> None:

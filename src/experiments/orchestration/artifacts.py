@@ -723,6 +723,11 @@ def _write_model_diagnostic_artifacts(
                     "train_rows_raw": fold.get("train_rows_raw"),
                     "train_rows": fold.get("train_rows"),
                     "train_rows_dropped_missing": fold.get("train_rows_dropped_missing"),
+                    "train_rows_not_labeled": fold.get("train_rows_not_labeled", 0),
+                    "train_rows_without_fit": fold.get(
+                        "train_rows_without_fit",
+                        fold.get("train_rows_dropped_missing", 0),
+                    ),
                     "test_rows": fold.get("test_rows"),
                     "test_pred_rows": fold.get("test_pred_rows"),
                     "test_rows_missing_features": fold.get("test_rows_missing_features", 0),

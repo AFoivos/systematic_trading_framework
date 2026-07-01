@@ -51,7 +51,7 @@ prediction. In-sample probability μέσα σε trading signal είναι leakag
 | No-op / diagnostic | `none` | Τρέχεις pipeline χωρίς πραγματικό trading signal ή με explicit flat signal. |
 | Indicator baselines | `trend_state`, `rsi`, `momentum`, `stochastic`, `volatility_regime` | Απλοί κανόνες από ένα βασικό feature ή regime. |
 | Probability και forecast signals | `probability_threshold`, `probability_conviction`, `probability_vol_adjusted`, `meta_probability_side`, `manual_long_model_filter`, `dense_return_forecast`, `forecast_threshold`, `forecast_vol_adjusted` | Μετατροπή model probability ή return forecast σε side, filter ή sizing. |
-| Primary candidate generators | `orb_candidate_side`, `roc_long_only_conditions`, `ema_stoch_rsi_pullback`, `indicator_model_adaptive_pullback`, `ppo_adx_stochrsi_trend`, `stc_roofing_hilbert` | Παράγουν υποψήφια trades από rule logic πριν από model filtering. |
+| Primary candidate generators | `orb_candidate_side`, `roc_long_only_conditions`, `ema_stoch_rsi_pullback`, `indicator_model_adaptive_pullback`, `quote_flow_scalp_router`, `ppo_adx_stochrsi_trend`, `stc_roofing_hilbert` | Παράγουν υποψήφια trades από rule logic πριν από model filtering. |
 | VWAP / EMA / RMS composite setups | `vwap_rms_ema_cross_long`, `vwap_rms_ema_cross_long_hmm_gate`, `vwap_rms_ema_cross_long_fractal_filter`, `ema_rms_ppo_vwap`, `c1_trend_pullback_vwap`, `c2_regime_aware_momentum` | Συνδυάζουν trend, VWAP/RMS, PPO, volatility/regime και pullback context. |
 | Ehlers / cycle-based setups | `ehlers_continuation_long`, `ehlers_continuation_short`, `ehlers_decycler_continuation`, `ehlers_semiscalp_long` | Χρησιμοποιούν MAMA/FAMA, Roofing, Hilbert, Decycler και cycle context. |
 | Wrapper / filter | `regime_filtered` | Κρατά ένα base signal μόνο όταν ένα regime column είναι ενεργό. |
@@ -448,6 +448,48 @@ prediction. In-sample probability μέσα σε trading signal είναι leakag
 - EMA stack `20 > 50 > 100`, θετικές slopes, ADX σε λογικό εύρος, τιμή κοντά
   στην EMA fast/mid, StochRSI cross up και MACD histogram που βελτιώνεται. Το
   signal δίνει `candidate_long = 1` και `direction = 1`.
+
+### `quote_flow_scalp_router`
+
+Τι μετρά:
+
+- Deterministic primary scalp candidates από ήδη υπολογισμένα quote/spread,
+  candle-flow proxy, VWAP distance, support/resistance, volume και session
+  features.
+- Δεν κάνει heavy feature engineering εσωτερικά. Οι proxy flow columns πρέπει
+  να έχουν παραχθεί από `scalp_microstructure_proxy`, `order_flow_imbalance`,
+  `vpin` και helpers.
+
+Τι σημαίνουν οι τιμές:
+
+- `signal_candidate = 1` -> υπάρχει primary scalp setup στο current closed bar.
+- `signal_side = 1/-1/0` -> long, short ή flat candidate side.
+- `signal_mode = 1` -> toxic-flow continuation, `2` -> liquidity-sweep fade,
+  `3` -> VWAP snapback.
+- `quote_flow_score` είναι deterministic mode score για audit/model input, όχι
+  fitted probability.
+- `qfs_cond_*` columns δείχνουν ποια mode/filter conditions πέρασαν.
+
+Λογική:
+
+- Global gates: spread rank/z-score κάτω από thresholds και optional liquid
+  session flag.
+- Toxic continuation: high VPIN rank, aligned fast/slow OFI proxy, high
+  relative volume και close near bar extreme.
+- Sweep fade: large wick, recovery/rejection close position, close κοντά σε
+  support/resistance και OFI proxy που δείχνει sweep pressure.
+- VWAP snapback: large ATR-scaled VWAP displacement, moderate VPIN rank και
+  wick/recovery confirmation.
+- Αν περάσουν πολλά modes στο ίδιο row, priority είναι sweep fade, μετά toxic
+  continuation, μετά VWAP snapback.
+
+Παράδειγμα:
+
+- Row με low spread rank, liquid session, `lower_wick_atr=0.5`,
+  `close_pos_in_bar=0.7`, `close_minus_support_atr=0.2` και αρνητικό fast OFI
+  proxy γράφει long sweep-fade candidate (`signal_side=1`, `signal_mode=2`).
+  Αν ακολουθεί meta model, το top-level `meta_probability_side` κρατά το
+  candidate μόνο όταν το OOS `pred_prob` περνά threshold.
 
 ### `ppo_adx_stochrsi_trend`
 

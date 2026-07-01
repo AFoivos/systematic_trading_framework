@@ -258,6 +258,12 @@ def aggregate_model_meta(per_asset_meta: dict[str, dict[str, Any]]) -> dict[str,
         "train_rows_dropped_missing": int(
             sum(int(meta.get("missing_value_diagnostics", {}).get("train_rows_dropped_missing", 0) or 0) for meta in per_asset_meta.values())
         ),
+        "train_rows_not_labeled": int(
+            sum(int(meta.get("missing_value_diagnostics", {}).get("train_rows_not_labeled", 0) or 0) for meta in per_asset_meta.values())
+        ),
+        "train_rows_without_fit": int(
+            sum(int(meta.get("missing_value_diagnostics", {}).get("train_rows_without_fit", 0) or 0) for meta in per_asset_meta.values())
+        ),
         "test_rows_missing_features": int(
             sum(int(meta.get("missing_value_diagnostics", {}).get("test_rows_missing_features", 0) or 0) for meta in per_asset_meta.values())
         ),

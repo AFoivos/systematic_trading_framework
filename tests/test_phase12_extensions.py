@@ -1322,6 +1322,11 @@ def test_logistic_meta_labels_predict_only_candidate_oos_rows() -> None:
     assert meta["target"]["candidate_col"] == "meta_candidate"
     assert meta["preprocessing"]["scaler"] == "standard"
     missing_diag = meta["missing_value_diagnostics"]
+    assert missing_diag["train_rows_not_labeled"] > 0
+    assert missing_diag["train_rows_without_fit"] == (
+        missing_diag["train_rows_dropped_missing"] + missing_diag["train_rows_not_labeled"]
+    )
+    assert missing_diag["train_rows_dropped_missing"] < missing_diag["train_rows_without_fit"]
     assert missing_diag["test_rows_not_candidates"] > 0
     assert (
         missing_diag["test_rows_without_prediction"]

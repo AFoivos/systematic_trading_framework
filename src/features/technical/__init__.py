@@ -23,7 +23,7 @@ from .ppo import compute_ppo
 from .ppo import add_ppo_features
 from .price_momentum import compute_price_momentum
 from .price_momentum import add_price_momentum_features
-from .return_momentum import compute_return_momentum
+from .return_momentum import compute_return_momentum, add_return_momentum_features
 from .roc import compute_roc
 from .roc import add_roc_features
 from .rsi import compute_rsi
@@ -56,6 +56,7 @@ __all__ = [
     "compute_price_momentum",
     "add_price_momentum_features",
     "compute_return_momentum",
+    "add_return_momentum_features",
     "compute_vol_normalized_momentum",
     "add_momentum_features",
     "compute_rsi",

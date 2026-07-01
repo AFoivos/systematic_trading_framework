@@ -38,6 +38,7 @@ from .permutation_entropy import add_permutation_entropy
 from .regime_context import add_regime_context_features
 from .helpers.normalizations.returns import add_close_returns
 from .roofing_filter import add_roofing_filter
+from .scalp_microstructure_proxy import add_scalp_microstructure_proxy
 from .session_context import add_session_context_features
 from .shannon_entropy import add_shannon_entropy
 from .shock_context import add_shock_context_features
@@ -129,6 +130,7 @@ _FEATURE_COMPONENTS: tuple[tuple[str, FeatureFn], ...] = (
     ("permutation_entropy", add_permutation_entropy),
     ("vpin", add_vpin),
     ("order_flow_imbalance", add_order_flow_imbalance),
+    ("scalp_microstructure_proxy", add_scalp_microstructure_proxy),
 )
 
 
@@ -144,6 +146,7 @@ def _legacy_signal_feature_steps() -> Mapping[str, FeatureFn]:
             ("ema_stoch_rsi_pullback", lazy_callable("src.signals.ema_stoch_rsi_pullback_signal", "ema_stoch_rsi_pullback_signal")),
             ("indicator_model_adaptive_pullback", lazy_callable("src.signals.indicator_model_adaptive_pullback", "indicator_model_adaptive_pullback_signal")),
             ("roc_long_only_conditions", lazy_callable("src.signals.roc_long_only_conditions_signal", "roc_long_only_conditions_signal")),
+            ("quote_flow_scalp_router", lazy_callable("src.signals.quote_flow_scalp_router_signal", "quote_flow_scalp_router_signal")),
             ("vwap_rms_ema_cross_long", lazy_callable("src.signals.vwap_rms_ema_cross_long_signal", "vwap_rms_ema_cross_long_signal")),
         ),
     )

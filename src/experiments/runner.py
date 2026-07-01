@@ -73,15 +73,151 @@ def run_experiment(config_path: str | Path) -> ExperimentResult:
 
 def print_experiment_completion(result: ExperimentResult) -> None:
     """
-    Render only the concise completion summary to stdout.
+    Render a concise but useful completion log to stdout.
 
-    Artifacts are still created and returned in `result.artifacts`, but are intentionally omitted
-    from terminal output to keep interactive runs less noisy.
+    The primary summary stays first for fast terminal scanning. Follow-up
+    sections include enough model, diagnostics, monitoring, and artifact context
+    to debug a run without dumping entire fold payloads or per-feature reports.
     """
     print("Experiment completed")
     print("Primary summary:")
     for k, v in result.evaluation.get("primary_summary", {}).items():
         print(f"  {k}: {v}")
+    _print_evaluation_context(result.evaluation)
+    _print_model_context(result.model_meta)
+    _print_monitoring_context(result.monitoring)
+    _print_artifact_context(result.artifacts)
+
+
+def _print_mapping(title: str, payload: dict[str, object]) -> None:
+    clean = {str(k): v for k, v in payload.items() if v is not None}
+    if not clean:
+        return
+    print(f"{title}:")
+    for key, value in clean.items():
+        print(f"  {key}: {value}")
+
+
+def _print_evaluation_context(evaluation: dict[str, object]) -> None:
+    if not evaluation:
+        return
+    context_keys = (
+        "scope",
+        "oos_rows",
+        "oos_coverage",
+    )
+    context = {key: evaluation.get(key) for key in context_keys if key in evaluation}
+    _print_mapping("Evaluation context", context)
+
+
+def _print_model_context(model_meta: dict[str, object]) -> None:
+    if not model_meta:
+        return
+    overview_keys = (
+        "model_kind",
+        "n_folds",
+        "train_rows",
+        "test_pred_rows",
+        "oos_rows",
+        "oos_prediction_coverage",
+        "pred_prob_col",
+        "pred_is_oos_col",
+    )
+    overview = {key: model_meta.get(key) for key in overview_keys if key in model_meta}
+    _print_mapping("Model overview", overview)
+
+    classification = dict(model_meta.get("oos_classification_summary", {}) or {})
+    _print_mapping(
+        "OOS classification",
+        {
+            "evaluation_rows": classification.get("evaluation_rows"),
+            "accuracy": classification.get("accuracy"),
+            "roc_auc": classification.get("roc_auc"),
+            "log_loss": classification.get("log_loss"),
+            "brier": classification.get("brier"),
+            "positive_rate": classification.get("positive_rate"),
+        },
+    )
+
+    prediction = dict(model_meta.get("prediction_diagnostics", {}) or {})
+    prediction_dist = dict(prediction.get("probability_distribution", {}) or prediction.get("prediction_distribution", {}) or {})
+    _print_mapping(
+        "Prediction diagnostics",
+        {
+            "oos_rows": prediction.get("oos_rows"),
+            "predicted_rows": prediction.get("predicted_rows"),
+            "missing_oos_prediction_rows": prediction.get("missing_oos_prediction_rows"),
+            "oos_prediction_coverage": prediction.get("oos_prediction_coverage"),
+            "alignment_ok": prediction.get("alignment_ok"),
+            "prob_min": prediction_dist.get("min"),
+            "prob_q25": prediction_dist.get("q25"),
+            "prob_median": prediction_dist.get("median"),
+            "prob_q75": prediction_dist.get("q75"),
+            "prob_max": prediction_dist.get("max"),
+        },
+    )
+
+    _print_mapping("Missing/value diagnostics", dict(model_meta.get("missing_value_diagnostics", {}) or {}))
+
+    target = dict(model_meta.get("target", {}) or {})
+    _print_mapping(
+        "Target diagnostics",
+        {
+            "kind": target.get("kind"),
+            "candidate_rows": target.get("candidate_rows"),
+            "labeled_rows": target.get("labeled_rows"),
+            "positive_rate": target.get("positive_rate"),
+            "profit_barrier_count": target.get("profit_barrier_count"),
+            "stop_barrier_count": target.get("stop_barrier_count"),
+            "neutral_count": target.get("neutral_count"),
+        },
+    )
+
+
+def _print_monitoring_context(monitoring: dict[str, object]) -> None:
+    if not monitoring:
+        return
+    _print_mapping(
+        "Monitoring",
+        {
+            "asset_count": monitoring.get("asset_count"),
+            "feature_count": monitoring.get("feature_count"),
+            "drifted_feature_count": monitoring.get("drifted_feature_count"),
+        },
+    )
+    per_asset = dict(monitoring.get("per_asset", {}) or {})
+    for asset, raw_payload in per_asset.items():
+        payload = dict(raw_payload or {})
+        per_feature = dict(payload.get("per_feature", {}) or {})
+        drifted = [
+            str(name)
+            for name, feature_payload in per_feature.items()
+            if bool(dict(feature_payload or {}).get("is_drifted", False))
+        ]
+        if drifted:
+            print(f"  {asset} drifted_features: {', '.join(drifted[:10])}")
+
+
+def _print_artifact_context(artifacts: dict[str, str]) -> None:
+    if not artifacts:
+        return
+    preferred_keys = (
+        "run_dir",
+        "summary",
+        "report",
+        "report_html",
+        "run_metadata",
+        "prediction_diagnostics",
+        "missing_value_diagnostics",
+        "monitoring",
+        "fold_model_summary",
+        "trade_events",
+    )
+    shown = {key: artifacts.get(key) for key in preferred_keys if artifacts.get(key)}
+    _print_mapping("Artifacts", shown)
+    remaining = max(0, len(artifacts) - len(shown))
+    if remaining:
+        print(f"  additional_artifacts: {remaining}")
 
 
 if __name__ == "__main__":

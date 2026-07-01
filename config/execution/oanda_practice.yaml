@@ -1,0 +1,55 @@
+execution:
+  broker: oanda
+  oanda:
+    environment: practice
+    account_id: YOUR_ACCOUNT_ID
+    api_token_env: OANDA_API_TOKEN
+    request_timeout: 30
+    reconnect: true
+    max_retry: 5
+    min_request_interval: 0.1
+    symbols:
+      SPX500:
+        oanda_symbol: US500_USD
+        enabled: true
+      US100:
+        oanda_symbol: NAS100_USD
+        enabled: true
+      GER40:
+        oanda_symbol: DE30_EUR
+        enabled: true
+      US30:
+        oanda_symbol: US30_USD
+        enabled: true
+      XAUUSD:
+        oanda_symbol: XAU_USD
+        enabled: true
+      EURUSD:
+        oanda_symbol: EUR_USD
+        enabled: true
+      GBPUSD:
+        oanda_symbol: GBP_USD
+        enabled: true
+      USDJPY:
+        oanda_symbol: USD_JPY
+        enabled: true
+      BTCUSD:
+        oanda_symbol: BTC_USD
+        enabled: false
+
+strategy:
+  config_path: config/experiments/ema_rms_ppo_vwap/best_long_only/vwap_rms_cross_ema50_regime_3atr_no_time_exit_BEST_all9_v2.yaml
+
+risk:
+  risk_per_trade: 0.0025
+  stop_loss_r: 3.0
+  take_profit_r: 4.0
+  max_daily_loss_pct: 0.02
+  max_total_drawdown_pct: 0.05
+  max_positions: 3
+  max_positions_per_symbol: 1
+  allow_short: false
+  demo_only: true
+
+logging:
+  output_dir: logs/oanda_practice

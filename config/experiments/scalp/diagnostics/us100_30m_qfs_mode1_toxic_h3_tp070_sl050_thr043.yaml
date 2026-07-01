@@ -1,0 +1,376 @@
+strategy:
+  name: us100_30m_qfs_mode1_toxic_h3_tp070_sl050_thr043
+  timeframe: 30m
+  assets:
+  - US100
+  description: Quote/spread-aware flow proxy scalp candidates filtered by purged OOS
+    meta-label probabilities.
+data:
+  source: dukascopy_csv
+  interval: 30m
+  start: null
+  end: null
+  alignment: inner
+  symbol: US100
+  storage:
+    mode: cached_only
+    dataset_id: us100_30m_qfs_mode1_toxic_h3_tp070_sl050_thr043
+    save_raw: false
+    save_processed: true
+    load_path: data/raw/dukascopy_30m_clean/us100_30m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed
+features:
+- step: scalp_microstructure_proxy
+  normalizations:
+    rolling_percent_rank:
+      items:
+      - source_col: bid_ask_spread_bps
+        window: 252
+        output_col: spread_bps_rank_252
+    volume_relative:
+      params:
+        volume_col: volume
+        window: 48
+        output_col: volume_relative_48
+        zscore_col: volume_z_48
+  transforms:
+    rolling_zscore:
+      items:
+      - source_col: bid_ask_spread_bps
+        window: 252
+        shift: 1
+        output_col: spread_bps_z_252
+- step: returns
+  params:
+    log: true
+    col_name: close_logret
+  transforms:
+    lag:
+      items:
+      - source_col: close_logret
+        lag: 1
+        output_col: lag_close_logret_1
+      - source_col: close_logret
+        lag: 2
+        output_col: lag_close_logret_2
+      - source_col: close_logret
+        lag: 4
+        output_col: lag_close_logret_4
+- step: volatility
+  params:
+    returns_col: close_logret
+    rolling_windows:
+    - 48
+    ewma_spans: []
+    annualization_factor: null
+- step: atr
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    windows:
+    - 14
+    method: wilder
+    atr_col: atr_14
+  transforms:
+    ratio:
+      items:
+      - numerator_col: atr_14
+        denominator_col: close
+        output_col: atr_over_price_14
+      - numerator_col: bar_body
+        denominator_col: atr_14
+        output_col: bar_body_atr
+      - numerator_col: bar_range
+        denominator_col: atr_14
+        output_col: bar_range_atr
+      - numerator_col: upper_wick
+        denominator_col: atr_14
+        output_col: upper_wick_atr
+      - numerator_col: lower_wick
+        denominator_col: atr_14
+        output_col: lower_wick_atr
+      - numerator_col: bid_ask_spread_abs
+        denominator_col: atr_14
+        output_col: spread_atr
+    rolling_zscore:
+      items:
+      - source_col: atr_over_price_14
+        window: 252
+        shift: 1
+        output_col: atr_over_price_z_252
+- step: vwap
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    volume_col: volume
+    windows:
+    - 20
+    vwap_col: vwap_20
+  normalizations:
+    atr_scaled_distance:
+      params:
+        base_col: close
+        ref_col: vwap_20
+        atr_col: atr_14
+        output_col: close_minus_vwap_20_atr
+- step: order_flow_imbalance
+  params:
+    buy_volume_col: buy_volume_proxy
+    sell_volume_col: sell_volume_proxy
+    window: 5
+    normalize: true
+    output_col: ofi_proxy_5_norm
+  transforms:
+    rolling_zscore:
+      items:
+      - source_col: close_minus_vwap_20_atr
+        window: 252
+        shift: 1
+        output_col: close_minus_vwap_20_atr_z_252
+      - source_col: ofi_proxy_5_norm
+        window: 252
+        shift: 1
+        output_col: ofi_proxy_5_norm_z_252
+- step: order_flow_imbalance
+  params:
+    buy_volume_col: buy_volume_proxy
+    sell_volume_col: sell_volume_proxy
+    window: 15
+    normalize: true
+    output_col: ofi_proxy_15_norm
+  transforms:
+    rolling_zscore:
+      params:
+        source_col: ofi_proxy_15_norm
+        window: 252
+        shift: 1
+        output_col: ofi_proxy_15_norm_z_252
+- step: vpin
+  params:
+    buy_volume_col: null
+    sell_volume_col: null
+    signed_volume_col: signed_volume_proxy
+    volume_col: volume
+    window: 50
+    output_col: vpin_proxy_50
+  normalizations:
+    rolling_percent_rank:
+      params:
+        source_col: vpin_proxy_50
+        window: 252
+        output_col: vpin_proxy_50_rank_252
+- step: session_context
+  params:
+    timezone: UTC
+    add_cyclical_time: true
+    include_weekend_flag: true
+    sessions:
+      london_ny_liquid:
+      - 12
+      - 20
+- step: support_resistance_v2
+  params:
+    price_col: close
+    high_col: high
+    low_col: low
+    atr_col: atr_14
+    pivot_left_window: 36
+    pivot_confirm_bars: 6
+    touch_tolerance_atr: 0.25
+    breakout_tolerance_atr: 0.05
+  normalizations:
+    atr_scaled_distance:
+      items:
+      - base_col: close
+        ref_col: sr_v2_support_level
+        atr_col: atr_14
+        output_col: close_minus_support_atr
+      - base_col: sr_v2_resistance_level
+        ref_col: close
+        atr_col: atr_14
+        output_col: resistance_minus_close_atr
+- step: rsi
+  params:
+    price_col: close
+    windows:
+    - 14
+    method: wilder
+- step: stochastic_rsi
+  params:
+    price_col: close
+    rsi_period: 14
+    stoch_period: 14
+    k_period: 3
+    d_period: 3
+    prefix: stoch_rsi
+    method: wilder
+- step: bollinger
+  params:
+    price_col: close
+    window: 20
+    n_std: 2
+- step: adx
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    windows:
+    - 14
+- step: quote_flow_scalp_router
+  params:
+    close_col: close
+    high_col: high
+    low_col: low
+    atr_col: atr_14
+    vwap_distance_col: close_minus_vwap_20_atr
+    vpin_rank_col: vpin_proxy_50_rank_252
+    ofi_fast_col: ofi_proxy_5_norm
+    ofi_slow_col: ofi_proxy_15_norm
+    spread_rank_col: spread_bps_rank_252
+    spread_z_col: spread_bps_z_252
+    volume_relative_col: volume_relative_48
+    close_pos_col: close_pos_in_bar
+    bar_range_atr_col: bar_range_atr
+    bar_body_atr_col: bar_body_atr
+    upper_wick_atr_col: upper_wick_atr
+    lower_wick_atr_col: lower_wick_atr
+    support_distance_col: close_minus_support_atr
+    resistance_distance_col: resistance_minus_close_atr
+    session_filter_col: session_london_ny_liquid
+    max_spread_rank: 0.85
+    max_spread_z: 2.5
+    signal_col: signal_side
+    candidate_col: signal_candidate
+    enabled_modes:
+    - 1
+model:
+  kind: xgboost_clf
+  pred_prob_col: pred_prob
+  pred_is_oos_col: pred_is_oos
+  preprocessing:
+    scaler: none
+  target:
+    kind: directional_triple_barrier
+    direction_col: signal_side
+    candidate_col: signal_candidate
+    price_col: close
+    open_col: open
+    high_col: high
+    low_col: low
+    volatility_col: atr_14
+    entry_price_mode: next_open
+    vertical_barrier_bars: 3
+    profit_barrier_r: 0.7
+    stop_barrier_r: 0.5
+    neutral_label: drop
+    label_col: label
+    event_ret_col: dtb_event_ret
+    r_col: dtb_event_r
+    oriented_r_col: dtb_oriented_r
+    add_r_multiple: true
+  split:
+    method: purged
+    train_frac: 0.7
+    test_size: 5000
+    step_size: 5000
+    expanding: true
+    max_folds: 4
+    purge_bars: 8
+    embargo_bars: 0
+  feature_cols:
+  - close_logret
+  - lag_close_logret_1
+  - lag_close_logret_2
+  - lag_close_logret_4
+  - atr_over_price_14
+  - atr_over_price_z_252
+  - close_minus_vwap_20_atr
+  - close_minus_vwap_20_atr_z_252
+  - volume_relative_48
+  - volume_z_48
+  - ofi_proxy_5_norm
+  - ofi_proxy_15_norm
+  - ofi_proxy_5_norm_z_252
+  - ofi_proxy_15_norm_z_252
+  - vpin_proxy_50_rank_252
+  - spread_bps_rank_252
+  - spread_bps_z_252
+  - bar_body_atr
+  - bar_range_atr
+  - upper_wick_atr
+  - lower_wick_atr
+  - close_pos_in_bar
+  - body_to_range
+  - bb_percent_b_20_2
+  - close_rsi_14
+  - stoch_rsi_k
+  - stoch_rsi_d
+  - adx_14
+  - quote_flow_score
+  params:
+    n_estimators: 300
+    learning_rate: 0.03
+    max_depth: 3
+    min_child_weight: 5.0
+    subsample: 0.8
+    colsample_bytree: 0.8
+    reg_lambda: 5.0
+    reg_alpha: 0.1
+    objective: binary:logistic
+    eval_metric: logloss
+    tree_method: hist
+    random_state: 7
+    n_jobs: 1
+signals:
+  kind: meta_probability_side
+  params:
+    prob_col: pred_prob
+    side_col: signal_side
+    candidate_col: signal_candidate
+    threshold: 0.43
+    profit_barrier_r: 0.7
+    stop_barrier_r: 0.5
+    min_expected_value_r: 0.02
+    signal_col: signal_meta_side
+target: {}
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+risk:
+  cost_per_turnover: 8.0e-05
+  slippage_per_turnover: 5.0e-05
+  target_vol: null
+  max_leverage: 1.0
+  sizing: {}
+  dd_guard:
+    enabled: false
+  portfolio_guard: {}
+  drawdown_sizing: {}
+  vol_col: null
+portfolio: {}
+backtest:
+  engine: vectorized
+  signal_col: signal_meta_side
+  returns_col: close_logret
+  returns_type: log
+  subset: full
+  periods_per_year: 12096
+  min_holding_bars: 0
+  missing_return_policy: raise_if_exposed
+  allow_short: true
+  long_only: false
+execution:
+  enabled: false
+  capital: 100000
+monitoring: {}
+diagnostics: {}
+logging:
+  enabled: true
+  run_name: us100_30m_qfs_mode1_toxic_h3_tp070_sl050_thr043
+  output_dir: logs/experiments
