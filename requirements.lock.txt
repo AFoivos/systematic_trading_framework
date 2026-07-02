@@ -23,6 +23,8 @@ plotly==5.24.1
 optuna==3.6.1
 yfinance==1.1.0
 requests==2.32.3
+websockets
+python-pptx
 
 metatrader5==5.0.5735; platform_system == "Windows"
 

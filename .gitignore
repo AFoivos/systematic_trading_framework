@@ -145,3 +145,12 @@ tests/*
 !tests/backtesting/*.py
 !tests/trade_path/
 !tests/trade_path/*.py
+# Keep market-making regression tests tracked.
+!tests/market_data/
+!tests/market_data/*.py
+!tests/market_making/
+!tests/market_making/*.py
+
+# Runtime reports and paper/live artifacts are generated outputs.
+reports/
+!reports/.gitkeep
