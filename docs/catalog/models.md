@@ -57,6 +57,7 @@ backtest έχει leakage.
 | Feature discovery | `tsfresh_extrema_feature_discovery` | PIT-safe tsfresh features και relevance για future extrema labels. |
 | Single-asset RL | `ppo_agent`, `dqn_agent` | Policy για actions σε ένα asset. |
 | Portfolio RL | `ppo_portfolio_agent`, `dqn_portfolio_agent` | Policy για allocation/actions σε πολλά assets. |
+| Market-making research | `market_making_moment` config | Research-only MOMENT quote filter για fee-adjusted markout, εκτός live/demo execution. |
 
 ## Κοινή δομή YAML για models
 
@@ -1146,6 +1147,64 @@ model:
 - Παράγει action/policy output, π.χ. `action_rl` και `signal_rl`.
 - Το αποτέλεσμα αξιολογείται ως sequential strategy με costs και execution
   assumptions, όχι ως classifier probability.
+
+### Market-making MOMENT quote filter
+
+Το `market_making_moment` δεν είναι canonical `MODEL_REGISTRY` entry για το
+candle-based pipeline. Είναι research-only market-making experiment κάτω από:
+
+```text
+config/experiments/market_making/market_making_moment.yaml
+```
+
+Στόχος:
+
+- να χτίσει quote-level/event-level dataset από `orderbook_events.csv` και
+  `quote_events.csv`,
+- να χρησιμοποιήσει MOMENT ως pretrained time-series feature extractor ή ως
+  frozen-encoder + lightweight-head baseline,
+- να σκοράρει buy/sell quote candidates ξεχωριστά,
+- να εφαρμόσει fee-aware expected edge:
+  `predicted_markout_bps + expected_spread_capture_bps - maker_fee_bps -
+  safety_buffer_bps`,
+- να αξιολογήσει αν μειώνει toxic fills και βελτιώνει fee-adjusted markout.
+
+Παράδειγμα:
+
+```bash
+python scripts/run_market_making_moment_experiment.py \
+  --config config/experiments/market_making/market_making_moment.yaml
+```
+
+Βασικά outputs:
+
+- `moment_dataset.parquet`
+- `moment_predictions.csv`
+- `quote_decisions.csv`
+- `baseline_vs_moment.csv`
+- `summary.json`
+- `run_metadata.json`
+- `artifact_manifest.json`
+
+Ερμηνεία των prediction columns:
+
+- `moment_buy_score`: predicted buy-side markout/edge score.
+- `moment_sell_score`: predicted sell-side markout/edge score.
+- `moment_buy_expected_edge_bps`: buy score μετά από spread capture, fees και
+  safety buffer.
+- `moment_sell_expected_edge_bps`: αντίστοιχο sell-side expected edge.
+- `moment_uncertainty`: uncertainty score που πρέπει να είναι κάτω από threshold.
+- `moment_decision`: `allow_buy`, `allow_sell`, `allow_both` ή `block`.
+- `moment_reason`: explainable reason για την απόφαση.
+
+Leakage rules:
+
+- Future columns όπως `future_mid_return_*`, `buy_markout_bps_*` και
+  `sell_markout_bps_*` είναι targets/evaluation fields, όχι model inputs.
+- Το split είναι chronological/walk-forward. Δεν επιτρέπεται random shuffle.
+- MOMENT δεν αντιμετωπίζεται ως black-box trader. Είναι research feature
+  extractor/filter που αξιολογείται πάνω σε local order-book data.
+- Δεν επιτρέπεται demo/live order placement από αυτό το experiment.
 
 ## Πρακτικός κανόνας επιλογής
 

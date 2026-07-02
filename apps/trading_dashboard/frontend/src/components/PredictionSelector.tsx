@@ -9,14 +9,14 @@ interface PredictionSelectorProps {
 export function PredictionSelector({ experiments, selectedRunId, onRunChange }: PredictionSelectorProps) {
   return (
     <section className="control-section">
-      <h2>Predictions</h2>
+      <h2>Experiments</h2>
       <label className="field">
         <span>Experiment run</span>
         <select value={selectedRunId} onChange={(event) => onRunChange(event.target.value)}>
           <option value="">None</option>
           {experiments.map((experiment) => (
             <option key={experiment.run_id} value={experiment.run_id}>
-              {experiment.name}
+              {experiment.run_type === "market_making" ? "market_making_latest" : experiment.name}
             </option>
           ))}
         </select>
@@ -24,4 +24,3 @@ export function PredictionSelector({ experiments, selectedRunId, onRunChange }: 
     </section>
   );
 }
-

@@ -32,6 +32,11 @@ const exitReasonLabels: Record<string, string> = {
   atr_trailing_stop: "ATR"
 };
 
+function isShortSide(side: TradeRecord["side"]): boolean {
+  const normalized = String(side ?? "").trim().toLowerCase();
+  return normalized === "short" || normalized === "sell";
+}
+
 function exitMarkerText(trade: TradeRecord): string {
   const returnLabel = trade.return === null ? null : `${(trade.return * 100).toFixed(2)}%`;
   const normalizedReason = trade.exit_reason?.trim().toLowerCase();
@@ -71,13 +76,21 @@ export function toTradeMarkers(trades: TradeRecord[]): SeriesMarker<Time>[] {
   return trades.flatMap((trade) => {
     const markers: SeriesMarker<Time>[] = [];
     if (trade.entry_time) {
-      const isLong = trade.side !== "short";
+      const isLong = !isShortSide(trade.side);
+      const entryText =
+        trade.exit_time === null && (trade.side === "long" || trade.side === "short")
+          ? isLong
+            ? "Buy fill"
+            : "Sell fill"
+          : isLong
+            ? "Entry L"
+            : "Entry S";
       markers.push({
         time: asTime(trade.entry_time),
         position: isLong ? "belowBar" : "aboveBar",
         color: isLong ? "#0f9f6e" : "#d14f3f",
         shape: isLong ? "arrowUp" : "arrowDown",
-        text: isLong ? "Entry L" : "Entry S"
+        text: entryText
       });
     }
     if (trade.exit_time) {

@@ -23,13 +23,12 @@ from src.evaluation.trade_path_diagnostics import (
     summarize_trade_lifecycle,
 )
 from src.experiments.orchestration.common import data_stats_payload, redact_sensitive_values, resolved_feature_columns
-from src.experiments.orchestration.reporting import build_experiment_report_markdown, render_markdown_report_html
+from src.experiments.orchestration.reporting import build_experiment_report_markdown
 from src.experiments.support.execution_source_audit import write_execution_source_audit
 from src.plots.trade_diagnostics import (
     build_trade_event_frame,
 )
 from src.portfolio import PortfolioPerformance
-from src.utils.html_reports import plotly_chart_config, write_plotly_dashboard_html
 from src.utils.run_metadata import build_artifact_manifest
 
 
@@ -1032,42 +1031,26 @@ def _write_lab_feature_diagnostic_artifacts(
     if not asset_frames:
         return {}
 
-    report_assets_dir = run_dir / "report_assets"
-    report_assets_dir.mkdir(parents=True, exist_ok=True)
-    chart_paths: dict[str, str] = {}
-    from src.plots.price_with_features import plot_price_with_features
-
+    artifact_paths: dict[str, str] = {}
     for asset, frame in sorted(asset_frames.items()):
         feature_cols = _resolve_lab_feature_columns(frame, cfg)
         if not feature_cols:
             continue
-        price_overlay_cols, scaled_feature_cols = _split_lab_feature_columns(feature_cols)
         safe_asset = _safe_asset_filename(asset)
-        html_path = report_assets_dir / f"lab_feature_diagnostics_{safe_asset}.html"
-        fig = plot_price_with_features(
-            frame,
-            title=(
-                f"Lab Feature Diagnostics: {asset} "
-                f"({len(price_overlay_cols)} price overlays, {len(scaled_feature_cols)} scaled features)"
-            ),
-            feature_cols=scaled_feature_cols,
-            price_overlay_cols=price_overlay_cols,
-            normalize=True,
-            price_col="close",
-            max_plot_points=5_000,
-            height=720,
-            initial_features_visible=False,
-        )
-        write_plotly_dashboard_html(
-            fig,
-            html_path,
-            include_plotlyjs="directory",
-            config=plotly_chart_config(),
-            title=f"Lab Feature Diagnostics: {asset}",
-            subtitle="Local experiment graph artifact",
-        )
-        chart_paths[f"lab_feature_diagnostics_{safe_asset}"] = str(html_path.relative_to(run_dir))
-    return chart_paths
+        diagnostics_dir = run_dir / "artifacts" / "diagnostics"
+        diagnostics_dir.mkdir(parents=True, exist_ok=True)
+        metadata_path = diagnostics_dir / f"lab_feature_diagnostics_{safe_asset}.json"
+        price_overlay_cols, scaled_feature_cols = _split_lab_feature_columns(feature_cols)
+        payload = {
+            "asset": asset,
+            "feature_count": len(feature_cols),
+            "price_overlay_columns": price_overlay_cols,
+            "scaled_feature_columns": scaled_feature_cols,
+            "row_count": int(len(frame)),
+        }
+        metadata_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        artifact_paths[f"lab_feature_diagnostics_{safe_asset}"] = str(metadata_path.relative_to(run_dir))
+    return artifact_paths
 
 
 def _should_write_trade_diagnostic_artifacts(cfg: dict[str, Any]) -> bool:
@@ -1441,9 +1424,6 @@ def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
     report_assets_dir = run_dir / "report_assets"
     report_assets_dir.mkdir(parents=True, exist_ok=True)
     chart_paths: dict[str, str] = {}
-    for lab_plot_path in sorted(report_assets_dir.glob("lab_feature_diagnostics_*.html")):
-        chart_paths[lab_plot_path.stem] = str(lab_plot_path.relative_to(run_dir))
-
     diagnostics_dir = run_dir / "artifacts" / "diagnostics"
     diagnostic_artifact_paths: dict[str, str] = {}
     if diagnostics_dir.exists():
@@ -1574,10 +1554,8 @@ def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
     chart_paths.update(model_chart_paths)
 
     report_path = run_dir / "report.md"
-    report_html_path = run_dir / "report.html"
     artifact_paths = {
         "report_markdown": "report.md",
-        "report_html": "report.html",
         "config": "config_used.yaml",
         "summary": "summary.json",
         "run_metadata": "run_metadata.json",
@@ -1630,14 +1608,9 @@ def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
     )
     with report_path.open("w", encoding="utf-8") as handle:
         handle.write(report_markdown)
-    report_html_path.write_text(
-        render_markdown_report_html(report_markdown, title=f"Experiment Report: {cfg.get('logging', {}).get('run_name', run_dir.name)}"),
-        encoding="utf-8",
-    )
 
     report_artifacts = {
         "report": str(report_path),
-        "report_html": str(report_html_path),
     }
     for label, rel_path in chart_paths.items():
         report_artifacts[label] = str((run_dir / rel_path).resolve())

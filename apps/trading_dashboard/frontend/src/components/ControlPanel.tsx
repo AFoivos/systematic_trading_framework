@@ -66,6 +66,26 @@ function selectionFromDataset(datasetId: string, datasets: DatasetSummary[]): Pa
   };
 }
 
+function selectionFromExperiment(experimentRunId: string, experiments: ExperimentSummary[], datasets: DatasetSummary[]): Partial<DashboardSelection> {
+  const experiment = experiments.find((item) => item.run_id === experimentRunId);
+  if (!experiment) {
+    return { runId: experimentRunId };
+  }
+  if (experiment.run_type === "market_making") {
+    return { runId: experimentRunId };
+  }
+  const processedDataset = experiment.processed_dataset_id
+    ? datasets.find((dataset) => dataset.id === experiment.processed_dataset_id)
+    : null;
+  return {
+    runId: experimentRunId,
+    datasetId: processedDataset?.id ?? "",
+    asset: processedDataset?.assets[0] ?? experiment.asset ?? "",
+    timeframe: processedDataset?.timeframe ?? experiment.timeframe ?? "",
+    source: processedDataset?.source ?? (processedDataset ? processedDataset.stage : "")
+  };
+}
+
 export function ControlPanel({
   datasets,
   experiments,
@@ -157,7 +177,11 @@ export function ControlPanel({
           Run parameterized series
         </button>
       </section>
-      <PredictionSelector experiments={experiments} selectedRunId={selection.runId} onRunChange={(runId) => onSelectionChange({ runId })} />
+      <PredictionSelector
+        experiments={experiments}
+        selectedRunId={selection.runId}
+        onRunChange={(runId) => onSelectionChange(selectionFromExperiment(runId, experiments, datasets))}
+      />
       <BacktestOverlaySelector experiments={experiments} selectedRunId={selection.runId} onRunChange={(runId) => onSelectionChange({ runId })} />
       <LayoutManager layouts={layouts} onSave={onSaveLayout} onLoad={onLoadLayout} />
     </aside>

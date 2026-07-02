@@ -31,7 +31,6 @@ optuna
 yfinance
 requests
 websockets
-python-pptx
 
 metatrader5; platform_system == "Windows"
 

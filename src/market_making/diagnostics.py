@@ -17,6 +17,7 @@ DIAGNOSTIC_KEYS = [
     "market_quality",
     "risk",
     "markout",
+    "adverse_selection",
     "gaps",
     "warnings",
     "artifacts",
@@ -71,12 +72,20 @@ def build_market_making_diagnostics(
     market_diag, market_rows = _market_quality_diagnostics(orderbook, warnings)
     risk_diag, risk_rows = _risk_diagnostics(quote_events, summary, warnings)
     markout_diag, markout_rows = _markout_diagnostics(trades, orderbook, markout_horizons, warnings)
+    adverse_diag, adverse_rows = _adverse_selection_diagnostics(
+        trades=trades,
+        quote_events=quote_events,
+        orderbook=orderbook,
+        markout_rows=markout_rows,
+        warnings=warnings,
+    )
     gaps = _gap_diagnostics(
         quote_events=quote_events,
         orders=orders,
         orderbook=orderbook,
         fills=trades,
         markout_rows=markout_rows,
+        adverse_selection_rows=adverse_rows,
     )
     run_diag = _run_diagnostics(
         summary=summary,
@@ -100,6 +109,7 @@ def build_market_making_diagnostics(
         "market_quality": market_diag,
         "risk": risk_diag,
         "markout": markout_diag,
+        "adverse_selection": adverse_diag,
         "gaps": gaps,
         "warnings": warnings,
         "artifacts": artifacts,
@@ -111,6 +121,7 @@ def build_market_making_diagnostics(
             "market_quality": market_rows,
             "risk_diagnostics": risk_rows,
             "markout_diagnostics": markout_rows,
+            "adverse_selection_diagnostics": adverse_rows,
         },
     }
     return diagnostics
@@ -177,33 +188,13 @@ def write_market_making_comparison(runs: Sequence[Path], output_dir: str | Path)
     """Write a compact multi-run comparison summary and markdown report."""
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
-    rows: list[dict[str, Any]] = []
-    for run in runs:
-        diagnostics = build_market_making_diagnostics(run)
-        rows.append(
-            {
-                "run_dir": str(run),
-                "total_pnl": diagnostics["run"].get("total_pnl"),
-                "fills": diagnostics["run"].get("number_of_fills"),
-                "quotes": diagnostics["run"].get("number_of_quotes"),
-                "fill_ratio": diagnostics["run"].get("fill_ratio"),
-                "max_drawdown": diagnostics["run"].get("max_drawdown"),
-                "fees": diagnostics["run"].get("fees"),
-                "avg_spread": diagnostics["run"].get("average_spread_quoted"),
-                "avg_abs_inventory": diagnostics["inventory"].get("avg_abs_inventory"),
-                "kill_switches": len(diagnostics["run"].get("kill_switch_events") or []),
-                "warnings_count": len(diagnostics["warnings"]),
-                "diagnostics_gaps": sum(1 for v in diagnostics["gaps"].values() if bool(v) is True),
-            }
-        )
+    rows = [_comparison_row(run) for run in runs]
     frame = pd.DataFrame(rows)
     summary_path = out / "summary.csv"
     report_path = out / "report.md"
-    pptx_path = out / "comparison.pptx"
     frame.to_csv(summary_path, index=False)
     report_path.write_text(_comparison_markdown(frame), encoding="utf-8")
-    _write_comparison_pptx(frame, pptx_path)
-    return {"summary": summary_path, "report": report_path, "pptx": pptx_path}
+    return {"summary": summary_path, "report": report_path}
 
 
 def _run_diagnostics(
@@ -462,6 +453,164 @@ def _markout_diagnostics(
     return result, markouts
 
 
+def _adverse_selection_diagnostics(
+    *,
+    trades: pd.DataFrame,
+    quote_events: pd.DataFrame,
+    orderbook: pd.DataFrame,
+    markout_rows: pd.DataFrame,
+    warnings: list[str],
+) -> tuple[dict[str, Any], pd.DataFrame]:
+    if trades.empty or quote_events.empty or orderbook.empty or markout_rows.empty:
+        warnings.append("Adverse-selection fill context unavailable: requires fills, quote events, orderbook events, and markout rows.")
+        return {"adverse_selection_context_available": False}, pd.DataFrame()
+
+    fills = trades.copy()
+    quotes = quote_events.copy()
+    book = orderbook.copy()
+    markouts = markout_rows.copy()
+    _coerce_numeric(fills)
+    _coerce_numeric(quotes)
+    _coerce_numeric(book)
+    _coerce_numeric(markouts)
+    fills["timestamp"] = _to_datetime(fills.get("timestamp"))
+    quotes["timestamp"] = _to_datetime(quotes.get("timestamp"))
+    book["timestamp"] = _to_datetime(book.get("timestamp"))
+    markouts["timestamp"] = _to_datetime(markouts.get("timestamp"))
+
+    if "quote_event_id" not in quotes or "parent_quote_event_id" not in fills:
+        warnings.append("Adverse-selection fill context unavailable: missing quote lineage columns.")
+        return {"adverse_selection_context_available": False}, pd.DataFrame()
+
+    quotes = quotes.sort_values("timestamp").reset_index(drop=True)
+    book = book.sort_values("timestamp").reset_index(drop=True)
+    book["recent_mid_slope_bps_5"] = _return_bps(book.get("mid_price"), periods=4)
+    mid_returns_bps = pd.Series(book.get("mid_price"), dtype=float).pct_change(fill_method=None) * 10_000.0
+    book["recent_mid_volatility_bps_5"] = mid_returns_bps.rolling(5, min_periods=2).std()
+    book_context_cols = [
+        col
+        for col in [
+            "timestamp",
+            "mid_price",
+            "spread_bps",
+            "imbalance_1",
+            "imbalance_5",
+            "bid_depth_5",
+            "ask_depth_5",
+            "recent_mid_slope_bps_5",
+            "recent_mid_volatility_bps_5",
+        ]
+        if col in book
+    ]
+    quotes = pd.merge_asof(
+        quotes.sort_values("timestamp"),
+        book[book_context_cols].rename(columns={"timestamp": "book_timestamp"}),
+        left_on="timestamp",
+        right_on="book_timestamp",
+        direction="backward",
+    )
+
+    markout_cols = [col for col in markouts.columns if col.startswith("markout_bps_h")]
+    fill_keys = [col for col in ["order_id", "parent_quote_event_id"] if col in fills and col in markouts]
+    if fill_keys:
+        fills = fills.merge(markouts[fill_keys + markout_cols].drop_duplicates(), on=fill_keys, how="left")
+    else:
+        for col in markout_cols:
+            fills[col] = np.nan
+
+    quote_cols = [
+        col
+        for col in [
+            "quote_event_id",
+            "timestamp",
+            "quote_reason",
+            "risk_reason",
+            "spread_bps",
+            "should_quote",
+            "placed",
+            "book_spread_bps",
+            "book_imbalance_1",
+            "book_imbalance_5",
+            "bid_depth_5",
+            "ask_depth_5",
+            "mid_price",
+            "recent_mid_slope_bps_5",
+            "recent_mid_volatility_bps_5",
+        ]
+        if col in quotes
+    ]
+    fills = fills.merge(
+        quotes[quote_cols].rename(
+            columns={
+                "quote_event_id": "parent_quote_event_id",
+                "timestamp": "quote_timestamp",
+                "spread_bps": "quote_spread_bps",
+                "mid_price": "quote_mid_price",
+            }
+        ),
+        on="parent_quote_event_id",
+        how="left",
+    )
+    fills["quoted_side"] = fills.get("side")
+    fills["filter_decision"] = np.where(_to_bool(fills.get("placed", pd.Series(False, index=fills.index))), "allowed", "blocked")
+    fills["book_side_depth_5"] = np.where(fills.get("side") == "buy", fills.get("bid_depth_5"), fills.get("ask_depth_5"))
+    fills["book_opposite_side_depth_5"] = np.where(fills.get("side") == "buy", fills.get("ask_depth_5"), fills.get("bid_depth_5"))
+
+    summary: dict[str, Any] = {
+        "adverse_selection_context_available": True,
+        "fill_count_with_context": int(fills["parent_quote_event_id"].notna().sum()),
+        "context_coverage_rate": _mean(fills["parent_quote_event_id"].notna().astype(float)),
+        "fill_count_by_quote_reason": _counts(fills.get("quote_reason")),
+        "fill_count_by_risk_reason": _counts(fills.get("risk_reason")),
+        "fill_count_by_filter_decision": _counts(fills.get("filter_decision")),
+        "avg_quote_spread_bps": _mean(fills.get("quote_spread_bps")),
+        "avg_book_imbalance_1": _mean(fills.get("book_imbalance_1")),
+        "avg_book_imbalance_5": _mean(fills.get("book_imbalance_5")),
+        "avg_recent_mid_slope_bps_5": _mean(fills.get("recent_mid_slope_bps_5")),
+        "avg_recent_mid_volatility_bps_5": _mean(fills.get("recent_mid_volatility_bps_5")),
+    }
+    for horizon_col in markout_cols:
+        suffix = horizon_col.replace("markout_bps_", "")
+        summary[f"avg_{horizon_col}"] = _mean(fills.get(horizon_col))
+        if "quote_reason" in fills:
+            grouped = (
+                fills.groupby("quote_reason", dropna=True)[horizon_col]
+                .mean()
+                .dropna()
+                .sort_values()
+            )
+            summary[f"avg_{horizon_col}_by_quote_reason"] = {str(k): float(v) for k, v in grouped.items()}
+
+    keep_cols = [
+        col
+        for col in [
+            "order_id",
+            "parent_quote_event_id",
+            "timestamp",
+            "quote_timestamp",
+            "side",
+            "quoted_side",
+            "price",
+            "quantity",
+            "fee",
+            "quote_reason",
+            "risk_reason",
+            "filter_decision",
+            "quote_spread_bps",
+            "book_spread_bps",
+            "book_imbalance_1",
+            "book_imbalance_5",
+            "book_side_depth_5",
+            "book_opposite_side_depth_5",
+            "recent_mid_slope_bps_5",
+            "recent_mid_volatility_bps_5",
+            *markout_cols,
+        ]
+        if col in fills
+    ]
+    return summary, fills[keep_cols]
+
+
 def _pnl_diagnostics(
     summary: Mapping[str, Any],
     pnl: pd.DataFrame,
@@ -657,6 +806,7 @@ def _gap_diagnostics(
     orderbook: pd.DataFrame,
     fills: pd.DataFrame,
     markout_rows: pd.DataFrame,
+    adverse_selection_rows: pd.DataFrame,
 ) -> dict[str, Any]:
     fill_count = 0 if fills.empty else len(fills)
     lineage_available = (
@@ -677,8 +827,56 @@ def _gap_diagnostics(
         "missing_queue_position_model": True,
         "missing_partial_fill_model": True,
         "missing_latency_model": True,
-        "missing_adverse_selection_filter_diagnostics": True,
+        "missing_adverse_selection_filter_diagnostics": adverse_selection_rows.empty,
     }
+
+
+def _comparison_row(run: Path) -> dict[str, Any]:
+    diagnostics = _load_saved_diagnostics_summary(run)
+    if diagnostics is None:
+        diagnostics = build_market_making_diagnostics(run)
+    run_diag = diagnostics.get("run", {})
+    inventory = diagnostics.get("inventory", {})
+    markout = diagnostics.get("markout", {})
+    risk = diagnostics.get("risk", {})
+    gaps = diagnostics.get("gaps", {})
+    return {
+        "run_dir": str(run),
+        "net_pnl": run_diag.get("total_pnl"),
+        "fills": run_diag.get("number_of_fills"),
+        "quotes": run_diag.get("number_of_quotes"),
+        "fills_per_placed_quote": run_diag.get("fills_per_placed_quote"),
+        "fill_ratio": run_diag.get("fill_ratio"),
+        "max_drawdown": run_diag.get("max_drawdown"),
+        "fees": run_diag.get("fees"),
+        "fee_drag_ratio": run_diag.get("fee_drag_ratio"),
+        "quoted_event_rate": run_diag.get("quoted_event_rate"),
+        "risk_reject_rate": _safe_div(risk.get("risk_reject_count"), risk.get("risk_allowed_count", 0) + risk.get("risk_reject_count", 0)),
+        "inventory_limit_utilization": inventory.get("inventory_limit_utilization"),
+        "avg_spread": run_diag.get("average_spread_quoted"),
+        "avg_abs_inventory": inventory.get("avg_abs_inventory"),
+        "avg_markout_bps_h1": markout.get("avg_markout_bps_h1"),
+        "avg_markout_bps_h5": markout.get("avg_markout_bps_h5"),
+        "avg_markout_bps_h10": markout.get("avg_markout_bps_h10"),
+        "avg_markout_bps_h30": markout.get("avg_markout_bps_h30"),
+        "adverse_selection_rate_h1": markout.get("adverse_selection_rate_h1"),
+        "adverse_selection_rate_h5": markout.get("adverse_selection_rate_h5"),
+        "adverse_selection_rate_h10": markout.get("adverse_selection_rate_h10"),
+        "adverse_selection_rate_h30": markout.get("adverse_selection_rate_h30"),
+        "kill_switches": len(run_diag.get("kill_switch_events") or []),
+        "warnings_count": len(diagnostics.get("warnings", [])),
+        "diagnostics_gaps": sum(1 for v in gaps.values() if bool(v) is True),
+    }
+
+
+def _load_saved_diagnostics_summary(run: Path) -> dict[str, Any] | None:
+    path = run / "diagnostics" / "summary.json"
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
 
 
 def _write_plots(out_dir: Path, *, tables: Mapping[str, pd.DataFrame], diagnostics: dict[str, Any]) -> None:
@@ -772,10 +970,19 @@ def _coerce_numeric(frame: pd.DataFrame) -> None:
                 frame[col] = converted
 
 
+def _return_bps(series: Any, *, periods: int) -> pd.Series:
+    s = pd.Series(series, dtype=float)
+    base = s.shift(periods)
+    return np.where(base > 0, (s - base) / base * 10_000.0, np.nan)
+
+
 def _to_datetime(series: Any) -> pd.Series:
     if series is None:
         return pd.Series(dtype="datetime64[ns, UTC]")
-    return pd.to_datetime(series, errors="coerce", utc=True)
+    try:
+        return pd.to_datetime(series, errors="coerce", utc=True, format="mixed")
+    except TypeError:
+        return pd.to_datetime(series, errors="coerce", utc=True)
 
 
 def _to_bool(series: pd.Series) -> pd.Series:
@@ -914,25 +1121,6 @@ def _comparison_markdown(frame: pd.DataFrame) -> str:
             lines.append("| " + " | ".join(str(row[col]) for col in cols) + " |")
     lines.append("")
     return "\n".join(lines)
-
-
-def _write_comparison_pptx(frame: pd.DataFrame, output_path: Path) -> None:
-    try:
-        from pptx import Presentation
-    except Exception:
-        return
-    prs = Presentation()
-    title = prs.slides.add_slide(prs.slide_layouts[0])
-    title.shapes.title.text = "Market Making Run Comparison"
-    title.placeholders[1].text = f"Runs analyzed: {len(frame)}"
-    slide = prs.slides.add_slide(prs.slide_layouts[1])
-    slide.shapes.title.text = "Summary"
-    body = slide.placeholders[1].text_frame
-    body.clear()
-    for idx, row in frame.head(8).iterrows():
-        p = body.paragraphs[0] if idx == 0 else body.add_paragraph()
-        p.text = f"{row.get('run_dir')}: PnL={row.get('total_pnl')}, fills={row.get('fills')}, fill_ratio={row.get('fill_ratio')}"
-    prs.save(output_path)
 
 
 __all__ = [

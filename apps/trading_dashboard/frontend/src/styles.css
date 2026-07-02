@@ -396,6 +396,23 @@ textarea {
   padding: 14px;
 }
 
+.research-main-stack {
+  min-width: 0;
+  overflow: auto;
+  max-height: calc(100vh - 64px);
+  padding: 14px;
+}
+
+.research-main-stack .workspace {
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+}
+
+.research-experiment-panel {
+  margin-top: 12px;
+}
+
 .workspace-focus-backdrop {
   position: fixed;
   inset: 0;

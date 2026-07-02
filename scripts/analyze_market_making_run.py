@@ -13,23 +13,21 @@ from src.market_making.diagnostics import (
     write_market_making_comparison,
     write_market_making_diagnostics,
 )
-from src.market_making.presentation import write_market_making_presentation
 from src.market_making.reporting import write_market_making_markdown_report
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Analyze a market-making paper run.")
-    parser.add_argument("--run-dir", default="reports/market_making")
+    parser.add_argument("--run-dir", default="logs/experiments/market_making")
     parser.add_argument("--orderbook-events", default=None)
     parser.add_argument("--markout-horizons", default="1,5,10,30")
     parser.add_argument("--max-inventory", type=float, default=None)
     parser.add_argument("--no-plots", action="store_true")
     parser.add_argument("--no-report", action="store_true")
-    parser.add_argument("--no-pptx", action="store_true")
     parser.add_argument("--language", choices=["el", "en"], default="el")
     parser.add_argument("--latest", action="store_true")
     parser.add_argument("--all", action="store_true")
-    parser.add_argument("--reports-root", default="reports")
+    parser.add_argument("--reports-root", default="logs/experiments")
     args = parser.parse_args()
 
     horizons = [int(value) for value in args.markout_horizons.split(",") if value.strip()]
@@ -49,10 +47,6 @@ def main() -> None:
     if not args.no_report:
         report_path = write_market_making_markdown_report(run_dir, diagnostics)
         diagnostics["artifacts"]["report.md"] = str(report_path)
-    if not args.no_pptx:
-        pptx_path = write_market_making_presentation(run_dir, diagnostics, language=args.language)
-        if pptx_path.exists():
-            diagnostics["artifacts"]["market_making_diagnostics.pptx"] = str(pptx_path)
     run = diagnostics["run"]
     gaps = diagnostics["gaps"]
     print("Market-making diagnostics")

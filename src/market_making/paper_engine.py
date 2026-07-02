@@ -49,6 +49,7 @@ class PaperAccount:
     initial_cash: float = 0.0
     cash: float = 0.0
     inventory: float = 0.0
+    average_entry_price: float = 0.0
     realized_pnl: float = 0.0
     fees: float = 0.0
     turnover: float = 0.0
@@ -109,8 +110,16 @@ class PaperMarketMakingEngine:
             )
             return False
         self.cancel_all(now=event_time)
-        bid_order_id = self._add_order(quote.symbol, "buy", quote.bid_price, quote.bid_size, event_time, quote_event_id)
-        ask_order_id = self._add_order(quote.symbol, "sell", quote.ask_price, quote.ask_size, event_time, quote_event_id)
+        bid_order_id = (
+            self._add_order(quote.symbol, "buy", quote.bid_price, quote.bid_size, event_time, quote_event_id)
+            if quote.bid_price is not None and quote.bid_size > 0
+            else None
+        )
+        ask_order_id = (
+            self._add_order(quote.symbol, "sell", quote.ask_price, quote.ask_size, event_time, quote_event_id)
+            if quote.ask_price is not None and quote.ask_size > 0
+            else None
+        )
         self.number_of_quotes += 1
         self.spreads_quoted.append(quote.spread_bps)
         self._record_quote_event(
@@ -179,8 +188,11 @@ class PaperMarketMakingEngine:
         return count
 
     def unrealized_pnl(self, mark_price: float) -> float:
-        """Mark inventory at the supplied price."""
-        return self.account.inventory * mark_price
+        """Mark open inventory against its average entry price."""
+        inventory = self.account.inventory
+        if inventory == 0.0:
+            return 0.0
+        return (mark_price - self.account.average_entry_price) * inventory
 
     def total_pnl(self, mark_price: float) -> float:
         """Return realized plus unrealized PnL net of fees."""
@@ -351,11 +363,11 @@ class PaperMarketMakingEngine:
         notional = order.price * order.quantity
         fee = notional * self.maker_fee_bps / 10_000.0
         signed_qty = order.quantity if order.side == "buy" else -order.quantity
-        self.account.inventory += signed_qty
         self.account.cash -= signed_qty * order.price
         self.account.fees += fee
         self.account.turnover += notional
-        self.account.realized_pnl = self.account.cash - self.account.initial_cash - self.account.fees
+        realized_delta = self._update_position(signed_qty=signed_qty, fill_price=order.price)
+        self.account.realized_pnl += realized_delta - fee
         fill = PaperFill(
             order.order_id,
             order.symbol,
@@ -368,6 +380,59 @@ class PaperMarketMakingEngine:
         )
         self.fills.append(fill)
         return fill
+
+    def _update_position(self, *, signed_qty: float, fill_price: float) -> float:
+        """Update signed inventory and realize PnL only on inventory reductions."""
+        inventory = self.account.inventory
+        average_entry_price = self.account.average_entry_price
+        realized_delta = 0.0
+
+        if inventory == 0.0:
+            self.account.inventory = signed_qty
+            self.account.average_entry_price = fill_price if signed_qty != 0.0 else 0.0
+            return realized_delta
+
+        if inventory > 0.0:
+            if signed_qty > 0.0:
+                new_inventory = inventory + signed_qty
+                self.account.average_entry_price = (
+                    (inventory * average_entry_price) + (signed_qty * fill_price)
+                ) / new_inventory
+                self.account.inventory = new_inventory
+                return realized_delta
+            closing_qty = min(inventory, abs(signed_qty))
+            realized_delta = (fill_price - average_entry_price) * closing_qty
+            new_inventory = inventory + signed_qty
+            self.account.inventory = new_inventory
+            if new_inventory > 0.0:
+                self.account.average_entry_price = average_entry_price
+            elif new_inventory < 0.0:
+                self.account.average_entry_price = fill_price
+            else:
+                self.account.average_entry_price = 0.0
+            return realized_delta
+
+        if signed_qty < 0.0:
+            current_abs = abs(inventory)
+            added_abs = abs(signed_qty)
+            new_inventory = inventory + signed_qty
+            self.account.average_entry_price = (
+                (current_abs * average_entry_price) + (added_abs * fill_price)
+            ) / abs(new_inventory)
+            self.account.inventory = new_inventory
+            return realized_delta
+
+        closing_qty = min(abs(inventory), signed_qty)
+        realized_delta = (average_entry_price - fill_price) * closing_qty
+        new_inventory = inventory + signed_qty
+        self.account.inventory = new_inventory
+        if new_inventory < 0.0:
+            self.account.average_entry_price = average_entry_price
+        elif new_inventory > 0.0:
+            self.account.average_entry_price = fill_price
+        else:
+            self.account.average_entry_price = 0.0
+        return realized_delta
 
     @staticmethod
     def _safe_div(num: float, den: float) -> float | None:

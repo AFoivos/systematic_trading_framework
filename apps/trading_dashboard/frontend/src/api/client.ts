@@ -8,7 +8,7 @@ import type {
   TradeRecord,
   TimeValuePoint
 } from "../types/market";
-import type { ExecutionFeatureSnapshot, ExecutionRecordList, ExecutionStatus } from "../types/execution";
+import type { ExecutionFeatureSnapshot, ExecutionRecordList, ExecutionStatus, MarketMakingSnapshot } from "../types/execution";
 import type { DashboardLayout, LayoutSummary } from "../types/visualization";
 import type { ExperimentDetail, ExperimentSummary } from "../types/experiment";
 import type { BuilderDefinition, TransformSeriesRequest, TransformSeriesResponse } from "../types/transforms";
@@ -81,6 +81,7 @@ export const api = {
   executionEvents: (params?: Params) => request<ExecutionRecordList>("/api/execution/events", params),
   executionFeatures: (asset: string, params?: Params) =>
     request<ExecutionFeatureSnapshot>(`/api/execution/features/${encodeURIComponent(asset)}`, params),
+  marketMakingSnapshot: (params?: Params) => request<MarketMakingSnapshot>("/api/execution/market-making", params),
   layouts: () => request<LayoutSummary[]>("/api/layouts"),
   layout: (layoutId: string) => request<DashboardLayout>(`/api/layouts/${encodeURIComponent(layoutId)}`),
   saveLayout: (layout: DashboardLayout) =>

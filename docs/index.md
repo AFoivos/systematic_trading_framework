@@ -33,6 +33,8 @@
   barrier outcomes και R-multiple ερμηνεία.
 - [Model catalog](catalog/models.md): classifiers, forecasters, sequence models,
   feature discovery και RL policies με ερμηνεία outputs.
+- [Market-making subsystem](market_making.md): event-driven paper/research
+  market making, MOMENT quote-filter experiments και diagnostics artifacts.
 - [Execution source audit](execution_source_audit.md): audit για execution
   πηγές και runtime assumptions.
 

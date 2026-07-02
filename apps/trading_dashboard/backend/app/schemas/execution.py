@@ -35,4 +35,17 @@ class ExecutionFeatureSnapshot(BaseModel):
     records: list[dict[str, Any]]
 
 
-__all__ = ["ExecutionFeatureSnapshot", "ExecutionRecordList", "ExecutionStatus"]
+class MarketMakingSnapshot(BaseModel):
+    run_dir: str
+    asset: str
+    row_count: int
+    columns: list[str]
+    numeric_columns: list[str]
+    feature_columns: list[str]
+    market_columns: list[str]
+    records: list[dict[str, Any]]
+    trades: list[dict[str, Any]]
+    summary: dict[str, Any]
+
+
+__all__ = ["ExecutionFeatureSnapshot", "ExecutionRecordList", "ExecutionStatus", "MarketMakingSnapshot"]

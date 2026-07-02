@@ -18,7 +18,6 @@ import pandas as pd
 import yaml
 
 from src.experiments.optuna_runtime import optuna_fold_reporting_context
-from src.experiments.orchestration.reporting import render_markdown_report_html
 from src.utils.config import load_experiment_config
 from src.utils.paths import PROJECT_ROOT, enforce_safe_absolute_path
 from src.utils.run_metadata import build_artifact_manifest
@@ -1260,8 +1259,6 @@ def build_study_objective(
             trial.set_user_attr("experiment_run_dir", result_artifacts["run_dir"])
         if result_artifacts.get("report"):
             trial.set_user_attr("experiment_report", result_artifacts["report"])
-        if result_artifacts.get("report_html"):
-            trial.set_user_attr("experiment_report_html", result_artifacts["report_html"])
         if report_state["reports"]:
             trial.set_user_attr("pruning_reports", list(report_state["reports"]))
         return score
@@ -1382,7 +1379,6 @@ def _flat_trial_row(trial: Any) -> dict[str, Any]:
         "experiment_run_name": user_attrs.get("experiment_run_name"),
         "experiment_run_dir": user_attrs.get("experiment_run_dir"),
         "experiment_report": user_attrs.get("experiment_report"),
-        "experiment_report_html": user_attrs.get("experiment_report_html"),
     }
     for key, value in sorted(ftmo_metrics.items()):
         row[f"ftmo_{key}"] = value
@@ -1472,7 +1468,6 @@ def _study_best_trial_payload(study: Any, *, direction: ObjectiveDirection) -> d
         "experiment_run_name": user_attrs.get("experiment_run_name"),
         "experiment_run_dir": user_attrs.get("experiment_run_dir"),
         "experiment_report": user_attrs.get("experiment_report"),
-        "experiment_report_html": user_attrs.get("experiment_report_html"),
         "trial_failed": user_attrs.get("trial_failed"),
         "exception": user_attrs.get("exception"),
     }
@@ -1639,7 +1634,6 @@ def build_study_report_payload(
                     "experiment_run_name": dict(getattr(trial, "user_attrs", {}) or {}).get("experiment_run_name"),
                     "experiment_run_dir": dict(getattr(trial, "user_attrs", {}) or {}).get("experiment_run_dir"),
                     "experiment_report": dict(getattr(trial, "user_attrs", {}) or {}).get("experiment_report"),
-                    "experiment_report_html": dict(getattr(trial, "user_attrs", {}) or {}).get("experiment_report_html"),
                 }
                 for trial in top_trials
             ],
@@ -1706,7 +1700,6 @@ def _build_study_report_markdown(payload: Mapping[str, Any]) -> str:
                 f"- PnL by session: `{orb_diagnostics.get('pnl_by_session', {})}`",
                 f"- Experiment run name: `{best_trial.get('experiment_run_name', 'n/a')}`",
                 f"- Experiment run dir: `{best_trial.get('experiment_run_dir', 'n/a')}`",
-                f"- Experiment HTML report: `{best_trial.get('experiment_report_html', 'n/a')}`",
                 "",
                 "### Best Params",
             ]
@@ -1834,13 +1827,8 @@ def write_study_report(
         writer.writerows(param_rows)
 
     report_path = run_dir / "report.md"
-    report_html_path = run_dir / "report.html"
     report_markdown = _build_study_report_markdown(payload)
     report_path.write_text(report_markdown, encoding="utf-8")
-    report_html_path.write_text(
-        render_markdown_report_html(report_markdown, title=f"Optuna Study Report: {getattr(study, 'study_name', 'study')}"),
-        encoding="utf-8",
-    )
 
     artifacts = {
         "run_dir": str(run_dir),
@@ -1848,7 +1836,6 @@ def write_study_report(
         "trials": str(trials_path),
         "trial_params": str(trial_params_path),
         "report": str(report_path),
-        "report_html": str(report_html_path),
     }
     manifest = build_artifact_manifest(artifacts)
     manifest_path = run_dir / "artifact_manifest.json"
@@ -2057,8 +2044,6 @@ def _print_cli_summary(study: Any) -> None:
     report_artifacts = dict(user_attrs.get("report_artifacts", {}) or {})
     if report_artifacts.get("report"):
         print(f"Report: {report_artifacts['report']}")
-    if report_artifacts.get("report_html"):
-        print(f"HTML report: {report_artifacts['report_html']}")
 
 
 def main(argv: Sequence[str] | None = None) -> int:

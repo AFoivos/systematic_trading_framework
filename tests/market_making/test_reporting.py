@@ -34,7 +34,6 @@ def test_analyze_market_making_run_cli_writes_diagnostics(tmp_path: Path) -> Non
             "--run-dir",
             str(run),
             "--no-plots",
-            "--no-pptx",
         ],
         check=True,
         text=True,
@@ -44,3 +43,4 @@ def test_analyze_market_making_run_cli_writes_diagnostics(tmp_path: Path) -> Non
     assert "Market-making diagnostics" in result.stdout
     assert (run / "diagnostics" / "summary.json").exists()
     assert (run / "diagnostics" / "report.md").exists()
+    assert not list(run.rglob("*.pptx"))

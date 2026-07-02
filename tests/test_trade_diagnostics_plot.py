@@ -8,7 +8,6 @@ from src.experiments.orchestration.artifacts import (
     _split_lab_feature_columns,
     _should_write_trade_diagnostic_artifacts,
 )
-from src.experiments.orchestration.reporting import render_markdown_report_html
 from src.experiments.orchestration.trade_diagnostics import plot_trade_diagnostics, plotly_chart_config
 from src.plots.price_with_features import plot_price_with_features
 from src.utils.html_reports import write_plotly_dashboard_html
@@ -207,19 +206,6 @@ def test_plotly_dashboard_html_uses_app_shell_and_local_plotly(tmp_path) -> None
     assert 'src="https://cdn.plot.ly/' not in html_text
     assert 'src="plotly.min.js"' in html_text
     assert (tmp_path / "plotly.min.js").exists()
-
-
-def test_markdown_report_html_uses_dashboard_shell() -> None:
-    html_text = render_markdown_report_html(
-        "# Experiment Report: demo\n\n| Metric | Value |\n| --- | --- |\n| sharpe | 1.2 |\n",
-        title="Experiment Report: demo",
-    )
-
-    assert 'class="app-shell"' in html_text
-    assert 'class="top-bar"' in html_text
-    assert 'class="content-surface report-content"' in html_text
-    assert "<h1>Experiment Report: demo</h1>" in html_text
-    assert "<table>" in html_text
 
 
 def test_plot_trade_diagnostics_downsamples_large_timeseries_payload() -> None:

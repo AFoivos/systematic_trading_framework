@@ -7,7 +7,9 @@ interface BacktestOverlaySelectorProps {
 }
 
 export function BacktestOverlaySelector({ experiments, selectedRunId, onRunChange }: BacktestOverlaySelectorProps) {
-  const eligible = experiments.filter((experiment) => experiment.has_trades || experiment.has_equity);
+  const eligible = experiments.filter(
+    (experiment) => experiment.run_type !== "market_making" && (experiment.has_trades || experiment.has_equity)
+  );
   return (
     <section className="control-section">
       <h2>Backtests</h2>
@@ -25,4 +27,3 @@ export function BacktestOverlaySelector({ experiments, selectedRunId, onRunChang
     </section>
   );
 }
-

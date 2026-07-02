@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.api._errors import raise_http_error
-from app.schemas.execution import ExecutionFeatureSnapshot, ExecutionRecordList, ExecutionStatus
+from app.schemas.execution import ExecutionFeatureSnapshot, ExecutionRecordList, ExecutionStatus, MarketMakingSnapshot
 from app.services.execution_monitor import ExecutionMonitorService
 
 
@@ -56,4 +56,24 @@ def get_execution_features(asset: str, log_dir: str | None = None) -> dict:
             "feature_columns": [],
             "market_columns": [],
             "records": [],
+        }
+
+
+@router.get("/execution/market-making", response_model=MarketMakingSnapshot)
+def get_market_making_snapshot(run_dir: str | None = None, symbol: str | None = None, max_points: int = 1200) -> dict:
+    try:
+        return ExecutionMonitorService().market_making_snapshot(run_dir=run_dir, symbol=symbol, max_points=max_points)
+    except Exception as exc:
+        raise_http_error(exc)
+        return {
+            "run_dir": "",
+            "asset": symbol or "",
+            "row_count": 0,
+            "columns": [],
+            "numeric_columns": [],
+            "feature_columns": [],
+            "market_columns": [],
+            "records": [],
+            "trades": [],
+            "summary": {},
         }

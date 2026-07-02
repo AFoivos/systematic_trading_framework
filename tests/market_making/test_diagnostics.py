@@ -6,8 +6,10 @@ from pathlib import Path
 import pandas as pd
 
 from src.market_making.diagnostics import (
+    _to_datetime,
     build_market_making_diagnostics,
     discover_market_making_runs,
+    write_market_making_comparison,
     write_market_making_diagnostics,
 )
 
@@ -96,16 +98,30 @@ def test_diagnostics_handles_missing_optional_files_with_warnings(tmp_path: Path
     assert diagnostics["warnings"]
 
 
+def test_to_datetime_accepts_mixed_iso_timestamp_formats() -> None:
+    parsed = _to_datetime(
+        pd.Series(
+            [
+                "2026-07-01T20:27:01.284919+00:00",
+                "2026-07-01T20:27:23+00:00",
+            ]
+        )
+    )
+
+    assert parsed.notna().all()
+
+
 def test_diagnostics_reads_artifacts_and_writes_summary(tmp_path: Path) -> None:
     run = tmp_path / "run"
     _write_run(run)
 
     diagnostics = write_market_making_diagnostics(run, max_inventory=2.0, make_plots=False)
 
-    assert set(["run", "quote", "fill", "pnl", "inventory", "market_quality", "risk", "markout", "gaps", "warnings", "artifacts"]).issubset(diagnostics)
+    assert set(["run", "quote", "fill", "pnl", "inventory", "market_quality", "risk", "markout", "adverse_selection", "gaps", "warnings", "artifacts"]).issubset(diagnostics)
     assert (run / "diagnostics" / "summary.json").exists()
     assert (run / "diagnostics" / "gaps.json").exists()
     assert (run / "diagnostics" / "quote_diagnostics.csv").exists()
+    assert not list(run.rglob("*.pptx"))
 
 
 def test_saved_summary_contains_plot_artifact_paths(tmp_path: Path) -> None:
@@ -176,6 +192,60 @@ def test_markout_expected_values_and_adverse_selection_rate(tmp_path: Path) -> N
 
     assert diagnostics["markout"]["avg_markout_bps_h1"] == 0.0
     assert diagnostics["markout"]["adverse_selection_rate_h1"] == 0.5
+
+
+def test_adverse_selection_diagnostics_attach_fill_context(tmp_path: Path) -> None:
+    run = tmp_path / "run"
+    _write_run(run)
+
+    diagnostics = build_market_making_diagnostics(run, markout_horizons=(1, 5))
+    context = diagnostics["_tables"]["adverse_selection_diagnostics"]
+
+    assert diagnostics["adverse_selection"]["adverse_selection_context_available"] is True
+    assert diagnostics["gaps"]["missing_adverse_selection_filter_diagnostics"] is False
+    assert not context.empty
+    assert {
+        "quote_reason",
+        "risk_reason",
+        "filter_decision",
+        "book_imbalance_1",
+        "recent_mid_slope_bps_5",
+        "recent_mid_volatility_bps_5",
+        "markout_bps_h1",
+    }.issubset(context.columns)
+
+
+def test_comparison_uses_saved_diagnostics_summary_for_external_orderbook_context(tmp_path: Path) -> None:
+    reports_root = tmp_path / "reports"
+    run = reports_root / "market_making" / "runs" / "20260701_000000_test"
+    _write_run(run)
+    external_orderbook = tmp_path / "external_orderbook_events.csv"
+    (run / "orderbook_events.csv").replace(external_orderbook)
+    write_market_making_diagnostics(run, orderbook_events_path=external_orderbook, make_plots=False)
+
+    artifacts = write_market_making_comparison([run], reports_root / "market_making_comparison")
+    frame = pd.read_csv(artifacts["summary"])
+
+    assert len(frame) == 1
+    assert pd.notna(frame.loc[0, "avg_markout_bps_h1"])
+    assert "fee_drag_ratio" in frame.columns
+    assert "inventory_limit_utilization" in frame.columns
+
+
+def test_comparison_writes_all_discovered_runs(tmp_path: Path) -> None:
+    reports_root = tmp_path / "reports"
+    top_level = reports_root / "market_making"
+    run_a = top_level / "runs" / "20260701_010101_run_a"
+    run_b = top_level / "runs" / "20260701_020202_run_b"
+    _write_run(top_level)
+    _write_run(run_a)
+    _write_run(run_b)
+
+    artifacts = write_market_making_comparison(discover_market_making_runs(reports_root), reports_root / "market_making_comparison")
+    frame = pd.read_csv(artifacts["summary"])
+
+    assert len(frame) == 3
+    assert set(["avg_markout_bps_h5", "adverse_selection_rate_h5", "quoted_event_rate", "fills_per_placed_quote"]).issubset(frame.columns)
 
 
 def test_market_quality_detects_crossed_and_missing_books(tmp_path: Path) -> None:

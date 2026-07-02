@@ -108,6 +108,73 @@ def test_execution_feature_snapshot_returns_empty_payload_when_missing(tmp_path:
     assert snapshot["records"] == []
 
 
+def test_market_making_snapshot_builds_chart_rows_and_trade_markers(tmp_path: Path) -> None:
+    run_dir = tmp_path / "reports" / "market_making"
+    run_dir.mkdir(parents=True)
+    (run_dir / "summary.json").write_text(json.dumps({"number_of_fills": 1, "total_pnl": 12.5}), encoding="utf-8")
+    (run_dir / "orderbook_events.csv").write_text(
+        "\n".join(
+            [
+                "timestamp,symbol,event_type,best_bid,best_ask,mid_price,spread,spread_bps,imbalance_1,imbalance_5,bid_depth_5,ask_depth_5",
+                "2026-07-01T20:27:01+00:00,BTC/USD,snapshot,59916.9,59917.0,59916.95,0.1,0.0166,0.94,0.07,0.16,2.05",
+                "2026-07-01T20:27:02+00:00,BTC/USD,update,59917.0,59917.2,59917.1,0.2,0.0333,0.75,0.03,0.25,1.12",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "inventory_timeseries.csv").write_text(
+        "\n".join(
+            [
+                "timestamp,inventory,mark_price",
+                "2026-07-01T20:27:01+00:00,0.0,59916.95",
+                "2026-07-01T20:27:02+00:00,-0.001,59917.1",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "pnl_timeseries.csv").write_text(
+        "\n".join(
+            [
+                "timestamp,realized_pnl,unrealized_pnl,total_pnl,fees",
+                "2026-07-01T20:27:01+00:00,0.0,0.0,0.0,0.0",
+                "2026-07-01T20:27:02+00:00,10.0,2.5,12.5,0.1",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "trades.csv").write_text(
+        "\n".join(
+            [
+                "order_id,symbol,side,price,quantity,fee,timestamp",
+                "paper-1,BTC/USD,sell,59917.1,0.001,0.1,2026-07-01T20:27:02+00:00",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    service = ExecutionMonitorService(paths=DashboardPaths.from_project_root(tmp_path))
+    snapshot = service.market_making_snapshot()
+
+    assert snapshot["asset"] == "BTC/USD"
+    assert snapshot["row_count"] == 2
+    assert snapshot["records"][-1]["total_pnl"] == 12.5
+    assert snapshot["records"][-1]["inventory"] == -0.001
+    assert snapshot["trades"] == [
+        {
+            "entry_time": "2026-07-01T20:27:02+00:00",
+            "exit_time": None,
+            "side": "short",
+            "entry_price": 59917.1,
+            "exit_price": None,
+            "pnl": None,
+            "return": None,
+            "size": 0.001,
+            "exit_reason": None,
+        }
+    ]
+    assert snapshot["summary"]["number_of_fills"] == 1
+
+
 def _append_jsonl(path: Path, record: dict) -> None:
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(record) + "\n")

@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
-import type { ExecutionAssetSummary, ExecutionFeatureSnapshot, ExecutionStatus, JsonRecord } from "../types/execution";
+import type {
+  ExecutionAssetSummary,
+  ExecutionFeatureSnapshot,
+  ExecutionStatus,
+  JsonRecord
+} from "../types/execution";
 import { ExecutionChartWorkspace } from "./ExecutionChartWorkspace";
 
 const POLL_MS = 15_000;
@@ -329,7 +334,11 @@ export function ExecutionMonitor() {
               </div>
               <div className="wide-panel">
                 <h3>Live Market &amp; Features</h3>
-                <ExecutionChartWorkspace snapshot={featureSnapshot} />
+                <ExecutionChartWorkspace
+                  snapshot={featureSnapshot}
+                  emptyLabel="No MT5 feature snapshot yet"
+                  sourceLabel="Updated"
+                />
               </div>
               <div className="wide-panel">
                 <h3>Latest Values</h3>
@@ -351,7 +360,11 @@ export function ExecutionMonitor() {
               </div>
               <div className="wide-panel">
                 <h3>Live Market &amp; Features</h3>
-                <ExecutionChartWorkspace snapshot={featureSnapshot} />
+                <ExecutionChartWorkspace
+                  snapshot={featureSnapshot}
+                  emptyLabel="No MT5 feature snapshot yet"
+                  sourceLabel="Updated"
+                />
               </div>
             </div>
           )}

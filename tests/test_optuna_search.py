@@ -665,7 +665,6 @@ def test_build_study_objective_records_primary_summary_on_success(monkeypatch: p
             artifacts={
                 "run_dir": "logs/experiments/unit_optuna_trial_0032_20260413_000000_deadbee",
                 "report": "logs/experiments/unit_optuna_trial_0032_20260413_000000_deadbee/report.md",
-                "report_html": "logs/experiments/unit_optuna_trial_0032_20260413_000000_deadbee/report.html",
             },
         ),
     )
@@ -695,10 +694,7 @@ def test_build_study_objective_records_primary_summary_on_success(monkeypatch: p
         trial.user_attrs["experiment_report"]
         == "logs/experiments/unit_optuna_trial_0032_20260413_000000_deadbee/report.md"
     )
-    assert (
-        trial.user_attrs["experiment_report_html"]
-        == "logs/experiments/unit_optuna_trial_0032_20260413_000000_deadbee/report.html"
-    )
+    assert "experiment_report" + "_html" not in trial.user_attrs
 
 
 def test_build_study_objective_supports_pruning(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1320,7 +1316,6 @@ def test_optimize_experiment_wires_fake_optuna_study(monkeypatch: pytest.MonkeyP
         "write_study_report",
         lambda *args, **kwargs: {
             "report": str(tmp_path / "report.md"),
-            "report_html": str(tmp_path / "report.html"),
         },
     )
 
@@ -1356,7 +1351,6 @@ def test_optimize_experiment_wires_fake_optuna_study(monkeypatch: pytest.MonkeyP
     assert study.user_attrs["pruning_metric"] == "classification_metrics.roc_auc"
     assert study.user_attrs["report_artifacts"] == {
         "report": str(tmp_path / "report.md"),
-        "report_html": str(tmp_path / "report.html"),
     }
     assert study.optimize_args == {
         "objective": sentinel_objective,
@@ -1410,7 +1404,6 @@ search_space:
             user_attrs={
                 "report_artifacts": {
                     "report": str(tmp_path / "report.md"),
-                    "report_html": str(tmp_path / "report.html"),
                 }
             },
         )
@@ -1452,7 +1445,8 @@ search_space:
     out = capsys.readouterr().out
     assert "Optuna study completed" in out
     assert "Best trial: 2" in out
-    assert f"HTML report: {tmp_path / 'report.html'}" in out
+    assert f"Report: {tmp_path / 'report.md'}" in out
+    assert "HTML report:" not in out
 
 
 def test_write_study_report_persists_optuna_artifacts(tmp_path: Path) -> None:
@@ -1480,7 +1474,6 @@ def test_write_study_report_persists_optuna_artifacts(tmp_path: Path) -> None:
             "experiment_run_name": "unit_trial_0003",
             "experiment_run_dir": str(tmp_path / "unit_trial_0003"),
             "experiment_report": str(tmp_path / "unit_trial_0003" / "report.md"),
-            "experiment_report_html": str(tmp_path / "unit_trial_0003" / "report.html"),
         },
     )
     failed_trial = SimpleNamespace(
@@ -1519,7 +1512,8 @@ def test_write_study_report_persists_optuna_artifacts(tmp_path: Path) -> None:
     run_dir = Path(artifacts["run_dir"])
     assert run_dir.parent == tmp_path
     assert Path(artifacts["report"]).exists()
-    assert Path(artifacts["report_html"]).exists()
+    assert "report" + "_html" not in artifacts
+    assert not (run_dir / "report.html").exists()
     assert Path(artifacts["trials"]).exists()
     assert Path(artifacts["study_summary"]).exists()
     assert Path(artifacts["manifest"]).exists()
@@ -1539,17 +1533,14 @@ def test_write_study_report_persists_optuna_artifacts(tmp_path: Path) -> None:
     assert "experiment_run_name" in trials.columns
     assert "experiment_run_dir" in trials.columns
     assert "experiment_report" in trials.columns
-    assert "experiment_report_html" in trials.columns
+    assert "experiment_report" + "_html" not in trials.columns
 
     report_text = Path(artifacts["report"]).read_text(encoding="utf-8")
     assert "# Optuna Study Report" in report_text
     assert "Turnover event count" in report_text
     assert "Active week ratio" in report_text
     assert "Experiment run dir" in report_text
-    assert "Experiment HTML report" in report_text
-    report_html_text = Path(artifacts["report_html"]).read_text(encoding="utf-8")
-    assert "<!DOCTYPE html>" in report_html_text
-    assert "<h1>Optuna Study Report</h1>" in report_html_text
+    assert "Experiment HTML report" not in report_text
 
 
 def test_study_report_payload_omits_failed_trials_from_best_trial() -> None:

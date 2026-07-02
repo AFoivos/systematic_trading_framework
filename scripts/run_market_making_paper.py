@@ -7,6 +7,7 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from collections import deque
 from typing import Any
 
 import yaml
@@ -20,12 +21,11 @@ from src.market_data.trades import Trade
 from src.market_making.paper_engine import PaperMarketMakingEngine
 from src.market_making.adverse_selection_filter import AdverseSelectionConfig, AdverseSelectionFilter
 from src.market_making.diagnostics import write_market_making_diagnostics
-from src.market_making.presentation import write_market_making_presentation
 from src.market_making.quote_generator import QuoteDecision, QuoteGenerator, QuoteGeneratorConfig
 from src.market_making.reporting import write_market_making_markdown_report
 from src.market_making.risk import RiskEngine, RiskLimits
 from src.market_making.spread_model import SpreadConfig
-from src.market_making.strategy import MarketMakingStrategy
+from src.market_making.strategy import DirectionalFeatureGate, FeeAwareGate, MarketMakingStrategy, SideSelectionGate
 
 
 @dataclass(frozen=True)
@@ -93,6 +93,30 @@ def build_components(config: dict[str, Any]) -> tuple[Any, PaperMarketMakingEngi
     )
     filters = config.get("filters", {})
     quote_source: Any = quote_generator
+    fee_gate: FeeAwareGate | None = None
+    side_gate: SideSelectionGate | None = None
+    directional_gate: DirectionalFeatureGate | None = None
+    if bool(filters.get("use_fee_aware_gate", False)):
+        fee_gate = FeeAwareGate(
+            maker_fee_bps=float(fees.get("maker_fee_bps", 0.0)),
+            min_expected_edge_bps=float(filters.get("min_expected_edge_bps", 0.0)),
+            adverse_selection_buffer_bps=float(filters.get("adverse_selection_buffer_bps", 0.0)),
+            inventory_penalty_bps_per_unit=float(filters.get("inventory_penalty_bps_per_unit", 0.0)),
+        )
+    if bool(filters.get("use_side_selection_gate", False)):
+        side_gate = SideSelectionGate(
+            microprice_offset_threshold_bps=float(filters.get("microprice_offset_threshold_bps", 0.0)),
+            inventory_soft_limit_ratio=float(filters.get("inventory_soft_limit_ratio", 1.0)),
+            allowed_side_mode=str(filters.get("allowed_side_mode", "both")),
+        )
+    if bool(filters.get("use_directional_feature_gate", False)):
+        directional_gate = DirectionalFeatureGate(
+            microprice_offset_threshold_bps=float(filters.get("feature_microprice_offset_threshold_bps", 0.0)),
+            imbalance_threshold=float(filters.get("feature_imbalance_threshold", 0.0)),
+            trend_threshold_bps=float(filters.get("feature_trend_threshold_bps", 0.0)),
+            max_volatility_bps=float(filters.get("feature_max_volatility_bps", 1.0e9)),
+            edge_credit_bps=float(filters.get("feature_edge_credit_bps", 0.0)),
+        )
     if bool(filters.get("use_adverse_selection_filter", False)):
         adverse_filter = AdverseSelectionFilter(
             AdverseSelectionConfig(
@@ -102,7 +126,24 @@ def build_components(config: dict[str, Any]) -> tuple[Any, PaperMarketMakingEngi
                 disable_on_strong_trend=bool(filters.get("disable_on_strong_trend", True)),
             )
         )
-        quote_source = StrategyQuoteAdapter(MarketMakingStrategy(quote_generator=quote_generator, adverse_filter=adverse_filter))
+        quote_source = StrategyQuoteAdapter(
+            MarketMakingStrategy(
+                quote_generator=quote_generator,
+                adverse_filter=adverse_filter,
+                fee_aware_gate=fee_gate,
+                side_selection_gate=side_gate,
+                directional_feature_gate=directional_gate,
+            )
+        )
+    elif fee_gate is not None or side_gate is not None or directional_gate is not None:
+        quote_source = StrategyQuoteAdapter(
+            MarketMakingStrategy(
+                quote_generator=quote_generator,
+                fee_aware_gate=fee_gate,
+                side_selection_gate=side_gate,
+                directional_feature_gate=directional_gate,
+            )
+        )
     risk_engine = RiskEngine(
         RiskLimits(
             max_inventory=float(mm.get("max_inventory", 0.01)),
@@ -126,7 +167,16 @@ def build_components(config: dict[str, Any]) -> tuple[Any, PaperMarketMakingEngi
 def run_synthetic_paper(config: dict[str, Any], *, duration_seconds: int, output_dir: str | Path | None = None) -> dict[str, Any]:
     """Run the original deterministic synthetic paper simulation."""
     symbol = config.get("execution", {}).get("symbol", "PI_XBTUSD")
-    output_dir = output_dir or config.get("logging", {}).get("output_dir", "reports/market_making")
+    output_dir = (
+        Path(output_dir)
+        if output_dir is not None
+        else resolve_output_dir(
+            config,
+            timestamped_output=True,
+            data_source="synthetic",
+            fill_model="trade_through",
+        )
+    )
     quote_generator, engine = build_components(config)
 
     book = LocalOrderBook(symbol)
@@ -165,12 +215,25 @@ def run_synthetic_paper(config: dict[str, Any], *, duration_seconds: int, output
 def run_csv_orderbook_replay(config: dict[str, Any], *, input_events: str | Path, output_dir: str | Path | None = None) -> dict[str, Any]:
     """Run paper market making on reconstructed Kraken order book CSV events."""
     events, input_event_count, skipped_events = load_orderbook_events(input_events)
-    output_dir = output_dir or config.get("logging", {}).get("output_dir", "reports/market_making")
+    output_dir = (
+        Path(output_dir)
+        if output_dir is not None
+        else resolve_output_dir(
+            config,
+            timestamped_output=True,
+            data_source="kraken_orderbook_csv",
+            fill_model="top_of_book_crossing",
+        )
+    )
     quote_generator, engine = build_components(config)
     book: LocalOrderBook | None = None
     quoted_events = 0
     reconstructed_book_events = 0
     mark_price = 0.0
+    recent_returns: deque[float] = deque(
+        maxlen=int(config.get("market_making", {}).get("feature_return_lookback", 5))
+    )
+    previous_mid: float | None = None
 
     for idx, event in enumerate(events):
         if book is None or book.symbol != event.symbol:
@@ -183,7 +246,14 @@ def run_csv_orderbook_replay(config: dict[str, Any], *, input_events: str | Path
         )
         reconstructed_book_events += 1
         mark_price = book.mid_price or mark_price
-        quote = quote_generator.generate(book=book, inventory=engine.account.inventory, recent_returns=[])
+        current_mid = book.mid_price
+        if previous_mid is not None and current_mid is not None and previous_mid > 0:
+            recent_returns.append((current_mid - previous_mid) / previous_mid)
+        quote = quote_generator.generate(
+            book=book,
+            inventory=engine.account.inventory,
+            recent_returns=list(recent_returns),
+        )
         placed = engine.place_quote(quote=quote, book=book, now=event.timestamp)
         if placed:
             quoted_events += 1
@@ -200,6 +270,7 @@ def run_csv_orderbook_replay(config: dict[str, Any], *, input_events: str | Path
             if fills:
                 logging.info("event=%s fills=%s inventory=%.6f", idx, len(fills), engine.account.inventory)
             mark_price = (next_event.best_bid + next_event.best_ask) / 2.0
+        previous_mid = current_mid
 
     summary = engine.write_report(
         output_dir,
@@ -237,12 +308,6 @@ def _maybe_write_diagnostics(
         )
         if bool(diag_cfg.get("make_report", True)):
             write_market_making_markdown_report(output_dir, diagnostics)
-        if bool(diag_cfg.get("make_presentation", True)):
-            write_market_making_presentation(
-                output_dir,
-                diagnostics,
-                language=diag_cfg.get("language", "el"),
-            )
     except Exception as exc:
         logging.exception("Market-making diagnostics generation failed: %s", exc)
 
@@ -259,7 +324,7 @@ def resolve_output_dir(
     """Resolve run output directory using CLI > timestamped > YAML precedence."""
     if explicit_output_dir:
         return Path(explicit_output_dir)
-    yaml_output = Path(config.get("logging", {}).get("output_dir", "reports/market_making"))
+    yaml_output = Path(config.get("logging", {}).get("output_dir", "logs/experiments/market_making"))
     if not timestamped_output:
         return yaml_output
     stamp = (now or datetime.now(timezone.utc)).strftime("%Y%m%d_%H%M%S")
@@ -351,23 +416,9 @@ def main() -> None:
         raise SystemExit("Kraken CSV paper runner requires execution.mode: paper or data_only.")
     logging.basicConfig(level=getattr(logging, config.get("logging", {}).get("level", "INFO")))
     if args.input_events:
-        output_dir = resolve_output_dir(
-            config,
-            explicit_output_dir=args.output_dir,
-            timestamped_output=args.timestamped_output,
-            data_source="kraken_orderbook_csv",
-            fill_model="top_of_book_crossing",
-        )
-        run_csv_orderbook_replay(config, input_events=args.input_events, output_dir=output_dir)
+        run_csv_orderbook_replay(config, input_events=args.input_events, output_dir=args.output_dir)
     else:
-        output_dir = resolve_output_dir(
-            config,
-            explicit_output_dir=args.output_dir,
-            timestamped_output=args.timestamped_output,
-            data_source="synthetic",
-            fill_model="trade_through",
-        )
-        run_synthetic_paper(config, duration_seconds=args.duration_seconds, output_dir=output_dir)
+        run_synthetic_paper(config, duration_seconds=args.duration_seconds, output_dir=args.output_dir)
 
 
 if __name__ == "__main__":

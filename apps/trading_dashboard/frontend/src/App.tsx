@@ -4,8 +4,10 @@ import { api } from "./api/client";
 import { ChartWorkspace } from "./components/ChartWorkspace";
 import { ControlPanel } from "./components/ControlPanel";
 import { ExecutionMonitor } from "./components/ExecutionMonitor";
+import { MarketMakingExperimentPanel } from "./components/MarketMakingExperimentPanel";
 import { SeriesStyleEditor } from "./components/SeriesStyleEditor";
 import { useDashboardStore } from "./state/dashboardStore";
+import type { ExperimentSummary } from "./types/experiment";
 import type { NamedSeries } from "./types/market";
 import { seriesKey } from "./utils/transforms";
 
@@ -129,6 +131,10 @@ export default function App() {
     () => datasets.find((dataset) => dataset.id === selection.datasetId),
     [datasets, selection.datasetId]
   );
+  const selectedExperiment = useMemo<ExperimentSummary | null>(
+    () => experiments.find((experiment) => experiment.run_id === selection.runId) ?? null,
+    [experiments, selection.runId]
+  );
 
   useEffect(() => {
     if (!selection.datasetId && !selection.asset) {
@@ -216,6 +222,10 @@ export default function App() {
       state.setMarketData({ trades: [], equity: [] });
       return;
     }
+    if (selectedExperiment?.run_type === "market_making") {
+      state.setMarketData({ trades: [], equity: [] });
+      return;
+    }
     let cancelled = false;
     Promise.all([api.trades(selection.runId, { asset: selection.asset || undefined }), api.equity(selection.runId)])
       .then(([tradeData, equityData]) => {
@@ -232,7 +242,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [selection.asset, selection.runId]);
+  }, [selection.asset, selection.runId, selectedExperiment?.run_type]);
 
   const saveLayout = (name: string) => {
     api
@@ -336,15 +346,18 @@ export default function App() {
           onSaveLayout={saveLayout}
           onLoadLayout={loadLayout}
         />
-        <ChartWorkspace
-          candles={candles}
-          configs={seriesConfigs}
-          seriesData={seriesData}
-          trades={trades}
-          loadingMessage={loadingMessage}
-          errorMessage={errorMessage}
-          dataWindowLabel={dataWindowLabel}
-        />
+        <div className="research-main-stack">
+          <ChartWorkspace
+            candles={candles}
+            configs={seriesConfigs}
+            seriesData={seriesData}
+            trades={trades}
+            loadingMessage={loadingMessage}
+            errorMessage={errorMessage}
+            dataWindowLabel={dataWindowLabel}
+          />
+          {selectedExperiment?.run_type === "market_making" ? <MarketMakingExperimentPanel /> : null}
+        </div>
         <SeriesStyleEditor
           configs={seriesConfigs}
           activeKey={activeSeriesKey}

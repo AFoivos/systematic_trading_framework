@@ -39,11 +39,11 @@ diagnostics:
     enabled: false
 ```
 
-Τα νέα outputs γράφονται κάτω από `report_assets/` όταν υπάρχουν αρκετά trade
+Τα structured outputs γράφονται κάτω από `report_assets/` όταν υπάρχουν αρκετά trade
 metadata: `trades_enriched.csv`, `trade_paths.parquet` ή fallback
 `trade_paths.csv`, `probability_trade_quality.csv`,
 `counterfactual_exit_summary.csv` και diagnostic JSON warnings. Τα legacy
-`trade_diagnostics_*.html` δεν παράγονται πλέον.
+HTML diagnostics όπως `trade_diagnostics_*.html` και `report.html` δεν παράγονται πλέον.
 
 ## Νέα δομή φακέλων
 
@@ -62,6 +62,9 @@ metadata: `trades_enriched.csv`, `trade_paths.parquet` ή fallback
   feature step
 - `src/features/helpers/registry.py`: registry για transform helpers και
   normalization helpers
+- `config/experiments/market_making/`: research-only event-driven market-making
+  experiments, όπως `market_making_moment.yaml`. Τα outputs γράφονται κάτω από
+  `logs/experiments/market_making/` και δεν παράγουν HTML/PPTX artifacts.
 
 Για πλήρη κατηγοριοποιημένη ερμηνεία κάθε helper, δες το
 [`catalog/helpers.md`](catalog/helpers.md). Για πλήρη κατηγοριοποιημένη

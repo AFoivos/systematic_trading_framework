@@ -110,12 +110,12 @@ python scripts/run_market_making_paper.py --config config/execution/kraken_futur
 
 Παράγει:
 
-- `reports/market_making/summary.json`
-- `reports/market_making/trades.csv`
-- `reports/market_making/orders.csv`
-- `reports/market_making/quote_events.csv`
-- `reports/market_making/pnl_timeseries.csv`
-- `reports/market_making/inventory_timeseries.csv`
+- `logs/experiments/market_making/summary.json`
+- `logs/experiments/market_making/trades.csv`
+- `logs/experiments/market_making/orders.csv`
+- `logs/experiments/market_making/quote_events.csv`
+- `logs/experiments/market_making/pnl_timeseries.csv`
+- `logs/experiments/market_making/inventory_timeseries.csv`
 
 Το fill model είναι conservative:
 
@@ -128,20 +128,20 @@ python scripts/run_market_making_paper.py --config config/execution/kraken_futur
 Κάθε paper run μπορεί να παράγει local-first diagnostics κάτω από:
 
 ```text
-reports/market_making/diagnostics/
+logs/experiments/market_making/diagnostics/
 ```
 
 Χειροκίνητη ανάλυση υπάρχοντος run:
 
 ```bash
-python scripts/analyze_market_making_run.py --run-dir reports/market_making
+python scripts/analyze_market_making_run.py --run-dir logs/experiments/market_making
 ```
 
 Docker-first:
 
 ```bash
 docker compose run --rm app python scripts/analyze_market_making_run.py \
-  --run-dir reports/market_making \
+  --run-dir logs/experiments/market_making \
   --max-inventory 0.01 \
   --language el
 ```
@@ -150,21 +150,21 @@ docker compose run --rm app python scripts/analyze_market_making_run.py \
 
 ```bash
 python scripts/analyze_market_making_run.py \
-  --run-dir reports/market_making \
-  --orderbook-events reports/market_making/orderbook_events.csv \
+  --run-dir logs/experiments/market_making \
+  --orderbook-events logs/experiments/market_making/orderbook_events.csv \
   --max-inventory 0.01
 ```
 
 Ανάλυση πιο πρόσφατου run:
 
 ```bash
-python scripts/analyze_market_making_run.py --latest --reports-root reports
+python scripts/analyze_market_making_run.py --latest --reports-root logs/experiments
 ```
 
 Ανάλυση όλων των runs και comparison report:
 
 ```bash
-python scripts/analyze_market_making_run.py --all --reports-root reports
+python scripts/analyze_market_making_run.py --all --reports-root logs/experiments
 ```
 
 Timestamped Kraken CSV paper replay:
@@ -172,14 +172,14 @@ Timestamped Kraken CSV paper replay:
 ```bash
 docker compose run --rm app python scripts/run_market_making_paper.py \
   --config config/execution/kraken_futures_demo_market_making.yaml \
-  --input-events reports/market_making/orderbook_events.csv \
+  --input-events logs/experiments/market_making/orderbook_events.csv \
   --timestamped-output
 ```
 
 Με `--timestamped-output`, το run γράφεται σε:
 
 ```text
-reports/market_making/runs/YYYYMMDD_HHMMSS_<data_source>_<fill_model>
+logs/experiments/market_making/runs/YYYYMMDD_HHMMSS_<data_source>_<fill_model>
 ```
 
 Με explicit output directory:
@@ -187,8 +187,8 @@ reports/market_making/runs/YYYYMMDD_HHMMSS_<data_source>_<fill_model>
 ```bash
 python scripts/run_market_making_paper.py \
   --config config/execution/kraken_futures_demo_market_making.yaml \
-  --input-events reports/market_making/orderbook_events.csv \
-  --output-dir reports/market_making/runs/my_replay
+  --input-events logs/experiments/market_making/orderbook_events.csv \
+  --output-dir logs/experiments/market_making/runs/my_replay
 ```
 
 Generated files:
@@ -196,7 +196,6 @@ Generated files:
 - `diagnostics/summary.json`
 - `diagnostics/gaps.json`
 - `diagnostics/report.md`
-- `diagnostics/market_making_diagnostics.pptx`, αν υπάρχει `python-pptx`
 - `diagnostics/quote_diagnostics.csv`
 - `diagnostics/fill_diagnostics.csv`
 - `diagnostics/pnl_attribution.csv`
@@ -229,7 +228,42 @@ Known limitations:
 - Το markout απαιτεί διαθέσιμα `orderbook_events.csv`.
 - Το PnL attribution είναι approximate εκτός αν υπάρχει πλήρης quote/order/fill linkage.
 - Τα paper replay fills δεν είναι ακόμη venue-realistic, γιατί δεν υπάρχει queue position, partial fills ή latency-aware matching.
-- Το PowerPoint generation είναι optional και παραλείπεται χωρίς failure αν λείπει `python-pptx`.
+- Τα diagnostics είναι JSON/CSV/Markdown-first. Δεν παράγονται legacy PowerPoint decks.
+
+### MOMENT research experiment
+
+`config/experiments/market_making/market_making_moment.yaml` defines a research-only experiment that evaluates
+MOMENT-style time-series features as a final quote filter. It does not place live or demo orders.
+The runner consumes local order-book and quote-event CSVs, builds a quote-level dataset, applies a
+chronological split, scores buy and sell quote candidates separately, and compares the current
+baseline strategy against the MOMENT-filtered variant on the same events:
+
+```bash
+python scripts/run_market_making_moment_experiment.py \
+  --config config/experiments/market_making/market_making_moment.yaml
+```
+
+The objective is not standalone price forecasting. The objective is reducing toxic fills and
+improving fee-adjusted markout after maker fees and safety buffers. MOMENT is a general pretrained
+time-series model, not a market-making- or stock-market-specialized model; it must be evaluated and,
+when enabled, fine-tuned on local order-book data before any operational use.
+
+Outputs are written under `logs/experiments/market_making/market_making_moment_<timestamp>_<hash>/` and follow the
+classic experiment artifact style:
+
+- `summary.json`
+- `run_metadata.json`
+- `artifact_manifest.json`
+- `config_used.yaml`
+- `returns.csv`, `equity_curve.csv`, `gross_returns.csv`, `costs.csv`, `turnover.csv`, `positions.csv`
+- `trades.csv`, `quote_decisions.csv`, `moment_predictions.csv`
+- `moment_dataset.parquet`
+- `baseline_vs_moment.csv` and `baseline_vs_moment.json`
+- optional `report.md`
+
+The pipeline is JSON/CSV/Markdown/Parquet-only. It does not generate HTML or PowerPoint artifacts.
+Production, demo, and live use remains disabled until queue-position, latency, and partial-fill
+modeling are implemented and validated.
 
 ### Kraken Futures demo mode
 

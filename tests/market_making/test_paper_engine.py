@@ -56,8 +56,9 @@ def test_virtual_buy_fill_updates_inventory_cash_and_fees() -> None:
     assert len(fills) == 1
     assert fills[0].side == "buy"
     assert engine.account.inventory == 1.0
+    assert engine.account.average_entry_price == pytest.approx(99.0)
     assert engine.account.fees == pytest.approx(0.099)
-    assert engine.account.realized_pnl == pytest.approx(-99.099)
+    assert engine.account.realized_pnl == pytest.approx(-0.099)
 
 
 def test_virtual_sell_fill_updates_inventory_and_pnl() -> None:
@@ -84,6 +85,9 @@ def test_report_summary_tracks_fill_ratio_and_drawdown(tmp_path) -> None:
 
     assert summary.number_of_fills == 1
     assert summary.number_of_quotes == 1
+    assert summary.realized_pnl == pytest.approx(0.0)
+    assert summary.unrealized_pnl == pytest.approx(1.0)
+    assert summary.total_pnl == pytest.approx(1.0)
     assert (tmp_path / "summary.json").exists()
     assert (tmp_path / "orders.csv").exists()
     assert (tmp_path / "trades.csv").exists()

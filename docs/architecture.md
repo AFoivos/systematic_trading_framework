@@ -101,6 +101,15 @@ orchestration/artifact layer. Αυτά τα diagnostics είναι reporting/EDA
 Ιδιοκτήτης για paper/demo execution outputs και MT5 demo runner. Live/demo
 orders προστατεύονται από explicit safety gates.
 
+### `src/market_making`
+
+Ιδιοκτήτης για event-driven market-making components: quote generation, paper
+engine, risk checks, diagnostics, MOMENT research dataset/model/filter helpers
+και experiment artifact writers. Τα research configs ανήκουν κάτω από
+`config/experiments/market_making/` και γράφουν outputs στο
+`logs/experiments/market_making/`. Τα demo/live adapters παραμένουν ξεχωριστά
+και δεν ενεργοποιούνται από research experiments.
+
 ## Registries
 
 Τα canonical registries βρίσκονται ανά package:

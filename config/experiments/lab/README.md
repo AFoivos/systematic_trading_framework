@@ -11,5 +11,5 @@ Signal and target catalog entries are optional: enable zero or one signal and ze
 target. With zero enabled signals, the loader emits a flat zero signal at `backtest.signal_col`
 so the runner can still produce artifacts for feature-only EDA. Keep the selected signal aligned
 with `backtest.signal_col` when you want trade diagnostics. Experiment artifacts are written
-under `logs/experiments/lab/<run_name>_<timestamp>_<id>/`, including the interactive Plotly
-diagnostics HTML in `report_assets/`.
+under `logs/experiments/lab/<run_name>_<timestamp>_<id>/` as structured JSON/CSV/Markdown and
+PNG files; legacy HTML diagnostics are not emitted.

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ExecutionFeatureSnapshot, JsonRecord } from "../types/execution";
-import type { OHLCVCandle, TimeValuePoint } from "../types/market";
+import type { ExecutionFeatureSnapshot, MarketMakingSnapshot } from "../types/execution";
+import type { OHLCVCandle, TimeValuePoint, TradeRecord } from "../types/market";
 import type { ChartTarget, RenderType, VisualizationConfig } from "../types/visualization";
 import { buildDefaultSeriesConfig, groupLowerPanelConfigs, seriesKey } from "../utils/transforms";
 import { LinkedChartStack } from "./CandlestickChart";
 
 const EXECUTION_SOURCE = "execution_feature";
+type ChartSnapshot = ExecutionFeatureSnapshot | MarketMakingSnapshot;
 const chartTargets: Array<{ value: ChartTarget; label: string }> = [
   { value: "main_price_chart", label: "Main chart" },
   { value: "lower_panel", label: "Lower panel" }
@@ -23,12 +24,12 @@ function numericValue(value: unknown): number | null {
   return null;
 }
 
-function recordTime(record: JsonRecord): string | null {
+function recordTime(record: Record<string, unknown>): string | null {
   const value = record.time;
   return typeof value === "string" && value.trim() ? value : null;
 }
 
-function snapshotCandles(snapshot: ExecutionFeatureSnapshot): OHLCVCandle[] {
+function snapshotCandles(snapshot: ChartSnapshot): OHLCVCandle[] {
   return snapshot.records.flatMap((record) => {
     const time = recordTime(record);
     const open = numericValue(record.open);
@@ -42,7 +43,7 @@ function snapshotCandles(snapshot: ExecutionFeatureSnapshot): OHLCVCandle[] {
   });
 }
 
-function snapshotSeries(snapshot: ExecutionFeatureSnapshot): Record<string, TimeValuePoint[]> {
+function snapshotSeries(snapshot: ChartSnapshot): Record<string, TimeValuePoint[]> {
   return snapshot.feature_columns.reduce<Record<string, TimeValuePoint[]>>((result, column) => {
     result[seriesKey(EXECUTION_SOURCE, column)] = snapshot.records.flatMap((record) => {
       const time = recordTime(record);
@@ -54,6 +55,15 @@ function snapshotSeries(snapshot: ExecutionFeatureSnapshot): Record<string, Time
 }
 
 function newConfig(column: string, index: number): VisualizationConfig {
+  if (column === "mid_price" || column === "mark_price") {
+    return {
+      ...buildDefaultSeriesConfig(EXECUTION_SOURCE, column, index),
+      chart_target: "main_price_chart",
+      render_type: "line",
+      panel_id: null,
+      visible: column === "mid_price"
+    };
+  }
   return {
     ...buildDefaultSeriesConfig(EXECUTION_SOURCE, column, index),
     visible: index === 0
@@ -71,10 +81,18 @@ function syncConfigs(current: VisualizationConfig[], columns: string[]): Visuali
 }
 
 interface ExecutionChartWorkspaceProps {
-  snapshot: ExecutionFeatureSnapshot | null;
+  snapshot: ChartSnapshot | null;
+  trades?: TradeRecord[];
+  emptyLabel?: string;
+  sourceLabel?: string;
 }
 
-export function ExecutionChartWorkspace({ snapshot }: ExecutionChartWorkspaceProps) {
+export function ExecutionChartWorkspace({
+  snapshot,
+  trades = [],
+  emptyLabel = "No chart snapshot yet",
+  sourceLabel = "Updated"
+}: ExecutionChartWorkspaceProps) {
   const [configs, setConfigs] = useState<VisualizationConfig[]>([]);
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -118,6 +136,16 @@ export function ExecutionChartWorkspace({ snapshot }: ExecutionChartWorkspacePro
     [configs]
   );
   const panels = useMemo(() => groupLowerPanelConfigs(configs), [configs]);
+  const snapshotTime = useMemo(() => {
+    if (!snapshot) {
+      return null;
+    }
+    if ("bar_time" in snapshot && snapshot.bar_time) {
+      return snapshot.bar_time;
+    }
+    const lastRecord = snapshot.records[snapshot.records.length - 1];
+    return lastRecord ? recordTime(lastRecord) : null;
+  }, [snapshot]);
   const active = configs.find((config) => seriesKey(config.source_type, config.series_id) === activeKey) ?? null;
   const normalizedQuery = query.trim().toLowerCase();
   const filteredConfigs = useMemo(
@@ -135,7 +163,7 @@ export function ExecutionChartWorkspace({ snapshot }: ExecutionChartWorkspacePro
   };
 
   if (!snapshot || snapshot.row_count === 0) {
-    return <p className="empty-copy">No MT5 feature snapshot yet</p>;
+    return <p className="empty-copy">{emptyLabel}</p>;
   }
   if (configs.length === 0) {
     return <p className="empty-copy">No numeric feature columns found</p>;
@@ -150,8 +178,8 @@ export function ExecutionChartWorkspace({ snapshot }: ExecutionChartWorkspacePro
           <div className="workspace-status execution-chart-status">
             <span>{candles.length.toLocaleString()} candles</span>
             <span>{visibleCount} visible features</span>
-            <span>{snapshot.timeframe || "timeframe n/a"}</span>
-            <span>Updated {snapshot.bar_time ? new Date(snapshot.bar_time).toLocaleString() : "n/a"}</span>
+            <span>{"timeframe" in snapshot ? snapshot.timeframe || "timeframe n/a" : "event stream"}</span>
+            <span>{sourceLabel} {snapshotTime ? new Date(snapshotTime).toLocaleString() : "n/a"}</span>
           </div>
           <button
             className="secondary-button workspace-toggle-button"
@@ -170,7 +198,7 @@ export function ExecutionChartWorkspace({ snapshot }: ExecutionChartWorkspacePro
           overlays={overlays}
           panels={panels}
           seriesData={seriesData}
-          trades={[]}
+          trades={trades}
           sizeMode={isExpanded ? "expanded" : "standard"}
         />
         <div className="execution-chart-legend" aria-label="Visible feature legend">

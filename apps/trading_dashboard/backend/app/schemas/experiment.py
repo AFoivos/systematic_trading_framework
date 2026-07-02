@@ -8,11 +8,14 @@ from pydantic import BaseModel, ConfigDict, Field
 class ExperimentSummary(BaseModel):
     run_id: str
     name: str
+    run_type: str = "experiment"
     path: str
     created_at_utc: str | None = None
     asset: str | None = None
     timeframe: str | None = None
     config_hash_sha256: str | None = None
+    processed_dataset_id: str | None = None
+    processed_dataset_path: str | None = None
     has_trades: bool
     has_equity: bool
     metrics: dict[str, Any]
@@ -21,6 +24,7 @@ class ExperimentSummary(BaseModel):
 class ExperimentDetail(BaseModel):
     run_id: str
     name: str
+    run_type: str = "experiment"
     path: str
     metadata: dict[str, Any]
     config: dict[str, Any]
@@ -29,6 +33,8 @@ class ExperimentDetail(BaseModel):
     available_predictions: list[str]
     available_trades: list[str]
     available_equity: str | None = None
+    processed_dataset_id: str | None = None
+    processed_dataset_path: str | None = None
 
 
 class TradeRecord(BaseModel):

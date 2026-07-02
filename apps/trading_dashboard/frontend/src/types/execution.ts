@@ -43,3 +43,16 @@ export interface ExecutionFeatureSnapshot {
   market_columns: string[];
   records: JsonRecord[];
 }
+
+export interface MarketMakingSnapshot {
+  run_dir: string;
+  asset: string;
+  row_count: number;
+  columns: string[];
+  numeric_columns: string[];
+  feature_columns: string[];
+  market_columns: string[];
+  records: JsonRecord[];
+  trades: JsonRecord[];
+  summary: JsonRecord;
+}

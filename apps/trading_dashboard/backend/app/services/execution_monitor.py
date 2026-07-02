@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import deque
+import csv
 from datetime import datetime, timezone
 import ctypes
 from ctypes import wintypes
@@ -13,6 +14,7 @@ from app.core.paths import DashboardPaths, get_paths
 
 
 DEFAULT_LOG_DIR = "logs/mt5_demo"
+DEFAULT_MARKET_MAKING_DIR = "reports/market_making"
 STREAMS = (
     "account_equity",
     "signals",
@@ -118,6 +120,109 @@ class ExecutionMonitorService:
             ),
         }
 
+    def market_making_snapshot(
+        self,
+        *,
+        run_dir: str | None = None,
+        symbol: str | None = None,
+        max_points: int = 1200,
+    ) -> dict[str, Any]:
+        resolved = self._resolve_market_making_dir(run_dir)
+        orderbook_rows = self._read_csv_records(resolved / "orderbook_events.csv")
+        trades = self._read_csv_records(resolved / "trades.csv")
+        inventory_rows = self._read_csv_records(resolved / "inventory_timeseries.csv")
+        pnl_rows = self._read_csv_records(resolved / "pnl_timeseries.csv")
+        summary = self._read_json(resolved / "summary.json")
+
+        asset = self._market_making_symbol(symbol, orderbook_rows, trades)
+        if asset:
+            orderbook_rows = [row for row in orderbook_rows if str(row.get("symbol") or "") == asset]
+            trades = [row for row in trades if str(row.get("symbol") or "") == asset]
+
+        inventory_by_time = {
+            str(row.get("timestamp") or ""): row
+            for row in inventory_rows
+            if str(row.get("timestamp") or "")
+        }
+        pnl_by_time = {
+            str(row.get("timestamp") or ""): row
+            for row in pnl_rows
+            if str(row.get("timestamp") or "")
+        }
+
+        records: list[dict[str, Any]] = []
+        for row in orderbook_rows:
+            timestamp = str(row.get("timestamp") or "").strip()
+            mid_price = _optional_float(row.get("mid_price"))
+            if not timestamp or mid_price is None:
+                continue
+            inventory = inventory_by_time.get(timestamp, {})
+            pnl = pnl_by_time.get(timestamp, {})
+            records.append(
+                {
+                    "time": timestamp,
+                    "open": mid_price,
+                    "high": mid_price,
+                    "low": mid_price,
+                    "close": mid_price,
+                    "mid_price": mid_price,
+                    "spread": _optional_float(row.get("spread")),
+                    "spread_bps": _optional_float(row.get("spread_bps")),
+                    "imbalance_1": _optional_float(row.get("imbalance_1")),
+                    "imbalance_5": _optional_float(row.get("imbalance_5")),
+                    "bid_depth_5": _optional_float(row.get("bid_depth_5")),
+                    "ask_depth_5": _optional_float(row.get("ask_depth_5")),
+                    "inventory": _optional_float(inventory.get("inventory")),
+                    "mark_price": _optional_float(inventory.get("mark_price")),
+                    "realized_pnl": _optional_float(pnl.get("realized_pnl")),
+                    "unrealized_pnl": _optional_float(pnl.get("unrealized_pnl")),
+                    "total_pnl": _optional_float(pnl.get("total_pnl")),
+                    "fees": _optional_float(pnl.get("fees")),
+                }
+            )
+
+        trade_markers = [
+            {
+                "entry_time": str(trade.get("timestamp") or "") or None,
+                "exit_time": None,
+                "side": "short" if str(trade.get("side") or "").strip().lower() == "sell" else "long",
+                "entry_price": _optional_float(trade.get("price")),
+                "exit_price": None,
+                "pnl": None,
+                "return": None,
+                "size": _optional_float(trade.get("quantity")),
+                "exit_reason": None,
+            }
+            for trade in trades
+            if str(trade.get("timestamp") or "").strip()
+        ]
+
+        sampled_records = self._sample_market_making_records(
+            records,
+            trade_times={str(trade.get("timestamp") or "").strip() for trade in trades},
+            max_points=max_points,
+        )
+        columns = list(sampled_records[0].keys()) if sampled_records else []
+        market_columns = ["open", "high", "low", "close"]
+        feature_columns = [
+            column
+            for column in columns
+            if column not in {"time", *market_columns}
+        ]
+        numeric_columns = [column for column in columns if column != "time"]
+        return {
+            "run_dir": str(resolved),
+            "asset": asset,
+            "row_count": len(sampled_records),
+            "columns": columns,
+            "numeric_columns": numeric_columns,
+            "feature_columns": feature_columns,
+            "market_columns": market_columns,
+            "records": sampled_records,
+            "trades": trade_markers,
+            "summary": summary,
+        }
+
     def _resolve_log_dir(self, raw_log_dir: str | None) -> Path:
         candidate = self.paths.resolve_project_path(raw_log_dir or DEFAULT_LOG_DIR)
         logs_root = (self.paths.project_root / "logs").resolve()
@@ -125,6 +230,15 @@ class ExecutionMonitorService:
             candidate.relative_to(logs_root)
         except ValueError as exc:
             raise ValueError("Execution log_dir must resolve under the project logs directory.") from exc
+        return candidate
+
+    def _resolve_market_making_dir(self, raw_run_dir: str | None) -> Path:
+        candidate = self.paths.resolve_project_path(raw_run_dir or DEFAULT_MARKET_MAKING_DIR)
+        reports_root = (self.paths.project_root / "reports").resolve()
+        try:
+            candidate.relative_to(reports_root)
+        except ValueError as exc:
+            raise ValueError("Market making run_dir must resolve under the project reports directory.") from exc
         return candidate
 
     def _files(self, log_dir: Path) -> list[dict[str, Any]]:
@@ -228,6 +342,16 @@ class ExecutionMonitorService:
         return text or None
 
     @staticmethod
+    def _read_csv_records(path: Path) -> list[dict[str, str]]:
+        if not path.exists():
+            return []
+        try:
+            with path.open("r", encoding="utf-8", newline="") as handle:
+                return [dict(row) for row in csv.DictReader(handle)]
+        except OSError:
+            return []
+
+    @staticmethod
     def _read_jsonl_tail(path: Path, *, limit: int, asset: str | None = None) -> list[dict[str, Any]]:
         if not path.exists() or limit <= 0:
             return []
@@ -252,6 +376,78 @@ class ExecutionMonitorService:
                     continue
                 records.append(record)
         return list(records)
+
+    @staticmethod
+    def _market_making_symbol(
+        requested_symbol: str | None,
+        orderbook_rows: list[dict[str, str]],
+        trades: list[dict[str, str]],
+    ) -> str:
+        normalized = str(requested_symbol or "").strip()
+        if normalized:
+            return normalized
+        for row in orderbook_rows:
+            symbol = str(row.get("symbol") or "").strip()
+            if symbol:
+                return symbol
+        for trade in trades:
+            symbol = str(trade.get("symbol") or "").strip()
+            if symbol:
+                return symbol
+        return ""
+
+    @staticmethod
+    def _sample_market_making_records(
+        records: list[dict[str, Any]],
+        *,
+        trade_times: set[str],
+        max_points: int,
+    ) -> list[dict[str, Any]]:
+        if max_points <= 0 or len(records) <= max_points:
+            return records
+
+        required_indices = sorted(
+            index for index, record in enumerate(records) if str(record.get("time") or "") in trade_times
+        )
+        required_indices = [index for index in required_indices if 0 <= index < len(records)]
+
+        if required_indices:
+            first_trade_index = required_indices[0]
+            last_trade_index = required_indices[-1]
+            trade_span = last_trade_index - first_trade_index + 1
+            context_budget = max(max_points - trade_span, 0)
+            left_context = context_budget // 2
+            right_context = context_budget - left_context
+            start = max(first_trade_index - left_context, 0)
+            end = min(last_trade_index + right_context + 1, len(records))
+            window = records[start:end]
+            if len(window) >= max_points:
+                return window[:max_points]
+            if start == 0:
+                return records[: min(max_points, len(records))]
+            if end == len(records):
+                return records[max(0, len(records) - max_points) :]
+            return window
+
+        required_index_set = set(required_indices)
+        remaining_budget = max(max_points - len(required_indices), 0)
+
+        sampled_indices: set[int] = set(required_index_set)
+        if remaining_budget > 0:
+            evenly_spaced = _evenly_spaced_indices(len(records), remaining_budget)
+            for index in evenly_spaced:
+                if len(sampled_indices) >= max_points:
+                    break
+                sampled_indices.add(index)
+
+        if len(sampled_indices) < max_points:
+            for index in range(len(records)):
+                sampled_indices.add(index)
+                if len(sampled_indices) >= max_points:
+                    break
+
+        ordered_indices = sorted(sampled_indices)[:max_points]
+        return [records[index] for index in ordered_indices]
 
 
 def _latest_poll_seconds(records: list[dict[str, Any]]) -> int | None:
@@ -278,6 +474,29 @@ def _optional_int(value: Any) -> int | None:
     except (TypeError, ValueError):
         return None
     return out if out > 0 else None
+
+
+def _optional_float(value: Any) -> float | None:
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return None
+    return out if out == out and out not in {float("inf"), float("-inf")} else None
+
+
+def _evenly_spaced_indices(length: int, count: int) -> list[int]:
+    if length <= 0 or count <= 0:
+        return []
+    if count >= length:
+        return list(range(length))
+    if count == 1:
+        return [length - 1]
+    positions = []
+    last_index = length - 1
+    for step in range(count):
+        ratio = step / (count - 1)
+        positions.append(round(ratio * last_index))
+    return sorted(set(positions))
 
 
 def _pid_is_running(pid: int) -> bool:

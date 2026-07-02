@@ -25,6 +25,7 @@ market_making:
   lot_size: 0.0001
   min_order_size: 0.0001
   min_notional: 5
+  feature_return_lookback: 5
 
 fees:
   maker_fee_bps: 2
@@ -42,20 +43,33 @@ risk:
 
 filters:
   use_adverse_selection_filter: true
+  use_fee_aware_gate: true
+  use_side_selection_gate: true
+  use_directional_feature_gate: true
   max_imbalance: 0.8
   min_imbalance: 0.2
   disable_on_high_volatility: true
   disable_on_strong_trend: true
+  min_expected_edge_bps: 0.25
+  adverse_selection_buffer_bps: 0.45
+  inventory_penalty_bps_per_unit: 0.25
+  microprice_offset_threshold_bps: 0.08
+  inventory_soft_limit_ratio: 0.2
+  allowed_side_mode: buy_only_with_unwind
+  feature_microprice_offset_threshold_bps: 0.08
+  feature_imbalance_threshold: 0.35
+  feature_trend_threshold_bps: 0.05
+  feature_max_volatility_bps: 0.15
+  feature_edge_credit_bps: 2.25
 
 logging:
   level: INFO
   save_events: true
-  output_dir: reports/market_making
+  output_dir: logs/experiments/market_making
 
 diagnostics:
   enabled: true
   make_plots: true
   make_report: true
-  make_presentation: true
   language: el
   markout_horizons: [1, 5, 10, 30]

@@ -8,6 +8,7 @@ import pandas as pd
 import yaml
 
 from app.core.paths import DashboardPaths, get_paths
+from app.services.data_loader import DataLoader
 from app.services.schema_mapper import is_prediction_column
 
 
@@ -74,29 +75,57 @@ class ExperimentLoader:
             data_cfg = dict((metadata.get("config_hash_input", {}) or {}).get("data", {}) or config.get("data", {}) or {})
             symbols = data_cfg.get("symbols")
             first_symbol = symbols[0] if isinstance(symbols, list) and symbols else symbols if isinstance(symbols, str) else None
+            processed_dataset = self._processed_dataset_for_run(run_dir, metadata=metadata, config=config) or {}
             runs.append(
                 {
                     "run_id": self.run_id_for_path(run_dir),
                     "name": str(run_name or run_dir.name),
+                    "run_type": "experiment",
                     "path": str(run_dir),
                     "created_at_utc": metadata.get("created_at_utc"),
                     "asset": data_cfg.get("symbol") or first_symbol,
                     "timeframe": data_cfg.get("interval"),
                     "config_hash_sha256": config_hash,
+                    "processed_dataset_id": processed_dataset.get("id"),
+                    "processed_dataset_path": processed_dataset.get("path"),
                     "has_trades": self._find_trades_path(run_dir) is not None,
                     "has_equity": (run_dir / "equity_curve.csv").exists(),
                     "metrics": summary.get("summary") or summary.get("study_summary") or {},
                 }
             )
+        market_making_run = self._market_making_summary()
+        if market_making_run:
+            runs.append(market_making_run)
         return sorted(runs, key=lambda item: str(item.get("created_at_utc") or ""), reverse=True)
 
     def load_run(self, run_id: str) -> dict[str, Any]:
+        if run_id == "market_making__latest":
+            market_making = self._market_making_summary()
+            if not market_making:
+                raise FileNotFoundError(f"Unknown experiment run_id: {run_id}")
+            run_dir = self.paths.project_root / "reports" / "market_making"
+            return {
+                "run_id": market_making["run_id"],
+                "name": market_making["name"],
+                "run_type": "market_making",
+                "path": market_making["path"],
+                "metadata": {},
+                "config": {},
+                "metrics": market_making["metrics"],
+                "artifacts": self._report_files(run_dir),
+                "available_predictions": [],
+                "available_trades": [],
+                "available_equity": None,
+                "processed_dataset_id": None,
+                "processed_dataset_path": None,
+            }
         run_dir = self.resolve_run_dir(run_id)
         metadata = self._load_json(run_dir / "run_metadata.json")
         summary = self._load_json(run_dir / "summary.json")
         config = self._load_yaml(run_dir / "config_used.yaml")
         manifest = self._load_json(run_dir / "artifact_manifest.json")
         artifact_files = self._artifact_files(manifest, run_dir)
+        processed_dataset = self._processed_dataset_for_run(run_dir, metadata=metadata, config=config) or {}
         model_meta = dict(metadata.get("model_meta", {}) or {})
         predictions = sorted(
             {
@@ -113,6 +142,7 @@ class ExperimentLoader:
         return {
             "run_id": self.run_id_for_path(run_dir),
             "name": run_dir.name,
+            "run_type": "experiment",
             "path": str(run_dir),
             "metadata": metadata,
             "config": config,
@@ -121,7 +151,89 @@ class ExperimentLoader:
             "available_predictions": predictions,
             "available_trades": [str(self._find_trades_path(run_dir))] if self._find_trades_path(run_dir) else [],
             "available_equity": str(run_dir / "equity_curve.csv") if (run_dir / "equity_curve.csv").exists() else None,
+            "processed_dataset_id": processed_dataset.get("id"),
+            "processed_dataset_path": processed_dataset.get("path"),
         }
+
+    def _market_making_summary(self) -> dict[str, Any] | None:
+        run_dir = self.paths.project_root / "reports" / "market_making"
+        summary = self._load_json(run_dir / "summary.json")
+        if not run_dir.exists() or not summary:
+            return None
+        trades_path = run_dir / "trades.csv"
+        orderbook_path = run_dir / "orderbook_events.csv"
+        asset = None
+        created_at = None
+        if orderbook_path.exists():
+            orderbook = pd.read_csv(orderbook_path, nrows=1)
+            if not orderbook.empty:
+                asset = orderbook.iloc[0].get("symbol")
+            tail = pd.read_csv(orderbook_path, usecols=["timestamp"]).tail(1)
+            if not tail.empty:
+                created_at = str(tail.iloc[-1]["timestamp"])
+        return {
+            "run_id": "market_making__latest",
+            "name": "market_making_latest",
+            "run_type": "market_making",
+            "path": str(run_dir),
+            "created_at_utc": created_at,
+            "asset": str(asset) if asset else None,
+            "timeframe": "event",
+            "config_hash_sha256": None,
+            "processed_dataset_id": None,
+            "processed_dataset_path": None,
+            "has_trades": False,
+            "has_equity": False,
+            "metrics": summary,
+        }
+
+    def _processed_dataset_for_run(
+        self,
+        run_dir: Path,
+        *,
+        metadata: dict[str, Any],
+        config: dict[str, Any],
+    ) -> dict[str, str] | None:
+        data_cfg = dict((metadata.get("config_hash_input", {}) or {}).get("data", {}) or config.get("data", {}) or {})
+        storage = dict(data_cfg.get("storage", {}) or {})
+        if not storage.get("save_processed"):
+            return None
+        base_dataset_id = str(storage.get("dataset_id") or "").strip()
+        if not base_dataset_id:
+            return None
+        datasets = DataLoader(self.paths).discover_datasets()
+        candidates: list[dict[str, str]] = []
+        for dataset in datasets:
+            if dataset.stage != "processed" or not dataset.metadata_path or not dataset.metadata_path.exists():
+                continue
+            metadata_payload = self._load_json(dataset.metadata_path)
+            context = dict(metadata_payload.get("context", {}) or {})
+            candidate_base = str(context.get("base_dataset_id") or "")
+            candidate_dataset_id = str(metadata_payload.get("dataset_id") or "")
+            if candidate_base == base_dataset_id or candidate_dataset_id.startswith(f"{base_dataset_id}_"):
+                candidates.append({"id": dataset.id, "path": str(dataset.path)})
+        if not candidates:
+            return None
+        return sorted(candidates, key=lambda item: item["id"], reverse=True)[0]
+
+    @staticmethod
+    def _report_files(run_dir: Path) -> list[dict[str, Any]]:
+        if not run_dir.exists():
+            return []
+        out: list[dict[str, Any]] = []
+        for path in sorted(run_dir.rglob("*")):
+            if not path.is_file():
+                continue
+            out.append(
+                {
+                    "name": path.name,
+                    "path": str(path),
+                    "exists": True,
+                    "bytes": path.stat().st_size,
+                    "sha256": None,
+                }
+            )
+        return out
 
     def _artifact_files(self, manifest: dict[str, Any], run_dir: Path) -> list[dict[str, Any]]:
         files = dict(manifest.get("files", {}) or {})

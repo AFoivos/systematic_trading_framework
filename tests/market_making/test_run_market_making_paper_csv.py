@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 from scripts.run_market_making_paper import (
     load_orderbook_events,
@@ -128,10 +129,11 @@ def test_load_orderbook_events_sorts_and_reconstructs_quantities(tmp_path) -> No
 
 def test_csv_replay_writes_reports_and_summary_metadata(tmp_path) -> None:
     events_path = tmp_path / "orderbook_events.csv"
-    output_dir = tmp_path / "reports"
+    output_root = tmp_path / "reports"
     _write_events(events_path)
 
-    summary = run_csv_orderbook_replay(_config(str(output_dir)), input_events=events_path)
+    config = _config(str(output_root))
+    summary = run_csv_orderbook_replay(config, input_events=events_path)
 
     assert summary["input_events"] == 3
     assert summary["quoted_events"] == 3
@@ -141,14 +143,16 @@ def test_csv_replay_writes_reports_and_summary_metadata(tmp_path) -> None:
     assert summary["data_source"] == "kraken_orderbook_csv"
     assert summary["number_of_fills"] >= 1
 
-    summary_path = output_dir / "summary.json"
+    run_dirs = sorted((output_root / "runs").iterdir())
+    assert len(run_dirs) == 1
+    summary_path = run_dirs[0] / "summary.json"
     assert summary_path.exists()
     persisted_summary = json.loads(summary_path.read_text(encoding="utf-8"))
     assert persisted_summary["fill_model"] == "top_of_book_crossing"
-    assert (output_dir / "orders.csv").exists()
-    assert (output_dir / "trades.csv").exists()
-    assert (output_dir / "pnl_timeseries.csv").exists()
-    assert (output_dir / "inventory_timeseries.csv").exists()
+    assert (run_dirs[0] / "orders.csv").exists()
+    assert (run_dirs[0] / "trades.csv").exists()
+    assert (run_dirs[0] / "pnl_timeseries.csv").exists()
+    assert (run_dirs[0] / "inventory_timeseries.csv").exists()
 
 
 def test_csv_replay_with_join_top_of_book_quotes_without_breaking(tmp_path) -> None:
@@ -178,10 +182,14 @@ def test_timestamped_output_path_and_explicit_override(tmp_path) -> None:
     assert legacy == tmp_path / "yaml_reports"
 
 
+def test_default_market_making_output_root_is_logs_experiments() -> None:
+    assert resolve_output_dir({"logging": {}}) == Path("logs/experiments/market_making")
+
+
 def test_csv_replay_with_adverse_filter_records_rejected_quote(tmp_path) -> None:
     events_path = tmp_path / "orderbook_events.csv"
-    output_dir = tmp_path / "filtered_reports"
-    config = _config(str(output_dir))
+    output_root = tmp_path / "filtered_reports"
+    config = _config(str(output_root))
     config["market_making"]["quote_placement_mode"] = "join_top_of_book"
     config["filters"] = {
         "use_adverse_selection_filter": True,
@@ -218,7 +226,9 @@ def test_csv_replay_with_adverse_filter_records_rejected_quote(tmp_path) -> None
 
     assert summary["quoted_events"] == 0
     assert summary["skipped_events"] == 1
-    quote_events = (output_dir / "quote_events.csv").read_text(encoding="utf-8")
+    run_dirs = sorted((output_root / "runs").iterdir())
+    assert len(run_dirs) == 1
+    quote_events = (run_dirs[0] / "quote_events.csv").read_text(encoding="utf-8")
     assert "extreme bid-side imbalance" in quote_events
 
 
@@ -236,7 +246,8 @@ def test_csv_replay_with_filter_disabled_places_same_book(tmp_path) -> None:
 
 
 def test_synthetic_mode_still_writes_synthetic_summary(tmp_path) -> None:
-    config = _config(str(tmp_path / "synthetic_reports"))
+    output_root = tmp_path / "synthetic_reports"
+    config = _config(str(output_root))
     config["execution"]["mode"] = "paper"
     config["execution"]["symbol"] = "BTC/USD"
 
@@ -245,4 +256,6 @@ def test_synthetic_mode_still_writes_synthetic_summary(tmp_path) -> None:
     assert summary["data_source"] == "synthetic"
     assert summary["fill_model"] == "trade_through"
     assert summary["input_events"] == 0
-    assert (tmp_path / "synthetic_reports" / "summary.json").exists()
+    run_dirs = sorted((output_root / "runs").iterdir())
+    assert len(run_dirs) == 1
+    assert (run_dirs[0] / "summary.json").exists()

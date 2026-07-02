@@ -205,7 +205,6 @@ def _print_artifact_context(artifacts: dict[str, str]) -> None:
         "run_dir",
         "summary",
         "report",
-        "report_html",
         "run_metadata",
         "prediction_diagnostics",
         "missing_value_diagnostics",

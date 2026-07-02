@@ -25,6 +25,7 @@ services:
     volumes:
       - ./data:/workspace/data
       - ./logs:/workspace/logs
+      - ./reports:/workspace/reports
       - ./apps/trading_dashboard/layouts:/workspace/apps/trading_dashboard/layouts
     ports:
       - "8000:8000"

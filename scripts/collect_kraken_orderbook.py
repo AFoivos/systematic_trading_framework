@@ -76,7 +76,7 @@ def parse_collector_config(config: dict[str, Any], *, output_override: str | Non
     if max_events is not None and max_events <= 0:
         raise SystemExit("execution.max_events must be > 0 when provided.")
 
-    output_dir = Path(config.get("logging", {}).get("output_dir", "reports/market_making"))
+    output_dir = Path(config.get("logging", {}).get("output_dir", "logs/experiments/market_making"))
     output_path = Path(output_override) if output_override else output_dir / "orderbook_events.csv"
     return CollectorConfig(
         symbol=symbol,

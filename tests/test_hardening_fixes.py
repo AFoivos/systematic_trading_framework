@@ -1621,9 +1621,9 @@ def test_save_artifacts_writes_experiment_report(tmp_path) -> None:
     )
 
     report_path = Path(artifacts["report"])
-    report_html_path = Path(artifacts["report_html"])
     assert report_path.exists()
-    assert report_html_path.exists()
+    assert "report" + "_html" not in artifacts
+    assert not (run_dir / "report.html").exists()
     assert artifacts["equity_curve"].endswith("equity_curve.csv")
     assert Path(artifacts["equity_curve_chart"]).parts[-2:] == ("report_assets", "equity_curve.png")
     assert Path(artifacts["trade_events"]).parts[-2:] == ("report_assets", "trade_events.csv")
@@ -1639,6 +1639,7 @@ def test_save_artifacts_writes_experiment_report(tmp_path) -> None:
     assert (run_dir / "report_assets" / "cumulative_cost_drag.png").exists()
     assert (run_dir / "report_assets" / "positions_turnover.png").exists()
     assert not (run_dir / "report_assets" / "trade_diagnostics_TEST.html").exists()
+    assert not list((run_dir / "report_assets").glob("*.html"))
     assert (run_dir / "report_assets" / "trade_events.csv").exists()
     assert (run_dir / "report_assets" / "rolling_behavior.png").exists()
     assert (run_dir / "report_assets" / "signal_distribution.png").exists()
@@ -1669,12 +1670,6 @@ def test_save_artifacts_writes_experiment_report(tmp_path) -> None:
     assert {"event_type", "side", "position_before", "position_after", "signal", "target"}.issubset(
         trade_events.columns
     )
-    report_html_text = report_html_path.read_text(encoding="utf-8")
-    report_html_text_normalized = report_html_text.replace("\\", "/")
-    assert "<!DOCTYPE html>" in report_html_text
-    assert "<h1>Experiment Report: demo_report</h1>" in report_html_text
-    assert "report_assets/equity_curve.png" in report_html_text_normalized
-    assert "report_assets/trade_diagnostics_TEST.html" not in report_html_text_normalized
 
 
 def test_execution_source_audit_includes_configured_runtime_modules_and_function_paths() -> None:
