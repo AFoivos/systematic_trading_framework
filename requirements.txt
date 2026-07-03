@@ -27,6 +27,7 @@ matplotlib
 seaborn
 plotly
 optuna
+moment
 
 yfinance
 requests
