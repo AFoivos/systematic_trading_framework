@@ -49,15 +49,19 @@ def run_pipeline(cfg: Mapping[str, Any], *, config_path: str | Path) -> dict[str
 
     collect_cfg = _stage_config(cfg_dict, "collect_orderbook", _mapping(data_cfg.get("collection")), _mapping(data_cfg.get("collect")))
     if _enabled(collect_cfg):
+        _stage_print("collect_orderbook", "starting")
         collect_result = _run_collect_stage(cfg_dict, collect_cfg)
         orderbook_events_path = Path(collect_result["output_path"])
         stages["collect_orderbook"] = collect_result
+        _stage_print("collect_orderbook", f"completed events={collect_result.get('events_written')}")
     else:
         stages["collect_orderbook"] = {"status": "skipped", "reason": "enabled=false"}
+        _stage_print("collect_orderbook", "skipped")
 
     paper_cfg = _stage_config(cfg_dict, "paper_replay")
     paper_output_dir: Path | None = None
     if _enabled(paper_cfg):
+        _stage_print("paper_replay", "starting")
         input_events = _required_existing_path(
             paper_cfg.get("input_events_path") or orderbook_events_path,
             label="paper_replay.input_events_path or data.orderbook_events_path",
@@ -70,6 +74,7 @@ def run_pipeline(cfg: Mapping[str, Any], *, config_path: str | Path) -> dict[str
             "output_dir": str(paper_output_dir),
             "summary": summary,
         }
+        _stage_print("paper_replay", f"completed output_dir={paper_output_dir}")
         if bool(paper_cfg.get("use_outputs_for_moment", paper_cfg.get("use_replay_outputs_for_moment", True))):
             replay_quotes = paper_output_dir / "quote_events.csv"
             replay_trades = paper_output_dir / "trades.csv"
@@ -79,11 +84,13 @@ def run_pipeline(cfg: Mapping[str, Any], *, config_path: str | Path) -> dict[str
                 trades_path = replay_trades
     else:
         stages["paper_replay"] = {"status": "skipped", "reason": "enabled=false"}
+        _stage_print("paper_replay", "skipped")
 
     moment_stage_cfg = _stage_config(cfg_dict, "moment_experiment")
     moment_model_cfg = _mapping(cfg_dict.get("moment"))
     moment_default_enabled = bool(moment_model_cfg.get("enabled", False))
     if _enabled(moment_stage_cfg, default=moment_default_enabled):
+        _stage_print("moment_experiment", "starting")
         moment_cfg = _build_moment_experiment_config(
             cfg_dict,
             orderbook_events_path=_required_existing_path(orderbook_events_path, label="data.orderbook_events_path"),
@@ -96,8 +103,10 @@ def run_pipeline(cfg: Mapping[str, Any], *, config_path: str | Path) -> dict[str
             "run_dir": artifacts.get("run_dir"),
             "artifacts": artifacts,
         }
+        _stage_print("moment_experiment", f"completed run_dir={artifacts.get('run_dir')}")
     else:
         stages["moment_experiment"] = {"status": "skipped", "reason": "enabled=false"}
+        _stage_print("moment_experiment", "skipped")
 
     result: dict[str, Any] = {
         "config_path": str(config_path),
@@ -119,6 +128,10 @@ def run_pipeline(cfg: Mapping[str, Any], *, config_path: str | Path) -> dict[str
         result["manifest_path"] = str(manifest_path)
         result["manifest_dir"] = str(manifest_dir)
     return result
+
+
+def _stage_print(stage: str, message: str) -> None:
+    print(f"[market-making-pipeline] {stage}: {message}", flush=True)
 
 
 def _run_collect_stage(cfg: Mapping[str, Any], collect_cfg: Mapping[str, Any]) -> dict[str, Any]:
