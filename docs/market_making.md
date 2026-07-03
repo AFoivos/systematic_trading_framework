@@ -265,6 +265,30 @@ The pipeline is JSON/CSV/Markdown/Parquet-only. It does not generate HTML or Pow
 Production, demo, and live use remains disabled until queue-position, latency, and partial-fill
 modeling are implemented and validated.
 
+### Single-command large MOMENT pipeline
+
+For larger local datasets, use the staged YAML runner instead of manually calling
+the collector, paper replay, dataset builder, and MOMENT experiment one by one:
+
+```bash
+python scripts/run_market_making_pipeline.py \
+  --config config/experiments/market_making/market_making_large_moment_pipeline.yaml
+```
+
+The key switch is:
+
+```yaml
+pipeline:
+  collect_orderbook:
+    enabled: false
+```
+
+With collection disabled, the runner uses the existing paths under `data`. If
+`paper_replay.enabled: true`, the generated `quote_events.csv` and `trades.csv`
+from that replay are automatically passed into the MOMENT stage. If
+`data.moment_dataset.reuse_existing: true` and the parquet dataset exists, the
+MOMENT stage reuses it instead of rebuilding it.
+
 ### Kraken Futures demo mode
 
 Το demo mode απαιτεί:

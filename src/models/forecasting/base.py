@@ -35,11 +35,25 @@ from src.models.common.runtime import describe_feature_set, infer_feature_column
 from src.targets.registry import build_target
 from src.models.types import ForecasterFoldPredictor
 from src.models.forecasting.garch import make_garch_fold_predictor
+from src.models.forecasting.foundation import (
+    make_chronos2_fold_predictor,
+    make_chronos_bolt_fold_predictor,
+    make_timesfm_fold_predictor,
+)
 from src.models.forecasting.lightgbm import make_lightgbm_regressor_fold_predictor
 from src.models.forecasting.lstm import make_lstm_fold_predictor
 from src.models.forecasting.patchtst import make_patchtst_fold_predictor
 from src.models.forecasting.sarimax import train_sarimax_fold
 from src.models.forecasting.tft import make_tft_fold_predictor
+
+
+def _foundation_model_cfg(model_cfg: dict[str, Any]) -> dict[str, Any]:
+    cfg = dict(model_cfg or {})
+    cfg.setdefault("use_features", False)
+    params = dict(cfg.get("params", {}) or {})
+    params["_target_cfg"] = dict(cfg.get("target", {}) or {})
+    cfg["params"] = params
+    return cfg
 
 
 def prepare_forecaster_inputs(
@@ -994,7 +1008,261 @@ def train_patchtst_forecaster(
     )
 
 
+def train_chronos_bolt_forecaster(
+    df: pd.DataFrame,
+    model_cfg: dict[str, Any],
+    returns_col: str | None = None,
+) -> tuple[pd.DataFrame, object, dict[str, Any]]:
+    """
+    Apply the registered ``chronos_bolt_forecaster`` model transformation.
+
+    This model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+
+    YAML declaration::
+
+        model:
+          kind: chronos_bolt_forecaster
+          params:
+            returns_col: null
+            source_col: close
+            source_kind: price
+            model_id: amazon/chronos-bolt-tiny
+            lookback: 256
+            min_context: 16
+            prediction_length: <target horizon>
+            quantiles: [0.1, 0.5, 0.9]
+
+    Required input columns
+    ----------------------
+    source_col:
+        Input dataframe column configured by ``model.params.source_col``. Default: target ``price_col`` or ``close``.
+    returns_col:
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
+
+    Parameters
+    ----------
+    returns_col:
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
+    source_col:
+        Observed causal series to forecast. Default: target ``price_col`` or ``close``.
+    source_kind:
+        Either ``price`` or ``returns``. Default is inferred from ``source_col``.
+    model_id:
+        Hugging Face Chronos-Bolt checkpoint. Default: ``amazon/chronos-bolt-tiny``.
+    lookback:
+        Maximum trailing observations passed as context. Default: ``256``.
+    min_context:
+        Minimum finite trailing observations required for a row prediction. Default: ``16``.
+    prediction_length:
+        Forecast horizon requested from Chronos-Bolt. Defaults to the target horizon.
+    quantiles:
+        Quantile levels used for ``pred_qXX`` and ``pred_vol`` outputs. Default: ``[0.1, 0.5, 0.9]``.
+    """
+    return train_forward_forecaster(
+        df,
+        _foundation_model_cfg(model_cfg),
+        model_kind="chronos_bolt_forecaster",
+        fold_predictor=make_chronos_bolt_fold_predictor(),
+        returns_col=returns_col,
+        required_features=False,
+        runtime_estimator_family="foundation",
+    )
+
+
+def train_chronos_2_forecaster(
+    df: pd.DataFrame,
+    model_cfg: dict[str, Any],
+    returns_col: str | None = None,
+) -> tuple[pd.DataFrame, object, dict[str, Any]]:
+    """
+    Apply the registered ``chronos_2_forecaster`` model transformation.
+
+    This model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+
+    YAML declaration::
+
+        model:
+          kind: chronos_2_forecaster
+          params:
+            returns_col: null
+            source_col: close
+            source_kind: price
+            model_id: amazon/chronos-2
+            lookback: 256
+            min_context: 16
+            prediction_length: <target horizon>
+            quantiles: [0.1, 0.5, 0.9]
+
+    Required input columns
+    ----------------------
+    source_col:
+        Input dataframe column configured by ``model.params.source_col``. Default: target ``price_col`` or ``close``.
+    returns_col:
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
+
+    Parameters
+    ----------
+    returns_col:
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
+    source_col:
+        Observed causal series to forecast. Default: target ``price_col`` or ``close``.
+    source_kind:
+        Either ``price`` or ``returns``. Default is inferred from ``source_col``.
+    model_id:
+        Hugging Face Chronos-2 checkpoint. Default: ``amazon/chronos-2``.
+    lookback:
+        Maximum trailing observations passed as context. Default: ``256``.
+    min_context:
+        Minimum finite trailing observations required for a row prediction. Default: ``16``.
+    prediction_length:
+        Forecast horizon requested from Chronos-2. Defaults to the target horizon.
+    quantiles:
+        Quantile levels used for ``pred_qXX`` and ``pred_vol`` outputs. Default: ``[0.1, 0.5, 0.9]``.
+    """
+    return train_forward_forecaster(
+        df,
+        _foundation_model_cfg(model_cfg),
+        model_kind="chronos_2_forecaster",
+        fold_predictor=make_chronos2_fold_predictor(),
+        returns_col=returns_col,
+        required_features=False,
+        runtime_estimator_family="foundation",
+    )
+
+
+def train_timesfm_2p5_200m_forecaster(
+    df: pd.DataFrame,
+    model_cfg: dict[str, Any],
+    returns_col: str | None = None,
+) -> tuple[pd.DataFrame, object, dict[str, Any]]:
+    """
+    Apply the registered ``timesfm_2p5_200m_forecaster`` model transformation.
+
+    This model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+
+    YAML declaration::
+
+        model:
+          kind: timesfm_2p5_200m_forecaster
+          params:
+            returns_col: null
+            source_col: close
+            source_kind: price
+            model_id: google/timesfm-2.5-200m-pytorch
+            lookback: 512
+            max_context: 512
+            prediction_length: <target horizon>
+            quantiles: [0.1, 0.5, 0.9]
+
+    Required input columns
+    ----------------------
+    source_col:
+        Input dataframe column configured by ``model.params.source_col``. Default: target ``price_col`` or ``close``.
+    returns_col:
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
+
+    Parameters
+    ----------
+    returns_col:
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
+    source_col:
+        Observed causal series to forecast. Default: target ``price_col`` or ``close``.
+    source_kind:
+        Either ``price`` or ``returns``. Default is inferred from ``source_col``.
+    model_id:
+        Hugging Face TimesFM checkpoint. Default: ``google/timesfm-2.5-200m-pytorch``.
+    lookback:
+        Maximum trailing observations passed as context. Default: ``256``.
+    max_context:
+        TimesFM compile-time maximum context. Default: ``lookback``.
+    max_horizon:
+        TimesFM compile-time maximum horizon. Default: ``prediction_length``.
+    prediction_length:
+        Forecast horizon requested from TimesFM. Defaults to the target horizon.
+    quantiles:
+        Quantile levels mapped from TimesFM quantile-head outputs when available. Default: ``[0.1, 0.5, 0.9]``.
+    """
+    return train_forward_forecaster(
+        df,
+        _foundation_model_cfg(model_cfg),
+        model_kind="timesfm_2p5_200m_forecaster",
+        fold_predictor=make_timesfm_fold_predictor(
+            setup="2p5_200m",
+            default_model_id="google/timesfm-2.5-200m-pytorch",
+        ),
+        returns_col=returns_col,
+        required_features=False,
+        runtime_estimator_family="foundation",
+    )
+
+
+def train_timesfm_1p0_200m_forecaster(
+    df: pd.DataFrame,
+    model_cfg: dict[str, Any],
+    returns_col: str | None = None,
+) -> tuple[pd.DataFrame, object, dict[str, Any]]:
+    """
+    Apply the registered ``timesfm_1p0_200m_forecaster`` model transformation.
+
+    This model uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+
+    YAML declaration::
+
+        model:
+          kind: timesfm_1p0_200m_forecaster
+          params:
+            returns_col: null
+            source_col: close
+            source_kind: price
+            model_id: google/timesfm-1.0-200m-pytorch
+            lookback: 512
+            max_context: 512
+            prediction_length: <target horizon>
+            frequency: 0
+
+    Required input columns
+    ----------------------
+    source_col:
+        Input dataframe column configured by ``model.params.source_col``. Default: target ``price_col`` or ``close``.
+    returns_col:
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
+
+    Parameters
+    ----------
+    returns_col:
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
+    source_col:
+        Observed causal series to forecast. Default: target ``price_col`` or ``close``.
+    source_kind:
+        Either ``price`` or ``returns``. Default is inferred from ``source_col``.
+    model_id:
+        Hugging Face TimesFM 1.0 checkpoint. Default: ``google/timesfm-1.0-200m-pytorch``.
+    lookback:
+        Maximum trailing observations passed as context. Default: ``256``.
+    max_context:
+        TimesFM hparams context length. Default: ``lookback``.
+    prediction_length:
+        Forecast horizon requested from TimesFM. Defaults to the target horizon.
+    frequency:
+        TimesFM 1.x frequency category: ``0`` high, ``1`` medium, ``2`` low. Default: ``0``.
+    """
+    return train_forward_forecaster(
+        df,
+        _foundation_model_cfg(model_cfg),
+        model_kind="timesfm_1p0_200m_forecaster",
+        fold_predictor=make_timesfm_fold_predictor(
+            setup="1p0_200m",
+            default_model_id="google/timesfm-1.0-200m-pytorch",
+        ),
+        returns_col=returns_col,
+        required_features=False,
+        runtime_estimator_family="foundation",
+    )
+
+
 __all__ = [
+    "train_chronos_2_forecaster",
+    "train_chronos_bolt_forecaster",
     "prepare_forecaster_inputs",
     "train_forward_forecaster",
     "train_garch_forecaster",
@@ -1002,5 +1270,7 @@ __all__ = [
     "train_lstm_forecaster",
     "train_patchtst_forecaster",
     "train_sarimax_forecaster",
+    "train_timesfm_1p0_200m_forecaster",
+    "train_timesfm_2p5_200m_forecaster",
     "train_tft_forecaster",
 ]

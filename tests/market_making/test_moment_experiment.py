@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -158,6 +159,48 @@ def test_moment_backend_missing_dependency_error_is_explicit(monkeypatch: pytest
     monkeypatch.setattr(model, "_load_moment_dependencies", _raise)
     with pytest.raises(MomentDependencyError, match="missing test dependency"):
         model.fit(pd.DataFrame({"buy_markout_bps_h5": [1.0], "sell_markout_bps_h5": [1.0]}), feature_columns=[])
+
+
+def test_moment_backend_uses_frozen_embeddings_with_ridge_head(monkeypatch: pytest.MonkeyPatch) -> None:
+    torch = pytest.importorskip("torch")
+
+    class FakeMomentModel:
+        def __call__(self, *, x_enc, input_mask):
+            del input_mask
+            return SimpleNamespace(embeddings=x_enc.mean(dim=2))
+
+    model = MomentResearchModel(
+        MomentModelConfig(
+            backend="moment",
+            lookback_length=3,
+            batch_size=2,
+            ridge_alpha=0.01,
+        )
+    )
+
+    def _fake_load() -> None:
+        model._torch = torch
+        model._moment_model = FakeMomentModel()
+
+    frame = pd.DataFrame(
+        {
+            "book_imbalance_1": [0.40, 0.45, 0.50, 0.55, 0.60, 0.65],
+            "recent_mid_slope": [0.0, 0.01, 0.02, 0.03, 0.04, 0.05],
+            "recent_volatility": [0.001] * 6,
+            "book_spread_bps": [10.0] * 6,
+            "buy_markout_bps_h5": [-2.0, -1.0, 0.0, 1.0, 2.0, 3.0],
+            "sell_markout_bps_h5": [3.0, 2.0, 1.0, 0.0, -1.0, -2.0],
+        }
+    )
+
+    monkeypatch.setattr(model, "_load_moment_dependencies", _fake_load)
+    model.fit(frame, feature_columns=["book_imbalance_1", "recent_mid_slope"])
+    predictions = model.predict(frame)
+
+    assert predictions["model_backend"].eq("moment").all()
+    assert predictions["moment_buy_score"].notna().all()
+    assert predictions["moment_sell_score"].notna().all()
+    assert model.metadata()["moment_embedding_dim"] == 2
 
 
 def test_deterministic_fixture_run_writes_experiment_artifact_schema(tmp_path: Path) -> None:

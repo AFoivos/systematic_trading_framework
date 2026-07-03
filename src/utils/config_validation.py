@@ -26,12 +26,19 @@ _CLASSIFIER_MODEL_KINDS = {
 }
 _EMBEDDING_MODEL_KINDS = {"event_transformer_encoder"}
 _DEEP_FORECASTER_MODEL_KINDS = {"lstm_forecaster", "patchtst_forecaster", "tft_forecaster"}
+_FOUNDATION_FORECASTER_MODEL_KINDS = {
+    "chronos_2_forecaster",
+    "chronos_bolt_forecaster",
+    "timesfm_1p0_200m_forecaster",
+    "timesfm_2p5_200m_forecaster",
+}
 _EXPERIMENTAL_DISCOVERY_MODEL_KINDS = {"tsfresh_extrema_feature_discovery"}
 _FORECASTER_MODEL_KINDS = {
     "sarimax_forecaster",
     "garch_forecaster",
     "lightgbm_regressor",
     *_DEEP_FORECASTER_MODEL_KINDS,
+    *_FOUNDATION_FORECASTER_MODEL_KINDS,
 }
 _GARCH_OVERLAY_COMPATIBLE_MODEL_KINDS = {
     "elastic_net_clf",
@@ -42,6 +49,7 @@ _GARCH_OVERLAY_COMPATIBLE_MODEL_KINDS = {
     "lstm_forecaster",
     "patchtst_forecaster",
     "tft_forecaster",
+    *_FOUNDATION_FORECASTER_MODEL_KINDS,
 }
 _XGBOOST_UNSUPPORTED_PARAM_KEYS = {"num_leaves", "min_child_samples"}
 _PPO_ONLY_RL_PARAM_KEYS = {"n_steps", "gae_lambda", "clip_range", "ent_coef", "vf_coef", "max_grad_norm"}
@@ -140,6 +148,52 @@ _MODEL_OUTPUT_KEYS = {
     "signal_col",
     "action_col",
 }
+
+
+def _validate_foundation_forecaster_params(kind: str, params: dict[str, Any]) -> None:
+    if not isinstance(params, dict):
+        raise ConfigValidationError("model.params must be a mapping.")
+    for key in ("source_col", "context_col", "source_kind", "source_returns_type", "model_id", "checkpoint", "device_map", "torch_dtype", "backend", "freq"):
+        value = params.get(key)
+        if value is not None and (not isinstance(value, str) or not value.strip()):
+            raise ConfigValidationError(f"model.params.{key} must be a non-empty string when provided.")
+    source_kind = params.get("source_kind")
+    if source_kind is not None and str(source_kind) not in {"price", "returns"}:
+        raise ConfigValidationError("model.params.source_kind must be one of: price, returns.")
+    source_returns_type = params.get("source_returns_type")
+    if source_returns_type is not None and str(source_returns_type) not in {"simple", "log"}:
+        raise ConfigValidationError("model.params.source_returns_type must be one of: simple, log.")
+    for key in ("lookback", "min_context", "prediction_length", "batch_size", "max_context", "max_horizon"):
+        if key in params and params[key] is not None:
+            _positive_int(params[key], field=f"model.params.{key}")
+    if "lookback" in params and "min_context" in params and int(params["min_context"]) > int(params["lookback"]):
+        raise ConfigValidationError("model.params.min_context must be <= model.params.lookback.")
+    quantiles = params.get("quantiles")
+    if quantiles is not None:
+        if not isinstance(quantiles, (list, tuple)) or not quantiles:
+            raise ConfigValidationError("model.params.quantiles must be a non-empty list.")
+        seen: set[float] = set()
+        for idx, item in enumerate(quantiles):
+            q = _finite_number(item, field=f"model.params.quantiles[{idx}]")
+            if not 0.0 < q < 1.0:
+                raise ConfigValidationError("model.params.quantiles values must be within (0,1).")
+            if q in seen:
+                raise ConfigValidationError("model.params.quantiles values must be unique.")
+            seen.add(q)
+    if kind.startswith("timesfm_"):
+        if "frequency" in params:
+            frequency = params["frequency"]
+            if isinstance(frequency, bool) or not isinstance(frequency, int) or frequency not in {0, 1, 2}:
+                raise ConfigValidationError("model.params.frequency must be one of: 0, 1, 2.")
+        for key in (
+            "normalize_inputs",
+            "use_continuous_quantile_head",
+            "force_flip_invariance",
+            "infer_is_positive",
+            "fix_quantile_crossing",
+        ):
+            if key in params and not isinstance(params[key], bool):
+                raise ConfigValidationError(f"model.params.{key} must be boolean.")
 
 
 def _validate_tsfresh_extrema_discovery_params(params: dict[str, Any]) -> None:
@@ -2210,6 +2264,14 @@ def validate_model_block(model: dict[str, Any]) -> None:
                 raise ConfigValidationError(
                     f"model.target.kind must be one of: '{allowed_targets}'."
                 )
+            if model["kind"] in _FOUNDATION_FORECASTER_MODEL_KINDS and target_kind not in {
+                "forward_return",
+                "future_return_regression",
+            }:
+                raise ConfigValidationError(
+                    "Foundation forecasters currently support only "
+                    "model.target.kind='forward_return' or 'future_return_regression'."
+                )
             if target_kind == "r_multiple":
                 if model["kind"] not in _CLASSIFIER_MODEL_KINDS:
                     raise ConfigValidationError(
@@ -2460,7 +2522,7 @@ def validate_model_block(model: dict[str, Any]) -> None:
                 raise ConfigValidationError(
                     "model.overlay is currently supported only for elastic_net_clf, lightgbm_clf, "
                     "logistic_regression_clf, xgboost_clf, sarimax_forecaster, lstm_forecaster, "
-                    "patchtst_forecaster, and tft_forecaster."
+                    "patchtst_forecaster, tft_forecaster, and foundation forecasters."
                 )
             overlay_kind = overlay.get("kind")
             if overlay_kind != "garch":
@@ -2525,6 +2587,8 @@ def validate_model_block(model: dict[str, Any]) -> None:
                 prefix = params["embedding_prefix"]
                 if not isinstance(prefix, str) or not prefix.strip():
                     raise ConfigValidationError("model.params.embedding_prefix must be a non-empty string.")
+        if model["kind"] in _FOUNDATION_FORECASTER_MODEL_KINDS:
+            _validate_foundation_forecaster_params(model["kind"], dict(model.get("params", {}) or {}))
 
         params = model.get("params", {}) or {}
         if not isinstance(params, dict):

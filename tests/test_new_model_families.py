@@ -18,6 +18,7 @@ from src.evaluation.model_diagnostics import (
     write_dense_diagnostic_plots,
 )
 from src.experiments.models import (
+    train_chronos_bolt_forecaster,
     train_garch_forecaster,
     train_lightgbm_regressor,
     train_sarimax_forecaster,
@@ -76,10 +77,86 @@ def test_registry_contains_new_models_and_signals() -> None:
     """
     Verify that registry wiring exposes new model families and signal adapters.
     """
-    for model_kind in ("sarimax_forecaster", "garch_forecaster", "tft_forecaster", "lightgbm_regressor"):
+    for model_kind in (
+        "sarimax_forecaster",
+        "garch_forecaster",
+        "tft_forecaster",
+        "lightgbm_regressor",
+        "chronos_bolt_forecaster",
+        "chronos_2_forecaster",
+        "timesfm_2p5_200m_forecaster",
+        "timesfm_1p0_200m_forecaster",
+    ):
         assert model_kind in MODEL_REGISTRY
     for signal_kind in ("forecast_threshold", "forecast_vol_adjusted", "dense_return_forecast"):
         assert signal_kind in SIGNAL_REGISTRY
+
+
+def test_chronos_bolt_forecaster_converts_price_forecast_to_oos_return(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Verify Chronos-Bolt wiring without requiring real checkpoint downloads.
+    """
+    if not _torch_available_in_subprocess():
+        pytest.skip("torch is unavailable or unstable in this environment.")
+    import torch
+
+    class FakeChronosBoltPipeline:
+        @classmethod
+        def from_pretrained(cls, *args: object, **kwargs: object) -> "FakeChronosBoltPipeline":
+            return cls()
+
+        def predict_quantiles(
+            self,
+            *,
+            inputs: list[object],
+            prediction_length: int,
+            quantile_levels: list[float],
+            **kwargs: object,
+        ) -> tuple[torch.Tensor, torch.Tensor]:
+            last_values = np.asarray([float(context[-1]) for context in inputs], dtype=float)
+            mean = np.column_stack(
+                [last_values * (1.0 + 0.01 * step) for step in range(1, prediction_length + 1)]
+            )
+            quantiles = np.stack(
+                [mean * (1.0 + 0.02 * (float(q) - 0.5)) for q in quantile_levels],
+                axis=2,
+            )
+            return (
+                torch.tensor(quantiles, dtype=torch.float32),
+                torch.tensor(mean, dtype=torch.float32),
+            )
+
+    monkeypatch.setitem(sys.modules, "chronos", types.SimpleNamespace(ChronosBoltPipeline=FakeChronosBoltPipeline))
+    df = _synthetic_ohlcv_with_returns(n=80)
+    out, _, meta = train_chronos_bolt_forecaster(
+        df,
+        model_cfg={
+            "target": {"kind": "forward_return", "price_col": "close", "horizon": 2},
+            "split": {
+                "method": "walk_forward",
+                "train_size": 40,
+                "test_size": 8,
+                "step_size": 8,
+                "expanding": True,
+                "max_folds": 1,
+            },
+            "params": {
+                "model_id": "fake/chronos-bolt",
+                "source_col": "close",
+                "source_kind": "price",
+                "lookback": 12,
+                "min_context": 4,
+                "quantiles": [0.1, 0.5, 0.9],
+            },
+        },
+    )
+
+    mask = out["pred_is_oos"] & out["pred_ret"].notna()
+    assert int(mask.sum()) > 0
+    assert out.loc[mask, "pred_ret"].round(6).eq(0.02).all()
+    assert out.loc[mask, "pred_vol"].notna().all()
+    assert meta["model_kind"] == "chronos_bolt_forecaster"
+    assert meta["folds"][0]["zero_shot"] is True
 
 
 def test_sarimax_forecaster_produces_oos_forecasts() -> None:

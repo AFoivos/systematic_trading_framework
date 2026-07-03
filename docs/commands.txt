@@ -1,0 +1,503 @@
+# Systematic Trading Framework - command sheet
+
+Χρήση:
+- Τρέξε τα commands από το root του repo.
+- Τα Docker commands είναι τα πιο σταθερά για καθαρά/reproducible runs.
+- Τα `.sh` scripts θέλουν bash, Git Bash ή WSL σε Windows.
+- Τα demo/live execution commands δεν πρέπει να τρέχουν με πραγματικά credentials χωρίς να έχεις ελέγξει το αντίστοιχο YAML και τα safety gates.
+
+
+## 1. Setup και βασικοί έλεγχοι
+
+Local Python environment:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+Linux/macOS/WSL:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+Optional dependencies:
+
+```bash
+python -m pip install -r requirements.tsfresh.txt
+```
+
+Run all tests:
+
+```bash
+python -m pytest
+```
+
+Run focused tests:
+
+```bash
+python -m pytest tests/market_making
+python -m pytest tests/execution
+python -m pytest tests/signals
+```
+
+Docker build και tests:
+
+```bash
+docker compose build
+docker compose run --rm app pytest
+docker compose run --rm app pytest tests/market_making
+```
+
+
+## 2. Docker και containers
+
+Start app shell:
+
+```bash
+docker compose run --rm app bash
+```
+
+Start persistent services:
+
+```bash
+docker compose up -d --build app trading-dashboard
+```
+
+Open shell σε ήδη ενεργό app container:
+
+```bash
+docker compose exec app bash
+```
+
+Dashboard logs:
+
+```bash
+docker compose logs -f trading-dashboard
+```
+
+Rebuild/recreate dashboard:
+
+```bash
+docker compose up -d --build --force-recreate trading-dashboard
+```
+
+Stop containers:
+
+```bash
+docker compose stop
+```
+
+Remove containers/network:
+
+```bash
+docker compose down
+```
+
+
+## 3. YAML experiments
+
+Run experiment με local env:
+
+```bash
+python -m src.experiments.runner config/experiments/lab/feature_signal_target_lab.yaml
+```
+
+Run experiment μέσω Docker:
+
+```bash
+docker compose run --rm app python -m src.experiments.runner config/experiments/lab/feature_signal_target_lab.yaml
+```
+
+Παραδείγματα London/NY v3:
+
+```bash
+python -m src.experiments.runner config/experiments/London_NY/raw/xauusd_london_orb_breakout_raw_v3.yaml
+python -m src.experiments.runner config/experiments/London_NY/tree_only/xauusd_london_tree_meta_v3.yaml
+python -m src.experiments.runner config/experiments/London_NY/stack/london_basket_tree_tft_overlay_v3.yaml
+python -m src.experiments.runner config/experiments/London_NY/tree_only/xauusd_london_tree_meta_long_only_v3.yaml
+python -m src.experiments.runner config/experiments/London_NY/tree_only/xauusd_london_tree_meta_short_only_v3.yaml
+```
+
+Scalp/QFS diagnostics:
+
+```bash
+bash scripts/run_qfs_diagnostics.sh
+bash scripts/run_qfs_diagnostics.sh qfs_all_modes
+python scripts/qfs_diagnostics_leaderboard.py --root logs/experiments --top 30
+python scripts/qfs_diagnostics_leaderboard.py --root logs/experiments --top 50 --csv reports/qfs_leaderboard.csv
+```
+
+C2 scalp diagnostic grid:
+
+```bash
+python scripts/run_c2_scalp_diagnostic_grid.py --config config/experiments/scalp/quote_flow_proxy_scalp_meta_v1.yaml --top 10
+python scripts/run_c2_scalp_diagnostic_grid.py --config config/experiments/scalp/quote_flow_proxy_scalp_meta_v1.yaml --asset us100 --output-dir logs/diagnostics --run-name c2_us100_grid
+```
+
+
+## 4. Optuna searches
+
+Run Optuna spec:
+
+```bash
+python -m src.experiments.optuna_search config/optuna/baseline_vwap_rms_ema_ppo_mfi_atr_30m_threshold_search.yaml
+```
+
+Override trial count και parallel jobs:
+
+```bash
+python -m src.experiments.optuna_search config/optuna/us100_30m_ehlers_tp_long_signal_backtest_v1_optuna.yaml --n-trials 50 --n-jobs 1
+```
+
+Use random sampler και fixed seed:
+
+```bash
+python -m src.experiments.optuna_search config/optuna/us100_30m_ehlers_tp_long_signal_backtest_v1_optuna.yaml --sampler random --seed 42
+```
+
+SQLite storage και resume existing study:
+
+```bash
+python -m src.experiments.optuna_search config/optuna/us100_30m_ehlers_tp_long_signal_backtest_v1_optuna.yaml --storage sqlite:///logs/optuna/us100_ehlers.db --study-name us100_ehlers --load-if-exists
+```
+
+Write report σε explicit directory:
+
+```bash
+python -m src.experiments.optuna_search config/optuna/us100_30m_ehlers_tp_long_signal_backtest_v1_optuna.yaml --report-output-dir logs/experiments/optuna_reports --report-run-name us100_ehlers_search
+```
+
+Docker:
+
+```bash
+docker compose run --rm app python -m src.experiments.optuna_search config/optuna/us100_30m_ehlers_tp_long_signal_backtest_v1_optuna.yaml --n-trials 20
+```
+
+
+## 5. Data download και preparation
+
+Download Dukascopy 30m BID/ASK:
+
+```bash
+FROM_DATE=2024-01-01 TO_DATE=2024-02-01 bash scripts/download_dukascopy_30m.sh
+FROM_DATE=2020-01-01 TO_DATE=2026-04-28 bash scripts/download_dukascopy_30m.sh
+```
+
+Quarterly Dukascopy download:
+
+```bash
+START_YEAR=2015 END_DATE=2026-05-20 bash scripts/download_dukascopy_30m_quarterly.sh
+```
+
+Merge quarterly files:
+
+```bash
+python scripts/merge_dukascopy_quarterly_30m.py --input-root data/raw/dukascopy_quarterly --output-dir data/raw/dukascopy_30m
+```
+
+Prepare canonical 30m mid-price files:
+
+```bash
+python scripts/prepare_dukascopy_30m_bid_ask_mid.py --input-dir data/raw/dukascopy_30m --output-dir data/raw/dukascopy_30m_clean
+python scripts/prepare_dukascopy_30m_bid_ask_mid.py --assets xauusd us100 spx500 ger40
+```
+
+Prepare one FTMO-style mid file:
+
+```bash
+python scripts/prepare_dukascopy_ftmo_mid.py --bid-path data/raw/eurusd_m15_bid.csv --ask-path data/raw/eurusd_m15_ask.csv --output-path data/processed/eurusd_m15_mid.csv --asset eurusd --timeframe m15
+```
+
+EURUSD M15 monthly merge:
+
+```bash
+python scripts/merge_dukascopy_eurusd_m15_monthly.py --input-root data/raw/dukascopy/eurusd/m15/monthly --output-path data/processed/eurusd_m15_3y.csv
+```
+
+TFT feature visualization:
+
+```bash
+python scripts/visualize_dukascopy_30m_tft_features.py --config config/experiments/London_NY/stack/london_basket_tree_tft_overlay_v3.yaml --asset xauusd --tail 2000
+```
+
+
+## 6. Trading dashboard
+
+Docker dashboard:
+
+```bash
+docker compose up -d --build trading-dashboard
+```
+
+Open:
+
+```text
+http://127.0.0.1:8000
+```
+
+Local backend:
+
+```bash
+cd apps/trading_dashboard/backend
+python -m pip install -r requirements.txt
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Local frontend:
+
+```bash
+cd apps/trading_dashboard/frontend
+npm install
+npm run dev
+```
+
+Frontend URL:
+
+```text
+http://127.0.0.1:5173
+```
+
+Useful API checks:
+
+```bash
+curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/api/datasets
+curl http://127.0.0.1:8000/api/features/builders
+curl http://127.0.0.1:8000/api/signals/builders
+curl http://127.0.0.1:8000/api/targets/builders
+curl http://127.0.0.1:8000/api/experiments
+```
+
+
+## 7. MT5 demo execution
+
+Dry-run/once:
+
+```bash
+python scripts/run_mt5_demo_bot.py --config config/execution/mt5_demo.yaml --once --dry-run
+```
+
+Run once με FTMO demo config:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_mt5_demo_bot.py --config config\execution\mt5_ftmo_demo_order.yaml --once
+```
+
+Loop mode:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_mt5_demo_bot.py --config config\execution\mt5_ftmo_demo_order.yaml --loop --sleep-seconds 30
+```
+
+Set MT5 credentials σε PowerShell:
+
+```powershell
+$env:MT5_LOGIN="..."
+$env:MT5_PASSWORD="..."
+$env:MT5_SERVER="..."
+```
+
+Stop Python process by PID:
+
+```powershell
+Get-Process python | Select-Object Id,ProcessName,Path
+Stop-Process -Id <PID>
+```
+
+Kill switch file, αν το YAML δείχνει στο default `STOP_TRADING`:
+
+```powershell
+New-Item -ItemType File -Path STOP_TRADING
+Remove-Item -Path STOP_TRADING
+```
+
+
+## 8. Market maker - data, paper, diagnostics, MOMENT, demo
+
+Το market maker είναι event-driven και ξεχωριστό από τα candle-based experiments.
+Βασικά docs: `docs/market_making.md`.
+
+### 8.1 Kraken public order-book collector, data-only
+
+Το τρέχον `config/execution/kraken_futures_demo_market_making.yaml` έχει `execution.mode: data_only` και δεν στέλνει orders.
+
+Local:
+
+```bash
+python scripts/collect_kraken_orderbook.py --config config/execution/kraken_futures_demo_market_making.yaml --output logs/experiments/market_making/orderbook_events.csv
+```
+
+Docker:
+
+```bash
+docker compose run --rm app python scripts/collect_kraken_orderbook.py --config config/execution/kraken_futures_demo_market_making.yaml --output logs/experiments/market_making/orderbook_events.csv
+```
+
+### 8.2 Paper replay από collected order-book CSV
+
+Αυτό είναι το πιο χρήσιμο market-making dry run μετά τον collector. Επιτρέπεται με `execution.mode: data_only` ή `paper`.
+
+```bash
+python scripts/run_market_making_paper.py --config config/execution/kraken_futures_demo_market_making.yaml --input-events logs/experiments/market_making/orderbook_events.csv --timestamped-output
+```
+
+Explicit output directory:
+
+```bash
+python scripts/run_market_making_paper.py --config config/execution/kraken_futures_demo_market_making.yaml --input-events logs/experiments/market_making/orderbook_events.csv --output-dir logs/experiments/market_making/runs/my_replay
+```
+
+Docker replay:
+
+```bash
+docker compose run --rm app python scripts/run_market_making_paper.py --config config/execution/kraken_futures_demo_market_making.yaml --input-events logs/experiments/market_making/orderbook_events.csv --timestamped-output
+```
+
+### 8.3 Synthetic paper simulation
+
+Χρησιμοποίησέ το μόνο με YAML που έχει `execution.mode: paper`.
+
+```bash
+python scripts/run_market_making_paper.py --config config/execution/kraken_futures_demo_market_making.yaml --duration-seconds 3600
+```
+
+### 8.4 Market-making diagnostics
+
+Analyze default run dir:
+
+```bash
+python scripts/analyze_market_making_run.py --run-dir logs/experiments/market_making --max-inventory 0.01
+```
+
+Analyze με order-book markouts:
+
+```bash
+python scripts/analyze_market_making_run.py --run-dir logs/experiments/market_making --orderbook-events logs/experiments/market_making/orderbook_events.csv --max-inventory 0.01
+```
+
+Analyze latest timestamped run:
+
+```bash
+python scripts/analyze_market_making_run.py --latest --reports-root logs/experiments
+```
+
+Analyze all market-making runs και γράψε comparison:
+
+```bash
+python scripts/analyze_market_making_run.py --all --reports-root logs/experiments
+```
+
+Skip plots/report:
+
+```bash
+python scripts/analyze_market_making_run.py --latest --reports-root logs/experiments --no-plots --no-report
+```
+
+English report:
+
+```bash
+python scripts/analyze_market_making_run.py --latest --reports-root logs/experiments --language en
+```
+
+### 8.5 MOMENT market-making research experiment
+
+Build quote-level MOMENT dataset manually:
+
+```bash
+python scripts/build_market_making_moment_dataset.py --orderbook-events logs/experiments/market_making/orderbook_events.csv --quote-events logs/experiments/market_making/quote_events.csv --output logs/experiments/market_making/datasets/moment_dataset.parquet --horizons 1,5,10,30 --maker-fee-bps 2 --max-inventory 0.01
+```
+
+Run full MOMENT research experiment:
+
+```bash
+python scripts/run_market_making_moment_experiment.py --config config/experiments/market_making/market_making_moment.yaml
+```
+
+Docker:
+
+```bash
+docker compose run --rm app python scripts/run_market_making_moment_experiment.py --config config/experiments/market_making/market_making_moment.yaml
+```
+
+### 8.6 Kraken Futures demo scaffold
+
+Το demo scaffold κάνει adapter/config validation. Το signed REST order placement δεν είναι production-ready στο τρέχον subsystem.
+
+PowerShell credentials:
+
+```powershell
+$env:KRAKEN_FUTURES_API_KEY="..."
+$env:KRAKEN_FUTURES_API_SECRET="..."
+python scripts/run_kraken_futures_demo_mm.py --config config/execution/kraken_futures_demo_market_making.yaml
+```
+
+Bash credentials:
+
+```bash
+export KRAKEN_FUTURES_API_KEY="..."
+export KRAKEN_FUTURES_API_SECRET="..."
+python scripts/run_kraken_futures_demo_mm.py --config config/execution/kraken_futures_demo_market_making.yaml
+```
+
+
+## 9. MCP server
+
+Start MCP server:
+
+```bash
+docker compose up -d --build mcp
+```
+
+Logs:
+
+```bash
+docker compose logs -f mcp
+```
+
+Expose local MCP server with ngrok:
+
+```bash
+ngrok http 8765
+```
+
+MCP health URL:
+
+```text
+http://127.0.0.1:8765
+```
+
+
+## 10. Useful inspection commands
+
+Find configs:
+
+```bash
+find config/experiments -name "*.yaml"
+find config/optuna -name "*.yaml"
+```
+
+PowerShell equivalents:
+
+```powershell
+Get-ChildItem -Recurse config\experiments -Filter *.yaml
+Get-ChildItem -Recurse config\optuna -Filter *.yaml
+```
+
+Search code/configs:
+
+```bash
+rg "market_making"
+rg "execution.mode"
+rg "signal_col" config src tests
+```
+
+Check current git changes:
+
+```bash
+git status --short
+git diff -- docs/commands.txt
+```

@@ -81,8 +81,12 @@ def run_experiment(cfg: dict[str, Any], *, config_path: str | Path) -> dict[str,
             fine_tune=bool(model_cfg.get("fine_tune", False)),
             random_seed=int(runtime_cfg.get("random_seed", 42)),
             target_horizon=str(model_cfg.get("target_horizon", "h5")),
+            lookback_length=int(model_cfg.get("lookback_length", 512)),
             batch_size=int(model_cfg.get("batch_size", 8)),
             device=str(model_cfg.get("device", "cpu")),
+            ridge_alpha=float(model_cfg.get("ridge_alpha", 1.0)),
+            max_fit_rows=_optional_positive_int(model_cfg.get("max_fit_rows")),
+            local_files_only=bool(model_cfg.get("local_files_only", False)),
         )
     ).fit(splits["train"], feature_columns=features)
 
@@ -228,6 +232,13 @@ def _first_path(paths: object) -> str:
     if isinstance(paths, list) and paths:
         return str(paths[0])
     return ""
+
+
+def _optional_positive_int(value: object) -> int | None:
+    if value is None or value == "":
+        return None
+    parsed = int(value)
+    return parsed if parsed > 0 else None
 
 
 if __name__ == "__main__":

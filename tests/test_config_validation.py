@@ -676,6 +676,56 @@ def test_validate_model_block_rejects_triple_barrier_for_forecasters() -> None:
         validate_model_block(model)
 
 
+def test_validate_model_block_accepts_foundation_forecaster_params() -> None:
+    validate_model_block(
+        {
+            "kind": "chronos_bolt_forecaster",
+            "target": {"kind": "forward_return", "price_col": "close", "horizon": 4},
+            "split": {"method": "walk_forward", "train_size": 100, "test_size": 20},
+            "params": {
+                "model_id": "amazon/chronos-bolt-tiny",
+                "source_col": "close",
+                "source_kind": "price",
+                "lookback": 128,
+                "min_context": 16,
+                "prediction_length": 4,
+                "quantiles": [0.1, 0.5, 0.9],
+            },
+        }
+    )
+    validate_model_block(
+        {
+            "kind": "timesfm_2p5_200m_forecaster",
+            "target": {"kind": "future_return_regression", "price_col": "close", "horizon_bars": 2},
+            "split": {"method": "walk_forward", "train_size": 100, "test_size": 20},
+            "params": {
+                "model_id": "google/timesfm-2.5-200m-pytorch",
+                "source_col": "close",
+                "max_context": 256,
+                "max_horizon": 8,
+                "quantiles": [0.1, 0.5, 0.9],
+            },
+        }
+    )
+
+
+def test_validate_model_block_rejects_barrier_target_for_foundation_forecasters() -> None:
+    with pytest.raises(ConfigValidationError, match="Foundation forecasters"):
+        validate_model_block(
+            {
+                "kind": "chronos_2_forecaster",
+                "target": {
+                    "kind": "triple_barrier",
+                    "price_col": "close",
+                    "target_col": "trade_r",
+                    "max_holding": 12,
+                },
+                "split": {"method": "walk_forward", "train_size": 100, "test_size": 20},
+                "params": {"lookback": 128},
+            }
+        )
+
+
 def test_validate_model_block_accepts_feature_selectors() -> None:
     validate_model_block(
         {

@@ -218,6 +218,10 @@ information.
 - `lstm_forecaster`
 - `patchtst_forecaster`
 - `tft_forecaster`
+- `chronos_bolt_forecaster`
+- `chronos_2_forecaster`
+- `timesfm_2p5_200m_forecaster`
+- `timesfm_1p0_200m_forecaster`
 - `ppo_agent`
 
 Το preprocessing πρέπει να είναι train-fold safe. Scalers/encoders δεν γίνονται

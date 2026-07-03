@@ -9,11 +9,15 @@ from src.models.classification import (
 )
 from src.models.common.runtime import infer_feature_columns, resolve_feature_selectors
 from src.models.forecasting import (
+    train_chronos_2_forecaster,
+    train_chronos_bolt_forecaster,
     train_garch_forecaster,
     train_lightgbm_regressor,
     train_lstm_forecaster,
     train_patchtst_forecaster,
     train_sarimax_forecaster,
+    train_timesfm_1p0_200m_forecaster,
+    train_timesfm_2p5_200m_forecaster,
     train_tft_forecaster,
 )
 from src.models.rl import (
@@ -33,6 +37,8 @@ __all__ = [
     "resolve_feature_selectors",
     "train_elastic_net_classifier",
     "train_event_transformer_encoder",
+    "train_chronos_2_forecaster",
+    "train_chronos_bolt_forecaster",
     "train_garch_forecaster",
     "train_lightgbm_classifier",
     "train_lightgbm_regressor",
@@ -42,6 +48,8 @@ __all__ = [
     "train_ppo_agent",
     "train_ppo_portfolio_agent",
     "train_sarimax_forecaster",
+    "train_timesfm_1p0_200m_forecaster",
+    "train_timesfm_2p5_200m_forecaster",
     "train_tsfresh_extrema_feature_discovery",
     "train_tft_forecaster",
     "train_xgboost_classifier",

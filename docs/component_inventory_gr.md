@@ -164,6 +164,10 @@ Single-asset model kinds:
 - `lstm_forecaster`
 - `patchtst_forecaster`
 - `tft_forecaster`
+- `chronos_bolt_forecaster`
+- `chronos_2_forecaster`
+- `timesfm_2p5_200m_forecaster`
+- `timesfm_1p0_200m_forecaster`
 - `tsfresh_extrema_feature_discovery`
 - `ppo_agent`
 - `dqn_agent`

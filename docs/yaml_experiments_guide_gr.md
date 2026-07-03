@@ -650,7 +650,8 @@ outputs είναι:
   `xgboost_clf`, `event_transformer_encoder`.
 - Regressors/forecasters: `lightgbm_regressor`, `sarimax_forecaster`,
   `garch_forecaster`, `lstm_forecaster`, `patchtst_forecaster`,
-  `tft_forecaster`.
+  `tft_forecaster`, `chronos_bolt_forecaster`, `chronos_2_forecaster`,
+  `timesfm_2p5_200m_forecaster`, `timesfm_1p0_200m_forecaster`.
 - Feature discovery: `tsfresh_extrema_feature_discovery`.
 - Single-asset RL: `ppo_agent`, `dqn_agent`.
 - Portfolio RL: `ppo_portfolio_agent`, `dqn_portfolio_agent`.

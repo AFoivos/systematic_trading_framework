@@ -53,6 +53,7 @@ backtest έχει leakage.
 | Tabular classifiers | `logistic_regression_clf`, `elastic_net_clf`, `lightgbm_clf`, `xgboost_clf` | Πιθανότητα binary label ή meta-label από tabular features. |
 | Sequence / event classifier | `event_transformer_encoder` | Πιθανότητα και embeddings από rolling event sequences. |
 | Return forecasters / regressors | `lightgbm_regressor`, `sarimax_forecaster`, `lstm_forecaster`, `patchtst_forecaster`, `tft_forecaster` | Μελλοντική απόδοση ή continuous target. |
+| Foundation zero-shot forecasters | `chronos_bolt_forecaster`, `chronos_2_forecaster`, `timesfm_2p5_200m_forecaster`, `timesfm_1p0_200m_forecaster` | Inference-only forecast από causal price/returns context. |
 | Volatility / risk forecaster | `garch_forecaster` | Κυρίως forecast volatility/risk από return dynamics. |
 | Feature discovery | `tsfresh_extrema_feature_discovery` | PIT-safe tsfresh features και relevance για future extrema labels. |
 | Single-asset RL | `ppo_agent`, `dqn_agent` | Policy για actions σε ένα asset. |
@@ -534,6 +535,55 @@ compression -> expansion που δεν χωράει σε ένα μόνο row.
 - `quantiles`: default `[0.1, 0.5, 0.9]`, πρέπει να είναι μοναδικά και μέσα
   στο `(0, 1)`.
 
+### Παράμετροι foundation forecasters
+
+Ισχύουν για `chronos_bolt_forecaster`, `chronos_2_forecaster`,
+`timesfm_2p5_200m_forecaster` και `timesfm_1p0_200m_forecaster`.
+
+- `params.source_col`: observed causal σειρά που δίνεται στο foundation model.
+  Default είναι το `model.target.price_col` ή `close`.
+- `params.source_kind`: `price` ή `returns`. Αν λείπει, γίνεται inference από το
+  όνομα του `source_col`.
+- `params.source_returns_type`: `simple` ή `log` όταν το source είναι returns.
+- `params.model_id`: checkpoint id. Defaults:
+  `amazon/chronos-bolt-tiny`, `amazon/chronos-2`,
+  `google/timesfm-2.5-200m-pytorch`, `google/timesfm-1.0-200m-pytorch`.
+- `params.lookback`: maximum context bars που περνάνε στο model. Default `256`.
+- `params.min_context`: minimum finite context bars για να βγει prediction.
+  Default `16`.
+- `params.prediction_length`: forecast horizon που ζητάς από το foundation model.
+  Default είναι το target horizon και πρέπει να είναι >= target horizon.
+- `params.quantiles`: default `[0.1, 0.5, 0.9]`. Γράφει `pred_q10`,
+  `pred_q50`, `pred_q90` όταν το backend επιστρέφει quantiles, και `pred_vol`
+  από το low/high spread.
+
+Παράδειγμα:
+
+```yaml
+model:
+  kind: chronos_bolt_forecaster
+  target:
+    kind: forward_return
+    price_col: close
+    horizon: 4
+  split:
+    method: walk_forward
+    train_size: 500
+    test_size: 100
+  params:
+    model_id: amazon/chronos-bolt-tiny
+    source_col: close
+    source_kind: price
+    lookback: 256
+    min_context: 32
+    quantiles: [0.1, 0.5, 0.9]
+```
+
+Σημείωση: αυτά τα wrappers δεν εκπαιδεύουν model ανά fold. Χρησιμοποιούν μόνο
+το causal context μέχρι το row `t`, προβλέπουν future price/returns και μετά
+μετατρέπουν το forecast σε `pred_ret`, ώστε να συγκρίνεται με το υπάρχον
+`forward_return` ή `future_return_regression` target.
+
 ## Παράμετροι RL models
 
 Τα RL models δεν εκπαιδεύουν supervised label probability. Χρησιμοποιούν
@@ -927,6 +977,30 @@ policy. Για αυτό τα outputs είναι `signal_rl` και, στα singl
 - Όταν θέλεις ισχυρό neural forecaster με πλουσιότερο temporal context.
 - Όταν έχεις αρκετά rows και αυστηρά OOS splits.
 
+### Foundation forecasters
+
+Τι μαθαίνουν:
+
+- Δεν κάνουν supervised fit στο dataset. Φορτώνουν pretrained Chronos ή TimesFM
+  checkpoint και παράγουν zero-shot forecast από ιστορικό context.
+- Τα wrappers χρησιμοποιούν causal `source_col` history, όχι generated target
+  columns, ώστε να μην διαρρεύσει future label.
+
+Τι σημαίνουν οι τιμές:
+
+- `pred_ret` είναι το forecast του target-horizon return που προκύπτει από το
+  predicted price/returns path.
+- `pred_qXX` είναι quantile-based return forecast όπου υποστηρίζεται από το
+  backend.
+- `pred_vol` είναι proxy uncertainty από το μισό εύρος high-low quantiles.
+
+Πότε το προτιμάς:
+
+- Όταν θέλεις γρήγορο zero-shot baseline χωρίς fold-level training.
+- Όταν θες να συγκρίνεις Chronos-Bolt/Chronos-2 ή μικρότερα TimesFM setups με
+  τα local neural forecasters.
+- Όταν το dependency/model download είναι αποδεκτό για το runtime περιβάλλον.
+
 ## Feature discovery
 
 ### `tsfresh_extrema_feature_discovery`
@@ -1214,6 +1288,9 @@ Leakage rules:
 - Θέλεις ισχυρό tabular classifier; σύγκρινε `lightgbm_clf` και `xgboost_clf`.
 - Θέλεις continuous return forecast; χρησιμοποίησε `lightgbm_regressor` ή
   sequence forecaster.
+- Θέλεις zero-shot foundation baseline χωρίς training; δοκίμασε
+  `chronos_bolt_forecaster`, `chronos_2_forecaster`,
+  `timesfm_2p5_200m_forecaster` ή `timesfm_1p0_200m_forecaster`.
 - Θέλεις volatility/risk forecast; χρησιμοποίησε `garch_forecaster`.
 - Θέλεις να αξιοποιήσεις temporal sequence context; δοκίμασε
   `event_transformer_encoder`, `lstm_forecaster`, `patchtst_forecaster` ή
