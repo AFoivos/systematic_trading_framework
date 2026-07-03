@@ -1,25 +1,25 @@
 pipeline:
-  output_dir: logs/experiments/market_making/pipeline_runs/large_moment
+  output_dir: logs/experiments/market_making/pipeline_runs/large_moment_collect_2m
   write_manifest: true
   collect_orderbook:
     enabled: true
-    output_path: logs/experiments/market_making/orderbook_events.csv
-    max_events: 1000000
+    output_path: logs/experiments/market_making/orderbook_events_btcusd_large_2m.csv
+    max_events: 2000000
   paper_replay:
     enabled: true
-    output_dir: logs/experiments/market_making/runs/large_moment_replay
+    output_dir: logs/experiments/market_making/runs/large_moment_collect_2m_replay
     use_outputs_for_moment: true
   moment_experiment:
     enabled: true
 
 data:
-  orderbook_events_path: logs/experiments/market_making/orderbook_events.csv
+  orderbook_events_path: logs/experiments/market_making/orderbook_events_btcusd_large_2m.csv
   quote_events_paths: []
-  trades_path: logs/experiments/market_making/trades.csv
+  trades_path: ""
   moment_dataset:
-    path: logs/experiments/market_making/datasets/moment_large_dataset.parquet
-    reuse_existing: true
-    rebuild: false
+    path: logs/experiments/market_making/datasets/moment_large_collect_2m_dataset.parquet
+    reuse_existing: false
+    rebuild: true
     horizons: [1, 5, 10, 30]
 
 execution:
@@ -28,7 +28,7 @@ execution:
   symbol: BTC/USD
   depth: 100
   reconnect: true
-  max_events: 1000000
+  max_events: 2000000
   quote_interval_ms: 500
   cancel_replace_interval_ms: 1000
   stale_order_book_ms: 3000
@@ -97,7 +97,7 @@ moment:
   batch_size: 8
   device: cpu
   ridge_alpha: 1.0
-  max_fit_rows: 5000
+  max_fit_rows: 50000
   local_files_only: false
 
 moment_filter:
@@ -112,7 +112,7 @@ split:
 
 moment_output:
   root: logs/experiments/market_making
-  run_name: market_making_large_moment
+  run_name: market_making_large_moment_collect_2m
   write_report: true
 
 logging:

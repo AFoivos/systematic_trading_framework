@@ -273,6 +273,9 @@ the collector, paper replay, dataset builder, and MOMENT experiment one by one:
 ```bash
 python scripts/run_market_making_pipeline.py \
   --config config/experiments/market_making/market_making_large_moment_pipeline.yaml
+
+docker compose run --rm app python scripts/run_market_making_pipeline.py \
+  --config config/experiments/market_making/market_making_large_moment_pipeline.yaml
 ```
 
 The key switch is:
