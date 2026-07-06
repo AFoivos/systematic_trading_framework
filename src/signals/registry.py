@@ -18,6 +18,7 @@ from .ehlers_semiscalp_long_signal import ehlers_semiscalp_long_signal
 from .ehlers_trend_pullback_continuation_long_signal import ehlers_trend_pullback_continuation_long_signal
 from .ema_rms_ppo_vwap_signal import ema_rms_ppo_vwap_signal
 from .ema_stoch_rsi_pullback_signal import ema_stoch_rsi_pullback_signal
+from .eurusd_session_bb_reversion import eurusd_session_bb_reversion_signal
 from .forecast_threshold_signal import forecast_threshold_signal
 from .forecast_threshold_hysteresis_signal import forecast_threshold_hysteresis_signal
 from .forecast_vol_adjusted_signal import forecast_vol_adjusted_signal
@@ -55,6 +56,7 @@ _SIGNAL_COMPONENTS: tuple[tuple[str, SignalFn], ...] = (
     ("ehlers_trend_pullback_continuation_long", ehlers_trend_pullback_continuation_long_signal),
     ("trend_state", trend_state_signal),
     ("ema_rms_ppo_vwap", ema_rms_ppo_vwap_signal),
+    ("eurusd_session_bb_reversion", eurusd_session_bb_reversion_signal),
     ("probability_threshold", probabilistic_signal),
     ("probability_conviction", conviction_sizing_signal),
     ("probability_vol_adjusted", probability_vol_adjusted_signal),

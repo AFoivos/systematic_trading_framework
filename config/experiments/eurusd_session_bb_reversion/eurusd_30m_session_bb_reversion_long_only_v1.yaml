@@ -1,0 +1,281 @@
+strategy:
+  name: EURUSD_30m_session_bb_reversion_long_only_v1
+  description: >
+    Independent Codex-researched EURUSD 30m long-only intraday mean-reversion
+    candidate. The rule buys London/NY-session washouts when EURUSD is below
+    the lower Bollinger tail, RSI is depressed, the 8-bar return is negative,
+    medium-term trend is not extended, ATR is in a normal regime, and spread
+    rank is acceptable.
+data:
+  source: dukascopy_csv
+  interval: 30m
+  start: null
+  end: null
+  alignment: inner
+  symbol: EURUSD
+  pit:
+    timestamp_alignment:
+      source_timezone: UTC
+      output_timezone: UTC
+      normalize_daily: false
+      duplicate_policy: last
+    corporate_actions:
+      policy: none
+      adj_close_col: adj_close
+    universe_snapshot:
+      inactive_policy: raise
+  storage:
+    mode: cached_only
+    dataset_id: eurusd_30m_session_bb_reversion_long_only_v1
+    save_raw: false
+    save_processed: true
+    load_path: data/raw/dukascopy_30m_clean/eurusd_30m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed
+features:
+- step: returns
+  params:
+    log: false
+    col_name: close_ret
+  outputs: {}
+  enabled: true
+- step: session_context
+  params:
+    timezone: UTC
+    add_cyclical_time: false
+    include_weekend_flag: true
+    sessions:
+      london_ny_research:
+      - 7
+      - 18
+  normalizations:
+    rolling_percent_rank:
+      enabled: true
+      source_col: spread_bps
+      window: 336
+      min_periods: 200
+      output_col: spread_rank_336
+      shift_window: false
+  outputs: {}
+  enabled: true
+- step: trend
+  params:
+    price_col: close
+    sma_windows: []
+    ema_spans:
+    - 20
+    - 50
+    - 100
+    - 200
+    add_ratios: false
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: close
+        denominator_col: close_ema_20
+        output_col: close_over_ema_20
+        subtract: 1.0
+      - numerator_col: close
+        denominator_col: close_ema_50
+        output_col: close_over_ema_50
+        subtract: 1.0
+      - numerator_col: close
+        denominator_col: close_ema_100
+        output_col: close_over_ema_100
+        subtract: 1.0
+      - numerator_col: close
+        denominator_col: close_ema_200
+        output_col: close_over_ema_200
+        subtract: 1.0
+  outputs: {}
+  enabled: true
+- step: bollinger
+  params:
+    price_col: close
+    window: 40
+    n_std: 2.0
+  outputs: {}
+  enabled: true
+- step: roc
+  params:
+    price_col: close
+    windows:
+    - 8
+  outputs: {}
+  enabled: true
+- step: rsi
+  params:
+    price_col: close
+    windows:
+    - 28
+    method: wilder
+  outputs: {}
+  enabled: true
+- step: atr
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    windows:
+    - 14
+    method: wilder
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: atr_14
+        denominator_col: close
+        output_col: atr_pct_14
+  normalizations:
+    rolling_percent_rank:
+      enabled: true
+      source_col: atr_pct_14
+      window: 336
+      min_periods: 200
+      output_col: atr_pct_rank_336
+      shift_window: false
+  outputs: {}
+  enabled: true
+model:
+  kind: none
+signals:
+  kind: eurusd_session_bb_reversion
+  params:
+    bb_percent_b_col: bb_percent_b_40_2.0
+    rsi_col: close_rsi_28
+    roc_col: roc_8
+    close_over_ema_col: close_over_ema_200
+    atr_rank_col: atr_pct_rank_336
+    spread_rank_col: spread_rank_336
+    is_weekend_col: is_weekend
+    timezone: UTC
+    start_hour: 7
+    end_hour: 18
+    bb_percent_b_max: 0.12
+    rsi_max: 35.0
+    roc_max: -0.0005
+    max_abs_trend: 0.005
+    min_atr_rank: 0.10
+    max_atr_rank: 0.80
+    max_spread_rank: 0.75
+    signal_col: signal_side
+    candidate_col: signal_candidate
+    score_col: eurusd_bb_reversion_score
+  outputs: {}
+target:
+  kind: triple_barrier
+  outputs:
+    label_col: label
+    event_ret_col: tb_event_ret
+    fwd_col: tb_event_ret
+    candidate_out_col: label_candidate
+    r_col: tb_event_r
+    oriented_r_col: tb_oriented_r
+  price_col: close
+  open_col: open
+  high_col: high
+  low_col: low
+  volatility_col: null
+  label_mode: meta
+  side_col: signal_side
+  candidate_col: signal_candidate
+  candidate_mode: all_nonzero
+  entry_price_mode: next_open
+  max_holding: 24
+  upper_mult: 100.0
+  lower_mult: 100.0
+  vol_window: 24
+  min_vol: 0.0001
+  neutral_label: lower
+  tie_break: closest_to_open
+  add_r_multiple: true
+  r_clip:
+  - -3
+  - 3
+  diagnostic_feature_cols:
+  - bb_percent_b_40_2.0
+  - close_rsi_28
+  - roc_8
+  - close_over_ema_200
+  - atr_pct_14
+  - atr_pct_rank_336
+  - spread_bps
+  - spread_rank_336
+  - is_weekend
+  - session_london_ny_research
+  - cond_session
+  - cond_not_weekend
+  - cond_bb_washout
+  - cond_rsi_washout
+  - cond_pullback
+  - cond_flat_medium_trend
+  - cond_atr_regime
+  - cond_spread_regime
+  - eurusd_bb_reversion_score
+  - signal_candidate
+  - signal_side
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+risk:
+  cost_per_turnover: 0.00015
+  slippage_per_turnover: 0.0001
+  target_vol: null
+  max_leverage: 1.0
+  sizing: {}
+  dd_guard:
+    enabled: false
+    max_drawdown: 0.08
+    rearm_drawdown: 0.04
+    cooloff_bars: 48
+  portfolio_guard: {}
+  drawdown_sizing: {}
+  vol_col: null
+backtest:
+  engine: manual_barrier
+  signal_col: signal_side
+  returns_col: close_ret
+  returns_type: simple
+  subset: full
+  periods_per_year: 12096
+  missing_return_policy: raise_if_exposed
+  allow_short: false
+  stop_mode: fixed_return
+  vol_col: null
+  open_col: open
+  high_col: high
+  low_col: low
+  close_col: close
+  take_profit_r: 100.0
+  stop_loss_r: 100.0
+  risk_per_trade: 0.01
+  max_holding_bars: 24
+  dynamic_exits: {}
+  partial_exits: {}
+portfolio:
+  enabled: false
+  construction: signal_weights
+  long_short: false
+monitoring:
+  enabled: true
+  psi_threshold: 0.2
+  n_bins: 10
+diagnostics:
+  enabled: true
+execution:
+  enabled: false
+  mode: paper
+  capital: 100000.0
+  price_col: close
+logging:
+  enabled: true
+  run_name: eurusd_30m_session_bb_reversion_long_only_v1
+  output_dir: logs/bot
+  stage_tails:
+    enabled: false
+  execution_source_audit:
+    enabled: true
