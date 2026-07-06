@@ -135,24 +135,31 @@ def assert_no_target_leakage(input_columns: Sequence[str]) -> None:
 
 
 def _load_orderbook(path: str | Path) -> pd.DataFrame:
-    frame = pd.read_csv(path)
+    frame = pd.read_csv(path, low_memory=False)
     if "timestamp" not in frame:
         raise ValueError("orderbook_events.csv must contain timestamp")
-    frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True)
+    frame["timestamp"] = _parse_timestamp_utc(frame["timestamp"], source=str(path))
     return frame.sort_values("timestamp")
 
 
 def _load_quotes(paths: Sequence[str | Path]) -> pd.DataFrame:
     frames = []
     for path in paths:
-        frame = pd.read_csv(path)
+        frame = pd.read_csv(path, low_memory=False)
         if frame.empty:
             continue
         if "timestamp" not in frame:
             raise ValueError(f"quote events missing timestamp: {path}")
-        frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True)
+        frame["timestamp"] = _parse_timestamp_utc(frame["timestamp"], source=str(path))
         frames.append(frame)
     return pd.concat(frames, ignore_index=True).sort_values("timestamp") if frames else pd.DataFrame()
+
+
+def _parse_timestamp_utc(values: pd.Series, *, source: str) -> pd.Series:
+    try:
+        return pd.to_datetime(values, utc=True, format="mixed")
+    except ValueError as exc:
+        raise ValueError(f"{source} contains timestamps that cannot be parsed as mixed ISO8601 datetimes") from exc
 
 
 def _coalesce_numeric(frame: pd.DataFrame, candidates: Sequence[str]) -> pd.Series:

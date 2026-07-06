@@ -1,17 +1,42 @@
 # Local Repository MCP Server
 
-This repository includes a Dockerized Model Context Protocol (MCP) server that exposes only this repository to ChatGPT.
+This repository includes a Dockerized Model Context Protocol (MCP) server for ChatGPT repository work.
 
-The server is tool-only. It does not provide a widget. It mounts the repository at `/workspace` inside the container and resolves every requested path against that root. Absolute paths and symlinks that escape `/workspace` are rejected.
+The server mounts the repository at `/workspace` inside the container. All repository path arguments are resolved against that root. Absolute paths, path traversal, and symlinks that escape `/workspace` are rejected.
 
-## Security Model
+## Rebuild And Restart
 
-- The Docker Compose service mounts the repository read-only.
-- Tools can read files, search code, inspect git state, read experiment artifacts, read configs, read logs, and inspect Optuna SQLite databases in read-only mode.
-- There is no arbitrary shell tool.
-- Git tools use fixed `git` argument lists and never mutate the repository.
-- Python script execution is allowlisted in `mcp_server/mcp-config.yaml` and additionally requires `confirmation="RUN_APPROVED_REPOSITORY_SCRIPT"`.
-- The server exposes no directory outside the repository volume.
+```bash
+docker compose up -d --build mcp
+```
+
+The MCP endpoint is:
+
+```text
+http://localhost:8765/mcp
+```
+
+For ChatGPT Developer Mode, expose the local endpoint through your preferred HTTPS tunnel and register the `/mcp` URL as a remote MCP server. Keep the tunnel pointed only at the MCP service port.
+
+## Full-Access Confirmation
+
+Write, delete, shell, experiment, and git-write tools require:
+
+```text
+confirmation="RUN_FULL_ACCESS_REPOSITORY_ACTION"
+```
+
+The legacy allowlisted Python script runner still requires:
+
+```text
+confirmation="RUN_APPROVED_REPOSITORY_SCRIPT"
+```
+
+The pytest helper still requires:
+
+```text
+confirmation="RUN_APPROVED_REPOSITORY_TESTS"
+```
 
 ## Tools
 
@@ -27,12 +52,31 @@ Repository exploration:
 - `find_references`
 - `read_project_tree`
 
+File mutation:
+
+- `write_file`
+- `append_file`
+- `apply_patch`
+- `delete_path`
+- `move_path`
+
+Commands and experiments:
+
+- `run_shell_command`
+- `run_experiment`
+- `run_pytest`
+- `execute_approved_python_script`
+
 Git:
 
 - `git_status`
 - `git_diff`
 - `git_log`
 - `git_current_branch`
+- `git_add`
+- `git_commit`
+- `git_checkout_new_branch`
+- `git_restore`
 
 Project utilities:
 
@@ -41,23 +85,39 @@ Project utilities:
 - `read_optuna_database`
 - `read_config`
 - `read_log`
-- `execute_approved_python_script`
+- repository introspection and leakage-audit helpers exposed by `server.py`
 
-## Run With Docker Compose
+## Running Experiments Through MCP
 
-Build and start the server:
-
-```bash
-docker compose up --build mcp
-```
-
-The MCP endpoint is:
+Use `run_experiment` for experiment configs under:
 
 ```text
-http://localhost:8765/mcp
+config/experiments/
 ```
 
-For ChatGPT Developer Mode, expose the local endpoint through your preferred HTTPS tunnel and register the `/mcp` URL as a remote MCP server. Keep the tunnel pointed only at the MCP service port.
+The tool runs:
+
+```bash
+python -m src.experiments.runner <config_path>
+```
+
+It returns stdout, stderr, return code, timeout status, and a detected created run directory when an artifact manifest appears under `logs/`.
+
+## Safety Boundaries
+
+- All file and cwd paths are scoped to `/workspace`.
+- Absolute paths are rejected.
+- Path traversal outside the repository is rejected.
+- Deleting the repository root is rejected.
+- Deleting or mutating `.git` through path tools is rejected.
+- Writes, deletes, moves, patches, and git path operations reject obvious secret-like paths:
+  - `.env`
+  - `.env.*`
+  - `*.pem`
+  - `*.key`
+  - `id_rsa`
+  - `id_ed25519`
+- `git push` is intentionally not exposed.
 
 ## Configuration
 
@@ -72,6 +132,5 @@ Important fields:
 - `limits.max_read_bytes`: maximum bytes returned by file-like reads.
 - `limits.max_search_results`: maximum search results.
 - `limits.max_tree_entries`: maximum tree/listing entries.
-- `approved_python_scripts`: repository-relative Python scripts that can be run after explicit confirmation.
-
-To add future tools, add a focused module under `mcp_server/repo_mcp/`, import the handler in `server.py`, and register it with `@mcp.tool()`.
+- `full_access`: full-access capability gates, confirmation token, timeouts, and output limits.
+- `approved_python_scripts`: repository-relative Python scripts that can be run by `execute_approved_python_script`.

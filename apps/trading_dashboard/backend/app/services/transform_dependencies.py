@@ -54,7 +54,9 @@ _EMA_ALIAS = re.compile(r"^ema_(\d+)$")
 _STOCHASTIC = re.compile(r"^close_stoch_[kd]_(\d+)$")
 _REGIME = re.compile(r"^regime_(?:vol_ratio|high_vol_state|low_vol_state|vol_ratio_z|absret_z)_(\d+)_(\d+)$")
 _TREND_REGIME = re.compile(r"^close_trend_(?:regime_sma_(\d+)|state_sma_(\d+)_(\d+))$")
-_MTF = re.compile(r"^mtf_([^_]+)_(?:close_logret|volatility|trend_score|atr|adx|regime_vol_ratio)$")
+_MTF = re.compile(
+    r"^mtf_([^_]+)_(?:open|high|low|close|volume|close_logret|volatility|trend_score|atr|adx|regime_vol_ratio)$"
+)
 _PPO = re.compile(r"^ppo_(\d+)_(\d+)$")
 _PPO_SIGNAL = re.compile(r"^ppo_signal_(\d+)$")
 _PPO_HIST = re.compile(r"^ppo_hist_(\d+)_(\d+)_(\d+)$")

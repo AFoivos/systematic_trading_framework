@@ -5,6 +5,12 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
+from .command_tools import git_add as git_add_impl
+from .command_tools import git_checkout_new_branch as git_checkout_new_branch_impl
+from .command_tools import git_commit as git_commit_impl
+from .command_tools import git_restore as git_restore_impl
+from .command_tools import run_experiment as run_experiment_impl
+from .command_tools import run_shell_command as run_shell_command_impl
 from .config import load_config
 from .git_tools import git_current_branch as git_current_branch_impl
 from .git_tools import git_diff as git_diff_impl
@@ -38,6 +44,11 @@ from .repository import read_project_tree as read_project_tree_impl
 from .repository import search_code as search_code_impl
 from .repository import search_files as search_files_impl
 from .repository import search_standard, search_symbols as search_symbols_impl
+from .write_tools import append_file as append_file_impl
+from .write_tools import apply_patch as apply_patch_impl
+from .write_tools import delete_path as delete_path_impl
+from .write_tools import move_path as move_path_impl
+from .write_tools import write_file as write_file_impl
 
 
 CONFIG = load_config()
@@ -48,6 +59,24 @@ READ_ONLY = ToolAnnotations(
     openWorldHint=False,
 )
 SCRIPT_RUNNER = ToolAnnotations(
+    readOnlyHint=False,
+    destructiveHint=False,
+    idempotentHint=False,
+    openWorldHint=False,
+)
+WRITE_TOOL = ToolAnnotations(
+    readOnlyHint=False,
+    destructiveHint=False,
+    idempotentHint=False,
+    openWorldHint=False,
+)
+DESTRUCTIVE_TOOL = ToolAnnotations(
+    readOnlyHint=False,
+    destructiveHint=True,
+    idempotentHint=False,
+    openWorldHint=False,
+)
+COMMAND_TOOL = ToolAnnotations(
     readOnlyHint=False,
     destructiveHint=False,
     idempotentHint=False,
@@ -82,6 +111,36 @@ def list_directory(path: str = ".", recursive: bool = False, max_entries: int | 
 def read_file(path: str, start_line: int | None = None, max_lines: int | None = None, max_bytes: int | None = None) -> dict[str, Any]:
     """Use this when reading any text-like file inside the repository."""
     return read_file_impl(CONFIG, path=path, start_line=start_line, max_lines=max_lines, max_bytes=max_bytes)
+
+
+@mcp.tool(annotations=WRITE_TOOL)
+def write_file(path: str, content: str, create_dirs: bool = True, overwrite: bool = True, confirmation: str | None = None) -> dict[str, Any]:
+    """Use this when editing or creating a repository text file."""
+    return write_file_impl(CONFIG, path=path, content=content, create_dirs=create_dirs, overwrite=overwrite, confirmation=confirmation)
+
+
+@mcp.tool(annotations=WRITE_TOOL)
+def append_file(path: str, content: str, create_dirs: bool = True, confirmation: str | None = None) -> dict[str, Any]:
+    """Use this when appending UTF-8 text to a repository file."""
+    return append_file_impl(CONFIG, path=path, content=content, create_dirs=create_dirs, confirmation=confirmation)
+
+
+@mcp.tool(annotations=WRITE_TOOL)
+def apply_patch(patch: str, confirmation: str | None = None, timeout_seconds: int | None = None) -> dict[str, Any]:
+    """Use this when applying a unified diff patch to the repository."""
+    return apply_patch_impl(CONFIG, patch=patch, confirmation=confirmation, timeout_seconds=timeout_seconds)
+
+
+@mcp.tool(annotations=DESTRUCTIVE_TOOL)
+def delete_path(path: str, recursive: bool = False, confirmation: str | None = None) -> dict[str, Any]:
+    """Use this when deleting a repository file or, with recursive=True, a directory."""
+    return delete_path_impl(CONFIG, path=path, recursive=recursive, confirmation=confirmation)
+
+
+@mcp.tool(annotations=WRITE_TOOL)
+def move_path(src: str, dst: str, overwrite: bool = False, confirmation: str | None = None) -> dict[str, Any]:
+    """Use this when moving or renaming a repository file or directory."""
+    return move_path_impl(CONFIG, src=src, dst=dst, overwrite=overwrite, confirmation=confirmation)
 
 
 @mcp.tool(annotations=READ_ONLY)
@@ -138,6 +197,30 @@ def git_current_branch() -> dict[str, str]:
     return git_current_branch_impl(CONFIG)
 
 
+@mcp.tool(annotations=WRITE_TOOL)
+def git_add(paths: list[str], confirmation: str | None = None) -> dict[str, Any]:
+    """Use this when staging repository changes with git add."""
+    return git_add_impl(CONFIG, paths=paths, confirmation=confirmation)
+
+
+@mcp.tool(annotations=WRITE_TOOL)
+def git_commit(message: str, confirmation: str | None = None) -> dict[str, Any]:
+    """Use this when creating a local git commit."""
+    return git_commit_impl(CONFIG, message=message, confirmation=confirmation)
+
+
+@mcp.tool(annotations=WRITE_TOOL)
+def git_checkout_new_branch(branch_name: str, confirmation: str | None = None) -> dict[str, Any]:
+    """Use this when creating and checking out a new local git branch."""
+    return git_checkout_new_branch_impl(CONFIG, branch_name=branch_name, confirmation=confirmation)
+
+
+@mcp.tool(annotations=DESTRUCTIVE_TOOL)
+def git_restore(paths: list[str], confirmation: str | None = None) -> dict[str, Any]:
+    """Use this when restoring tracked repository paths from git."""
+    return git_restore_impl(CONFIG, paths=paths, confirmation=confirmation)
+
+
 @mcp.tool(annotations=READ_ONLY)
 def list_experiment_runs(root: str = "logs", max_runs: int = 100) -> dict[str, Any]:
     """Use this when discovering experiment or bot run artifact directories."""
@@ -172,6 +255,18 @@ def read_log(path: str, tail_lines: int = 200) -> dict[str, Any]:
 def execute_approved_python_script(script: str, args: list[str] | None = None, confirmation: str | None = None, timeout_seconds: int | None = None) -> dict[str, Any]:
     """Use this only when the user explicitly confirms running an allowlisted Python script."""
     return execute_approved_python_script_impl(CONFIG, script=script, args=args, confirmation=confirmation, timeout_seconds=timeout_seconds)
+
+
+@mcp.tool(annotations=COMMAND_TOOL)
+def run_shell_command(command: str, cwd: str = ".", timeout_seconds: int | None = None, confirmation: str | None = None, max_output_bytes: int | None = None) -> dict[str, Any]:
+    """Use this when running a shell command inside the repository container."""
+    return run_shell_command_impl(CONFIG, command=command, cwd=cwd, timeout_seconds=timeout_seconds, confirmation=confirmation, max_output_bytes=max_output_bytes)
+
+
+@mcp.tool(annotations=COMMAND_TOOL)
+def run_experiment(config_path: str, timeout_seconds: int | None = None, confirmation: str | None = None) -> dict[str, Any]:
+    """Use this when running an experiment config under config/experiments/."""
+    return run_experiment_impl(CONFIG, config_path=config_path, timeout_seconds=timeout_seconds, confirmation=confirmation)
 
 
 @mcp.tool(annotations=READ_ONLY)

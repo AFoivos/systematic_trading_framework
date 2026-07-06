@@ -25,7 +25,6 @@ services:
     volumes:
       - ./data:/workspace/data
       - ./logs:/workspace/logs
-      - ./reports:/workspace/reports
       - ./apps/trading_dashboard/layouts:/workspace/apps/trading_dashboard/layouts
     ports:
       - "8000:8000"
@@ -48,9 +47,9 @@ services:
       MCP_CONFIG_PATH: /app/mcp-config.yaml
       MCP_HOST: 0.0.0.0
       MCP_PORT: 8765
-      PYTHONPATH: /app
+      PYTHONPATH: /workspace:/app
     volumes:
-      - ./:/workspace:ro
+      - ./:/workspace
     ports:
       - "8765:8765"
     restart: unless-stopped

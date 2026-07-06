@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import inspect
 from typing import Any, Callable
 
 import numpy as np
@@ -346,6 +347,21 @@ def _chronos_common_meta(
     }
 
 
+def _chronos_predict_kwargs(pipeline: object, model_params: dict[str, Any]) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {
+        "batch_size": int(model_params.get("batch_size", 256)),
+        "limit_prediction_length": bool(model_params.get("limit_prediction_length", False)),
+    }
+    try:
+        signature = inspect.signature(getattr(pipeline, "predict"))
+    except (TypeError, ValueError, AttributeError):
+        return kwargs
+    parameters = signature.parameters
+    if any(param.kind is inspect.Parameter.VAR_KEYWORD for param in parameters.values()):
+        return kwargs
+    return {key: value for key, value in kwargs.items() if key in parameters}
+
+
 def make_chronos_bolt_fold_predictor(
     *,
     default_model_id: str = "amazon/chronos-bolt-tiny",
@@ -415,8 +431,7 @@ def make_chronos_bolt_fold_predictor(
             inputs=tensor_contexts,
             prediction_length=spec.prediction_length,
             quantile_levels=list(spec.quantiles),
-            batch_size=int(model_params.get("batch_size", 256)),
-            limit_prediction_length=bool(model_params.get("limit_prediction_length", False)),
+            **_chronos_predict_kwargs(pipeline, model_params),
         )
         point_forecast = _matrix(mean, expected_rows=len(contexts), horizon=spec.prediction_length, name="chronos_mean")
         quantile_cube = _quantile_cube(

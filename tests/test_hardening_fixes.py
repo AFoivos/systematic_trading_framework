@@ -1672,6 +1672,141 @@ def test_save_artifacts_writes_experiment_report(tmp_path) -> None:
     )
 
 
+def test_forecast_diagnostics_write_prediction_timeseries_plot(tmp_path: Path) -> None:
+    """
+    Forecast diagnostics should expose model prediction time-series plots, not only PnL charts.
+    """
+    from src.evaluation.model_diagnostics import write_dense_diagnostic_plots
+
+    idx = pd.date_range("2024-01-01", periods=64, freq="30min")
+    prediction_frame = pd.DataFrame(
+        {
+            "timestamp": idx,
+            "asset": "TEST",
+            "prediction": np.linspace(-0.01, 0.01, len(idx)),
+            "realized": np.linspace(-0.008, 0.012, len(idx)),
+            "pred_q10": np.linspace(-0.015, 0.005, len(idx)),
+            "pred_q90": np.linspace(-0.005, 0.018, len(idx)),
+        }
+    )
+
+    paths = write_dense_diagnostic_plots(tmp_path, {"prediction_frame": prediction_frame})
+
+    assert "prediction_timeseries" in paths
+    assert paths["prediction_timeseries"].name == "prediction_timeseries.png"
+    assert paths["prediction_timeseries"].exists()
+
+
+def test_forecast_first_report_suppresses_cumulative_return_charts(tmp_path: Path) -> None:
+    """
+    Forecast-first model reports should prioritize forecast diagnostics over no-trade PnL plots.
+    """
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    idx = pd.date_range("2024-01-01", periods=16, freq="30min")
+    for name, values in {
+        "returns.csv": np.zeros(len(idx)),
+        "gross_returns.csv": np.zeros(len(idx)),
+        "costs.csv": np.zeros(len(idx)),
+        "turnover.csv": np.zeros(len(idx)),
+        "positions.csv": np.zeros(len(idx)),
+        "equity_curve.csv": np.ones(len(idx)),
+    }.items():
+        pd.Series(values, index=idx, name=name.removesuffix(".csv")).to_csv(run_dir / name)
+
+    (run_dir / "config_used.yaml").write_text(
+        """
+strategy:
+  name: lab_forecast_first
+model:
+  kind: timesfm_2p5_200m_forecaster
+backtest:
+  returns_type: simple
+diagnostics:
+  enabled: true
+logging:
+  output_dir: logs/lab
+""".strip(),
+        encoding="utf-8",
+    )
+    (run_dir / "summary.json").write_text(json.dumps({"evaluation": {}, "primary_summary": {}}), encoding="utf-8")
+    (run_dir / "run_metadata.json").write_text(json.dumps({"model_meta": {}}), encoding="utf-8")
+    diagnostics_dir = run_dir / "artifacts" / "diagnostics"
+    diagnostics_dir.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "timestamp": idx,
+            "asset": "TEST",
+            "prediction": np.zeros(len(idx)),
+            "realized": np.zeros(len(idx)),
+        }
+    ).to_csv(diagnostics_dir / "prediction_distribution.csv", index=False)
+    (diagnostics_dir / "prediction_timeseries.png").write_bytes(b"png")
+
+    artifacts = artifacts_module.write_experiment_report_from_run_dir(run_dir)
+
+    assert "diagnostics_prediction_timeseries" in artifacts
+    assert "cumulative_returns" not in artifacts
+    assert "equity_curve_chart" not in artifacts
+    assert not (run_dir / "report_assets" / "cumulative_returns.png").exists()
+
+
+def test_forecast_diagnostic_artifacts_run_for_foundation_forecasters(tmp_path: Path) -> None:
+    """
+    Foundation forecaster labs should get prediction diagnostics, not only dense LightGBM configs.
+    """
+    idx = pd.date_range("2024-01-01", periods=64, freq="30min")
+    frame = pd.DataFrame(
+        {
+            "pred_ret": np.linspace(-0.01, 0.01, len(idx)),
+            "target_future_return_h24": np.linspace(-0.008, 0.012, len(idx)),
+            "pred_is_oos": True,
+            "pred_q10": np.linspace(-0.015, 0.005, len(idx)),
+            "pred_q90": np.linspace(-0.005, 0.018, len(idx)),
+            "atr_over_price_48": np.linspace(0.001, 0.002, len(idx)),
+        },
+        index=idx,
+    )
+    perf = BacktestResult(
+        equity_curve=pd.Series(1.0, index=idx),
+        returns=pd.Series(0.0, index=idx),
+        gross_returns=pd.Series(0.0, index=idx),
+        costs=pd.Series(0.0, index=idx),
+        positions=pd.Series(0.0, index=idx),
+        turnover=pd.Series(0.0, index=idx),
+        summary={},
+    )
+    cfg = {
+        "strategy": {"name": "forecast_lab"},
+        "data": {"symbol": "TEST"},
+        "model": {"kind": "timesfm_2p5_200m_forecaster"},
+        "signals": {"params": {}},
+        "portfolio": {},
+        "diagnostics": {
+            "enabled": True,
+            "forecast": {"quantiles": 10, "autocorrelation_lags": [1, 2], "volatility_col": "atr_over_price_48"},
+        },
+    }
+    model_meta = {
+        "pred_ret_col": "pred_ret",
+        "pred_is_oos_col": "pred_is_oos",
+        "fwd_col": "target_future_return_h24",
+    }
+
+    paths = artifacts_module._write_dense_forecast_diagnostic_artifacts(
+        run_dir=tmp_path,
+        data=frame,
+        cfg=cfg,
+        performance=perf,
+        model_meta=model_meta,
+        portfolio_weights=None,
+    )
+
+    assert "diagnostics_prediction_distribution" in paths
+    assert "diagnostics_prediction_timeseries" in paths
+    assert (tmp_path / paths["diagnostics_prediction_timeseries"]).exists()
+
+
 def test_execution_source_audit_includes_configured_runtime_modules_and_function_paths() -> None:
     config_path = Path(
         "config/experiments/ema_rms_ppo_vwap/"

@@ -30,8 +30,8 @@ plotly
 optuna
 momentfm
 # Optional foundation forecasters:
-# chronos-forecasting
-# timesfm[torch]  # TimesFM 2.5
+chronos-forecasting
+timesfm[torch]  # TimesFM 2.5
 # timesfm==1.3.0  # Archived TimesFM 1.x API
 
 yfinance

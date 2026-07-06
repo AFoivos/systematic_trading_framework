@@ -49,7 +49,7 @@ def test_loads_paired_trades_from_trade_events_when_trades_csv_is_absent(tmp_pat
             "entry_price": 2050.0,
             "exit_price": 2055.0,
             "pnl": None,
-            "return": None,
+            "return": 5.0 / 2050.0,
             "size": 0.5,
             "exit_reason": None,
         }

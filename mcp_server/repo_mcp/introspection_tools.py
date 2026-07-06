@@ -785,12 +785,44 @@ def run_pytest(config: ServerConfig, paths: list[str] | None = None, confirmatio
         if not (rel == "tests" or rel.startswith("tests/") or rel == "mcp_server/tests" or rel.startswith("mcp_server/tests/")):
             raise PathSecurityError("pytest paths must be under tests/ or mcp_server/tests/")
         resolved_paths.append(rel)
-    proc = subprocess.run(
-        ["pytest", *resolved_paths],
-        cwd=config.repo_root,
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=min(timeout_seconds or config.script_timeout_seconds, config.script_timeout_seconds),
-    )
-    return {"returncode": proc.returncode, "stdout_tail": proc.stdout[-config.max_read_bytes :], "stderr_tail": proc.stderr[-config.max_read_bytes :]}
+    command = ["pytest", *resolved_paths]
+    try:
+        proc = subprocess.run(
+            command,
+            cwd=config.repo_root,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=min(timeout_seconds or config.script_timeout_seconds, config.script_timeout_seconds),
+        )
+        stdout = proc.stdout[-config.max_read_bytes :]
+        stderr = proc.stderr[-config.max_read_bytes :]
+        return {
+            "command": command,
+            "return_code": proc.returncode,
+            "returncode": proc.returncode,
+            "stdout": stdout,
+            "stderr": stderr,
+            "stdout_tail": stdout,
+            "stderr_tail": stderr,
+            "timed_out": False,
+        }
+    except subprocess.TimeoutExpired as exc:
+        stdout = exc.stdout or ""
+        stderr = exc.stderr or ""
+        if isinstance(stdout, bytes):
+            stdout = stdout.decode("utf-8", errors="replace")
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode("utf-8", errors="replace")
+        stdout = stdout[-config.max_read_bytes :]
+        stderr = stderr[-config.max_read_bytes :]
+        return {
+            "command": command,
+            "return_code": None,
+            "returncode": None,
+            "stdout": stdout,
+            "stderr": stderr,
+            "stdout_tail": stdout,
+            "stderr_tail": stderr,
+            "timed_out": True,
+        }

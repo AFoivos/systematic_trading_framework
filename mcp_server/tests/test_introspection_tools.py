@@ -258,3 +258,8 @@ def test_server_import_registers_new_tools(monkeypatch: pytest.MonkeyPatch, tmp_
     assert callable(server.inspect_config)
     assert callable(server.leakage_audit_config)
     assert callable(server.review_current_changes)
+    assert callable(server.write_file)
+    assert callable(server.apply_patch)
+    assert callable(server.run_shell_command)
+    assert callable(server.run_experiment)
+    assert callable(server.git_add)

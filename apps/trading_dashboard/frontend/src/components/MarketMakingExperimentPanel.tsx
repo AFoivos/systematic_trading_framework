@@ -112,7 +112,7 @@ export function MarketMakingExperimentPanel() {
     <section className="execution-section research-experiment-panel">
       <div className="execution-section-header">
         <h2>Market Making Experiment</h2>
-        <span>{snapshot?.run_dir || "reports/market_making"}</span>
+        <span>{snapshot?.run_dir || "logs/experiments/market_making"}</span>
       </div>
       {error ? <div className="error-banner">{error}</div> : null}
       <div className="execution-detail-grid">

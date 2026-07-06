@@ -1708,6 +1708,18 @@ def test_validate_model_block_accepts_lstm_forecaster_with_garch_overlay() -> No
     validate_model_block(model)
 
 
+def test_validate_model_block_accepts_lightgbm_regressor_with_garch_overlay() -> None:
+    model = {
+        "kind": "lightgbm_regressor",
+        "feature_cols": ["feat_1", "feat_2"],
+        "target": {"kind": "future_return_regression", "price_col": "close", "horizon": 1},
+        "split": {"method": "walk_forward", "train_size": 100, "test_size": 20},
+        "overlay": {"kind": "garch", "params": {"returns_input_col": "close_ret", "mean_model": "zero"}},
+    }
+
+    validate_model_block(model)
+
+
 def test_validate_model_block_accepts_standard_preprocessing_scaler() -> None:
     model = {
         "kind": "logistic_regression_clf",

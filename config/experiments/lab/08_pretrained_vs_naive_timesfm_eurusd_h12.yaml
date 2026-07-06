@@ -1,0 +1,52 @@
+strategy:
+  name: lab_08_pretrained_vs_naive_timesfm_eurusd_h12
+  timeframe: 30m
+  assets: [EURUSD]
+  description: >
+    Forecast-first benchmark lab for EURUSD. The report should compare TimesFM
+    forecast metrics against naive zero/rolling baselines outside the trading
+    objective before any strategy conversion.
+data:
+  source: dukascopy_csv
+  interval: 30m
+  start: null
+  end: null
+  alignment: inner
+  symbol: EURUSD
+  pit:
+    timestamp_alignment: {source_timezone: UTC, output_timezone: UTC, normalize_daily: false, duplicate_policy: last}
+    corporate_actions: {policy: none, adj_close_col: adj_close}
+    universe_snapshot: {inactive_policy: raise}
+  storage: {mode: cached_only, dataset_id: lab_08_pretrained_vs_naive_timesfm_eurusd_h12, save_raw: false, save_processed: true, load_path: data/raw/dukascopy_30m_clean/eurusd_30m.csv, raw_dir: data/raw, processed_dir: data/processed}
+features:
+- step: returns
+  params: {log: false, col_name: close_ret}
+- step: volatility
+  params: {returns_col: close_ret, rolling_windows: [24, 96, 192], ewma_spans: [], annualization_factor: null}
+- step: atr
+  params: {high_col: high, low_col: low, close_col: close, window: 48, windows: [48], method: wilder, add_over_price: false, atr_col: atr_48}
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - {numerator_col: atr_48, denominator_col: close, output_col: atr_over_price_48}
+model:
+  kind: timesfm_2p5_200m_forecaster
+  outputs: {pred_ret_col: pred_ret, pred_is_oos_col: pred_is_oos}
+  target: {kind: future_return_regression, price_col: close, returns_col: close_ret, returns_type: simple, horizon_bars: 12, fwd_col: target_future_return_h12, label_col: target_future_return_h12}
+  split: {method: walk_forward, train_size: 12000, test_size: 256, step_size: 256, expanding: true, max_folds: 1, purge_bars: 12, embargo_bars: 12}
+  params: {model_id: google/timesfm-2.5-200m-pytorch, source_col: close, source_kind: price, lookback: 512, max_context: 512, min_context: 96, max_horizon: 24, prediction_length: 12, quantiles: [0.1, 0.5, 0.9]}
+signals:
+  kind: forecast_threshold
+  params: {forecast_col: pred_ret, signal_col: signal_forecast_lab, upper: 999.0, lower: -999.0, mode: long_short}
+target: {}
+validation: {method: walk_forward, purge_bars: 12, embargo_bars: 12}
+metrics: {regression: [mae, rmse, r2, correlation, directional_accuracy]}
+runtime: {seed: 7, repro_mode: strict, deterministic: true, threads: 1, seed_torch: false}
+risk: {cost_per_turnover: 0.0, slippage_per_turnover: 0.0, target_vol: null, max_leverage: 1.0, sizing: {}, dd_guard: {enabled: false}, portfolio_guard: {}, drawdown_sizing: {}, vol_col: null}
+backtest: {engine: vectorized, returns_col: close_ret, signal_col: signal_forecast_lab, periods_per_year: 17520, returns_type: simple, missing_return_policy: raise_if_exposed, min_holding_bars: 12, subset: test, vol_col: null}
+portfolio: {enabled: false, construction: signal_weights, gross_target: 1.0, long_short: true, expected_return_col: pred_ret}
+monitoring: {enabled: true, psi_threshold: 0.15, n_bins: 10}
+diagnostics: {enabled: true, model: {enabled: true}, forecast: {quantiles: 10, autocorrelation_lags: [1, 2, 4, 8, 12], volatility_col: atr_over_price_48}}
+execution: {enabled: false, mode: paper, capital: 100000.0, price_col: close, min_trade_notional: 0.0, current_weights: {}, current_prices: {}}
+logging: {enabled: true, run_name: lab_08_pretrained_vs_naive_timesfm_eurusd_h12, output_dir: logs/lab}

@@ -22,6 +22,8 @@ matplotlib==3.9.2
 seaborn==0.13.2
 plotly==5.24.1
 optuna==3.6.1
+chronos-forecasting==2.3.1
+timesfm[torch]==2.0.2
 momentfm @ https://github.com/moment-timeseries-foundation-model/moment/archive/refs/heads/main.zip
 yfinance==1.1.0
 requests==2.32.3

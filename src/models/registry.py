@@ -18,6 +18,7 @@ _SINGLE_ASSET_MODEL_COMPONENTS: tuple[tuple[str, SingleAssetModelFn], ...] = (
     ("lightgbm_regressor", lazy_callable("src.models.forecasting.base", "train_lightgbm_regressor")),
     ("logistic_regression_clf", lazy_callable("src.models.classification.logistic_regression", "train_logistic_regression_classifier")),
     ("xgboost_clf", lazy_callable("src.models.classification.xgboost", "train_xgboost_classifier")),
+    ("xgboost_regressor", lazy_callable("src.models.forecasting.base", "train_xgboost_regressor")),
     ("event_transformer_encoder", lazy_callable("src.models.classification.event_transformer", "train_event_transformer_encoder")),
     ("sarimax_forecaster", lazy_callable("src.models.forecasting.base", "train_sarimax_forecaster")),
     ("garch_forecaster", lazy_callable("src.models.forecasting.base", "train_garch_forecaster")),

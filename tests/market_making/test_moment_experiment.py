@@ -120,6 +120,30 @@ def test_moment_dataset_construction_and_leakage_guard(tmp_path: Path) -> None:
     assert_no_target_leakage(inputs)
 
 
+def test_moment_dataset_accepts_mixed_iso8601_timestamps(tmp_path: Path) -> None:
+    paths = _write_fixture_inputs(tmp_path)
+    orderbook = pd.read_csv(paths["orderbook"])
+    quotes = pd.read_csv(paths["quotes"])
+    orderbook.loc[0, "timestamp"] = "2026-07-03T15:28:28.123456+00:00"
+    orderbook.loc[1, "timestamp"] = "2026-07-03T15:28:29+00:00"
+    quotes.loc[0, "timestamp"] = "2026-07-03T15:28:28.500000+00:00"
+    quotes.loc[1, "timestamp"] = "2026-07-03T15:28:29+00:00"
+    orderbook.to_csv(paths["orderbook"], index=False)
+    quotes.to_csv(paths["quotes"], index=False)
+
+    dataset = build_market_making_moment_dataset(
+        orderbook_events_path=paths["orderbook"],
+        quote_events_paths=[paths["quotes"]],
+        output_path=tmp_path / "mixed_timestamp_dataset.parquet",
+        horizons=(1, 5),
+        maker_fee_bps=2.0,
+        max_inventory=1.0,
+    )
+
+    assert str(dataset["timestamp"].dtype) == "datetime64[ns, UTC]"
+    assert dataset["timestamp"].is_monotonic_increasing
+
+
 def test_chronological_split_preserves_temporal_order(tmp_path: Path) -> None:
     paths = _write_fixture_inputs(tmp_path)
     dataset = build_market_making_moment_dataset(

@@ -1,0 +1,34 @@
+strategy: {name: lab_local_03_us100_lstm_momentum_h12, timeframe: 30m, assets: [US100], description: "Local LSTM sequence lab for US100 momentum continuation."}
+data:
+  source: dukascopy_csv
+  interval: 30m
+  symbol: US100
+  alignment: inner
+  storage: {mode: cached_only, dataset_id: lab_local_03_us100_lstm_momentum_h12, save_raw: false, save_processed: true, load_path: data/raw/dukascopy_30m_clean/us100_30m.csv, raw_dir: data/raw, processed_dir: data/processed}
+features:
+- {step: returns, outputs: {close_ret: close_ret}, params: {log: false, col_name: close_ret}}
+- {step: volatility, params: {returns_col: close_ret, rolling_windows: [12, 24, 48, 96], ewma_spans: [], annualization_factor: null}}
+- step: trend
+  params: {price_col: close, sma_windows: [], ema_spans: [20, 50, 100], ema_col_template: "ema_{span}", add_ratios: false}
+  transforms: {ratio: {enabled: true, items: [{numerator_col: close, denominator_col: ema_50, output_col: close_over_ema_50, subtract: 1.0}, {numerator_col: ema_20, denominator_col: ema_100, output_col: ema_trend_20_100, subtract: 1.0}]}}
+- step: atr
+  params: {high_col: high, low_col: low, close_col: close, window: 24, windows: [24], method: wilder}
+  transforms: {ratio: {enabled: true, items: [{numerator_col: atr_24, denominator_col: close, output_col: atr_over_price_24}]}}
+- {step: rsi, params: {price_col: close, windows: [14], method: wilder}}
+- {step: stochastic_rsi, params: {price_col: close, rsi_period: 14, stoch_period: 14, k_period: 3, d_period: 3, oversold: 0.2, overbought: 0.8, prefix: stoch_rsi}}
+- {step: roc, params: {price_col: close, windows: [3, 6, 12, 24]}}
+model:
+  kind: lstm_forecaster
+  minimum_expected_features: 14
+  outputs: {pred_ret_col: pred_ret, pred_prob_col: pred_prob, pred_is_oos_col: pred_is_oos}
+  target: {kind: future_return_regression, price_col: close, returns_col: close_ret, returns_type: simple, horizon_bars: 24, normalize_by_volatility: true, volatility_col: atr_24, clip: [-3.0, 3.0], fwd_col: target_momo_12h_atr, label_col: target_momo_12h_atr}
+  split: {method: purged, train_size: 18000, test_size: 2500, step_size: 2500, expanding: true, max_folds: 4, purge_bars: 24, embargo_bars: 24}
+  feature_selectors: {include: [{regex: "^(close_ret|vol_rolling_|close_over_ema_|ema_trend_|atr_|atr_over_price_|rsi_|stoch_rsi_|roc_)"}], strict: {min_count: 14}}
+  params: {lookback: 48, hidden_dim: 32, num_layers: 1, dropout: 0.05, epochs: 6, batch_size: 128, learning_rate: 0.001, weight_decay: 0.0001, quantiles: [0.1, 0.5, 0.9], scale_target: true}
+signals: {kind: forecast_threshold, params: {forecast_col: pred_ret, signal_col: signal_lstm_momentum, upper: 0.25, lower: -0.25, mode: long_short}}
+validation: {method: purged_walk_forward, purge_bars: 24, embargo_bars: 24}
+runtime: {seed: 7, repro_mode: strict, deterministic: true, threads: 1, seed_torch: true}
+risk: {cost_per_turnover: 0.0001}
+backtest: {engine: vectorized, signal_col: signal_lstm_momentum, returns_col: close_ret, returns_type: simple, subset: test, periods_per_year: 12096, missing_return_policy: raise_if_exposed}
+diagnostics: {enabled: true, model: {enabled: true}, forecast: {quantiles: 10, autocorrelation_lags: [1, 2, 4, 12, 24], volatility_col: atr_over_price_24}}
+logging: {enabled: true, run_name: lab_local_03_us100_lstm_momentum_h12, output_dir: logs/lab/local_forecasters}

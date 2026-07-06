@@ -7,6 +7,18 @@ limits:
   max_tree_entries: 5000
   script_timeout_seconds: 120
 
+full_access:
+  enabled: true
+  require_confirmation: true
+  confirmation_token: RUN_FULL_ACCESS_REPOSITORY_ACTION
+  max_output_bytes: 200000
+  default_timeout_seconds: 300
+  max_timeout_seconds: 3600
+  allow_shell: true
+  allow_write: true
+  allow_delete: true
+  allow_git_write: true
+
 # Repository-relative Python scripts that may be executed by the MCP tool after
 # the caller provides confirmation="RUN_APPROVED_REPOSITORY_SCRIPT".
 approved_python_scripts:
@@ -14,3 +26,5 @@ approved_python_scripts:
   - scripts/merge_dukascopy_quarterly_30m.py
   - scripts/prepare_dukascopy_30m_bid_ask_mid.py
   - scripts/prepare_dukascopy_ftmo_mid.py
+  - src/experiments/runner.py
+  - scripts/chatgpt_repo_write.py

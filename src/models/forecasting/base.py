@@ -45,6 +45,7 @@ from src.models.forecasting.lstm import make_lstm_fold_predictor
 from src.models.forecasting.patchtst import make_patchtst_fold_predictor
 from src.models.forecasting.sarimax import train_sarimax_fold
 from src.models.forecasting.tft import make_tft_fold_predictor
+from src.models.forecasting.xgboost import make_xgboost_regressor_fold_predictor
 
 
 def _foundation_model_cfg(model_cfg: dict[str, Any]) -> dict[str, Any]:
@@ -891,6 +892,29 @@ def train_lightgbm_regressor(
         returns_col=returns_col,
         required_features=True,
         runtime_estimator_family="lightgbm",
+    )
+
+
+def train_xgboost_regressor(
+    df: pd.DataFrame,
+    model_cfg: dict[str, Any],
+    returns_col: str | None = None,
+) -> tuple[pd.DataFrame, object, dict[str, Any]]:
+    """
+    Apply the registered ``xgboost_regressor`` model transformation.
+
+    This forecaster trains XGBRegressor fold-by-fold on configured features and
+    emits strict OOS future-return predictions through the shared forecasting
+    pipeline.
+    """
+    return train_forward_forecaster(
+        df=df,
+        model_cfg=model_cfg,
+        model_kind="xgboost_regressor",
+        fold_predictor=make_xgboost_regressor_fold_predictor(),
+        returns_col=returns_col,
+        required_features=True,
+        runtime_estimator_family="xgboost",
     )
 
 

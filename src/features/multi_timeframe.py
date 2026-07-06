@@ -5,14 +5,13 @@ from collections.abc import Sequence
 import numpy as np
 import pandas as pd
 
-from src.features.technical.adx import compute_adx
-from src.features.technical.atr import compute_atr
-
 
 _INTERNAL_TS_COL = "__mtf_timestamp_utc"
 
 
-def _coerce_utc_index(values: pd.Index | pd.Series, *, timezone: str) -> pd.DatetimeIndex:
+def _coerce_utc_index(
+    values: pd.Index | pd.Series, *, timezone: str
+) -> pd.DatetimeIndex:
     idx = pd.DatetimeIndex(pd.to_datetime(values, errors="raise"))
     if idx.tz is None:
         idx = idx.tz_localize(str(timezone))
@@ -25,7 +24,9 @@ def _input_was_tz_naive(values: pd.Index | pd.Series) -> bool:
     return pd.DatetimeIndex(pd.to_datetime(values, errors="raise")).tz is None
 
 
-def _restore_timestamp_convention(index: pd.DatetimeIndex, *, tz_naive: bool) -> pd.DatetimeIndex:
+def _restore_timestamp_convention(
+    index: pd.DatetimeIndex, *, tz_naive: bool
+) -> pd.DatetimeIndex:
     utc_index = index.tz_convert("UTC")
     if tz_naive:
         return utc_index.tz_localize(None)
@@ -36,7 +37,9 @@ def _timeframe_minutes(timeframe: str) -> int:
     delta = pd.Timedelta(str(timeframe))
     minutes = int(delta.total_seconds() // 60)
     if minutes <= 0 or not np.isclose(delta.total_seconds(), minutes * 60):
-        raise ValueError(f"timeframe '{timeframe}' must resolve to whole positive minutes.")
+        raise ValueError(
+            f"timeframe '{timeframe}' must resolve to whole positive minutes."
+        )
     return minutes
 
 
@@ -57,7 +60,9 @@ def _prepare_single_asset_frame(
     timezone: str,
 ) -> tuple[pd.DataFrame, bool, bool]:
     has_timestamp_col = timestamp_col in df.columns
-    time_values: pd.Index | pd.Series = df[timestamp_col] if has_timestamp_col else df.index
+    time_values: pd.Index | pd.Series = (
+        df[timestamp_col] if has_timestamp_col else df.index
+    )
     tz_naive = _input_was_tz_naive(time_values)
     utc_index = _coerce_utc_index(time_values, timezone=timezone)
 
@@ -87,7 +92,9 @@ def _resample_ohlcv(
         raise ValueError("timestamp_convention must be one of: bar_start, bar_close.")
     timeframe_minutes = _timeframe_minutes(timeframe)
     if timeframe_minutes % int(base_interval_minutes) != 0:
-        raise ValueError("Higher timeframes must be integer multiples of base_interval_minutes.")
+        raise ValueError(
+            "Higher timeframes must be integer multiples of base_interval_minutes."
+        )
     expected_rows = timeframe_minutes // int(base_interval_minutes)
 
     # Timestamp convention:
@@ -98,7 +105,9 @@ def _resample_ohlcv(
     #   HTF bars use `closed='left'`, so [00:00, 01:00) is labeled 01:00 and only rows
     #   at or after 01:00 can receive that fully closed 1h feature.
     closed = "left" if timestamp_convention == "bar_start" else "right"
-    resampler = df.resample(str(timeframe), label="right", closed=closed, origin="epoch")
+    resampler = df.resample(
+        str(timeframe), label="right", closed=closed, origin="epoch"
+    )
     bars = resampler.agg(
         {
             open_col: "first",
@@ -109,58 +118,34 @@ def _resample_ohlcv(
         }
     )
     counts = resampler[close_col].count()
-    bars = bars.loc[counts >= expected_rows].dropna(subset=[open_col, high_col, low_col, close_col])
+    bars = bars.loc[counts >= expected_rows].dropna(
+        subset=[open_col, high_col, low_col, close_col]
+    )
     bars.index.name = _INTERNAL_TS_COL
     return bars
 
 
-def _compute_higher_timeframe_features(
+def _prefix_higher_timeframe_candles(
     bars: pd.DataFrame,
     *,
     prefix: str,
-    price_col: str,
+    open_col: str,
     high_col: str,
     low_col: str,
-    returns_col: str,
-    volatility_window: int,
-    trend_ema_span: int,
-    trend_sma_window: int,
-    atr_window: int,
-    adx_window: int,
-    regime_short_window: int,
-    regime_long_window: int,
+    close_col: str,
+    volume_col: str,
 ) -> pd.DataFrame:
-    close = bars[price_col].astype(float)
-    high = bars[high_col].astype(float)
-    low = bars[low_col].astype(float)
-
-    ratio = close / close.shift(1)
-    logret = np.log(ratio)
-    logret = logret.where(ratio > 0.0)
-
-    volatility = logret.rolling(volatility_window, min_periods=volatility_window).std()
-    ema = close.ewm(span=trend_ema_span, adjust=False, min_periods=trend_ema_span).mean()
-    sma = close.rolling(trend_sma_window, min_periods=trend_sma_window).mean()
-    trend_score = ema / sma.replace(0.0, np.nan) - 1.0
-    atr = compute_atr(high, low, close, window=atr_window)
-    adx_frame = compute_adx(high, low, close, window=adx_window)
-    adx = adx_frame[f"adx_{adx_window}"]
-    short_vol = logret.rolling(regime_short_window, min_periods=regime_short_window).std()
-    long_vol = logret.rolling(regime_long_window, min_periods=regime_long_window).std()
-    regime_vol_ratio = short_vol / long_vol.replace(0.0, np.nan)
-
-    features = pd.DataFrame(
+    candles = pd.DataFrame(
         {
-            f"mtf_{prefix}_{returns_col}": logret,
-            f"mtf_{prefix}_volatility": volatility,
-            f"mtf_{prefix}_trend_score": trend_score,
-            f"mtf_{prefix}_atr": atr,
-            f"mtf_{prefix}_adx": adx,
-            f"mtf_{prefix}_regime_vol_ratio": regime_vol_ratio,
+            f"mtf_{prefix}_open": bars[open_col],
+            f"mtf_{prefix}_high": bars[high_col],
+            f"mtf_{prefix}_low": bars[low_col],
+            f"mtf_{prefix}_close": bars[close_col],
+            f"mtf_{prefix}_volume": bars[volume_col],
         },
         index=bars.index,
     )
-    return features.astype("float32")
+    return candles.astype("float32")
 
 
 def _merge_last_closed_features(
@@ -195,16 +180,8 @@ def _add_multi_timeframe_single_asset(
     low_col: str,
     open_col: str,
     volume_col: str,
-    returns_col: str,
     timezone: str,
     timestamp_col: str,
-    volatility_window: int,
-    trend_ema_span: int,
-    trend_sma_window: int,
-    atr_window: int,
-    adx_window: int,
-    regime_short_window: int,
-    regime_long_window: int,
     timestamp_convention: str,
 ) -> pd.DataFrame:
     _require_columns(df, [open_col, high_col, low_col, price_col, volume_col])
@@ -233,20 +210,14 @@ def _add_multi_timeframe_single_asset(
             volume_col=volume_col,
             timestamp_convention=timestamp_convention,
         )
-        features = _compute_higher_timeframe_features(
+        features = _prefix_higher_timeframe_candles(
             bars,
             prefix=prefix,
-            price_col=price_col,
+            open_col=open_col,
             high_col=high_col,
             low_col=low_col,
-            returns_col=returns_col,
-            volatility_window=volatility_window,
-            trend_ema_span=trend_ema_span,
-            trend_sma_window=trend_sma_window,
-            atr_window=atr_window,
-            adx_window=adx_window,
-            regime_short_window=regime_short_window,
-            regime_long_window=regime_long_window,
+            close_col=price_col,
+            volume_col=volume_col,
         )
         out = _merge_last_closed_features(out, features)
 
@@ -289,11 +260,15 @@ def add_multi_timeframe_features(
 ) -> pd.DataFrame:
     """
     Apply the registered ``multi_timeframe`` feature transformation.
-    
-    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
-    
+
+    This feature resamples the base OHLCV input to each configured higher timeframe and
+    aligns the last fully closed higher-timeframe raw candle to the base frame. It does
+    not compute derived returns, indicators, helpers, or normalizations; downstream
+    feature steps should derive those explicitly from the raw ``mtf_{timeframe}_*``
+    candle columns.
+
     YAML declaration::
-    
+
         features:
           - step: multi_timeframe
             params:
@@ -304,20 +279,12 @@ def add_multi_timeframe_features(
               low_col: low
               open_col: open
               volume_col: volume
-              returns_col: close_logret
               timezone: UTC
               shift_to_last_closed: true
               timestamp_convention: bar_close
               timestamp_col: timestamp
               asset_col: asset
-              volatility_window: 12
-              trend_ema_span: 8
-              trend_sma_window: 20
-              atr_window: 14
-              adx_window: 14
-              regime_short_window: 12
-              regime_long_window: 48
-    
+
     Required input columns
     ----------------------
     price_col:
@@ -330,13 +297,11 @@ def add_multi_timeframe_features(
         Input dataframe column configured by ``open_col``. Default: ``open``.
     volume_col:
         Input dataframe column configured by ``volume_col``. Default: ``volume``.
-    returns_col:
-        Input dataframe column configured by ``returns_col``. Default: ``close_logret``.
     timestamp_col:
         Input dataframe column configured by ``timestamp_col``. Default: ``timestamp``.
     asset_col:
         Input dataframe column configured by ``asset_col``. Default: ``asset``.
-    
+
     Parameters
     ----------
     base_interval_minutes:
@@ -354,7 +319,7 @@ def add_multi_timeframe_features(
     volume_col:
         Input dataframe column configured by ``volume_col``. Default: ``volume``.
     returns_col:
-        Input dataframe column configured by ``returns_col``. Default: ``close_logret``.
+        Deprecated compatibility parameter. Ignored by this transform.
     timezone:
         Configuration parameter accepted by this feature. Default: ``UTC``.
     shift_to_last_closed:
@@ -366,41 +331,29 @@ def add_multi_timeframe_features(
     asset_col:
         Input dataframe column configured by ``asset_col``. Default: ``asset``.
     volatility_window:
-        Trailing lookback or forecast horizon controlling this feature. Default: ``12``.
+        Deprecated compatibility parameter. Ignored by this transform.
     trend_ema_span:
-        Configuration parameter accepted by this feature. Default: ``8``.
+        Deprecated compatibility parameter. Ignored by this transform.
     trend_sma_window:
-        Trailing lookback or forecast horizon controlling this feature. Default: ``20``.
+        Deprecated compatibility parameter. Ignored by this transform.
     atr_window:
-        Trailing lookback or forecast horizon controlling this feature. Default: ``14``.
+        Deprecated compatibility parameter. Ignored by this transform.
     adx_window:
-        Trailing lookback or forecast horizon controlling this feature. Default: ``14``.
+        Deprecated compatibility parameter. Ignored by this transform.
     regime_short_window:
-        Trailing lookback or forecast horizon controlling this feature. Default: ``12``.
+        Deprecated compatibility parameter. Ignored by this transform.
     regime_long_window:
-        Trailing lookback or forecast horizon controlling this feature. Default: ``48``.
+        Deprecated compatibility parameter. Ignored by this transform.
     """
     if not shift_to_last_closed:
-        raise ValueError("multi_timeframe currently supports only shift_to_last_closed=true.")
+        raise ValueError(
+            "multi_timeframe currently supports only shift_to_last_closed=true."
+        )
     timestamp_convention = str(timestamp_convention).strip().lower()
     if timestamp_convention not in {"bar_start", "bar_close"}:
         raise ValueError("timestamp_convention must be one of: bar_start, bar_close.")
     if int(base_interval_minutes) <= 0:
         raise ValueError("base_interval_minutes must be positive.")
-    for key, value in {
-        "volatility_window": volatility_window,
-        "trend_ema_span": trend_ema_span,
-        "trend_sma_window": trend_sma_window,
-        "atr_window": atr_window,
-        "adx_window": adx_window,
-        "regime_short_window": regime_short_window,
-        "regime_long_window": regime_long_window,
-    }.items():
-        if int(value) <= 0:
-            raise ValueError(f"{key} must be positive.")
-    if int(regime_short_window) > int(regime_long_window):
-        raise ValueError("regime_short_window must be <= regime_long_window.")
-
     if timestamp_col in df.columns and asset_col in df.columns:
         frames: list[pd.DataFrame] = []
         for _, group in df.groupby(asset_col, sort=True, dropna=False):
@@ -414,25 +367,21 @@ def add_multi_timeframe_features(
                     low_col=low_col,
                     open_col=open_col,
                     volume_col=volume_col,
-                    returns_col=returns_col,
                     timezone=timezone,
                     timestamp_col=timestamp_col,
-                    volatility_window=int(volatility_window),
-                    trend_ema_span=int(trend_ema_span),
-                    trend_sma_window=int(trend_sma_window),
-                    atr_window=int(atr_window),
-                    adx_window=int(adx_window),
-                    regime_short_window=int(regime_short_window),
-                    regime_long_window=int(regime_long_window),
                     timestamp_convention=timestamp_convention,
                 )
             )
         if not frames:
             return df.copy()
-        return pd.concat(frames, axis=0, ignore_index=True, sort=False).sort_values(
-            [timestamp_col, asset_col],
-            kind="mergesort",
-        ).reset_index(drop=True)
+        return (
+            pd.concat(frames, axis=0, ignore_index=True, sort=False)
+            .sort_values(
+                [timestamp_col, asset_col],
+                kind="mergesort",
+            )
+            .reset_index(drop=True)
+        )
 
     return _add_multi_timeframe_single_asset(
         df,
@@ -443,16 +392,8 @@ def add_multi_timeframe_features(
         low_col=low_col,
         open_col=open_col,
         volume_col=volume_col,
-        returns_col=returns_col,
         timezone=timezone,
         timestamp_col=timestamp_col,
-        volatility_window=int(volatility_window),
-        trend_ema_span=int(trend_ema_span),
-        trend_sma_window=int(trend_sma_window),
-        atr_window=int(atr_window),
-        adx_window=int(adx_window),
-        regime_short_window=int(regime_short_window),
-        regime_long_window=int(regime_long_window),
         timestamp_convention=timestamp_convention,
     )
 

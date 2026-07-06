@@ -109,7 +109,7 @@ def test_execution_feature_snapshot_returns_empty_payload_when_missing(tmp_path:
 
 
 def test_market_making_snapshot_builds_chart_rows_and_trade_markers(tmp_path: Path) -> None:
-    run_dir = tmp_path / "reports" / "market_making"
+    run_dir = tmp_path / "logs" / "experiments" / "market_making" / "runs" / "latest_demo"
     run_dir.mkdir(parents=True)
     (run_dir / "summary.json").write_text(json.dumps({"number_of_fills": 1, "total_pnl": 12.5}), encoding="utf-8")
     (run_dir / "orderbook_events.csv").write_text(
@@ -173,6 +173,29 @@ def test_market_making_snapshot_builds_chart_rows_and_trade_markers(tmp_path: Pa
         }
     ]
     assert snapshot["summary"]["number_of_fills"] == 1
+
+
+def test_market_making_snapshot_reads_quote_events_from_logs_experiments(tmp_path: Path) -> None:
+    run_dir = tmp_path / "logs" / "experiments" / "market_making" / "runs" / "quote_demo"
+    run_dir.mkdir(parents=True)
+    (run_dir / "summary.json").write_text(json.dumps({"number_of_quotes": 1}), encoding="utf-8")
+    (run_dir / "quote_events.csv").write_text(
+        "\n".join(
+            [
+                "timestamp,symbol,fair_price,book_mid_price,book_spread_bps,book_imbalance_1,book_imbalance_5",
+                "2026-07-03T22:16:10+00:00,BTC/USD,62561.67,62561.65,0.015984,0.70642,0.70642",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    service = ExecutionMonitorService(paths=DashboardPaths.from_project_root(tmp_path))
+    snapshot = service.market_making_snapshot()
+
+    assert snapshot["run_dir"] == str(run_dir.resolve())
+    assert snapshot["asset"] == "BTC/USD"
+    assert snapshot["row_count"] == 1
+    assert snapshot["records"][0]["close"] == 62561.65
 
 
 def _append_jsonl(path: Path, record: dict) -> None:

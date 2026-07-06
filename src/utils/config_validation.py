@@ -37,6 +37,7 @@ _FORECASTER_MODEL_KINDS = {
     "sarimax_forecaster",
     "garch_forecaster",
     "lightgbm_regressor",
+    "xgboost_regressor",
     *_DEEP_FORECASTER_MODEL_KINDS,
     *_FOUNDATION_FORECASTER_MODEL_KINDS,
 }
@@ -45,6 +46,8 @@ _GARCH_OVERLAY_COMPATIBLE_MODEL_KINDS = {
     "lightgbm_clf",
     "logistic_regression_clf",
     "xgboost_clf",
+    "lightgbm_regressor",
+    "xgboost_regressor",
     "sarimax_forecaster",
     "lstm_forecaster",
     "patchtst_forecaster",
@@ -2612,7 +2615,7 @@ def validate_model_block(model: dict[str, Any]) -> None:
                     raise ConfigValidationError("model.params.C must be > 0.")
             if "max_iter" in params:
                 _positive_int(params["max_iter"], field="model.params.max_iter")
-        if model["kind"] == "xgboost_clf":
+        if model["kind"] in {"xgboost_clf", "xgboost_regressor"}:
             invalid_keys = [
                 key
                 for key in _XGBOOST_UNSUPPORTED_PARAM_KEYS
@@ -2621,7 +2624,7 @@ def validate_model_block(model: dict[str, Any]) -> None:
             if invalid_keys:
                 joined = ", ".join(sorted(invalid_keys))
                 raise ConfigValidationError(
-                    "xgboost_clf does not support LightGBM-only params: "
+                    f"{model['kind']} does not support LightGBM-only params: "
                     f"{joined}. Remove them or set them to null in the child config."
                 )
 
@@ -3171,6 +3174,20 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
                     raise ConfigValidationError(
                         f"signals.params.activation_filters[{idx}].use_abs must be boolean."
                     )
+    if signals["kind"] == "forecast_threshold_hysteresis":
+        for key in ("forecast_col", "signal_col"):
+            if key in params and params[key] is not None and not isinstance(params[key], str):
+                raise ConfigValidationError(f"signals.params.{key} must be a string or null.")
+        long_entry = _finite_number(params.get("long_entry", 0.75), field="signals.params.long_entry")
+        long_exit = _finite_number(params.get("long_exit", 0.25), field="signals.params.long_exit")
+        short_entry = _finite_number(params.get("short_entry", -0.75), field="signals.params.short_entry")
+        short_exit = _finite_number(params.get("short_exit", -0.25), field="signals.params.short_exit")
+        if not long_exit < long_entry:
+            raise ConfigValidationError("signals.params.long_exit must be < signals.params.long_entry.")
+        if not short_entry < short_exit:
+            raise ConfigValidationError("signals.params.short_entry must be < signals.params.short_exit.")
+        _non_negative_int(params.get("cooldown_bars", 0), field="signals.params.cooldown_bars")
+        _non_negative_int(params.get("min_holding_bars", 0), field="signals.params.min_holding_bars")
     if signals["kind"] == "meta_probability_side":
         for key in ("prob_col", "side_col", "candidate_col", "expected_value_col", "signal_col"):
             if key in params and params[key] is not None and not isinstance(params[key], str):
@@ -3890,6 +3907,51 @@ def validate_diagnostics_block(diagnostics: dict[str, Any]) -> None:
         field="diagnostics.robustness.max_gap_multiple",
     ) <= 1.0:
         raise ConfigValidationError("diagnostics.robustness.max_gap_multiple must be > 1.")
+
+    baselines = diagnostics.get("baselines", {})
+    if not isinstance(baselines, dict):
+        raise ConfigValidationError("diagnostics.baselines must be a mapping.")
+    if not isinstance(baselines.get("enabled", False), bool):
+        raise ConfigValidationError("diagnostics.baselines.enabled must be boolean.")
+    _non_negative_int(baselines.get("random_seed", 7), field="diagnostics.baselines.random_seed")
+
+    threshold_grid = diagnostics.get("threshold_grid", {})
+    if not isinstance(threshold_grid, dict):
+        raise ConfigValidationError("diagnostics.threshold_grid must be a mapping.")
+    if not isinstance(threshold_grid.get("enabled", False), bool):
+        raise ConfigValidationError("diagnostics.threshold_grid.enabled must be boolean.")
+    forecast_col = threshold_grid.get("forecast_col", "pred_ret")
+    if forecast_col is not None and (not isinstance(forecast_col, str) or not forecast_col.strip()):
+        raise ConfigValidationError("diagnostics.threshold_grid.forecast_col must be null or a non-empty string.")
+    symmetric = threshold_grid.get("symmetric_thresholds", [])
+    if not isinstance(symmetric, list):
+        raise ConfigValidationError("diagnostics.threshold_grid.symmetric_thresholds must be a list.")
+    for idx, item in enumerate(symmetric):
+        value = _finite_number(item, field=f"diagnostics.threshold_grid.symmetric_thresholds[{idx}]")
+        if value <= 0.0:
+            raise ConfigValidationError("diagnostics.threshold_grid.symmetric_thresholds values must be > 0.")
+    asymmetric = threshold_grid.get("asymmetric_thresholds", [])
+    if not isinstance(asymmetric, list):
+        raise ConfigValidationError("diagnostics.threshold_grid.asymmetric_thresholds must be a list.")
+    for idx, raw_pair in enumerate(asymmetric):
+        if not isinstance(raw_pair, dict):
+            raise ConfigValidationError(f"diagnostics.threshold_grid.asymmetric_thresholds[{idx}] must be a mapping.")
+        upper = _finite_number(raw_pair.get("upper"), field=f"diagnostics.threshold_grid.asymmetric_thresholds[{idx}].upper")
+        lower = _finite_number(raw_pair.get("lower"), field=f"diagnostics.threshold_grid.asymmetric_thresholds[{idx}].lower")
+        if not lower < upper:
+            raise ConfigValidationError(
+                f"diagnostics.threshold_grid.asymmetric_thresholds[{idx}] must satisfy lower < upper."
+            )
+        if "name" in raw_pair and raw_pair["name"] is not None and not isinstance(raw_pair["name"], str):
+            raise ConfigValidationError(
+                f"diagnostics.threshold_grid.asymmetric_thresholds[{idx}].name must be a string."
+            )
+
+    regime_performance = diagnostics.get("regime_performance", {})
+    if not isinstance(regime_performance, dict):
+        raise ConfigValidationError("diagnostics.regime_performance must be a mapping.")
+    if not isinstance(regime_performance.get("enabled", False), bool):
+        raise ConfigValidationError("diagnostics.regime_performance.enabled must be boolean.")
 
     trade_path = diagnostics.get("trade_path", {})
     if not isinstance(trade_path, dict):

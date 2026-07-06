@@ -1,0 +1,26 @@
+ers: []
+diagnostics:
+  enabled: true
+  baselines:
+    enabled: true
+    random_seed: 7
+  threshold_grid:
+    enabled: true
+    forecast_col: pred_q50
+    symmetric_thresholds: [0.50, 0.75, 1.00, 1.25, 1.50, 2.00]
+    asymmetric_thresholds: []
+  regime_performance:
+    enabled: true
+target: {}
+validation:
+  method: purged_walk_forward
+  purge_bars: 24
+  embargo_bars: 24
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+risk:
+  cost_per_turnover: 0.0001

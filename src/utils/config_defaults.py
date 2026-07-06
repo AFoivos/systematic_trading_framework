@@ -318,6 +318,19 @@ def default_diagnostics_block(diagnostics: dict[str, Any]) -> dict[str, Any]:
     robustness.setdefault("gross_cap_values", [])
     robustness.setdefault("cost_filter_max_cost_r_values", [])
     diagnostics["robustness"] = robustness
+    baselines = dict(diagnostics.get("baselines", {}) or {})
+    baselines.setdefault("enabled", False)
+    baselines.setdefault("random_seed", 7)
+    diagnostics["baselines"] = baselines
+    threshold_grid = dict(diagnostics.get("threshold_grid", {}) or {})
+    threshold_grid.setdefault("enabled", False)
+    threshold_grid.setdefault("forecast_col", "pred_ret")
+    threshold_grid.setdefault("symmetric_thresholds", [])
+    threshold_grid.setdefault("asymmetric_thresholds", [])
+    diagnostics["threshold_grid"] = threshold_grid
+    regime_performance = dict(diagnostics.get("regime_performance", {}) or {})
+    regime_performance.setdefault("enabled", False)
+    diagnostics["regime_performance"] = regime_performance
     trade_path = dict(diagnostics.get("trade_path", {}) or {})
     trade_path.setdefault("enabled", diagnostics_enabled)
     trade_path.setdefault("include_executed_trades", True)

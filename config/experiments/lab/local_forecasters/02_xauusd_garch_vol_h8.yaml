@@ -1,0 +1,26 @@
+strategy: {name: lab_local_02_xauusd_garch_vol_h8, timeframe: 30m, assets: [XAUUSD], description: "Local GARCH volatility forecast lab for XAUUSD."}
+data:
+  source: dukascopy_csv
+  interval: 30m
+  symbol: XAUUSD
+  alignment: inner
+  storage: {mode: cached_only, dataset_id: lab_local_02_xauusd_garch_vol_h8, save_raw: false, save_processed: true, load_path: data/raw/dukascopy_30m_clean/xauusd_30m.csv, raw_dir: data/raw, processed_dir: data/processed}
+features:
+- {step: returns, outputs: {close_ret: close_ret}, params: {log: false, col_name: close_ret}}
+- {step: volatility, params: {returns_col: close_ret, rolling_windows: [8, 24, 48, 96], ewma_spans: [], annualization_factor: null}}
+- step: atr
+  params: {high_col: high, low_col: low, close_col: close, window: 24, windows: [24], method: wilder}
+  transforms: {ratio: {enabled: true, items: [{numerator_col: atr_24, denominator_col: close, output_col: atr_over_price_24}]}}
+model:
+  kind: garch_forecaster
+  outputs: {pred_ret_col: pred_ret, pred_prob_col: pred_prob, pred_is_oos_col: pred_is_oos, returns_input_col: close_ret}
+  target: {kind: future_return_regression, price_col: close, returns_col: close_ret, returns_type: simple, horizon_bars: 16, fwd_col: target_ret_8h, label_col: target_ret_8h}
+  split: {method: purged, train_size: 20000, test_size: 3000, step_size: 3000, expanding: true, max_folds: 6, purge_bars: 16, embargo_bars: 16}
+  params: {returns_input_col: close_ret, mean_model: ar1}
+signals: {kind: forecast_vol_adjusted, params: {forecast_col: pred_ret, vol_col: pred_vol, signal_col: signal_garch_vol_adj, clip: 1.0, vol_floor: 0.000001}}
+validation: {method: purged_walk_forward, purge_bars: 16, embargo_bars: 16}
+runtime: {seed: 7, repro_mode: strict, deterministic: true, threads: 1, seed_torch: false}
+risk: {cost_per_turnover: 0.0001}
+backtest: {engine: vectorized, signal_col: signal_garch_vol_adj, returns_col: close_ret, returns_type: simple, subset: test, periods_per_year: 12096, missing_return_policy: raise_if_exposed}
+diagnostics: {enabled: true, model: {enabled: true}, forecast: {quantiles: 10, autocorrelation_lags: [1, 2, 4, 8, 16], volatility_col: atr_over_price_24}}
+logging: {enabled: true, run_name: lab_local_02_xauusd_garch_vol_h8, output_dir: logs/lab/local_forecasters}

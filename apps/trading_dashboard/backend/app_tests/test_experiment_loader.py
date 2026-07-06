@@ -100,7 +100,7 @@ def test_list_runs_exposes_processed_dataset_and_market_making_summary(tmp_path:
         encoding="utf-8",
     )
 
-    mm_dir = tmp_path / "reports" / "market_making"
+    mm_dir = tmp_path / "logs" / "experiments" / "market_making" / "runs" / "latest_demo"
     mm_dir.mkdir(parents=True)
     _write_json(mm_dir / "summary.json", {"total_pnl": 12.5})
     (mm_dir / "orderbook_events.csv").write_text(

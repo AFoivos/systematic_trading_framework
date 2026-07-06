@@ -23,9 +23,10 @@ from src.experiments.models import (
     train_lightgbm_regressor,
     train_sarimax_forecaster,
     train_tft_forecaster,
+    train_xgboost_regressor,
 )
 from src.experiments.registry import MODEL_REGISTRY, SIGNAL_REGISTRY
-from src.models.common.runtime import probe_lightgbm_runtime
+from src.models.common.runtime import probe_lightgbm_runtime, probe_xgboost_runtime
 from src.signals.dense_return_forecast_signal import dense_return_forecast_signal
 from src.signals.forecast_signal import (
     compute_forecast_threshold_signal,
@@ -82,6 +83,7 @@ def test_registry_contains_new_models_and_signals() -> None:
         "garch_forecaster",
         "tft_forecaster",
         "lightgbm_regressor",
+        "xgboost_regressor",
         "chronos_bolt_forecaster",
         "chronos_2_forecaster",
         "timesfm_2p5_200m_forecaster",
@@ -515,6 +517,108 @@ def test_lightgbm_regressor_records_diagnostics_metadata() -> None:
     assert fold["shap"]["enabled"] is True
     assert "feature_importance_stability" in meta
     assert meta["feature_pipeline"]["reported_feature_count"] == meta["feature_pipeline"]["actual_model_feature_count"]
+
+
+def test_xgboost_regressor_future_return_target_emits_dense_oos_predictions() -> None:
+    available, detail = probe_xgboost_runtime()
+    if not available:
+        pytest.skip(f"XGBoost runtime unavailable: {detail}")
+
+    df = _synthetic_ohlcv_with_returns(n=180)
+    df["atr_14"] = df["close"] * 0.01
+    out, _, meta = train_xgboost_regressor(
+        df,
+        model_cfg={
+            "feature_cols": ["lag_close_ret_1", "lag_close_ret_2", "vol_rolling_20"],
+            "minimum_expected_features": 2,
+            "target": {
+                "kind": "future_return_regression",
+                "price_col": "close",
+                "returns_col": "close_ret",
+                "horizon_bars": 3,
+                "normalize_by_volatility": True,
+                "volatility_col": "atr_14",
+                "clip": [-3.0, 3.0],
+                "fwd_col": "target_future_r",
+            },
+            "split": {
+                "method": "walk_forward",
+                "train_size": 100,
+                "test_size": 30,
+                "step_size": 30,
+                "expanding": True,
+            },
+            "params": {
+                "n_estimators": 8,
+                "learning_rate": 0.05,
+                "max_depth": 2,
+                "min_child_weight": 1,
+                "subsample": 1.0,
+                "colsample_bytree": 1.0,
+                "objective": "reg:squarederror",
+                "eval_metric": "rmse",
+                "tree_method": "hist",
+                "random_state": 11,
+                "n_jobs": 1,
+            },
+        },
+    )
+
+    oos_pred = out.loc[out["pred_is_oos"], "pred_ret"]
+    assert meta["model_kind"] == "xgboost_regressor"
+    assert int(out["pred_is_oos"].sum()) > 0
+    assert oos_pred.notna().any()
+    assert oos_pred.notna().mean() > 0.8
+    assert out.loc[out["pred_is_oos"] & out["pred_ret"].notna(), "pred_prob"].notna().all()
+    assert meta["target"]["kind"] == "future_return_regression"
+    assert meta["feature_pipeline"]["model_feature_count"] == 3
+    assert meta["feature_pipeline"]["reported_feature_count"] == 3
+    assert meta["feature_pipeline"]["reported_feature_count"] == meta["feature_pipeline"]["actual_model_feature_count"]
+    assert meta["oos_regression_summary"]["evaluation_rows"] > 0
+    assert meta["oos_classification_summary"]["evaluation_rows"] > 0
+    assert meta["prediction_diagnostics"]["predicted_rows"] > 0
+    assert meta["feature_importance"]["available"] is True
+    assert len(meta["feature_selection"]["feature_coverage_heatmap"]) == 3
+    assert meta["folds"][0]["target_density"] > 0.0
+    assert meta["folds"][0]["model_train_rows"] > 0
+    assert "skew" in meta["folds"][0]["regression_target_stats"]
+
+
+def test_xgboost_regressor_strips_lightgbm_only_params() -> None:
+    available, detail = probe_xgboost_runtime()
+    if not available:
+        pytest.skip(f"XGBoost runtime unavailable: {detail}")
+
+    df = _synthetic_ohlcv_with_returns(n=150)
+    out, model, meta = train_xgboost_regressor(
+        df,
+        model_cfg={
+            "feature_cols": ["lag_close_ret_1", "lag_close_ret_2", "vol_rolling_20"],
+            "target": {"kind": "future_return_regression", "price_col": "close", "horizon_bars": 2},
+            "split": {
+                "method": "walk_forward",
+                "train_size": 90,
+                "test_size": 20,
+                "step_size": 20,
+                "expanding": True,
+                "max_folds": 1,
+            },
+            "params": {
+                "n_estimators": 4,
+                "max_depth": 2,
+                "num_leaves": 7,
+                "min_child_samples": 5,
+                "random_state": 11,
+                "n_jobs": 1,
+            },
+        },
+    )
+
+    params = model.get_params()
+    assert out.loc[out["pred_is_oos"], "pred_ret"].notna().any()
+    assert "num_leaves" not in params
+    assert "min_child_samples" not in params
+    assert meta["folds"][0]["runtime"]["seed"] == 11
 
 
 def test_shap_diagnostics_use_tree_explainer_when_available(monkeypatch: pytest.MonkeyPatch) -> None:

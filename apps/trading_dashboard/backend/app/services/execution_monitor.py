@@ -11,10 +11,11 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from app.core.paths import DashboardPaths, get_paths
+from app.services.market_making_runs import latest_market_making_run, market_making_root
 
 
 DEFAULT_LOG_DIR = "logs/mt5_demo"
-DEFAULT_MARKET_MAKING_DIR = "reports/market_making"
+DEFAULT_MARKET_MAKING_DIR = "logs/experiments/market_making"
 STREAMS = (
     "account_equity",
     "signals",
@@ -129,6 +130,8 @@ class ExecutionMonitorService:
     ) -> dict[str, Any]:
         resolved = self._resolve_market_making_dir(run_dir)
         orderbook_rows = self._read_csv_records(resolved / "orderbook_events.csv")
+        if not orderbook_rows:
+            orderbook_rows = self._read_csv_records(resolved / "quote_events.csv")
         trades = self._read_csv_records(resolved / "trades.csv")
         inventory_rows = self._read_csv_records(resolved / "inventory_timeseries.csv")
         pnl_rows = self._read_csv_records(resolved / "pnl_timeseries.csv")
@@ -153,7 +156,7 @@ class ExecutionMonitorService:
         records: list[dict[str, Any]] = []
         for row in orderbook_rows:
             timestamp = str(row.get("timestamp") or "").strip()
-            mid_price = _optional_float(row.get("mid_price"))
+            mid_price = _optional_float(row.get("mid_price", row.get("book_mid_price", row.get("fair_price"))))
             if not timestamp or mid_price is None:
                 continue
             inventory = inventory_by_time.get(timestamp, {})
@@ -166,10 +169,10 @@ class ExecutionMonitorService:
                     "low": mid_price,
                     "close": mid_price,
                     "mid_price": mid_price,
-                    "spread": _optional_float(row.get("spread")),
-                    "spread_bps": _optional_float(row.get("spread_bps")),
-                    "imbalance_1": _optional_float(row.get("imbalance_1")),
-                    "imbalance_5": _optional_float(row.get("imbalance_5")),
+                    "spread": _optional_float(row.get("spread", row.get("book_spread"))),
+                    "spread_bps": _optional_float(row.get("spread_bps", row.get("book_spread_bps"))),
+                    "imbalance_1": _optional_float(row.get("imbalance_1", row.get("book_imbalance_1"))),
+                    "imbalance_5": _optional_float(row.get("imbalance_5", row.get("book_imbalance_5"))),
                     "bid_depth_5": _optional_float(row.get("bid_depth_5")),
                     "ask_depth_5": _optional_float(row.get("ask_depth_5")),
                     "inventory": _optional_float(inventory.get("inventory")),
@@ -233,12 +236,15 @@ class ExecutionMonitorService:
         return candidate
 
     def _resolve_market_making_dir(self, raw_run_dir: str | None) -> Path:
+        if raw_run_dir is None:
+            latest = latest_market_making_run(self.paths)
+            return latest if latest is not None else market_making_root(self.paths).resolve()
         candidate = self.paths.resolve_project_path(raw_run_dir or DEFAULT_MARKET_MAKING_DIR)
-        reports_root = (self.paths.project_root / "reports").resolve()
+        reports_root = market_making_root(self.paths).resolve()
         try:
             candidate.relative_to(reports_root)
         except ValueError as exc:
-            raise ValueError("Market making run_dir must resolve under the project reports directory.") from exc
+            raise ValueError("Market making run_dir must resolve under logs/experiments/market_making.") from exc
         return candidate
 
     def _files(self, log_dir: Path) -> list[dict[str, Any]]:

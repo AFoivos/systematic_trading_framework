@@ -104,14 +104,17 @@ class BacktestLoader:
     def _trade_from_events(self, entry: pd.Series | None, exit_row: pd.Series | None) -> dict[str, Any]:
         source = entry if entry is not None else exit_row
         side = str(source.get("side", "long")).lower() if source is not None else "long"
+        entry_price = self._float_or_none(entry.get("price")) if entry is not None else None
+        exit_price = self._float_or_none(exit_row.get("price")) if exit_row is not None else None
+        explicit_return = self._float_or_none(exit_row.get("return")) if exit_row is not None else None
         return {
             "entry_time": self._event_time(entry) if entry is not None else None,
             "exit_time": self._event_time(exit_row) if exit_row is not None else None,
             "side": side,
-            "entry_price": self._float_or_none(entry.get("price")) if entry is not None else None,
-            "exit_price": self._float_or_none(exit_row.get("price")) if exit_row is not None else None,
+            "entry_price": entry_price,
+            "exit_price": exit_price,
             "pnl": self._float_or_none(exit_row.get("pnl")) if exit_row is not None else None,
-            "return": self._float_or_none(exit_row.get("return")) if exit_row is not None else None,
+            "return": explicit_return if explicit_return is not None else self._price_return(entry_price, exit_price, side),
             "size": self._event_size(entry if entry is not None else exit_row),
             "exit_reason": self._string_or_none(exit_row.get("exit_reason")) if exit_row is not None else None,
         }
@@ -147,6 +150,14 @@ class BacktestLoader:
         if value is None or pd.isna(value) or str(value).strip() == "":
             return None
         return float(value)
+
+    @staticmethod
+    def _price_return(entry_price: float | None, exit_price: float | None, side: str) -> float | None:
+        if entry_price is None or exit_price is None or entry_price == 0.0:
+            return None
+        if side.strip().lower() in {"short", "sell"}:
+            return (entry_price - exit_price) / entry_price
+        return (exit_price - entry_price) / entry_price
 
     @staticmethod
     def _string_or_none(value: Any) -> str | None:

@@ -19,6 +19,7 @@ _EXPORTS = {
     "make_patchtst_fold_predictor": ("src.models.forecasting.patchtst", "make_patchtst_fold_predictor"),
     "make_timesfm_fold_predictor": ("src.models.forecasting.foundation", "make_timesfm_fold_predictor"),
     "make_tft_fold_predictor": ("src.models.forecasting.tft", "make_tft_fold_predictor"),
+    "make_xgboost_regressor_fold_predictor": ("src.models.forecasting.xgboost", "make_xgboost_regressor_fold_predictor"),
     "prepare_forecaster_inputs": ("src.models.forecasting.base", "prepare_forecaster_inputs"),
     "predict_returns": ("src.models.forecasting.lightgbm_baseline", "predict_returns"),
     "prediction_to_signal": ("src.models.forecasting.lightgbm_baseline", "prediction_to_signal"),
@@ -36,6 +37,7 @@ _EXPORTS = {
     "train_timesfm_1p0_200m_forecaster": ("src.models.forecasting.base", "train_timesfm_1p0_200m_forecaster"),
     "train_timesfm_2p5_200m_forecaster": ("src.models.forecasting.base", "train_timesfm_2p5_200m_forecaster"),
     "train_tft_forecaster": ("src.models.forecasting.base", "train_tft_forecaster"),
+    "train_xgboost_regressor": ("src.models.forecasting.base", "train_xgboost_regressor"),
 }
 
 

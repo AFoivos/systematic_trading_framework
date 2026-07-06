@@ -7,7 +7,6 @@ pipeline:
     max_events: 2000000
   paper_replay:
     enabled: true
-    output_dir: logs/experiments/market_making/runs/large_moment_collect_2m_replay
     use_outputs_for_moment: true
   moment_experiment:
     enabled: true

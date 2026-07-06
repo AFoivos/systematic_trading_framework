@@ -31,6 +31,19 @@ from src.plots.trade_diagnostics import (
 from src.portfolio import PortfolioPerformance
 from src.utils.run_metadata import build_artifact_manifest
 
+_FORECASTER_MODEL_KINDS = {
+    "sarimax_forecaster",
+    "garch_forecaster",
+    "lstm_forecaster",
+    "patchtst_forecaster",
+    "tft_forecaster",
+    "chronos_bolt_forecaster",
+    "chronos_2_forecaster",
+    "timesfm_2p5_200m_forecaster",
+    "timesfm_1p0_200m_forecaster",
+    "lightgbm_regressor",
+}
+
 
 def _load_json(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
@@ -239,6 +252,32 @@ def _save_fold_bar_chart(path: Path, *, fold_summaries: list[dict[str, Any]]) ->
     plt.close(fig)
 
 
+def _save_fold_metric_bar_chart(
+    path: Path,
+    *,
+    rows: list[dict[str, Any]],
+    metric: str,
+    title: str,
+    ylabel: str,
+) -> None:
+    if not rows:
+        return
+    _ensure_matplotlib_backend(path.parent.parent)
+    import matplotlib.pyplot as plt
+
+    folds = [str(int(row.get("fold", idx))) for idx, row in enumerate(rows)]
+    values = [float(row.get(metric, 0.0) or 0.0) for row in rows]
+    colors = ["tab:green" if value >= 0 else "tab:red" for value in values]
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.bar(folds, values, color=colors)
+    ax.set_title(title)
+    ax.set_ylabel(ylabel)
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
 def _save_horizontal_bar_chart(
     path: Path,
     *,
@@ -344,7 +383,7 @@ def _write_dense_forecast_diagnostic_artifacts(
         return {}
     model_kind = str(dict(cfg.get("model", {}) or {}).get("kind", "none"))
     strategy_name = str(dict(cfg.get("strategy", {}) or {}).get("name", ""))
-    if model_kind != "lightgbm_regressor" and strategy_name != "dense_return_forecasting_v2":
+    if model_kind not in _FORECASTER_MODEL_KINDS and strategy_name != "dense_return_forecasting_v2":
         return {}
 
     if isinstance(data, dict):
@@ -762,6 +801,71 @@ def _write_model_diagnostic_artifacts(
         if coverage_chart_path.exists():
             chart_paths["prediction_coverage_by_fold"] = str(coverage_chart_path.relative_to(run_dir))
 
+    return chart_paths, artifact_paths
+
+
+def _write_forecast_alpha_diagnostic_artifacts(
+    *,
+    run_dir: Path,
+    evaluation: dict[str, Any],
+) -> tuple[dict[str, str], dict[str, str]]:
+    report_assets_dir = run_dir / "report_assets"
+    diagnostics_dir = run_dir / "artifacts" / "diagnostics"
+    report_assets_dir.mkdir(parents=True, exist_ok=True)
+    diagnostics_dir.mkdir(parents=True, exist_ok=True)
+    chart_paths: dict[str, str] = {}
+    artifact_paths: dict[str, str] = {}
+
+    table_sections = {
+        "forecast_baselines": "forecast_baselines.csv",
+        "threshold_grid": "threshold_grid.csv",
+        "regime_performance": "regime_performance.csv",
+    }
+    for key, filename in table_sections.items():
+        rows = list(dict(evaluation.get(key, {}) or {}).get("rows", []) or [])
+        if rows:
+            path = diagnostics_dir / filename
+            pd.DataFrame(rows).to_csv(path, index=False)
+            artifact_paths[key] = str(path.relative_to(run_dir))
+
+    fold_payload = dict(evaluation.get("fold_backtest_diagnostics", {}) or {})
+    fold_rows = list(fold_payload.get("rows", []) or [])
+    if fold_rows:
+        fold_path = diagnostics_dir / "fold_backtest_diagnostics.csv"
+        pd.DataFrame(fold_rows).to_csv(fold_path, index=False)
+        artifact_paths["fold_backtest_diagnostics"] = str(fold_path.relative_to(run_dir))
+
+        for metric, title, ylabel, filename in (
+            ("cumulative_return", "Fold Cumulative Return", "Return", "fold_cumulative_return.png"),
+            ("sharpe", "Fold Sharpe", "Sharpe", "fold_sharpe.png"),
+            ("cost_to_gross_pnl", "Fold Cost / Gross PnL", "Cost / Gross PnL", "fold_cost_to_gross_pnl.png"),
+        ):
+            chart_path = report_assets_dir / filename
+            _save_fold_metric_bar_chart(
+                chart_path,
+                rows=fold_rows,
+                metric=metric,
+                title=title,
+                ylabel=ylabel,
+            )
+            if chart_path.exists():
+                chart_paths[filename.removesuffix(".png")] = str(chart_path.relative_to(run_dir))
+
+    summary_sections = {
+        key: dict(evaluation.get(key, {}) or {}).get("summary")
+        or dict(evaluation.get(key, {}) or {}).get("best_by_sharpe")
+        for key in (
+            "fold_backtest_diagnostics",
+            "threshold_grid",
+            "forecast_baselines",
+            "regime_performance",
+        )
+        if evaluation.get(key)
+    }
+    if summary_sections:
+        summary_path = diagnostics_dir / "forecast_alpha_diagnostics_summary.json"
+        _write_json(summary_path, {"sections": summary_sections})
+        artifact_paths["forecast_alpha_diagnostics_summary"] = str(summary_path.relative_to(run_dir))
     return chart_paths, artifact_paths
 
 
@@ -1437,7 +1541,21 @@ def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
             elif path.suffix.lower() in {".csv", ".json", ".html", ".htm"}:
                 diagnostic_artifact_paths[label] = rel_path
 
-    if not equity_curve.empty:
+    model_kind = str(dict(cfg.get("model", {}) or {}).get("kind", "none"))
+    strategy_name = str(dict(cfg.get("strategy", {}) or {}).get("name", ""))
+    logging_output_dir = str(dict(cfg.get("logging", {}) or {}).get("output_dir", ""))
+    is_lab_forecast_run = (
+        strategy_name.startswith("lab_")
+        or logging_output_dir.endswith("logs/lab")
+        or "/logs/lab" in logging_output_dir
+    )
+    forecast_first = (
+        model_kind in _FORECASTER_MODEL_KINDS
+        and is_lab_forecast_run
+        and (diagnostics_dir / "prediction_distribution.csv").exists()
+    )
+
+    if not forecast_first and not equity_curve.empty:
         equity_path = report_assets_dir / "equity_curve.png"
         _save_line_chart(
             equity_path,
@@ -1456,7 +1574,7 @@ def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
         )
         chart_paths["drawdown_curve"] = str(drawdown_path.relative_to(run_dir))
 
-    if not net_returns.empty and not gross_returns.empty:
+    if not forecast_first and not net_returns.empty and not gross_returns.empty:
         cumulative_path = report_assets_dir / "cumulative_returns.png"
         _save_line_chart(
             cumulative_path,
@@ -1496,7 +1614,7 @@ def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
         if cumulative_cost_path.exists():
             chart_paths["cumulative_cost_drag"] = str(cumulative_cost_path.relative_to(run_dir))
 
-    if not positions.empty and not turnover.empty:
+    if not forecast_first and not positions.empty and not turnover.empty:
         signal_turnover_path = report_assets_dir / "positions_turnover.png"
         _save_dual_panel_chart(
             signal_turnover_path,
@@ -1535,13 +1653,13 @@ def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
             chart_paths["signal_distribution"] = str(distribution_path.relative_to(run_dir))
 
     fold_summaries = list(dict(summary_payload.get("evaluation", {}) or {}).get("fold_backtest_summaries", []) or [])
-    if fold_summaries:
+    if not forecast_first and fold_summaries:
         fold_path = report_assets_dir / "fold_net_pnl.png"
         _save_fold_bar_chart(fold_path, fold_summaries=fold_summaries)
         if fold_path.exists():
             chart_paths["fold_net_pnl"] = str(fold_path.relative_to(run_dir))
 
-    if not portfolio_weights.empty:
+    if not forecast_first and not portfolio_weights.empty:
         exposure_path = report_assets_dir / "portfolio_exposures.png"
         _save_portfolio_exposure_chart(exposure_path, weights=portfolio_weights)
         if exposure_path.exists():
@@ -2154,6 +2272,13 @@ def save_artifacts(
         portfolio_weights=portfolio_weights,
     )
     for label, rel_path in dense_diagnostic_paths.items():
+        artifacts[label] = str((run_dir / rel_path).resolve())
+
+    forecast_alpha_chart_paths, forecast_alpha_artifact_paths = _write_forecast_alpha_diagnostic_artifacts(
+        run_dir=run_dir,
+        evaluation=evaluation,
+    )
+    for label, rel_path in {**forecast_alpha_chart_paths, **forecast_alpha_artifact_paths}.items():
         artifacts[label] = str((run_dir / rel_path).resolve())
 
     tsfresh_dataset_artifacts = _write_tsfresh_feature_dataset_artifacts(

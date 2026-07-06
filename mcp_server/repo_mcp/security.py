@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import mimetypes
+import fnmatch
 from pathlib import Path
 
 
@@ -30,6 +31,16 @@ class PathSecurityError(ValueError):
     """Raised when a requested repository path escapes the configured root."""
 
 
+PROTECTED_WRITE_PATTERNS = (
+    ".env",
+    ".env.*",
+    "*.pem",
+    "*.key",
+    "id_rsa",
+    "id_ed25519",
+)
+
+
 def normalize_repo_path(path: str | None) -> str:
     raw = "." if path in (None, "") else str(path)
     normalized = raw.replace("\\", "/")
@@ -48,6 +59,16 @@ def resolve_repo_path(repo_root: Path, path: str | None) -> Path:
 
 def to_repo_relative(repo_root: Path, path: Path) -> str:
     return path.resolve().relative_to(repo_root).as_posix()
+
+
+def is_protected_secret_path(repo_relative_path: str) -> bool:
+    name = Path(repo_relative_path).name
+    return any(fnmatch.fnmatch(name, pattern) for pattern in PROTECTED_WRITE_PATTERNS)
+
+
+def reject_protected_write_path(repo_relative_path: str) -> None:
+    if is_protected_secret_path(repo_relative_path):
+        raise PermissionError(f"Refusing to write or delete protected secret-like path: {repo_relative_path}")
 
 
 def is_probably_text(path: Path, sample_size: int = 4096) -> bool:

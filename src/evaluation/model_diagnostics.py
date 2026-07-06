@@ -543,6 +543,12 @@ def build_dense_forecast_diagnostic_frames(
             },
             index=work.index,
         ).replace([np.inf, -np.inf], np.nan)
+        for quantile_col in sorted(
+            col
+            for col in work.columns
+            if str(col).startswith("pred_q")
+        ):
+            pred_frame[str(quantile_col)] = _numeric_series(work, str(quantile_col))
         pred_frame.index.name = "timestamp"
         prediction_rows.append(pred_frame.reset_index())
 
@@ -673,6 +679,60 @@ def write_dense_diagnostic_plots(diagnostics_dir: Path, frames: Mapping[str, Any
     paths: dict[str, Path] = {}
     prediction_frame = frames.get("prediction_frame")
     if isinstance(prediction_frame, pd.DataFrame) and not prediction_frame.empty:
+        time_sample = prediction_frame.copy()
+        if "timestamp" in time_sample.columns:
+            time_sample["timestamp"] = pd.to_datetime(time_sample["timestamp"], errors="coerce")
+            time_sample = time_sample.dropna(subset=["timestamp"])
+        if {"timestamp", "prediction", "realized"}.issubset(time_sample.columns) and not time_sample.empty:
+            path = diagnostics_dir / "prediction_timeseries.png"
+            assets = (
+                time_sample["asset"].dropna().astype(str).drop_duplicates().head(4).tolist()
+                if "asset" in time_sample.columns
+                else ["asset"]
+            )
+            fig, axes = plt.subplots(
+                len(assets),
+                1,
+                figsize=(12, max(4, 3.2 * len(assets))),
+                sharex=False,
+                squeeze=False,
+            )
+            quantile_cols = sorted(
+                col
+                for col in time_sample.columns
+                if str(col).startswith("pred_q")
+                and pd.to_numeric(time_sample[col], errors="coerce").notna().any()
+            )
+            for row_idx, asset in enumerate(assets):
+                ax = axes[row_idx][0]
+                asset_frame = (
+                    time_sample.loc[time_sample["asset"].astype(str) == asset].copy()
+                    if "asset" in time_sample.columns
+                    else time_sample.copy()
+                )
+                asset_frame = asset_frame.sort_values("timestamp")
+                if len(asset_frame) > 2000:
+                    take_idx = np.linspace(0, len(asset_frame) - 1, 2000).astype(int)
+                    asset_frame = asset_frame.iloc[take_idx]
+                x = asset_frame["timestamp"]
+                realized = pd.to_numeric(asset_frame["realized"], errors="coerce")
+                prediction = pd.to_numeric(asset_frame["prediction"], errors="coerce")
+                ax.plot(x, realized, linewidth=1.0, alpha=0.75, label="realized")
+                ax.plot(x, prediction, linewidth=1.1, alpha=0.9, label="prediction")
+                if len(quantile_cols) >= 2:
+                    low = pd.to_numeric(asset_frame[quantile_cols[0]], errors="coerce")
+                    high = pd.to_numeric(asset_frame[quantile_cols[-1]], errors="coerce")
+                    ax.fill_between(x, low, high, alpha=0.16, label=f"{quantile_cols[0]}-{quantile_cols[-1]}")
+                ax.axhline(0.0, color="black", linewidth=0.8, alpha=0.55)
+                ax.set_title(f"Forecast Time Series: {asset}")
+                ax.set_ylabel("Forward return")
+                ax.grid(alpha=0.25)
+                ax.legend(loc="best")
+            fig.tight_layout()
+            fig.savefig(path, dpi=150, bbox_inches="tight")
+            plt.close(fig)
+            paths["prediction_timeseries"] = path
+
         path = diagnostics_dir / "prediction_histogram.png"
         fig, ax = plt.subplots(figsize=(10, 4))
         for column in ("prediction", "expected_net_return"):
@@ -709,7 +769,11 @@ def write_dense_diagnostic_plots(diagnostics_dir: Path, frames: Mapping[str, Any
             paths["prediction_vs_realized"] = path
 
         path = diagnostics_dir / "residual_histogram.png"
-        residual = pd.to_numeric(prediction_frame.get("residual"), errors="coerce").dropna()
+        residual = (
+            pd.to_numeric(prediction_frame["residual"], errors="coerce").dropna()
+            if "residual" in prediction_frame.columns
+            else pd.Series(dtype=float)
+        )
         if not residual.empty:
             fig, ax = plt.subplots(figsize=(10, 4))
             ax.hist(residual.to_numpy(dtype=float), bins=50, alpha=0.75)

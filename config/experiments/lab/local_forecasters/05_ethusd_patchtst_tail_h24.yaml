@@ -1,0 +1,35 @@
+strategy: {name: lab_local_05_ethusd_patchtst_tail_h24, timeframe: 30m, assets: [ETHUSD], description: "Local PatchTST tail-return forecast lab for ETHUSD."}
+data:
+  source: dukascopy_csv
+  interval: 30m
+  symbol: ETHUSD
+  alignment: inner
+  storage: {mode: cached_only, dataset_id: lab_local_05_ethusd_patchtst_tail_h24, save_raw: false, save_processed: true, load_path: data/raw/dukascopy_30m_clean/ethusd_30m.csv, raw_dir: data/raw, processed_dir: data/processed}
+features:
+- {step: returns, outputs: {close_ret: close_ret}, params: {log: false, col_name: close_ret}}
+- {step: volatility, params: {returns_col: close_ret, rolling_windows: [24, 48, 96, 192], ewma_spans: [], annualization_factor: null}}
+- step: trend
+  params: {price_col: close, sma_windows: [], ema_spans: [24, 48, 96, 192], ema_col_template: "ema_{span}", add_ratios: false}
+  transforms: {ratio: {enabled: true, items: [{numerator_col: ema_24, denominator_col: ema_96, output_col: ema_trend_24_96, subtract: 1.0}, {numerator_col: close, denominator_col: ema_96, output_col: close_over_ema_96, subtract: 1.0}, {numerator_col: close, denominator_col: ema_192, output_col: close_over_ema_192, subtract: 1.0}]}}
+- step: atr
+  params: {high_col: high, low_col: low, close_col: close, window: 48, windows: [48], method: wilder}
+  transforms: {ratio: {enabled: true, items: [{numerator_col: atr_48, denominator_col: close, output_col: atr_over_price_48}]}}
+- {step: rsi, params: {price_col: close, windows: [14], method: wilder}}
+- {step: macd, outputs: {macd_12_26: macd, macd_signal_9: macd_signal, macd_hist_12_26_9: macd_hist}, params: {price_col: close, fast: 12, slow: 26, signal: 9}}
+- {step: bollinger, params: {price_col: close, window: 96, n_std: 2.0}}
+- {step: roc, params: {price_col: close, windows: [4, 12, 24, 48]}}
+model:
+  kind: patchtst_forecaster
+  minimum_expected_features: 18
+  outputs: {pred_ret_col: pred_ret, pred_prob_col: pred_prob, pred_is_oos_col: pred_is_oos}
+  target: {kind: future_return_regression, price_col: close, returns_col: close_ret, returns_type: simple, horizon_bars: 48, normalize_by_volatility: true, volatility_col: atr_48, clip: [-4.0, 4.0], fwd_col: target_tail_24h_atr, label_col: target_tail_24h_atr}
+  split: {method: purged, train_size: 20000, test_size: 2500, step_size: 2500, expanding: true, max_folds: 4, purge_bars: 48, embargo_bars: 48}
+  feature_selectors: {include: [{regex: "^(close_ret|vol_rolling_|ema_trend_|close_over_ema_|atr_|atr_over_price_|rsi_|macd|macd_signal|macd_hist|bb_|bollinger_|roc_)"}], strict: {min_count: 18}}
+  params: {lookback: 96, patch_len: 12, patch_stride: 6, hidden_dim: 48, num_heads: 4, num_layers: 1, dropout: 0.10, epochs: 6, batch_size: 128, learning_rate: 0.001, weight_decay: 0.0001, quantiles: [0.05, 0.5, 0.95], scale_target: true}
+signals: {kind: forecast_threshold, params: {forecast_col: pred_ret, signal_col: signal_patchtst_tail, upper: 0.35, lower: -0.35, mode: long_short}}
+validation: {method: purged_walk_forward, purge_bars: 48, embargo_bars: 48}
+runtime: {seed: 7, repro_mode: strict, deterministic: true, threads: 1, seed_torch: true}
+risk: {cost_per_turnover: 0.00015}
+backtest: {engine: vectorized, signal_col: signal_patchtst_tail, returns_col: close_ret, returns_type: simple, subset: test, periods_per_year: 12096, missing_return_policy: raise_if_exposed}
+diagnostics: {enabled: true, model: {enabled: true}, forecast: {quantiles: 10, autocorrelation_lags: [1, 2, 4, 8, 24, 48], volatility_col: atr_over_price_48}}
+logging: {enabled: true, run_name: lab_local_05_ethusd_patchtst_tail_h24, output_dir: logs/lab/local_forecasters}

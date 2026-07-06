@@ -644,12 +644,12 @@ Confirmed pivot-based support/resistance.
 
 ## multi_timeframe
 
-Higher-timeframe features aligned στο base timeframe.
+Higher-timeframe raw candles aligned στο base timeframe.
 
-- Outputs ανά timeframe: `mtf_{tf}_{returns_col}`, `mtf_{tf}_volatility`, `mtf_{tf}_trend_score`, `mtf_{tf}_atr`, `mtf_{tf}_adx`, `mtf_{tf}_regime_vol_ratio`.
-- Resamples OHLCV σε higher timeframe, υπολογίζει features εκεί και τα κάνει backward `merge_asof` στο base frame.
-- Χρησιμότητα: δίνει 1h/4h context σε 30m ή χαμηλότερο timeframe.
-- Θεωρία: multi-timeframe confluence. Ένα short-term setup έχει διαφορετική πιθανότητα όταν το higher timeframe trend συμφωνεί.
+- Outputs ανά timeframe: `mtf_{tf}_open`, `mtf_{tf}_high`, `mtf_{tf}_low`, `mtf_{tf}_close`, `mtf_{tf}_volume`.
+- Resamples OHLCV σε higher timeframe και κάνει backward `merge_asof` του τελευταίου fully closed raw candle στο base frame.
+- Χρησιμότητα: δίνει 1h/4h raw context σε 30m ή χαμηλότερο timeframe, ώστε returns, helpers, indicators και normalizations να ορίζονται explicit downstream.
+- Θεωρία: multi-timeframe confluence χωρίς hidden assumptions για το ποια derived features πρέπει να υπολογιστούν.
 - Αιτιότητα: `shift_to_last_closed=true` απαιτείται. Δεν επιτρέπεται να πάρει HTF bar που δεν έχει κλείσει.
 
 ## opening_range_breakout

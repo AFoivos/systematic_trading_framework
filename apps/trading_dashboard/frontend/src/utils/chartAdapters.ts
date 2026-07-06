@@ -37,11 +37,36 @@ function isShortSide(side: TradeRecord["side"]): boolean {
   return normalized === "short" || normalized === "sell";
 }
 
+function signedPercentLabel(value: number | null): string | null {
+  if (value === null) {
+    return null;
+  }
+  const percent = value * 100;
+  const sign = percent > 0 ? "+" : "";
+  return `${sign}${percent.toFixed(2)}%`;
+}
+
+function inferredExitLabel(value: number | null): string | null {
+  if (value === null) {
+    return null;
+  }
+  if (value > 0) {
+    return "TP";
+  }
+  if (value < 0) {
+    return "SL";
+  }
+  return "BE";
+}
+
 function exitMarkerText(trade: TradeRecord): string {
-  const returnLabel = trade.return === null ? null : `${(trade.return * 100).toFixed(2)}%`;
+  const returnLabel = signedPercentLabel(trade.return);
   const normalizedReason = trade.exit_reason?.trim().toLowerCase();
-  const reasonLabel = normalizedReason ? (exitReasonLabels[normalizedReason] ?? normalizedReason.toUpperCase()) : null;
-  return ["Exit", returnLabel, reasonLabel].filter(Boolean).join(" ");
+  const reasonLabel = normalizedReason
+    ? (exitReasonLabels[normalizedReason] ?? normalizedReason.toUpperCase())
+    : inferredExitLabel(trade.return);
+  const label = [reasonLabel, returnLabel].filter(Boolean).join(" ");
+  return label || "Exit";
 }
 
 export function toCandles(candles: OHLCVCandle[]) {

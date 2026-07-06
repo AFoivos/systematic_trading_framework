@@ -83,6 +83,7 @@ def compute_forecast_threshold_signal(
     lower: float | None = None,
     signal_col: str = "forecast_threshold_signal",
     mode: str = "long_short_hold",
+    activation_filters: list[dict[str, object]] | None = None,
 ) -> pd.DataFrame:
     """
     Convert return forecasts into thresholded directional exposure.
@@ -106,12 +107,18 @@ def compute_forecast_threshold_signal(
         hold.loc[long_mask] = 1.0
         hold.loc[short_mask] = -1.0
         out[signal_col] = hold.ffill().fillna(0.0).astype(float)
+        if activation_filters:
+            mask = _resolve_activation_filter_mask(out, index=out.index, activation_filters=activation_filters)
+            out.loc[~mask, signal_col] = 0.0
         return out
 
     if mode in {"long_only", "long_short"}:
         out.loc[long_mask, signal_col] = 1.0
     if mode in {"short_only", "long_short"}:
         out.loc[short_mask, signal_col] = -1.0
+    if activation_filters:
+        mask = _resolve_activation_filter_mask(out, index=out.index, activation_filters=activation_filters)
+        out.loc[~mask, signal_col] = 0.0
     return out
 
 

@@ -9,6 +9,7 @@ import yaml
 
 from app.core.paths import DashboardPaths, get_paths
 from app.services.data_loader import DataLoader
+from app.services.market_making_runs import latest_market_making_run
 from app.services.schema_mapper import is_prediction_column
 
 
@@ -103,7 +104,9 @@ class ExperimentLoader:
             market_making = self._market_making_summary()
             if not market_making:
                 raise FileNotFoundError(f"Unknown experiment run_id: {run_id}")
-            run_dir = self.paths.project_root / "reports" / "market_making"
+            run_dir = latest_market_making_run(self.paths)
+            if run_dir is None:
+                raise FileNotFoundError(f"Unknown experiment run_id: {run_id}")
             return {
                 "run_id": market_making["run_id"],
                 "name": market_making["name"],
@@ -156,21 +159,29 @@ class ExperimentLoader:
         }
 
     def _market_making_summary(self) -> dict[str, Any] | None:
-        run_dir = self.paths.project_root / "reports" / "market_making"
+        run_dir = latest_market_making_run(self.paths)
+        if run_dir is None:
+            return None
         summary = self._load_json(run_dir / "summary.json")
         if not run_dir.exists() or not summary:
             return None
         trades_path = run_dir / "trades.csv"
         orderbook_path = run_dir / "orderbook_events.csv"
+        quote_events_path = run_dir / "quote_events.csv"
+        event_path = orderbook_path if orderbook_path.exists() else quote_events_path
         asset = None
         created_at = None
-        if orderbook_path.exists():
-            orderbook = pd.read_csv(orderbook_path, nrows=1)
+        if event_path.exists():
+            orderbook = pd.read_csv(event_path, nrows=1)
             if not orderbook.empty:
                 asset = orderbook.iloc[0].get("symbol")
-            tail = pd.read_csv(orderbook_path, usecols=["timestamp"]).tail(1)
+            tail = pd.read_csv(event_path, usecols=["timestamp"]).tail(1)
             if not tail.empty:
                 created_at = str(tail.iloc[-1]["timestamp"])
+        if asset is None and trades_path.exists():
+            trades = pd.read_csv(trades_path, nrows=1)
+            if not trades.empty:
+                asset = trades.iloc[0].get("symbol")
         return {
             "run_id": "market_making__latest",
             "name": "market_making_latest",

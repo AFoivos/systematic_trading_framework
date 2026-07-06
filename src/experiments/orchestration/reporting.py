@@ -652,6 +652,10 @@ def build_experiment_report_markdown(
     ehlers_diagnostics = _safe_meta_dict(evaluation.get("ehlers_continuation_long_diagnostics"))
     ehlers_short_diagnostics = _safe_meta_dict(evaluation.get("ehlers_continuation_short_diagnostics"))
     robustness_diagnostics = _safe_meta_dict(evaluation.get("robustness"))
+    forecast_baselines = _safe_meta_dict(evaluation.get("forecast_baselines"))
+    threshold_grid = _safe_meta_dict(evaluation.get("threshold_grid"))
+    fold_backtest_diagnostics = _safe_meta_dict(evaluation.get("fold_backtest_diagnostics"))
+    regime_performance = _safe_meta_dict(evaluation.get("regime_performance"))
 
     symbols = data_cfg.get("symbols") or ([data_cfg.get("symbol")] if data_cfg.get("symbol") else [])
     run_name = str(cfg.get("logging", {}).get("run_name", cfg.get("config_path", "experiment")))
@@ -813,6 +817,131 @@ def build_experiment_report_markdown(
                 _markdown_table(["Artifact", "Link"], dense_diagnostic_links),
             ]
         )
+
+    if forecast_baselines:
+        rows = list(forecast_baselines.get("rows", []) or [])
+        if rows:
+            lines.extend(
+                [
+                    "",
+                    "## Forecast Baselines",
+                    _markdown_table(
+                        [
+                            "Name",
+                            "Cum Return",
+                            "Ann Return",
+                            "Ann Vol",
+                            "Sharpe",
+                            "Sortino",
+                            "Calmar",
+                            "Max DD",
+                            "Profit Factor",
+                            "Hit Rate",
+                            "Turnover",
+                            "Cost/Gross",
+                        ],
+                        [
+                            [
+                                row.get("name"),
+                                row.get("cumulative_return"),
+                                row.get("annualized_return"),
+                                row.get("annualized_vol"),
+                                row.get("sharpe"),
+                                row.get("sortino"),
+                                row.get("calmar"),
+                                row.get("max_drawdown"),
+                                row.get("profit_factor"),
+                                row.get("hit_rate"),
+                                row.get("total_turnover"),
+                                row.get("cost_to_gross_pnl"),
+                            ]
+                            for row in rows
+                        ],
+                    ),
+                ]
+            )
+
+    if threshold_grid:
+        rows = list(threshold_grid.get("rows", []) or [])
+        if rows:
+            lines.extend(
+                [
+                    "",
+                    "## Threshold Grid",
+                    _markdown_table(
+                        [
+                            "Name",
+                            "Upper",
+                            "Lower",
+                            "Net PnL",
+                            "Sharpe",
+                            "Max DD",
+                            "Profit Factor",
+                            "Cost/Gross",
+                            "Turnover",
+                            "Active Rows",
+                            "Profitable Folds",
+                            "Median Fold Return",
+                            "Worst 3-Fold Avg",
+                        ],
+                        [
+                            [
+                                row.get("name"),
+                                row.get("upper"),
+                                row.get("lower"),
+                                row.get("net_pnl"),
+                                row.get("sharpe"),
+                                row.get("max_drawdown"),
+                                row.get("profit_factor"),
+                                row.get("cost_to_gross_pnl"),
+                                row.get("total_turnover"),
+                                row.get("active_rows"),
+                                row.get("profitable_fold_count"),
+                                row.get("median_fold_return"),
+                                row.get("worst_3_fold_average_return"),
+                            ]
+                            for row in rows
+                        ],
+                    ),
+                ]
+            )
+
+    if fold_backtest_diagnostics:
+        summary_rows = _dict_metric_rows(_safe_meta_dict(fold_backtest_diagnostics.get("summary")))
+        if summary_rows:
+            lines.extend(
+                [
+                    "",
+                    "## Fold Robustness",
+                    _markdown_table(["Metric", "Value"], summary_rows),
+                ]
+            )
+
+    if regime_performance:
+        rows = list(regime_performance.get("rows", []) or [])
+        if rows:
+            lines.extend(
+                [
+                    "",
+                    "## Regime Performance",
+                    _markdown_table(
+                        ["Feature", "Bucket", "Rows", "Cum Return", "Sharpe", "Max DD", "Profit Factor", "Cost/Gross"],
+                        [
+                            [
+                                row.get("feature"),
+                                row.get("bucket"),
+                                row.get("row_count"),
+                                row.get("cumulative_return"),
+                                row.get("sharpe"),
+                                row.get("max_drawdown"),
+                                row.get("profit_factor"),
+                                row.get("cost_to_gross_pnl"),
+                            ]
+                            for row in rows
+                        ],
+                    ),
+                ]
+            )
 
     if model_stages:
         stage_rows = [

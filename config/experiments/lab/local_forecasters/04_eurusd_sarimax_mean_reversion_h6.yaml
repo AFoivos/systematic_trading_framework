@@ -1,0 +1,32 @@
+strategy: {name: lab_local_04_eurusd_sarimax_mean_reversion_h6, timeframe: 30m, assets: [EURUSD], description: "Local SARIMAX mean-reversion forecast lab for EURUSD."}
+data:
+  source: dukascopy_csv
+  interval: 30m
+  symbol: EURUSD
+  alignment: inner
+  storage: {mode: cached_only, dataset_id: lab_local_04_eurusd_sarimax_mean_reversion_h6, save_raw: false, save_processed: true, load_path: data/raw/dukascopy_30m_clean/eurusd_30m.csv, raw_dir: data/raw, processed_dir: data/processed}
+features:
+- {step: returns, outputs: {close_ret: close_ret}, params: {log: false, col_name: close_ret}}
+- {step: volatility, params: {returns_col: close_ret, rolling_windows: [6, 24, 48], ewma_spans: [], annualization_factor: null}}
+- step: trend
+  params: {price_col: close, sma_windows: [], ema_spans: [20, 50, 100], ema_col_template: "ema_{span}", add_ratios: false}
+  transforms: {ratio: {enabled: true, items: [{numerator_col: close, denominator_col: ema_50, output_col: close_over_ema_50, subtract: 1.0}, {numerator_col: close, denominator_col: ema_100, output_col: close_over_ema_100, subtract: 1.0}]}}
+- step: atr
+  params: {high_col: high, low_col: low, close_col: close, window: 24, windows: [24], method: wilder}
+  transforms: {ratio: {enabled: true, items: [{numerator_col: atr_24, denominator_col: close, output_col: atr_over_price_24}]}}
+- {step: rsi, params: {price_col: close, windows: [14], method: wilder}}
+- {step: roc, params: {price_col: close, windows: [3, 6, 12]}}
+model:
+  kind: sarimax_forecaster
+  outputs: {pred_ret_col: pred_ret, pred_prob_col: pred_prob, pred_is_oos_col: pred_is_oos}
+  target: {kind: future_return_regression, price_col: close, returns_col: close_ret, returns_type: simple, horizon_bars: 12, fwd_col: target_ret_6h, label_col: target_ret_6h}
+  split: {method: purged, train_size: 16000, test_size: 2000, step_size: 2000, expanding: true, max_folds: 5, purge_bars: 12, embargo_bars: 12}
+  feature_selectors: {include: [{exact: [close_over_ema_50, close_over_ema_100, rsi_14, roc_3, roc_6, roc_12, vol_rolling_24, atr_over_price_24]}], strict: {min_count: 8}}
+  params: {order: [2, 0, 1], seasonal_order: [0, 0, 0, 0], trend: c, use_exog: true, enforce_stationarity: false, enforce_invertibility: false, maxiter: 100, allow_fallback: true}
+signals: {kind: forecast_threshold, params: {forecast_col: pred_ret, signal_col: signal_sarimax_mr, upper: 0.00015, lower: -0.00015, mode: long_short}}
+validation: {method: purged_walk_forward, purge_bars: 12, embargo_bars: 12}
+runtime: {seed: 7, repro_mode: strict, deterministic: true, threads: 1, seed_torch: false}
+risk: {cost_per_turnover: 0.00002}
+backtest: {engine: vectorized, signal_col: signal_sarimax_mr, returns_col: close_ret, returns_type: simple, subset: test, periods_per_year: 12096, missing_return_policy: raise_if_exposed}
+diagnostics: {enabled: true, model: {enabled: true}, forecast: {quantiles: 10, autocorrelation_lags: [1, 2, 3, 6, 12], volatility_col: atr_over_price_24}}
+logging: {enabled: true, run_name: lab_local_04_eurusd_sarimax_mean_reversion_h6, output_dir: logs/lab/local_forecasters}

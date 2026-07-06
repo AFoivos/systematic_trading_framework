@@ -8,7 +8,9 @@ from src.features.multi_timeframe import add_multi_timeframe_features
 from src.features.multi_timeframe import _resample_ohlcv
 
 
-def _base_30m_frame(periods: int = 12, *, start: str = "2024-01-01 00:30:00") -> pd.DataFrame:
+def _base_30m_frame(
+    periods: int = 12, *, start: str = "2024-01-01 00:30:00"
+) -> pd.DataFrame:
     idx = pd.date_range(start, periods=periods, freq="30min", tz="UTC")
     close = pd.Series(np.arange(100.0, 100.0 + periods), index=idx)
     return pd.DataFrame(
@@ -24,6 +26,8 @@ def _base_30m_frame(periods: int = 12, *, start: str = "2024-01-01 00:30:00") ->
 
 
 def _minimal_feature_kwargs() -> dict[str, int]:
+    # Deprecated indicator parameters are still accepted for config compatibility,
+    # but multi_timeframe now only emits raw higher-timeframe candles.
     return {
         "volatility_window": 2,
         "trend_ema_span": 1,
@@ -91,10 +95,40 @@ def test_multi_timeframe_alignment_uses_last_closed_1h_without_lookahead() -> No
 
     row_0130 = out.loc[pd.Timestamp("2024-01-01 01:30:00", tz="UTC")]
     row_0200 = out.loc[pd.Timestamp("2024-01-01 02:00:00", tz="UTC")]
-    expected_0200_ret = np.log(df.loc[pd.Timestamp("2024-01-01 02:00:00", tz="UTC"), "close"] / df.loc[pd.Timestamp("2024-01-01 01:00:00", tz="UTC"), "close"])
 
-    assert pd.isna(row_0130["mtf_1h_close_logret"])
-    assert row_0200["mtf_1h_close_logret"] == pytest.approx(expected_0200_ret)
+    assert row_0130["mtf_1h_close"] == pytest.approx(
+        df.loc[pd.Timestamp("2024-01-01 01:00:00", tz="UTC"), "close"]
+    )
+    assert row_0200["mtf_1h_open"] == pytest.approx(
+        df.loc[pd.Timestamp("2024-01-01 01:30:00", tz="UTC"), "open"]
+    )
+    assert row_0200["mtf_1h_high"] == pytest.approx(
+        df.loc[
+            pd.Timestamp("2024-01-01 01:30:00", tz="UTC") : pd.Timestamp(
+                "2024-01-01 02:00:00", tz="UTC"
+            ),
+            "high",
+        ].max()
+    )
+    assert row_0200["mtf_1h_low"] == pytest.approx(
+        df.loc[
+            pd.Timestamp("2024-01-01 01:30:00", tz="UTC") : pd.Timestamp(
+                "2024-01-01 02:00:00", tz="UTC"
+            ),
+            "low",
+        ].min()
+    )
+    assert row_0200["mtf_1h_close"] == pytest.approx(
+        df.loc[pd.Timestamp("2024-01-01 02:00:00", tz="UTC"), "close"]
+    )
+    assert row_0200["mtf_1h_volume"] == pytest.approx(
+        df.loc[
+            pd.Timestamp("2024-01-01 01:30:00", tz="UTC") : pd.Timestamp(
+                "2024-01-01 02:00:00", tz="UTC"
+            ),
+            "volume",
+        ].sum()
+    )
 
 
 def test_multi_timeframe_alignment_uses_last_closed_4h_without_lookahead() -> None:
@@ -106,19 +140,23 @@ def test_multi_timeframe_alignment_uses_last_closed_4h_without_lookahead() -> No
         **_minimal_feature_kwargs(),
     )
 
-    assert pd.isna(out.loc[pd.Timestamp("2024-01-01 03:30:00", tz="UTC"), "mtf_4h_close_logret"])
-    assert pd.isna(out.loc[pd.Timestamp("2024-01-01 04:00:00", tz="UTC"), "mtf_4h_close_logret"])
-    longer = _base_30m_frame(periods=18)
-    expected = np.log(
-        longer.loc[pd.Timestamp("2024-01-01 08:00:00", tz="UTC"), "close"]
-        / longer.loc[pd.Timestamp("2024-01-01 04:00:00", tz="UTC"), "close"]
+    assert pd.isna(
+        out.loc[pd.Timestamp("2024-01-01 03:30:00", tz="UTC"), "mtf_4h_close"]
     )
+    assert out.loc[
+        pd.Timestamp("2024-01-01 04:00:00", tz="UTC"), "mtf_4h_close"
+    ] == pytest.approx(df.loc[pd.Timestamp("2024-01-01 04:00:00", tz="UTC"), "close"])
+    longer = _base_30m_frame(periods=18)
     longer_out = add_multi_timeframe_features(
         longer,
         timeframes=["4h"],
         **_minimal_feature_kwargs(),
     )
-    assert longer_out.loc[pd.Timestamp("2024-01-01 08:00:00", tz="UTC"), "mtf_4h_close_logret"] == pytest.approx(expected)
+    assert longer_out.loc[
+        pd.Timestamp("2024-01-01 08:00:00", tz="UTC"), "mtf_4h_close"
+    ] == pytest.approx(
+        longer.loc[pd.Timestamp("2024-01-01 08:00:00", tz="UTC"), "close"]
+    )
 
 
 def test_multi_timeframe_bar_start_1h_alignment_uses_closed_left_bins() -> None:
@@ -131,8 +169,12 @@ def test_multi_timeframe_bar_start_1h_alignment_uses_closed_left_bins() -> None:
         **_minimal_feature_kwargs(),
     )
 
-    assert pd.isna(out.loc[pd.Timestamp("2024-01-01 00:30:00", tz="UTC"), "mtf_1h_trend_score"])
-    assert out.loc[pd.Timestamp("2024-01-01 01:00:00", tz="UTC"), "mtf_1h_trend_score"] == pytest.approx(0.0)
+    assert pd.isna(
+        out.loc[pd.Timestamp("2024-01-01 00:30:00", tz="UTC"), "mtf_1h_close"]
+    )
+    assert out.loc[
+        pd.Timestamp("2024-01-01 01:00:00", tz="UTC"), "mtf_1h_close"
+    ] == pytest.approx(df.loc[pd.Timestamp("2024-01-01 00:30:00", tz="UTC"), "close"])
 
 
 def test_multi_timeframe_bar_start_4h_alignment_uses_closed_left_bins() -> None:
@@ -145,8 +187,12 @@ def test_multi_timeframe_bar_start_4h_alignment_uses_closed_left_bins() -> None:
         **_minimal_feature_kwargs(),
     )
 
-    assert pd.isna(out.loc[pd.Timestamp("2024-01-01 03:30:00", tz="UTC"), "mtf_4h_trend_score"])
-    assert out.loc[pd.Timestamp("2024-01-01 04:00:00", tz="UTC"), "mtf_4h_trend_score"] == pytest.approx(0.0)
+    assert pd.isna(
+        out.loc[pd.Timestamp("2024-01-01 03:30:00", tz="UTC"), "mtf_4h_close"]
+    )
+    assert out.loc[
+        pd.Timestamp("2024-01-01 04:00:00", tz="UTC"), "mtf_4h_close"
+    ] == pytest.approx(df.loc[pd.Timestamp("2024-01-01 03:30:00", tz="UTC"), "close"])
 
 
 def test_multi_timeframe_bar_close_preserves_legacy_closed_right_behavior() -> None:
@@ -159,8 +205,12 @@ def test_multi_timeframe_bar_close_preserves_legacy_closed_right_behavior() -> N
         **_minimal_feature_kwargs(),
     )
 
-    assert pd.isna(out.loc[pd.Timestamp("2024-01-01 00:30:00", tz="UTC"), "mtf_1h_trend_score"])
-    assert out.loc[pd.Timestamp("2024-01-01 01:00:00", tz="UTC"), "mtf_1h_trend_score"] == pytest.approx(0.0)
+    assert pd.isna(
+        out.loc[pd.Timestamp("2024-01-01 00:30:00", tz="UTC"), "mtf_1h_close"]
+    )
+    assert out.loc[
+        pd.Timestamp("2024-01-01 01:00:00", tz="UTC"), "mtf_1h_close"
+    ] == pytest.approx(df.loc[pd.Timestamp("2024-01-01 01:00:00", tz="UTC"), "close"])
 
 
 def test_multi_timeframe_invalid_timestamp_convention_raises() -> None:
@@ -214,6 +264,10 @@ def test_multi_timeframe_processes_assets_independently() -> None:
     )
 
     ts = pd.Timestamp("2024-01-01 02:00:00", tz="UTC")
-    aaa = out.loc[(out["asset"] == "AAA") & (out["timestamp"] == ts), "mtf_1h_close_logret"].iloc[0]
-    bbb = out.loc[(out["asset"] == "BBB") & (out["timestamp"] == ts), "mtf_1h_close_logret"].iloc[0]
+    aaa = out.loc[
+        (out["asset"] == "AAA") & (out["timestamp"] == ts), "mtf_1h_close"
+    ].iloc[0]
+    bbb = out.loc[
+        (out["asset"] == "BBB") & (out["timestamp"] == ts), "mtf_1h_close"
+    ].iloc[0]
     assert aaa != pytest.approx(bbb)

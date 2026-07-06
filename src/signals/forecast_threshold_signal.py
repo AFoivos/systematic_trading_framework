@@ -13,6 +13,7 @@ def forecast_threshold_signal(
     upper: float = 0.0,
     lower: float | None = None,
     mode: str = "long_short_hold",
+    activation_filters: list[dict[str, object]] | None = None,
 ) -> pd.Series:
     """
     Apply the registered ``forecast_threshold`` signal transformation.
@@ -61,6 +62,7 @@ def forecast_threshold_signal(
         lower=lower,
         signal_col=output_col,
         mode=mode,
+        activation_filters=activation_filters,
     )
     return out[output_col]
 

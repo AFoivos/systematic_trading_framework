@@ -746,7 +746,7 @@ execution:
 logging:
   enabled: true
   run_name: feature_signal_target_lab
-  output_dir: logs/experiments/00_lab
+  output_dir: logs/lab
   stage_tails:
     enabled: false
     stdout: false

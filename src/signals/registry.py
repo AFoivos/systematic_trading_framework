@@ -19,6 +19,7 @@ from .ehlers_trend_pullback_continuation_long_signal import ehlers_trend_pullbac
 from .ema_rms_ppo_vwap_signal import ema_rms_ppo_vwap_signal
 from .ema_stoch_rsi_pullback_signal import ema_stoch_rsi_pullback_signal
 from .forecast_threshold_signal import forecast_threshold_signal
+from .forecast_threshold_hysteresis_signal import forecast_threshold_hysteresis_signal
 from .forecast_vol_adjusted_signal import forecast_vol_adjusted_signal
 from .indicator_model_adaptive_pullback import indicator_model_adaptive_pullback_signal
 from .manual_long_model_filter_signal import manual_long_model_filter_signal
@@ -39,6 +40,7 @@ from .volatility_regime_strategy import volatility_regime_strategy
 from .vwap_rms_ema_cross_long_fractal_filter import vwap_rms_ema_cross_long_fractal_filter_signal
 from .vwap_rms_ema_cross_long_hmm_gate import vwap_rms_ema_cross_long_hmm_gate_signal
 from .vwap_rms_ema_cross_long_signal import vwap_rms_ema_cross_long_signal
+from .weekday_prev_daily_return_reversal import weekday_prev_daily_return_reversal_signal
 
 SignalFn = Callable[..., Union[pd.DataFrame, pd.Series]]
 
@@ -66,12 +68,14 @@ _SIGNAL_COMPONENTS: tuple[tuple[str, SignalFn], ...] = (
     ("manual_long_model_filter", manual_long_model_filter_signal),
     ("dense_return_forecast", dense_return_forecast_signal),
     ("forecast_threshold", forecast_threshold_signal),
+    ("forecast_threshold_hysteresis", forecast_threshold_hysteresis_signal),
     ("forecast_vol_adjusted", forecast_vol_adjusted_signal),
     ("rsi", rsi_strategy),
     ("momentum", momentum_strategy),
     ("stochastic", stochastic_strategy),
     ("stc_roofing_hilbert", stc_roofing_hilbert_signal),
     ("volatility_regime", volatility_regime_strategy),
+    ("weekday_prev_daily_return_reversal", weekday_prev_daily_return_reversal_signal),
     ("vwap_rms_ema_cross_long_fractal_filter", vwap_rms_ema_cross_long_fractal_filter_signal),
     ("vwap_rms_ema_cross_long_hmm_gate", vwap_rms_ema_cross_long_hmm_gate_signal),
     ("vwap_rms_ema_cross_long", vwap_rms_ema_cross_long_signal),

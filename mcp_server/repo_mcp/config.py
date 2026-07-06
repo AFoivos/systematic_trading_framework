@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +12,24 @@ DEFAULT_MAX_READ_BYTES = 1_000_000
 DEFAULT_MAX_SEARCH_RESULTS = 200
 DEFAULT_MAX_TREE_ENTRIES = 5_000
 DEFAULT_SCRIPT_TIMEOUT_SECONDS = 120
+DEFAULT_FULL_ACCESS_CONFIRMATION = "RUN_FULL_ACCESS_REPOSITORY_ACTION"
+DEFAULT_FULL_ACCESS_MAX_OUTPUT_BYTES = 200_000
+DEFAULT_FULL_ACCESS_TIMEOUT_SECONDS = 300
+DEFAULT_FULL_ACCESS_MAX_TIMEOUT_SECONDS = 3_600
+
+
+@dataclass(frozen=True)
+class FullAccessConfig:
+    enabled: bool = False
+    require_confirmation: bool = True
+    confirmation_token: str = DEFAULT_FULL_ACCESS_CONFIRMATION
+    max_output_bytes: int = DEFAULT_FULL_ACCESS_MAX_OUTPUT_BYTES
+    default_timeout_seconds: int = DEFAULT_FULL_ACCESS_TIMEOUT_SECONDS
+    max_timeout_seconds: int = DEFAULT_FULL_ACCESS_MAX_TIMEOUT_SECONDS
+    allow_shell: bool = False
+    allow_write: bool = False
+    allow_delete: bool = False
+    allow_git_write: bool = False
 
 
 @dataclass(frozen=True)
@@ -24,6 +42,7 @@ class ServerConfig:
     max_tree_entries: int
     script_timeout_seconds: int
     approved_python_scripts: tuple[str, ...]
+    full_access: FullAccessConfig = field(default_factory=FullAccessConfig)
 
 
 def _read_yaml_config(path: Path) -> dict[str, Any]:
@@ -45,6 +64,10 @@ def load_config() -> ServerConfig:
     if not isinstance(scripts, list) or not all(isinstance(item, str) for item in scripts):
         raise ValueError("approved_python_scripts must be a list of repository-relative paths")
 
+    full_access_payload = payload.get("full_access", {})
+    if not isinstance(full_access_payload, dict):
+        full_access_payload = {}
+
     return ServerConfig(
         repo_root=Path(os.environ.get("MCP_REPO_ROOT", "/workspace")).resolve(),
         host=os.environ.get("MCP_HOST", str(payload.get("host", "0.0.0.0"))),
@@ -56,4 +79,36 @@ def load_config() -> ServerConfig:
             limits.get("script_timeout_seconds", DEFAULT_SCRIPT_TIMEOUT_SECONDS)
         ),
         approved_python_scripts=tuple(scripts),
+        full_access=FullAccessConfig(
+            enabled=bool(full_access_payload.get("enabled", False)),
+            require_confirmation=bool(full_access_payload.get("require_confirmation", True)),
+            confirmation_token=str(
+                full_access_payload.get(
+                    "confirmation_token",
+                    DEFAULT_FULL_ACCESS_CONFIRMATION,
+                )
+            ),
+            max_output_bytes=int(
+                full_access_payload.get(
+                    "max_output_bytes",
+                    DEFAULT_FULL_ACCESS_MAX_OUTPUT_BYTES,
+                )
+            ),
+            default_timeout_seconds=int(
+                full_access_payload.get(
+                    "default_timeout_seconds",
+                    DEFAULT_FULL_ACCESS_TIMEOUT_SECONDS,
+                )
+            ),
+            max_timeout_seconds=int(
+                full_access_payload.get(
+                    "max_timeout_seconds",
+                    DEFAULT_FULL_ACCESS_MAX_TIMEOUT_SECONDS,
+                )
+            ),
+            allow_shell=bool(full_access_payload.get("allow_shell", False)),
+            allow_write=bool(full_access_payload.get("allow_write", False)),
+            allow_delete=bool(full_access_payload.get("allow_delete", False)),
+            allow_git_write=bool(full_access_payload.get("allow_git_write", False)),
+        ),
     )

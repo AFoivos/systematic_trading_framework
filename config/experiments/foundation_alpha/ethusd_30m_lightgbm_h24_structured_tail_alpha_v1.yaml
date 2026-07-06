@@ -1,0 +1,292 @@
+strategy:
+  name: ethusd_30m_lightgbm_h24_structured_tail_alpha_v1
+  timeframe: 30m
+  assets:
+  - ETHUSD
+  description: >
+    ETHUSD 30m structured feature-alpha experiment derived from the local
+    research scan. It deliberately avoids pretrained/foundation models and
+    tests whether causal trend, momentum, volatility expansion, overextension,
+    and range-position features can forecast 24-bar returns. Trading is
+    tail-only through a fixed forecast threshold with a 24-bar hold.
+data:
+  source: dukascopy_csv
+  interval: 30m
+  start: null
+  end: null
+  alignment: inner
+  symbol: ETHUSD
+  pit:
+    timestamp_alignment:
+      source_timezone: UTC
+      output_timezone: UTC
+      normalize_daily: false
+      duplicate_policy: last
+    corporate_actions:
+      policy: none
+      adj_close_col: adj_close
+    universe_snapshot:
+      inactive_policy: raise
+  storage:
+    mode: cached_only
+    dataset_id: ethusd_30m_lightgbm_h24_structured_tail_alpha_v1
+    save_raw: false
+    save_processed: true
+    load_path: data/raw/dukascopy_30m_clean/ethusd_30m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed
+features:
+- step: returns
+  params:
+    log: false
+    col_name: close_ret
+  transforms:
+    lag:
+      enabled: true
+      items:
+      - {source_col: close_ret, lag: 1, output_col: lag_close_ret_1}
+      - {source_col: close_ret, lag: 2, output_col: lag_close_ret_2}
+      - {source_col: close_ret, lag: 4, output_col: lag_close_ret_4}
+      - {source_col: close_ret, lag: 8, output_col: lag_close_ret_8}
+      - {source_col: close_ret, lag: 16, output_col: lag_close_ret_16}
+      - {source_col: close_ret, lag: 24, output_col: lag_close_ret_24}
+      - {source_col: close_ret, lag: 48, output_col: lag_close_ret_48}
+- step: volatility
+  params:
+    returns_col: close_ret
+    rolling_windows: [24, 48, 96, 192]
+    ewma_spans: []
+    annualization_factor: null
+- step: trend
+  params:
+    price_col: close
+    sma_windows: []
+    ema_spans: [24, 48, 96, 192]
+    ema_col_template: ema_{span}
+    add_ratios: false
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - {numerator_col: ema_24, denominator_col: ema_96, output_col: ema_trend_24_96, subtract: 1.0}
+      - {numerator_col: ema_48, denominator_col: ema_192, output_col: ema_trend_48_192, subtract: 1.0}
+      - {numerator_col: close, denominator_col: ema_96, output_col: close_over_ema_96, subtract: 1.0}
+      - {numerator_col: close, denominator_col: ema_192, output_col: close_over_ema_192, subtract: 1.0}
+- step: atr
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    window: 48
+    windows: [48]
+    method: wilder
+    add_over_price: false
+    atr_col: atr_48
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - {numerator_col: atr_48, denominator_col: close, output_col: atr_over_price_48}
+- step: macd
+  outputs:
+    macd_12_26: macd
+    macd_signal_9: macd_signal
+    macd_hist_12_26_9: macd_hist
+  params:
+    price_col: close
+    fast: 12
+    slow: 26
+    signal: 9
+- step: rsi
+  outputs:
+    close_rsi_14: rsi_14
+  params:
+    price_col: close
+    windows: [14]
+    method: wilder
+- step: stochastic_rsi
+  outputs:
+    stoch_rsi_k: stoch_rsi_k
+    stoch_rsi_d: stoch_rsi_d
+  params:
+    price_col: close
+    rsi_period: 14
+    stoch_period: 14
+    k_period: 3
+    d_period: 3
+    oversold: 0.2
+    overbought: 0.8
+    prefix: stoch_rsi
+- step: bollinger
+  outputs:
+    bb_ma_192: bollinger_mid_192
+    bb_upper_192_2.0: bollinger_upper_192
+    bb_lower_192_2.0: bollinger_lower_192
+    bb_width_192_2.0: bollinger_bandwidth
+    bb_percent_b_192_2.0: bollinger_percent_b
+  params:
+    price_col: close
+    window: 192
+    n_std: 2.0
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - {numerator_col: close, denominator_col: bb_upper_192_2.0, output_col: close_over_bb_upper_192, subtract: 1.0}
+      - {numerator_col: close, denominator_col: bb_ma_192, output_col: close_over_bb_mid_192, subtract: 1.0}
+- step: indicator_pullback
+  params:
+    asset_vocab: [ETHUSD]
+    open_col: open
+    high_col: high
+    low_col: low
+    close_col: close
+    ema_fast_period: 24
+    ema_mid_period: 96
+    ema_slow_period: 192
+    atr_period: 48
+    atr_pct_rank_window: 192
+    macd_hist_col: macd_hist
+    rsi_period: 14
+    stoch_k_col: stoch_rsi_k
+    stoch_d_col: stoch_rsi_d
+    bollinger_bandwidth_col: bollinger_bandwidth
+    bollinger_percent_b_col: bollinger_percent_b
+    bb_bandwidth_rank_window: 192
+    realized_vol_windows: [24, 48, 96, 192]
+    return_windows: [1, 4, 8, 16, 24, 48]
+    rolling_return_windows: [24, 48]
+model:
+  kind: lightgbm_regressor
+  outputs:
+    pred_ret_col: pred_ret
+    pred_prob_col: pred_prob
+    pred_is_oos_col: pred_is_oos
+  target:
+    kind: future_return_regression
+    price_col: close
+    returns_col: close_ret
+    returns_type: simple
+    horizon_bars: 24
+    normalize_by_volatility: true
+    volatility_col: atr_48
+    clip: [-4.0, 4.0]
+    fwd_col: target_future_return_h24_atr
+    label_col: target_future_return_h24_atr
+  split:
+    method: purged
+    train_size: 35040
+    test_size: 4380
+    step_size: 4380
+    expanding: true
+    max_folds: 10
+    purge_bars: 24
+    embargo_bars: 24
+  feature_cols:
+  - close_ret
+  - lag_close_ret_1
+  - lag_close_ret_2
+  - lag_close_ret_4
+  - lag_close_ret_8
+  - lag_close_ret_16
+  - lag_close_ret_24
+  - lag_close_ret_48
+  - ret_1
+  - ret_4
+  - ret_8
+  - ret_16
+  - ret_24
+  - ret_48
+  - rolling_return_24
+  - rolling_return_48
+  - vol_rolling_24
+  - vol_rolling_48
+  - vol_rolling_96
+  - vol_rolling_192
+  - atr_48
+  - atr_over_price_48
+  - atr_pct
+  - atr_pct_rank_192
+  - ema_trend_24_96
+  - ema_trend_48_192
+  - close_over_ema_96
+  - close_over_ema_192
+  - close_over_bb_upper_192
+  - close_over_bb_mid_192
+  - bollinger_percent_b
+  - bollinger_bandwidth
+  - bollinger_bandwidth_rank_192
+  - ema_alignment_score
+  - distance_from_ema24_atr
+  - distance_from_ema96_atr
+  - body_ratio
+  - upper_wick_ratio
+  - lower_wick_ratio
+  - close_location
+  - range_to_atr
+  params:
+    n_estimators: 500
+    learning_rate: 0.025
+    max_depth: 4
+    num_leaves: 15
+    min_child_samples: 120
+    subsample: 0.8
+    colsample_bytree: 0.8
+    reg_alpha: 0.2
+    reg_lambda: 1.0
+    random_state: 7
+    n_jobs: 1
+    verbosity: -1
+signals:
+  kind: forecast_threshold
+  params:
+    forecast_col: pred_ret
+    signal_col: signal_structured_tail
+    upper: 0.35
+    lower: -0.35
+    mode: long_short
+target: {}
+validation:
+  method: purged_walk_forward
+  purge_bars: 24
+  embargo_bars: 24
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+risk:
+  cost_per_turnover: 0.0001
+  slippage_per_turnover: 0.0
+  target_vol: null
+  max_leverage: 1.0
+  sizing: {}
+  dd_guard:
+    enabled: false
+  portfolio_guard: {}
+  drawdown_sizing: {}
+  vol_col: null
+backtest:
+  engine: vectorized
+  returns_col: close_ret
+  signal_col: signal_structured_tail
+  periods_per_year: 17520
+  returns_type: simple
+  missing_return_policy: raise_if_exposed
+  min_holding_bars: 24
+  subset: test
+  vol_col: null
+portfolio:
+  enabled: false
+  construction: signal_weights
+  gross_target: 1.0
+  long_short: true
+evaluation:
+  strict_oos_only: true
+logging:
+  output_dir: logs/experiments
+  run_name: ethusd_30m_lightgbm_h24_structured_tail_alpha_v1
+  save_model: false
+  save_predictions: true
+  save_processed: true

@@ -1,0 +1,43 @@
+strategy: {name: lab_local_08_us30_lightgbm_trend_h24, timeframe: 30m, assets: [US30], description: "Local LightGBM trend-persistence forecast lab for US30."}
+data:
+  source: dukascopy_csv
+  interval: 30m
+  symbol: US30
+  alignment: inner
+  storage: {mode: cached_only, dataset_id: lab_local_08_us30_lightgbm_trend_h24, save_raw: false, save_processed: true, load_path: data/raw/dukascopy_30m_clean/us30_30m.csv, raw_dir: data/raw, processed_dir: data/processed}
+features:
+- step: returns
+  outputs: {close_ret: close_ret}
+  params: {log: false, col_name: close_ret}
+  transforms:
+    lag:
+      enabled: true
+      items:
+      - {source_col: close_ret, lag: 1, output_col: lag_close_ret_1}
+      - {source_col: close_ret, lag: 4, output_col: lag_close_ret_4}
+      - {source_col: close_ret, lag: 8, output_col: lag_close_ret_8}
+- {step: volatility, params: {returns_col: close_ret, rolling_windows: [24, 48, 96, 192], ewma_spans: [], annualization_factor: null}}
+- step: trend
+  params: {price_col: close, sma_windows: [], ema_spans: [24, 72, 144, 288], ema_col_template: "ema_{span}", add_ratios: false}
+  transforms: {ratio: {enabled: true, items: [{numerator_col: ema_24, denominator_col: ema_144, output_col: ema_trend_24_144, subtract: 1.0}, {numerator_col: ema_72, denominator_col: ema_288, output_col: ema_trend_72_288, subtract: 1.0}, {numerator_col: close, denominator_col: ema_144, output_col: close_over_ema_144, subtract: 1.0}]}}
+- step: atr
+  params: {high_col: high, low_col: low, close_col: close, window: 48, windows: [48], method: wilder}
+  transforms: {ratio: {enabled: true, items: [{numerator_col: atr_48, denominator_col: close, output_col: atr_over_price_48}]}}
+- {step: adx, params: {high_col: high, low_col: low, close_col: close, window: 14, windows: [14]}}
+- {step: rsi, params: {price_col: close, windows: [14], method: wilder}}
+- {step: roc, params: {price_col: close, windows: [8, 16, 24, 48]}}
+model:
+  kind: lightgbm_regressor
+  minimum_expected_features: 22
+  outputs: {pred_ret_col: pred_ret, pred_prob_col: pred_prob, pred_is_oos_col: pred_is_oos}
+  target: {kind: future_return_regression, price_col: close, returns_col: close_ret, returns_type: simple, horizon_bars: 48, normalize_by_volatility: true, volatility_col: atr_48, clip: [-3.5, 3.5], fwd_col: target_trend_24h_atr, label_col: target_trend_24h_atr}
+  split: {method: purged, train_size: 22000, test_size: 3000, step_size: 3000, expanding: true, max_folds: 5, purge_bars: 48, embargo_bars: 48}
+  feature_selectors: {include: [{regex: "^(close_ret|vol_rolling_|ema_trend_|close_over_ema_|atr_|atr_over_price_|adx_|plus_di_|minus_di_|rsi_|roc_|lag_)"}], strict: {min_count: 22}}
+  params: {n_estimators: 450, learning_rate: 0.025, max_depth: 5, num_leaves: 31, min_child_samples: 120, subsample: 0.8, colsample_bytree: 0.8, reg_alpha: 0.2, reg_lambda: 1.2, random_state: 7, n_jobs: 1, verbosity: -1}
+signals: {kind: forecast_threshold, params: {forecast_col: pred_ret, signal_col: signal_trend_h24, upper: 0.30, lower: -0.30, mode: long_short}}
+validation: {method: purged_walk_forward, purge_bars: 48, embargo_bars: 48}
+runtime: {seed: 7, repro_mode: strict, deterministic: true, threads: 1, seed_torch: false}
+risk: {cost_per_turnover: 0.0001}
+backtest: {engine: vectorized, signal_col: signal_trend_h24, returns_col: close_ret, returns_type: simple, subset: test, periods_per_year: 12096, missing_return_policy: raise_if_exposed}
+diagnostics: {enabled: true, model: {enabled: true}, forecast: {quantiles: 10, autocorrelation_lags: [1, 2, 4, 8, 24, 48], volatility_col: atr_over_price_48}}
+logging: {enabled: true, run_name: lab_local_08_us30_lightgbm_trend_h24, output_dir: logs/lab/local_forecasters}

@@ -32,6 +32,12 @@ from src.experiments.orchestration.stage_trace import (
 )
 from src.experiments.orchestration.target_stage import apply_post_signal_target_to_assets
 from src.experiments.orchestration.types import ExperimentResult
+from src.experiments.support.forecast_alpha_diagnostics import (
+    build_fold_backtest_diagnostics,
+    build_forecast_baseline_diagnostics,
+    build_forecast_threshold_grid_diagnostics,
+    build_regime_performance_diagnostics,
+)
 from src.utils.config import load_experiment_config
 from src.utils.repro import runtime_reproducibility_context
 from src.utils.run_metadata import (
@@ -255,6 +261,40 @@ def run_experiment_pipeline(
                 periods_per_year=cfg["backtest"].get("periods_per_year", 252),
                 backtest_cfg=dict(cfg.get("backtest", {}) or {}),
             )
+            forecast_baselines = build_forecast_baseline_diagnostics(
+                asset_frames[asset],
+                cfg=cfg,
+                model_meta=model_meta,
+            )
+            threshold_grid = build_forecast_threshold_grid_diagnostics(
+                asset_frames[asset],
+                cfg=cfg,
+                model_meta=model_meta,
+            )
+            fold_backtests = build_fold_backtest_diagnostics(
+                asset_frames[asset],
+                cfg=cfg,
+                model_meta=model_meta,
+            )
+            regime_performance = build_regime_performance_diagnostics(
+                asset_frames[asset],
+                cfg=cfg,
+                model_meta=model_meta,
+            )
+            if any((forecast_baselines, threshold_grid, fold_backtests, regime_performance)):
+                evaluation = dict(evaluation)
+                if forecast_baselines:
+                    evaluation["forecast_baselines"] = forecast_baselines
+                if threshold_grid:
+                    evaluation["threshold_grid"] = threshold_grid
+                if fold_backtests:
+                    evaluation["fold_backtest_diagnostics"] = fold_backtests
+                    evaluation["fold_backtest_summaries"] = [
+                        {"fold": row.get("fold"), "metrics": row}
+                        for row in list(fold_backtests.get("rows", []) or [])
+                    ]
+                if regime_performance:
+                    evaluation["regime_performance"] = regime_performance
 
         evaluation, _trade_path_context = enrich_evaluation_with_trade_path_diagnostics(
             cfg=cfg,

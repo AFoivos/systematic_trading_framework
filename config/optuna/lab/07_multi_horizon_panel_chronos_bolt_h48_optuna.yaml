@@ -1,0 +1,29 @@
+base_config: config/experiments/lab/07_multi_horizon_panel_chronos_bolt_h48.yaml
+study: {study_name: optuna_lab_07_multi_horizon_panel_chronos_bolt_h48, storage: null, load_if_exists: false, sampler: tpe, seed: 42, n_trials: 40, timeout: null, n_jobs: 1, logging_enabled: true, catch_exceptions: true}
+report: {enabled: true, output_dir: logs/lab, run_name: optuna_lab_07_multi_horizon_panel_chronos_bolt_h48}
+objective:
+  metric_path: regression_metrics.correlation
+  direction: maximize
+  failure_score: -1000000000000.0
+  base_metric_weight: 1.0
+  stability_weight: 0.25
+  stability_metric_path: regression_metrics.correlation
+  stability_std_penalty: 1.0
+  fold_summary_path: evaluation.fold_backtest_summaries
+  constraints:
+  - {metric_path: regression_metrics.evaluation_rows, op: lt, threshold: 1000.0, penalty: 5.0, missing_penalty: 5.0}
+pruning: {enabled: false, metric_path: regression_metrics.correlation, direction: maximize, stage_filter: [chronos_bolt_forecaster], pruner: none, n_startup_trials: 5, n_warmup_steps: 1, interval_steps: 1}
+search_space:
+- name: horizon_bars
+  path: model.target.horizon_bars
+  paths: [model.params.prediction_length, model.split.purge_bars, model.split.embargo_bars, validation.purge_bars, validation.embargo_bars, backtest.min_holding_bars]
+  kind: int
+  low: 24
+  high: 72
+  step: 12
+  value_templates:
+  - {path: model.target.fwd_col, template: "target_future_return_h{horizon_bars}"}
+  - {path: model.target.label_col, template: "target_future_return_h{horizon_bars}"}
+- {name: lookback, path: model.params.lookback, kind: categorical, choices: [384, 768, 1024]}
+- {name: min_context, path: model.params.min_context, kind: categorical, choices: [96, 192, 256]}
+search_metadata: {intent: horizon_robustness_panel_proxy, trade_objective: disabled}

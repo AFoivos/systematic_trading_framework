@@ -19,6 +19,7 @@ from src.models.forecasting import (
     train_timesfm_1p0_200m_forecaster,
     train_timesfm_2p5_200m_forecaster,
     train_tft_forecaster,
+    train_xgboost_regressor,
 )
 from src.models.rl import (
     train_dqn_agent,
@@ -53,4 +54,5 @@ __all__ = [
     "train_tsfresh_extrema_feature_discovery",
     "train_tft_forecaster",
     "train_xgboost_classifier",
+    "train_xgboost_regressor",
 ]

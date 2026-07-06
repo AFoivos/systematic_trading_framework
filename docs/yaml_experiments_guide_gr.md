@@ -1,6 +1,6 @@
 # Οδηγός YAML Experiments
 
-Τελευταία ενημέρωση: 2026-06-30
+Τελευταία ενημέρωση: 2026-07-03
 
 ## Βασική αρχή
 
@@ -72,6 +72,290 @@ HTML diagnostics όπως `trade_diagnostics_*.html` και `report.html` δεν
 Για το ίδιο επίπεδο ανάλυσης σε signals, targets και models, δες τα
 [`catalog/signals.md`](catalog/signals.md), [`catalog/targets.md`](catalog/targets.md)
 και [`catalog/models.md`](catalog/models.md).
+
+## Market-making YAML experiments
+
+Τα market-making experiments έχουν διαφορετικό YAML contract από το canonical
+OHLCV/candle pipeline. Δεν χρησιμοποιούν top-level `features`, `model.target`,
+`signals`, `backtest` με την ίδια σημασία. Είναι event-driven experiments που
+δουλεύουν πάνω σε `orderbook_events.csv`, `quote_events.csv`, quote decisions
+και markout targets.
+
+Τα configs βρίσκονται κάτω από:
+
+```text
+config/experiments/market_making/
+```
+
+Τα outputs γράφονται κάτω από:
+
+```text
+logs/experiments/market_making/
+```
+
+και πρέπει να μένουν JSON/CSV/Markdown/Parquet-only. Δεν παράγονται HTML ή
+PowerPoint artifacts.
+
+### Γιατί είναι ξεχωριστό YAML shape
+
+Το canonical pipeline παράγει trade signal τύπου:
+
+```text
+long / flat / short / weight
+```
+
+Το market maker παράγει quote decision τύπου:
+
+```text
+quote bid / quote ask / quote both / quote none
+spread
+size
+inventory skew
+cancel-replace behavior
+```
+
+Άρα το market-making YAML δεν πρέπει να αντιμετωπίζεται ως απλό `signals`
+extension. Η σωστή σειρά είναι:
+
+```text
+orderbook events
+  -> quote candidates
+  -> context/features/filters
+  -> quote policy
+  -> risk filter
+  -> paper replay / markout evaluation
+  -> JSON/CSV/Markdown/Parquet artifacts
+```
+
+### Απλό MOMENT research config
+
+Το `market_making_moment.yaml` είναι research-only config που καταναλώνει ήδη
+υπάρχοντα local artifacts:
+
+```yaml
+data:
+  orderbook_events_path: logs/experiments/market_making/orderbook_events.csv
+  quote_events_paths:
+    - logs/experiments/market_making/quote_events.csv
+  trades_path: logs/experiments/market_making/trades.csv
+  dataset_path: logs/experiments/market_making/datasets/moment_dataset.parquet
+  reuse_dataset: true
+  horizons: [1, 5, 10, 30]
+
+market_making:
+  maker_fee_bps: 2.0
+  max_inventory: 1.0
+
+model:
+  backend: deterministic_fixture
+  checkpoint: AutonLab/MOMENT-1-large
+  frozen_encoder: true
+  fine_tune: false
+  lookback_length: 512
+  target_horizon: h5
+  batch_size: 8
+  device: cpu
+
+filter:
+  expected_spread_capture_bps: 0.0
+  safety_buffer_bps: 0.5
+  max_uncertainty: 1.0
+  min_expected_edge_bps: 0.0
+
+split:
+  train_fraction: 0.6
+  validation_fraction: 0.2
+
+output:
+  root: logs/experiments/market_making
+  run_name: market_making_moment
+  write_report: true
+
+runtime:
+  random_seed: 42
+  deterministic: true
+```
+
+Σημασία των blocks:
+
+- `data`: δηλώνει quote-level inputs και πού θα γραφτεί/διαβαστεί το
+  `moment_dataset.parquet`.
+- `market_making`: δηλώνει fee και inventory assumptions για evaluation.
+- `model`: δηλώνει MOMENT backend/checkpoint ή deterministic fixture backend
+  για local tests.
+- `filter`: δηλώνει thresholds για fee-aware expected edge και uncertainty.
+- `split`: chronological train/validation/test split. Δεν επιτρέπεται random
+  shuffle.
+- `output`: namespace για artifacts κάτω από `logs/experiments/market_making/`.
+- `runtime`: reproducibility controls.
+
+### Staged market-making pipeline configs
+
+Τα staged configs, όπως `market_making_large_moment_pipeline.yaml`,
+`market_making_moment_collect_100k_pipeline.yaml` και
+`market_making_large_moment_collect_2m_pipeline.yaml`, προσθέτουν top-level
+`pipeline` block:
+
+```yaml
+pipeline:
+  output_dir: logs/experiments/market_making/pipeline_runs/large_moment
+  write_manifest: true
+  collect_orderbook:
+    enabled: true
+    output_path: logs/experiments/market_making/orderbook_events.csv
+    max_events: 1000000
+  paper_replay:
+    enabled: true
+    output_dir: logs/experiments/market_making/runs/large_moment_replay
+    use_outputs_for_moment: true
+  moment_experiment:
+    enabled: true
+```
+
+Αυτό το shape είναι orchestration config, όχι canonical experiment config.
+Δηλώνει ποια stages θα τρέξουν:
+
+- `collect_orderbook`: συλλογή public order-book events σε local CSV.
+- `paper_replay`: deterministic paper replay πάνω στα collected events.
+- `moment_experiment`: χτίσιμο/reuse quote-level dataset και MOMENT/filter
+  evaluation.
+
+Αν `paper_replay.use_outputs_for_moment: true`, τότε το pipeline πρέπει να
+χρησιμοποιεί τα `quote_events.csv`, `trades.csv` και λοιπά outputs του replay ως
+inputs για το MOMENT dataset.
+
+### Market-making filters και combinations
+
+Τα market-making filters περιορίζουν quote decisions πριν εμφανιστούν fills. Δεν
+περιορίζουν απευθείας trades εκ των υστέρων. Η causal ροή είναι:
+
+```text
+context features -> quote filter stack -> allowed bid/ask quotes -> possible fills
+```
+
+Παραδείγματα φίλτρων:
+
+- `use_adverse_selection_filter`: μπλοκάρει quotes όταν το book context δείχνει
+  αυξημένο toxic-fill risk.
+- `use_fee_aware_gate`: απαιτεί θετικό expected edge μετά από fees και safety
+  buffer.
+- `use_side_selection_gate`: επιτρέπει bid/ask πλευρές χωριστά.
+- `use_directional_feature_gate`: χρησιμοποιεί directional context, όπως
+  microprice offset, short-term trend ή imbalance.
+- volatility filters: μπλοκάρουν ή widen quotes όταν η πρόσφατη μεταβλητότητα
+  είναι υψηλή.
+- trend/regime filters: επιτρέπουν μόνο bid, μόνο ask, both ή none ανάλογα με
+  causal trend context.
+
+Το σωστό abstraction είναι:
+
+```text
+QuoteCandidate
+  + book context
+  + trend context
+  + volatility context
+  + model predictions
+  -> filter stack
+  -> final QuoteDecision
+```
+
+Κάθε filter πρέπει να γράφει explainable reason fields, ώστε τα diagnostics να
+δείχνουν γιατί έγινε block:
+
+```text
+filter_name
+allowed
+blocked_side
+reason
+thresholds
+input_columns_used
+```
+
+### Σύνδεση με canonical features/models/signals
+
+Μπορείς να χρησιμοποιήσεις outputs από τα canonical experiments ως causal
+context στο market maker, αλλά όχι να συγχωνεύσεις αβίαστα τα schemas.
+
+Επιτρεπτά inputs, αν είναι point-in-time:
+
+- trend features από τελευταίο γνωστό κλεισμένο candle,
+- volatility/regime features,
+- OOS model predictions όπως `pred_prob`, `pred_ret`, `pred_vol`,
+- signal columns ως context/gates,
+- session/time filters,
+- cross-asset context.
+
+Απαγορευμένα ως model/filter inputs:
+
+- future markout columns,
+- `future_mid_return_*`,
+- `buy_markout_bps_*`,
+- `sell_markout_bps_*`,
+- fill-only labels ως training base,
+- in-sample predictions,
+- current candle values που δεν ήταν γνωστά στο quote timestamp.
+
+Το join πρέπει να γίνεται με as-of semantics:
+
+```text
+quote timestamp -> latest known closed candle/context timestamp
+```
+
+και όχι με forward-looking merge. Αν το trend feature προέρχεται από 30m candle,
+στο quote timestamp επιτρέπεται μόνο το τελευταίο κλεισμένο 30m candle.
+
+### Market-making targets
+
+Τα market-making targets είναι quote-level/evaluation labels, όχι bar-level
+trade targets:
+
+- `future_mid_return_h1/h5/h10/h30`
+- `buy_markout_bps_h1/h5/h10/h30`
+- `sell_markout_bps_h1/h5/h10/h30`
+- `buy_good_h5`
+- `sell_good_h5`
+- `buy_good_after_fees_h5`
+- `sell_good_after_fees_h5`
+
+Αυτά επιτρέπεται να κοιτάνε μέλλον μόνο για target/evaluation construction.
+Δεν μπαίνουν ποτέ στα input features ή filters.
+
+### Market-making artifacts
+
+Ένα market-making research run πρέπει να γράφει artifacts στο ίδιο ύφος με τα
+classic experiments:
+
+- `summary.json`
+- `run_metadata.json`
+- `artifact_manifest.json`
+- `config_used.yaml`
+- `returns.csv`
+- `equity_curve.csv`
+- `gross_returns.csv`
+- `costs.csv`
+- `turnover.csv`
+- `positions.csv`
+- `trades.csv`
+- `quote_decisions.csv`
+- `moment_predictions.csv`
+- `moment_dataset.parquet`
+- optional `report.md`
+
+Το `summary.json` πρέπει να έχει και classic metrics και market-making-specific
+blocks:
+
+- `summary`
+- `timeline_summary`
+- `evaluation.primary_summary`
+- `evaluation.trade_diagnostics`
+- `market_making_summary`
+- `markout_summary`
+- `risk_summary`
+- `moment_summary`
+- `model_meta`
+- `reproducibility`
+
+Δεν επιτρέπονται `.html` ή `.pptx` outputs.
 
 ## Σειρά εκτέλεσης
 
