@@ -16,6 +16,7 @@ from src.evaluation.model_diagnostics import (
     write_dense_diagnostic_plots,
 )
 from src.evaluation.trade_path_diagnostics import (
+    build_trade_ledger_from_position_transitions,
     build_trade_paths,
     enrich_trade_lifecycle_columns,
     simulate_counterfactual_exits,
@@ -1859,6 +1860,20 @@ def enrich_evaluation_with_trade_path_diagnostics(
     asset_frames = _asset_frames_for_trade_diagnostics(data, cfg)
     trades = getattr(performance, "trades", None)
     has_executed_trades = isinstance(trades, pd.DataFrame) and not trades.empty
+    ledger_diag: dict[str, Any] = {}
+    if not has_executed_trades and isinstance(performance, BacktestResult):
+        default_asset = next(iter(sorted(asset_frames))) if len(asset_frames) == 1 else None
+        trades, ledger_diag = build_trade_ledger_from_position_transitions(
+            asset_frames,
+            positions=performance.positions,
+            gross_returns=performance.gross_returns,
+            net_returns=performance.returns,
+            costs=performance.costs,
+            turnover=performance.turnover,
+            cfg=cfg,
+            asset=default_asset,
+        )
+        has_executed_trades = isinstance(trades, pd.DataFrame) and not trades.empty
     enriched = pd.DataFrame()
     max_path_points = int(dict(trade_path_cfg.get("plots", {}) or {}).get("max_path_points", 200000))
     trade_paths = pd.DataFrame()
@@ -1925,11 +1940,14 @@ def enrich_evaluation_with_trade_path_diagnostics(
             if key in {"primary_summary", "could_have_been_profitable", "capture_giveback", "mae_before_win"}
         }
     warnings = list(trade_path_payload.get("warnings", []) or [])
+    warnings.extend(list(ledger_diag.get("warnings", []) or []))
     warnings.extend(list(path_diag.get("warnings", []) or []))
     warnings.extend(list(counter_diag.get("warnings", []) or []))
     if not has_executed_trades and target_enriched.empty:
         warnings.append("trade_path diagnostics skipped: no executed trades or target candidate trades")
     trade_path_payload["warnings"] = warnings
+    if ledger_diag:
+        trade_path_payload["trade_ledger_construction"] = ledger_diag
     trade_path_payload["path_construction"] = path_diag
     if counter_diag:
         trade_path_payload["counterfactual"] = {

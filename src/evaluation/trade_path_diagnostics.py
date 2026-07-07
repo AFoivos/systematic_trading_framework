@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 import numpy as np
 import pandas as pd
@@ -98,6 +98,482 @@ def _canonical_columns(trades: pd.DataFrame) -> pd.DataFrame:
         if source is not None:
             out[canonical] = out[source]
     return out
+
+
+def _position_sign(value: float, *, eps: float) -> int:
+    if not np.isfinite(value) or abs(float(value)) <= float(eps):
+        return 0
+    return 1 if float(value) > 0.0 else -1
+
+
+def _as_single_asset_series(
+    values: pd.Series | pd.DataFrame | None,
+    *,
+    asset: str,
+    index: pd.Index,
+    field_name: str,
+    diagnostics: dict[str, Any],
+    default: float = 0.0,
+) -> pd.Series | None:
+    if values is None:
+        return pd.Series(float(default), index=index, dtype=float)
+    if isinstance(values, pd.DataFrame):
+        if asset in values.columns:
+            raw = values[asset]
+        elif len(values.columns) == 1:
+            raw = values.iloc[:, 0]
+        else:
+            diagnostics["warnings"].append(
+                f"fallback trade ledger skipped {field_name}: multi-asset frames require an asset column"
+            )
+            return None
+    elif isinstance(values, pd.Series):
+        raw = values
+    else:
+        diagnostics["warnings"].append(f"fallback trade ledger skipped {field_name}: unsupported series type")
+        return None
+    return pd.to_numeric(raw, errors="coerce").reindex(index).fillna(float(default)).astype(float)
+
+
+def _first_cfg_dict(cfg: Mapping[str, Any] | None, *path: str) -> dict[str, Any]:
+    current: Any = cfg or {}
+    for key in path:
+        if not isinstance(current, Mapping):
+            return {}
+        current = current.get(key, {})
+    return dict(current or {}) if isinstance(current, Mapping) else {}
+
+
+def _unique_existing_candidates(*values: Any) -> list[str]:
+    out: list[str] = []
+    for value in values:
+        if value is None:
+            continue
+        token = str(value)
+        if token and token not in out:
+            out.append(token)
+    return out
+
+
+def _resolve_ledger_columns(
+    frame: pd.DataFrame,
+    *,
+    cfg: Mapping[str, Any] | None,
+    price_col: str | None,
+    high_col: str | None,
+    low_col: str | None,
+) -> tuple[str | None, str | None, str | None]:
+    backtest_cfg = _first_cfg_dict(cfg, "backtest")
+    target_cfg = _first_cfg_dict(cfg, "target")
+    model_target_cfg = _first_cfg_dict(cfg, "model", "target")
+    price = _first_existing(
+        frame,
+        _unique_existing_candidates(
+            price_col,
+            backtest_cfg.get("price_col"),
+            backtest_cfg.get("close_col"),
+            target_cfg.get("price_col"),
+            model_target_cfg.get("price_col"),
+            "close",
+        ),
+    )
+    high = _first_existing(frame, _unique_existing_candidates(high_col, backtest_cfg.get("high_col"), "high"))
+    low = _first_existing(frame, _unique_existing_candidates(low_col, backtest_cfg.get("low_col"), "low"))
+    return price, high or price, low or price
+
+
+def _numeric_value_at(frame: pd.DataFrame, timestamp: pd.Timestamp, column: str | None) -> float:
+    if column is None or column not in frame.columns or timestamp not in frame.index:
+        return np.nan
+    value = pd.to_numeric(pd.Series([frame.at[timestamp, column]]), errors="coerce").iloc[0]
+    return float(value) if np.isfinite(value) else np.nan
+
+
+def _resolve_entry_risk_distance(
+    frame: pd.DataFrame,
+    *,
+    entry_timestamp: pd.Timestamp,
+    entry_price: float,
+    cfg: Mapping[str, Any] | None,
+    risk_col: str | None,
+) -> tuple[float, str]:
+    backtest_cfg = _first_cfg_dict(cfg, "backtest")
+    target_cfg = _first_cfg_dict(cfg, "target")
+    model_target_cfg = _first_cfg_dict(cfg, "model", "target")
+    candidates = _unique_existing_candidates(
+        risk_col,
+        backtest_cfg.get("volatility_col"),
+        target_cfg.get("volatility_col"),
+        model_target_cfg.get("volatility_col"),
+        "atr_48",
+        "atr",
+    )
+    for column in candidates:
+        value = _numeric_value_at(frame, entry_timestamp, column)
+        if np.isfinite(value) and float(value) > 0.0:
+            return float(value), column
+    fallback = abs(float(entry_price)) if np.isfinite(entry_price) else np.nan
+    return (float(fallback), "fallback_price") if np.isfinite(fallback) and fallback > 0.0 else (np.nan, "missing")
+
+
+def _compound_simple_returns(values: pd.Series) -> float:
+    clean = pd.to_numeric(values, errors="coerce").replace([np.inf, -np.inf], np.nan).dropna()
+    if clean.empty:
+        return 0.0
+    return float((1.0 + clean.astype(float)).prod() - 1.0)
+
+
+def _series_value_at(series: pd.Series, timestamp: pd.Timestamp) -> float:
+    if timestamp not in series.index:
+        return 0.0
+    value = pd.to_numeric(pd.Series([series.loc[timestamp]]), errors="coerce").iloc[0]
+    return float(value) if np.isfinite(value) else 0.0
+
+
+def build_trade_ledger_from_position_transitions(
+    asset_frames: dict[str, pd.DataFrame],
+    *,
+    positions: pd.Series | pd.DataFrame | None,
+    gross_returns: pd.Series | pd.DataFrame | None,
+    net_returns: pd.Series | pd.DataFrame | None = None,
+    strategy_returns: pd.Series | pd.DataFrame | None = None,
+    costs: pd.Series | pd.DataFrame | None = None,
+    turnover: pd.Series | pd.DataFrame | None = None,
+    cfg: Mapping[str, Any] | None = None,
+    asset: str | None = None,
+    price_col: str | None = None,
+    high_col: str | None = None,
+    low_col: str | None = None,
+    risk_col: str | None = None,
+    eps: float = 1e-12,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """
+    Build a trade-level ledger from vectorized position transitions.
+
+    The ledger is diagnostic only: PnL is aggregated from the existing vectorized return
+    streams over ``entry_timestamp < timestamp <= exit_timestamp`` and does not alter
+    backtest accounting.
+    """
+    diagnostics: dict[str, Any] = {
+        "ledger_source": "position_transitions",
+        "trade_count": 0,
+        "position_transition_count": 0,
+        "fallback_price_risk_distance_count": 0,
+        "end_of_data_exit_count": 0,
+        "skipped_missing_price_count": 0,
+        "warnings": [],
+    }
+    if not asset_frames:
+        diagnostics["warnings"].append("fallback trade ledger skipped: missing asset frames")
+        return pd.DataFrame(), diagnostics
+
+    if asset is None:
+        if len(asset_frames) != 1:
+            diagnostics["warnings"].append(
+                "fallback trade ledger skipped: multi-asset positions require explicit asset"
+            )
+            return pd.DataFrame(), diagnostics
+        asset = next(iter(sorted(asset_frames)))
+    asset = str(asset)
+    if asset not in asset_frames:
+        diagnostics["warnings"].append(f"fallback trade ledger skipped: missing asset frame for asset={asset}")
+        return pd.DataFrame(), diagnostics
+
+    frame = asset_frames[asset].sort_index()
+    if frame.empty:
+        diagnostics["warnings"].append(f"fallback trade ledger skipped: empty asset frame for asset={asset}")
+        return pd.DataFrame(), diagnostics
+
+    if positions is None:
+        diagnostics["warnings"].append("fallback trade ledger skipped: missing positions")
+        return pd.DataFrame(), diagnostics
+    if isinstance(positions, pd.DataFrame):
+        if asset in positions.columns:
+            raw_positions = positions[asset]
+        elif len(positions.columns) == 1:
+            raw_positions = positions.iloc[:, 0]
+        else:
+            diagnostics["warnings"].append("fallback trade ledger skipped: multi-asset positions are not supported")
+            return pd.DataFrame(), diagnostics
+    elif isinstance(positions, pd.Series):
+        raw_positions = positions
+    else:
+        diagnostics["warnings"].append("fallback trade ledger skipped: unsupported positions type")
+        return pd.DataFrame(), diagnostics
+
+    position_series = pd.to_numeric(raw_positions, errors="coerce").dropna().sort_index().astype(float)
+    if position_series.empty:
+        diagnostics["warnings"].append("fallback trade ledger skipped: empty positions")
+        return pd.DataFrame(), diagnostics
+    if not isinstance(position_series.index, pd.DatetimeIndex):
+        position_series.index = pd.to_datetime(position_series.index, errors="coerce")
+        position_series = position_series.loc[position_series.index.notna()].sort_index()
+    if position_series.empty:
+        diagnostics["warnings"].append("fallback trade ledger skipped: positions have no valid timestamps")
+        return pd.DataFrame(), diagnostics
+
+    index = position_series.index
+    gross_series = _as_single_asset_series(
+        gross_returns,
+        asset=asset,
+        index=index,
+        field_name="gross_returns",
+        diagnostics=diagnostics,
+        default=0.0,
+    )
+    cost_series = _as_single_asset_series(
+        costs,
+        asset=asset,
+        index=index,
+        field_name="costs",
+        diagnostics=diagnostics,
+        default=0.0,
+    )
+    turnover_series = _as_single_asset_series(
+        turnover,
+        asset=asset,
+        index=index,
+        field_name="turnover",
+        diagnostics=diagnostics,
+        default=0.0,
+    )
+    if gross_series is None or cost_series is None or turnover_series is None:
+        return pd.DataFrame(), diagnostics
+
+    resolved_price_col, resolved_high_col, resolved_low_col = _resolve_ledger_columns(
+        frame,
+        cfg=cfg,
+        price_col=price_col,
+        high_col=high_col,
+        low_col=low_col,
+    )
+    if resolved_price_col is None:
+        diagnostics["warnings"].append("fallback trade ledger skipped: missing price column")
+        return pd.DataFrame(), diagnostics
+
+    previous = position_series.shift(1).fillna(0.0)
+    rows: list[dict[str, Any]] = []
+    open_trade: dict[str, Any] | None = None
+
+    def open_position(
+        timestamp: pd.Timestamp,
+        position_value: float,
+        *,
+        entry_cost: float,
+        entry_turnover: float,
+    ) -> dict[str, Any]:
+        return {
+            "entry_timestamp": pd.Timestamp(timestamp),
+            "signal_timestamp": pd.Timestamp(timestamp),
+            "side": "long" if float(position_value) > 0.0 else "short",
+            "position_size": abs(float(position_value)),
+            "entry_cost": float(entry_cost),
+            "entry_turnover": float(entry_turnover),
+        }
+
+    def close_position(
+        open_state: dict[str, Any],
+        exit_timestamp: pd.Timestamp,
+        exit_reason: str,
+        *,
+        exit_cost: float,
+        exit_turnover: float,
+    ) -> None:
+        entry_ts = pd.Timestamp(open_state["entry_timestamp"])
+        exit_ts = pd.Timestamp(exit_timestamp)
+        entry_price = _numeric_value_at(frame, entry_ts, resolved_price_col)
+        exit_price = _numeric_value_at(frame, exit_ts, resolved_price_col)
+        if not np.isfinite(entry_price) or not np.isfinite(exit_price):
+            diagnostics["skipped_missing_price_count"] += 1
+            return
+
+        risk_distance, risk_source = _resolve_entry_risk_distance(
+            frame,
+            entry_timestamp=entry_ts,
+            entry_price=entry_price,
+            cfg=cfg,
+            risk_col=risk_col,
+        )
+        if not np.isfinite(risk_distance) or float(risk_distance) <= 0.0:
+            diagnostics["skipped_missing_price_count"] += 1
+            return
+        if risk_source == "fallback_price":
+            diagnostics["fallback_price_risk_distance_count"] += 1
+
+        pnl_mask = (gross_series.index > entry_ts) & (gross_series.index <= exit_ts)
+        gross_slice = gross_series.loc[pnl_mask]
+        if exit_reason == "end_of_data":
+            holding_mask = (cost_series.index > entry_ts) & (cost_series.index <= exit_ts)
+        else:
+            holding_mask = (cost_series.index > entry_ts) & (cost_series.index < exit_ts)
+        holding_cost_slice = cost_series.loc[holding_mask]
+        holding_turnover_slice = turnover_series.loc[holding_mask]
+        gross_return = _compound_simple_returns(gross_slice)
+        entry_cost = float(open_state.get("entry_cost", 0.0))
+        entry_turnover = float(open_state.get("entry_turnover", 0.0))
+        holding_cost = float(pd.to_numeric(holding_cost_slice, errors="coerce").fillna(0.0).sum())
+        holding_turnover = float(pd.to_numeric(holding_turnover_slice, errors="coerce").fillna(0.0).sum())
+        total_cost = float(entry_cost + holding_cost + float(exit_cost))
+        total_turnover = float(entry_turnover + holding_turnover + float(exit_turnover))
+
+        net_mask = (gross_series.index >= entry_ts) & (gross_series.index <= exit_ts)
+        net_components = pd.Series(0.0, index=gross_series.index[net_mask], dtype=float)
+        if not net_components.empty:
+            net_components.loc[gross_slice.index] = net_components.loc[gross_slice.index].add(
+                gross_slice,
+                fill_value=0.0,
+            )
+            if entry_ts in net_components.index:
+                net_components.loc[entry_ts] -= entry_cost
+            if exit_ts in net_components.index:
+                net_components.loc[exit_ts] -= float(exit_cost)
+            if not holding_cost_slice.empty:
+                net_components.loc[holding_cost_slice.index] = net_components.loc[holding_cost_slice.index].sub(
+                    holding_cost_slice,
+                    fill_value=0.0,
+                )
+        net_return = _compound_simple_returns(net_components)
+
+        path = frame.loc[(frame.index > entry_ts) & (frame.index <= exit_ts)]
+        side = str(open_state["side"])
+        gross_trade_r = (
+            (entry_price - exit_price) / float(risk_distance)
+            if side == "short"
+            else (exit_price - entry_price) / float(risk_distance)
+        )
+        if path.empty:
+            max_favorable_r = max(0.0, float(gross_trade_r))
+            max_adverse_r = min(0.0, float(gross_trade_r))
+            time_to_mfe = int(len(gross_slice))
+            time_to_mae = int(len(gross_slice))
+        else:
+            high_path = pd.to_numeric(path[resolved_high_col], errors="coerce").astype(float)
+            low_path = pd.to_numeric(path[resolved_low_col], errors="coerce").astype(float)
+            if side == "short":
+                favorable = (entry_price - low_path) / float(risk_distance)
+                adverse = (entry_price - high_path) / float(risk_distance)
+            else:
+                favorable = (high_path - entry_price) / float(risk_distance)
+                adverse = (low_path - entry_price) / float(risk_distance)
+            max_favorable_r = max(0.0, float(favorable.max(skipna=True))) if favorable.notna().any() else 0.0
+            max_adverse_r = min(0.0, float(adverse.min(skipna=True))) if adverse.notna().any() else 0.0
+            entry_loc = int(frame.index.searchsorted(entry_ts, side="left"))
+            if favorable.notna().any():
+                time_to_mfe = int(frame.index.get_loc(favorable.idxmax()) - entry_loc)
+            else:
+                time_to_mfe = 0
+            if adverse.notna().any():
+                time_to_mae = int(frame.index.get_loc(adverse.idxmin()) - entry_loc)
+            else:
+                time_to_mae = 0
+
+        total_cost_r = float(total_cost) * float(entry_price) / float(risk_distance)
+        rows.append(
+            {
+                "trade_id": int(len(rows)),
+                "asset": asset,
+                "side": side,
+                "signal_timestamp": open_state["signal_timestamp"],
+                "entry_timestamp": entry_ts,
+                "exit_timestamp": exit_ts,
+                "entry_price": float(entry_price),
+                "exit_price": float(exit_price),
+                "raw_entry_price": float(entry_price),
+                "raw_exit_price": float(exit_price),
+                "bars_held": int(len(gross_slice)),
+                "position_size": float(open_state["position_size"]),
+                "gross_return": float(gross_return),
+                "net_return": float(net_return),
+                "entry_cost": float(entry_cost),
+                "exit_cost": float(exit_cost),
+                "holding_cost": float(holding_cost),
+                "total_cost": float(total_cost),
+                "entry_turnover": float(entry_turnover),
+                "exit_turnover": float(exit_turnover),
+                "holding_turnover": float(holding_turnover),
+                "total_turnover": float(total_turnover),
+                "trade_r": float(gross_trade_r - total_cost_r),
+                "gross_trade_r": float(gross_trade_r),
+                "total_cost_r": float(total_cost_r),
+                "max_favorable_r": float(max_favorable_r),
+                "max_adverse_r": float(max_adverse_r),
+                "time_to_mfe": int(time_to_mfe),
+                "time_to_mae": int(time_to_mae),
+                "exit_reason": exit_reason,
+                "risk_distance": float(risk_distance),
+                "risk_distance_source": risk_source,
+            }
+        )
+
+    for timestamp in index:
+        prev_pos = float(previous.loc[timestamp])
+        curr_pos = float(position_series.loc[timestamp])
+        prev_sign = _position_sign(prev_pos, eps=eps)
+        curr_sign = _position_sign(curr_pos, eps=eps)
+        if prev_sign == curr_sign:
+            continue
+        if prev_sign == 0 and curr_sign != 0:
+            diagnostics["position_transition_count"] += 1
+            transition_ts = pd.Timestamp(timestamp)
+            open_trade = open_position(
+                transition_ts,
+                curr_pos,
+                entry_cost=_series_value_at(cost_series, transition_ts),
+                entry_turnover=_series_value_at(turnover_series, transition_ts),
+            )
+        elif prev_sign != 0 and curr_sign == 0:
+            diagnostics["position_transition_count"] += 1
+            if open_trade is not None:
+                transition_ts = pd.Timestamp(timestamp)
+                close_position(
+                    open_trade,
+                    transition_ts,
+                    "position_exit",
+                    exit_cost=_series_value_at(cost_series, transition_ts),
+                    exit_turnover=_series_value_at(turnover_series, transition_ts),
+                )
+            open_trade = None
+        elif prev_sign != 0 and curr_sign != 0:
+            diagnostics["position_transition_count"] += 2
+            transition_ts = pd.Timestamp(timestamp)
+            total_position_change = abs(curr_pos - prev_pos)
+            close_fraction = abs(prev_pos) / total_position_change if total_position_change > 0.0 else 0.0
+            entry_fraction = abs(curr_pos) / total_position_change if total_position_change > 0.0 else 0.0
+            transition_cost = _series_value_at(cost_series, transition_ts)
+            transition_turnover = _series_value_at(turnover_series, transition_ts)
+            if open_trade is not None:
+                close_position(
+                    open_trade,
+                    transition_ts,
+                    "reversal",
+                    exit_cost=transition_cost * close_fraction,
+                    exit_turnover=transition_turnover * close_fraction,
+                )
+            open_trade = open_position(
+                transition_ts,
+                curr_pos,
+                entry_cost=transition_cost * entry_fraction,
+                entry_turnover=transition_turnover * entry_fraction,
+            )
+
+    if open_trade is not None:
+        diagnostics["end_of_data_exit_count"] += 1
+        close_position(
+            open_trade,
+            pd.Timestamp(index[-1]),
+            "end_of_data",
+            exit_cost=0.0,
+            exit_turnover=0.0,
+        )
+
+    if diagnostics["fallback_price_risk_distance_count"] > 0:
+        count = int(diagnostics["fallback_price_risk_distance_count"])
+        diagnostics["warnings"].append(f"fallback trade ledger used entry price as risk distance for {count} trades")
+    result = pd.DataFrame(rows)
+    diagnostics["trade_count"] = int(len(result))
+    if result.empty and diagnostics["position_transition_count"] == 0:
+        diagnostics["warnings"].append("fallback trade ledger skipped: no position transitions")
+    return result, diagnostics
 
 
 def enrich_trade_lifecycle_columns(
@@ -598,6 +1074,7 @@ def simulate_counterfactual_exits(
 
 
 __all__ = [
+    "build_trade_ledger_from_position_transitions",
     "build_trade_paths",
     "enrich_trade_lifecycle_columns",
     "simulate_counterfactual_exits",
