@@ -574,6 +574,160 @@ def test_rules_only_all11_optuna_uses_runtime_result_paths_without_fold_stabilit
     assert payload["study"]["load_if_exists"] is False
 
 
+def test_foundation_alpha_ethusd_signal_gates_optuna_yaml_matches_base_config_contract() -> None:
+    optuna_cfg_path = Path(
+        "config/optuna/foundation_alpha/"
+        "optuna_ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_signal_gates_lgbm_v1.yaml"
+    )
+    payload = yaml.safe_load(optuna_cfg_path.read_text(encoding="utf-8"))
+
+    search_space = load_search_space_yaml(optuna_cfg_path)
+    objective = normalize_objective_spec(payload["objective"])
+    pruning = normalize_pruning_spec(payload["pruning"])
+    base_cfg = load_experiment_config(payload["base_config"])
+    validate_search_space_feature_contract(base_cfg, search_space)
+
+    trial_params = {}
+    for dimension in search_space:
+        if dimension.kind == "categorical":
+            trial_params[dimension.name] = list(dimension.choices or [])[0]
+        elif dimension.kind == "int":
+            trial_params[dimension.name] = int(dimension.low)
+        elif dimension.kind == "float":
+            trial_params[dimension.name] = float(dimension.low)
+        else:
+            trial_params[dimension.name] = False
+
+    trial_cfg = prepare_trial_config(
+        base_cfg,
+        trial_params=trial_params,
+        search_space=search_space,
+        logging_enabled=False,
+    )
+
+    validate_resolved_config(trial_cfg)
+    constraints_by_path = {constraint.metric_path: constraint for constraint in objective.constraints}
+
+    activation_filters = base_cfg["signals"]["params"]["activation_filters"]
+    assert [(item["col"], item["op"]) for item in activation_filters] == [
+        ("atr_pct_rank_192", "ge"),
+        ("atr_pct_rank_192", "le"),
+        ("range_to_atr", "ge"),
+        ("bollinger_bandwidth_rank_192", "ge"),
+    ]
+    assert payload["base_config"] == (
+        "config/experiments/foundation_alpha/BEST/"
+        "BEST_ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid.yaml"
+    )
+    assert payload["study"]["study_name"] == "optuna_ethusd_30m_v3_7_ehlers_trend_hybrid_signal_gates_lgbm_v1"
+    assert payload["report"]["run_name"] == "optuna_ethusd_30m_v3_7_ehlers_trend_hybrid_signal_gates_lgbm_v1"
+    assert objective.metric_path == "evaluation.primary_summary.sharpe"
+    assert objective.stability_weight == pytest.approx(0.35)
+    assert objective.stability_metric_path == "metrics.sharpe"
+    assert constraints_by_path["evaluation.primary_summary.cumulative_return"].threshold == pytest.approx(0.0)
+    assert constraints_by_path["evaluation.primary_summary.max_drawdown"].threshold == pytest.approx(-0.25)
+    assert constraints_by_path["evaluation.primary_summary.gross_pnl"].penalty == pytest.approx(25.0)
+    entry_count_constraints = [
+        constraint for constraint in objective.constraints if constraint.metric_path == "derived.entry_count"
+    ]
+    assert any(
+        constraint.op == "lt"
+        and constraint.threshold == pytest.approx(300.0)
+        and constraint.penalty == pytest.approx(10.0)
+        for constraint in entry_count_constraints
+    )
+    assert any(
+        constraint.op == "gt"
+        and constraint.threshold == pytest.approx(4000.0)
+        and constraint.penalty == pytest.approx(8.0)
+        for constraint in entry_count_constraints
+    )
+    assert pruning.enabled is False
+    assert pruning.metric_path == "evaluation.primary_summary.sharpe"
+    assert trial_cfg["signals"]["params"]["upper"] == pytest.approx(0.30)
+    assert trial_cfg["signals"]["params"]["lower"] == pytest.approx(-0.90)
+    assert trial_cfg["signals"]["params"]["activation_filters"][0]["value"] == pytest.approx(0.10)
+    assert trial_cfg["signals"]["params"]["activation_filters"][1]["value"] == pytest.approx(0.70)
+    assert trial_cfg["signals"]["params"]["activation_filters"][2]["value"] == pytest.approx(0.70)
+    assert trial_cfg["signals"]["params"]["activation_filters"][3]["value"] == pytest.approx(0.20)
+    assert trial_cfg["model"]["params"]["n_estimators"] == 250
+    assert trial_cfg["model"]["params"]["learning_rate"] == pytest.approx(0.008)
+    assert trial_cfg["model"]["params"]["max_depth"] == 3
+    assert trial_cfg["model"]["params"]["num_leaves"] == 7
+    assert trial_cfg["model"]["params"]["min_child_samples"] == 80
+    assert trial_cfg["model"]["params"]["subsample"] == pytest.approx(0.65)
+    assert trial_cfg["model"]["params"]["colsample_bytree"] == pytest.approx(0.60)
+    assert trial_cfg["model"]["params"]["reg_alpha"] == pytest.approx(0.01)
+    assert trial_cfg["model"]["params"]["reg_lambda"] == pytest.approx(0.1)
+    assert trial_cfg["logging"]["enabled"] is False
+
+
+def test_foundation_alpha_ethusd_signal_gates_smoke_optuna_yaml_matches_main_contract() -> None:
+    optuna_cfg_path = Path(
+        "config/optuna/foundation_alpha/"
+        "optuna_ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_signal_gates_lgbm_v1_smoke.yaml"
+    )
+    payload = yaml.safe_load(optuna_cfg_path.read_text(encoding="utf-8"))
+
+    search_space = load_search_space_yaml(optuna_cfg_path)
+    objective = normalize_objective_spec(payload["objective"])
+    pruning = normalize_pruning_spec(payload["pruning"])
+    base_cfg = load_experiment_config(payload["base_config"])
+    validate_search_space_feature_contract(base_cfg, search_space)
+
+    trial_params = {}
+    for dimension in search_space:
+        if dimension.kind == "categorical":
+            trial_params[dimension.name] = list(dimension.choices or [])[0]
+        elif dimension.kind == "int":
+            trial_params[dimension.name] = int(dimension.low)
+        elif dimension.kind == "float":
+            trial_params[dimension.name] = float(dimension.low)
+        else:
+            trial_params[dimension.name] = False
+
+    trial_cfg = prepare_trial_config(
+        base_cfg,
+        trial_params=trial_params,
+        search_space=search_space,
+        logging_enabled=False,
+    )
+
+    validate_resolved_config(trial_cfg)
+    assert payload["study"]["study_name"] == (
+        "optuna_ethusd_30m_v3_7_ehlers_trend_hybrid_signal_gates_lgbm_v1_smoke"
+    )
+    assert payload["report"]["run_name"] == (
+        "optuna_ethusd_30m_v3_7_ehlers_trend_hybrid_signal_gates_lgbm_v1_smoke"
+    )
+    assert payload["study"]["n_trials"] == 8
+    assert objective.metric_path == "evaluation.primary_summary.sharpe"
+    assert objective.stability_weight == pytest.approx(0.0)
+    assert objective.stability_metric_path is None
+    assert pruning.enabled is False
+    assert pruning.metric_path == "evaluation.primary_summary.sharpe"
+    assert [dimension.name for dimension in search_space] == [
+        "upper_threshold",
+        "lower_threshold",
+        "atr_rank_min",
+        "atr_rank_max",
+        "range_to_atr_min",
+        "bb_width_rank_min",
+        "lgbm_n_estimators",
+        "lgbm_learning_rate",
+        "lgbm_max_depth",
+        "lgbm_num_leaves",
+        "lgbm_min_child_samples",
+        "lgbm_subsample",
+        "lgbm_colsample_bytree",
+        "lgbm_reg_alpha",
+        "lgbm_reg_lambda",
+    ]
+    assert trial_cfg["signals"]["params"]["activation_filters"][0]["value"] == pytest.approx(0.10)
+    assert trial_cfg["model"]["params"]["n_estimators"] == 250
+    assert trial_cfg["logging"]["enabled"] is False
+
+
 def test_dense_return_forecasting_v2_optuna_penalizes_rank_cost_and_turnover() -> None:
     optuna_cfg_path = Path("config/optuna/dense_return_forecasting_v2_optuna.yaml")
     payload = yaml.safe_load(optuna_cfg_path.read_text(encoding="utf-8"))

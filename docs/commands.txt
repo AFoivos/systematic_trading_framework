@@ -109,8 +109,9 @@ python -m src.experiments.runner config/experiments/lab/feature_signal_target_la
 Run experiment μέσω Docker:
 
 ```bash
-docker compose run --rm app python -m src.experiments.runner config/experiments/foundation_alpha/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_tail_validation.yaml
-
+docker compose run --rm app python -m src.experiments.runner config/experiments/foundation_alpha/BEST/BEST_ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid.yaml
+docker compose run --rm app python -m src.experiments.runner config/experiments/eurusd_30m_lightgbm_h24_structured_tail_alpha_v1.yaml
+docker compose run --rm app python -m src.experiments.runner config/experiments/thursday_weak_prevday_reversal/spx500_30m_codex_vwap_ppo_mfi_edge_v1.yaml
 Παραδείγματα London/NY v3:
 
 ```bash
@@ -173,7 +174,7 @@ python -m src.experiments.optuna_search config/optuna/us100_30m_ehlers_tp_long_s
 Docker:
 
 ```bash
-docker compose run --rm app python -m src.experiments.optuna_search config/optuna/us100_30m_ehlers_tp_long_signal_backtest_v1_optuna.yaml --n-trials 20
+docker compose run --rm app python -m src.experiments.optuna_search config/optuna/foundation_alpha/optuna_ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_signal_gates_lgbm_v1.yaml
 ```
 
 

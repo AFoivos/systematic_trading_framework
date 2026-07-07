@@ -1,0 +1,62 @@
+base_config: config/experiments/foundation_alpha/BEST/BEST_ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid.yaml
+
+study:
+  study_name: optuna_ethusd_30m_v3_7_ehlers_trend_hybrid_signal_gates_lgbm_v1_smoke
+  storage: null
+  load_if_exists: false
+  sampler: tpe
+  seed: 7
+  n_trials: 8
+  timeout: null
+  n_jobs: 1
+  logging_enabled: true
+  catch_exceptions: true
+
+report:
+  enabled: true
+  output_dir: logs/experiments
+  run_name: optuna_ethusd_30m_v3_7_ehlers_trend_hybrid_signal_gates_lgbm_v1_smoke
+
+objective:
+  metric_path: evaluation.primary_summary.sharpe
+  direction: maximize
+  failure_score: -1000000000000.0
+  base_metric_weight: 1.0
+  stability_weight: 0.0
+  stability_std_penalty: 1.0
+  fold_summary_path: evaluation.fold_backtest_summaries
+  constraints:
+  - {metric_path: evaluation.primary_summary.cumulative_return, op: le, threshold: 0.0, penalty: 100.0, missing_penalty: 100.0}
+  - {metric_path: evaluation.primary_summary.max_drawdown, op: lt, threshold: -0.25, penalty: 40.0, missing_penalty: 40.0}
+  - {metric_path: evaluation.primary_summary.profit_factor, op: lt, threshold: 1.05, penalty: 20.0, missing_penalty: 20.0}
+  - {metric_path: evaluation.primary_summary.gross_pnl, op: le, threshold: 0.0, penalty: 25.0, missing_penalty: 10.0}
+  - {metric_path: evaluation.primary_summary.cost_to_gross_pnl, op: gt, threshold: 0.35, penalty: 15.0, missing_penalty: 10.0}
+  - {metric_path: derived.entry_count, op: lt, threshold: 300.0, penalty: 10.0, missing_penalty: 10.0}
+  - {metric_path: derived.entry_count, op: gt, threshold: 4000.0, penalty: 8.0, missing_penalty: 4.0}
+
+pruning:
+  enabled: false
+  metric_path: evaluation.primary_summary.sharpe
+  direction: maximize
+  stage_filter: []
+  pruner: none
+  n_startup_trials: 25
+  n_warmup_steps: 1
+  interval_steps: 1
+
+search_space:
+- {name: upper_threshold, path: signals.params.upper, kind: float, low: 0.30, high: 0.90, step: 0.05}
+- {name: lower_threshold, path: signals.params.lower, kind: float, low: -0.90, high: -0.30, step: 0.05}
+- {name: atr_rank_min, path: signals.params.activation_filters.0.value, kind: float, low: 0.10, high: 0.35, step: 0.05}
+- {name: atr_rank_max, path: signals.params.activation_filters.1.value, kind: float, low: 0.70, high: 0.95, step: 0.05}
+- {name: range_to_atr_min, path: signals.params.activation_filters.2.value, kind: float, low: 0.70, high: 1.40, step: 0.10}
+- {name: bb_width_rank_min, path: signals.params.activation_filters.3.value, kind: float, low: 0.20, high: 0.70, step: 0.05}
+- {name: lgbm_n_estimators, path: model.params.n_estimators, kind: int, low: 250, high: 900, step: 50}
+- {name: lgbm_learning_rate, path: model.params.learning_rate, kind: float, low: 0.008, high: 0.06, log: true}
+- {name: lgbm_max_depth, path: model.params.max_depth, kind: categorical, choices: [3, 4, 5, 6]}
+- {name: lgbm_num_leaves, path: model.params.num_leaves, kind: categorical, choices: [7, 15, 31]}
+- {name: lgbm_min_child_samples, path: model.params.min_child_samples, kind: int, low: 80, high: 240, step: 20}
+- {name: lgbm_subsample, path: model.params.subsample, kind: float, low: 0.65, high: 0.95, step: 0.05}
+- {name: lgbm_colsample_bytree, path: model.params.colsample_bytree, kind: float, low: 0.60, high: 0.95, step: 0.05}
+- {name: lgbm_reg_alpha, path: model.params.reg_alpha, kind: float, low: 0.01, high: 5.0, log: true}
+- {name: lgbm_reg_lambda, path: model.params.reg_lambda, kind: float, low: 0.1, high: 20.0, log: true}

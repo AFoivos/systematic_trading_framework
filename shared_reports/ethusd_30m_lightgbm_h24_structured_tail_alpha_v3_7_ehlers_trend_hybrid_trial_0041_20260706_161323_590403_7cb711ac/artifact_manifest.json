@@ -1,0 +1,275 @@
+{
+  "created_at_utc": "2026-07-06T13:13:44.220630+00:00",
+  "files": {
+    "config": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/config_used.yaml",
+      "bytes": 14182,
+      "sha256": "08741b29cb2832ef98a78e7995b900a246431a9b6d2441fa04c366350109dc50"
+    },
+    "costs": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/costs.csv",
+      "bytes": 1777038,
+      "sha256": "aae4846e2fcdd8ee70b942d78a1c080ad390c763e4c94cff36ede44425999fbe"
+    },
+    "cumulative_cost_drag": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/report_assets/cumulative_cost_drag.png",
+      "bytes": 39098,
+      "sha256": "1eb8b2bcf327745b508fa7cb3489e24ebb96a4e3decc71d5732f2b3e9016d5a5"
+    },
+    "cumulative_returns": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/report_assets/cumulative_returns.png",
+      "bytes": 57985,
+      "sha256": "106228263c3d806abdcf7094954cc2622948286bf2886d644a1b3a1d655582c0"
+    },
+    "diagnostics_cost_vs_gross_pnl": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/artifacts/diagnostics/cost_vs_gross_pnl.png",
+      "bytes": 45471,
+      "sha256": "197d9a15d756b77832e0e61c832a9610dc2e8059d4570d2a243a76f100afe2a1"
+    },
+    "diagnostics_lgbm_gain_importance": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/artifacts/diagnostics/lgbm_gain_importance.png",
+      "bytes": 88605,
+      "sha256": "012616fa547a4fe2d453467bd3f9848179741d29f0626340afdd1477f00295fe"
+    },
+    "diagnostics_lgbm_split_importance": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/artifacts/diagnostics/lgbm_split_importance.png",
+      "bytes": 88339,
+      "sha256": "d26ade9e5304479b114223663709d53d8f8c23a9d51dd6673584565f18ec7b21"
+    },
+    "diagnostics_lightgbm_importance": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/artifacts/diagnostics/lightgbm_importance.csv",
+      "bytes": 61525,
+      "sha256": "3a3419183a825002c531a3ddac1fc346c4a8a9f9d7878d06de6200ce26eda17b"
+    },
+    "diagnostics_prediction_autocorrelation": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/artifacts/diagnostics/prediction_autocorrelation.png",
+      "bytes": 21696,
+      "sha256": "6d8b877c402e7e5b22e2417eae3a7a4d63db663ec3beca372ff725a6f44eaae3"
+    },
+    "diagnostics_prediction_distribution": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/artifacts/diagnostics/prediction_distribution.csv",
+      "bytes": 3636748,
+      "sha256": "f311bb9a1d75ba6b4eccc52b3656b1a8ac10656429f28e1c751a2d9c18f17911"
+    },
+    "diagnostics_prediction_histogram": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/artifacts/diagnostics/prediction_histogram.png",
+      "bytes": 32381,
+      "sha256": "2d2952349492df129f95ecb4960523f08150b9af2ed44699bb1f611999b873eb"
+    },
+    "diagnostics_prediction_metrics": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/artifacts/diagnostics/prediction_metrics.csv",
+      "bytes": 385,
+      "sha256": "6e459c385ee041e2f3f4a0468a19f761d304da755650c222b9dd74247d3d82cc"
+    },
+    "diagnostics_prediction_quantiles": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/artifacts/diagnostics/prediction_quantiles.png",
+      "bytes": 54311,
+      "sha256": "dd51ba0e0d9dbb0b4c8c121a8c254f5dcb5697b5e791414d171c5369ac02a23e"
+    },
+    "diagnostics_prediction_timeseries": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/artifacts/diagnostics/prediction_timeseries.png",
+      "bytes": 352796,
+      "sha256": "f2b4179e3d1ec0f7538933c5c78a6d4f41ae006a55f5ba40a3dd191414fbe709"
+    },
+    "diagnostics_prediction_vs_realized": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/artifacts/diagnostics/prediction_vs_realized.png",
+      "bytes": 289866,
+      "sha256": "600d8aeac46b4a9c8b03abd450ae3e536d6438b8687a6e0a75bda83fdcd42f3a"
+    },
+    "diagnostics_regime_diagnostics": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/artifacts/diagnostics/regime_diagnostics.csv",
+      "bytes": 234,
+      "sha256": "902f7e9e342850be89ab83be5419d97a512ccfb6496461340c40365d8e479165"
+    },
+    "diagnostics_residual_histogram": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/artifacts/diagnostics/residual_histogram.png",
+      "bytes": 32297,
+      "sha256": "9a0624560afcea90d4a332a168ff620d655f2ee13cfa6192510094ba2327c798"
+    },
+    "diagnostics_summary": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/artifacts/diagnostics/summary.json",
+      "bytes": 4338,
+      "sha256": "1d8d88b96a2a0962b295fc9ce2e82fb5d9e7ff4b03fb1222cc182854a233c778"
+    },
+    "diagnostics_turnover_cost_timeseries": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/artifacts/diagnostics/turnover_cost_timeseries.csv",
+      "bytes": 7925566,
+      "sha256": "7b99c91e22eec44feb566cc6b27e75effd0d72da3f96cad68667d298a3e7c202"
+    },
+    "diagnostics_turnover_timeseries": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/artifacts/diagnostics/turnover_timeseries.png",
+      "bytes": 55086,
+      "sha256": "9d7e662b8ee59e133db27f3228d7a8259ad260d4a26e6b2b8f85c28934cf81ec"
+    },
+    "diagnostics_turnover_vs_net_pnl": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/artifacts/diagnostics/turnover_vs_net_pnl.png",
+      "bytes": 37791,
+      "sha256": "ff0ac45f4906dbeb93e5ebefaf0cc290a553f1d36e84afc0df00063e8cdf5589"
+    },
+    "drawdown_curve": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/report_assets/drawdown_curve.png",
+      "bytes": 75844,
+      "sha256": "fd59213074233b84912937f02e04ad51a244da72b7f69b7b7dc335ad1da3e6f8"
+    },
+    "equity_curve": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/equity_curve.csv",
+      "bytes": 2833864,
+      "sha256": "2b928303cdd77ac7949a6c61ef5096699dc28814fd837b2e766fcde5e2edf01e"
+    },
+    "equity_curve_chart": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/report_assets/equity_curve.png",
+      "bytes": 45329,
+      "sha256": "a34280424466bb36130750300d58c9ac5c08826e44c8fb95cf309811dadd599d"
+    },
+    "feature_importance": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/feature_importance.csv",
+      "bytes": 1469,
+      "sha256": "5d7c5d5eae4021018c2816c964e0dbbd98a17136b1a0cc6cb57d20ee493d878b"
+    },
+    "feature_importance_chart": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/report_assets/feature_importance.png",
+      "bytes": 87492,
+      "sha256": "92661fcd5308aff4e305148776ebb12c3e56863f881faa9a6d1dfd122beb0f02"
+    },
+    "fold_backtest_diagnostics": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/artifacts/diagnostics/fold_backtest_diagnostics.csv",
+      "bytes": 3416,
+      "sha256": "748af4e04579f8c97136c7463a532af692bcc633be9185c912840db470e4d94f"
+    },
+    "fold_cost_to_gross_pnl": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/report_assets/fold_cost_to_gross_pnl.png",
+      "bytes": 27013,
+      "sha256": "51b619e64ec39c56c72eab08eb4721241031d68592522bdf13c2ae620674fe42"
+    },
+    "fold_cumulative_return": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/report_assets/fold_cumulative_return.png",
+      "bytes": 21166,
+      "sha256": "0e11c57d98ab169c4cfcddfebf6e0461b5d20920716ccd1d167b13ace98d3d8f"
+    },
+    "fold_model_summary": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/fold_model_summary.csv",
+      "bytes": 1121,
+      "sha256": "e454556898217e1d45b98bc81cb15c986171bd2724ffdeb11384392bd5d6cf5f"
+    },
+    "fold_net_pnl": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/report_assets/fold_net_pnl.png",
+      "bytes": 18471,
+      "sha256": "53d21abe5133ae9faffc7fa59ed2d8cf3ad3e0c5dc465c0320ad05f68bffd35d"
+    },
+    "fold_sharpe": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/report_assets/fold_sharpe.png",
+      "bytes": 18946,
+      "sha256": "a4eff427b2834d875861145e8073a3577d7d67a9a631d0e9fa953560b20d112d"
+    },
+    "forecast_alpha_diagnostics_summary": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/artifacts/diagnostics/forecast_alpha_diagnostics_summary.json",
+      "bytes": 24142,
+      "sha256": "a23dc6f9649274f9a45217bfa1f4fe845be04b11a8b8d30dfecd9a45e9008544"
+    },
+    "forecast_baselines": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/artifacts/diagnostics/forecast_baselines.csv",
+      "bytes": 2202,
+      "sha256": "c1d740ae75c93aab5f085975e7796fa88971992760f916c64b4b14f716c8de59"
+    },
+    "gross_returns": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/gross_returns.csv",
+      "bytes": 1942960,
+      "sha256": "abac46d65757d8b064672549abc2276fd22b5a5af7c41c091ceaa97f9f57088b"
+    },
+    "missing_value_diagnostics": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/missing_value_diagnostics.json",
+      "bytes": 75,
+      "sha256": "7dce850be8b86dbdecced86830e34766c79c45352b7eedb0012c995efb7bb460"
+    },
+    "monitoring": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/monitoring_report.json",
+      "bytes": 24385,
+      "sha256": "480fe8402c0836dbd02417db2c91fb8238c876158e2be3fa07a91b6591718971"
+    },
+    "monthly_returns": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/report_assets/monthly_returns.png",
+      "bytes": 45901,
+      "sha256": "376b12db795b7ae878497c57007193e6bdc9121d46a629b65eef85b2a6a8926f"
+    },
+    "positions": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/positions.csv",
+      "bytes": 1778353,
+      "sha256": "4ac1b0091670d163898c5d236d73ec50b095a956f77cd43bda1fecbd1a0ccc38"
+    },
+    "positions_turnover": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/report_assets/positions_turnover.png",
+      "bytes": 79125,
+      "sha256": "1258da2b86c4b3eb79391d7fee9e4619a1b1c71ae3291d38b4e2766b435372fc"
+    },
+    "prediction_coverage_by_fold": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/report_assets/prediction_coverage_by_fold.png",
+      "bytes": 25473,
+      "sha256": "27d5daea021a2504b7cd16dce5fc94be42cc49b3bd7162adbac743c53085da9f"
+    },
+    "prediction_diagnostics": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/prediction_diagnostics.json",
+      "bytes": 1915,
+      "sha256": "88c08fb81d5965b43253660a003ce694d92dc6e71b4e30fede152bf06f9a5e8f"
+    },
+    "regime_performance": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/artifacts/diagnostics/regime_performance.csv",
+      "bytes": 2670,
+      "sha256": "4c7f3db165541c6936c0de130ef1843f111868ee5557665676c26c7bcaea4dc9"
+    },
+    "report": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/report.md",
+      "bytes": 81194,
+      "sha256": "b705d6337229abe6b35bcf46bb0b6fe9e04d4e2c6f15ae61498125ceee65c8a1"
+    },
+    "returns": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/returns.csv",
+      "bytes": 1944020,
+      "sha256": "727772d5be52648776b44ff4233004ae1fc345fc88978d8ee3a68c7d71ad6add"
+    },
+    "rolling_behavior": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/report_assets/rolling_behavior.png",
+      "bytes": 127562,
+      "sha256": "0956567581aa38d5c25927157733c06779e80e8570935bff134184503543f6f6"
+    },
+    "rolling_pnl": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/report_assets/rolling_pnl.png",
+      "bytes": 80988,
+      "sha256": "ea718a8886e44fb6bb95f7af401cfd0c6d4aad64f33dbc10f67c31f61041f623"
+    },
+    "run_metadata": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/run_metadata.json",
+      "bytes": 511448,
+      "sha256": "0d7dd36e9106f89d050c7c5e3170854a39dc9a0b32b979ad6dab6c158d92bc3c"
+    },
+    "signal_distribution": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/report_assets/signal_distribution.png",
+      "bytes": 31534,
+      "sha256": "8e835e0219a8c2ce3795a3816540ed430e1e07fbdefa70e51abd3323af2eaa23"
+    },
+    "stage_tails": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/stage_tails.json",
+      "bytes": 161,
+      "sha256": "2bda34625b04850c2c773d11e7220b3588cb7c493cc5c556acede1a2af2ca0e8"
+    },
+    "summary": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/summary.json",
+      "bytes": 591558,
+      "sha256": "7a485bfa9c48f3bded4eb5a6a9b3fb51b926152bef218695631beaddfcaf86c7"
+    },
+    "threshold_grid": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/artifacts/diagnostics/threshold_grid.csv",
+      "bytes": 2106,
+      "sha256": "1cd457f6aa29caa0c0dd444cd65f0896260257ca1011821ac8fb23e2058752e4"
+    },
+    "trade_events": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/report_assets/trade_events.csv",
+      "bytes": 65916,
+      "sha256": "dfedef12c09ac7d13a2e5e3b8f45a5ae1112503724eb0402a930ae5a4a8b159d"
+    },
+    "turnover": {
+      "path": "/workspace/logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260706_161323_590403_7cb711ac/turnover.csv",
+      "bytes": 1775193,
+      "sha256": "00f89173b2f0e4637b9efd0c1a379e5bc28dd147ad74798e1cb57f80f294e8e3"
+    }
+  }
+}
