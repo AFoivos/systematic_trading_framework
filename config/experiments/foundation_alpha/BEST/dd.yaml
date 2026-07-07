@@ -352,7 +352,8 @@ model:
     pred_ret_col: pred_ret
     pred_prob_col: pred_prob
     pred_is_oos_col: pred_is_oos
-  preprocessing: {}
+  preprocessing:
+    scaler: robust
   calibration: {}
   feature_cols:
   - close_ret
