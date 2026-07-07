@@ -112,6 +112,10 @@ Run experiment μέσω Docker:
 docker compose run --rm app python -m src.experiments.runner config/experiments/foundation_alpha/BEST/BEST_ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid.yaml
 docker compose run --rm app python -m src.experiments.runner config/experiments/eurusd_30m_lightgbm_h24_structured_tail_alpha_v1.yaml
 docker compose run --rm app python -m src.experiments.runner config/experiments/thursday_weak_prevday_reversal/spx500_30m_codex_vwap_ppo_mfi_edge_v1.yaml
+docker compose run --rm app python -m src.experiments.runner config/experiments/thursday_weak_prevday_reversal/spx500_30m_codex_vwap_ppo_mfi_edge_v1.yaml
+docker compose run --rm app python -m src.experiments.runner config/experiments/thursday_weak_prevday_reversal/spx500_30m_thursday_weak_prevday_reversal_v1.yaml
+docker compose run --rm app python -m src.experiments.runner config/experiments/eurusd_session_bb_reversion/eurusd_30m_session_bb_reversion_long_only_v1.yaml
+
 Παραδείγματα London/NY v3:
 
 ```bash
