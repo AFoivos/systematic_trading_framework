@@ -32,7 +32,7 @@ data:
     dataset_id: ethusd_30m_lightgbm_h24_structured_tail_alpha_v2_hysteresis
     save_raw: false
     save_processed: true
-    load_path: data/raw/dukascopy_30m_clean/ethusd_30m.csv
+    load_path: data/raw/dukascopy_30m_clean/usoil_30m.csv
     raw_dir: data/raw
     processed_dir: data/processed
 features:
@@ -289,7 +289,7 @@ backtest:
   periods_per_year: 17520
   returns_type: simple
   missing_return_policy: raise_if_exposed
-  min_holding_bars: 24
+  min_holding_bars: 12
   subset: test
   vol_col: null
 portfolio:

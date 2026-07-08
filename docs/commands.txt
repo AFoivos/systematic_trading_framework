@@ -109,23 +109,12 @@ python -m src.experiments.runner config/experiments/lab/feature_signal_target_la
 Run experiment μέσω Docker:
 
 ```bash
-docker compose run --rm app python -m src.experiments.runner config/experiments/foundation_alpha/BEST/BEST_ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid.yaml
-docker compose run --rm app python -m src.experiments.runner config/experiments/eurusd_30m_lightgbm_h24_structured_tail_alpha_v1.yaml
-docker compose run --rm app python -m src.experiments.runner config/experiments/thursday_weak_prevday_reversal/spx500_30m_codex_vwap_ppo_mfi_edge_v1.yaml
-docker compose run --rm app python -m src.experiments.runner config/experiments/thursday_weak_prevday_reversal/spx500_30m_codex_vwap_ppo_mfi_edge_v1.yaml
-docker compose run --rm app python -m src.experiments.runner config/experiments/thursday_weak_prevday_reversal/spx500_30m_thursday_weak_prevday_reversal_v1.yaml
-docker compose run --rm app python -m src.experiments.runner config/experiments/eurusd_session_bb_reversion/eurusd_30m_session_bb_reversion_long_only_v1.yaml
-docker compose run --rm app python -m src.experiments.runner config/experiments/foundation_alpha/BEST/dd.yaml
-docker compose run --rm app python -m src.experiments.runner config/experiments/foundation_alpha/ethusd_30m_lightgbm_h24_structured_tail_alpha_v1.yaml
+docker compose run --rm app python -m src.experiments.runner config/experiments/foundation_alpha/ethusd/ethusd_30m_lightgbm_h24_structured_tail_alpha_v2_sparse_threshold_grid.yaml
 
 Παραδείγματα London/NY v3:
 
 ```bash
-python -m src.experiments.runner config/experiments/London_NY/raw/xauusd_london_orb_breakout_raw_v3.yaml
-python -m src.experiments.runner config/experiments/London_NY/tree_only/xauusd_london_tree_meta_v3.yaml
-python -m src.experiments.runner config/experiments/London_NY/stack/london_basket_tree_tft_overlay_v3.yaml
-python -m src.experiments.runner config/experiments/London_NY/tree_only/xauusd_london_tree_meta_long_only_v3.yaml
-python -m src.experiments.runner config/experiments/London_NY/tree_only/xauusd_london_tree_meta_short_only_v3.yaml
+python -m src.experiments.runner config/experiments/foundation_alpha/usoil/usoil_30m_lightgbm_h24_structured_tail_alpha_v1.yaml
 ```
 
 Scalp/QFS diagnostics:

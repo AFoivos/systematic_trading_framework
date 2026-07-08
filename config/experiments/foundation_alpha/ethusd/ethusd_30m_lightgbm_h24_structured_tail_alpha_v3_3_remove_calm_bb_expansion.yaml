@@ -33,7 +33,7 @@ data:
     dataset_id: ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_3_remove_calm_bb_expansion
     save_raw: false
     save_processed: true
-    load_path: data/raw/dukascopy_30m_clean/ethusd_30m.csv
+    load_path: data/raw/dukascopy_30m_clean/usoil_30m.csv
     raw_dir: data/raw
     processed_dir: data/processed
 features:

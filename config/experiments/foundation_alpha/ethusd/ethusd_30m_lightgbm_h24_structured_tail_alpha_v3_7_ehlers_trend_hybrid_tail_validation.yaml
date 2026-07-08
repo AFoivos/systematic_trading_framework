@@ -31,7 +31,7 @@ data:
     dataset_id: ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_tail_validation
     save_raw: false
     save_processed: true
-    load_path: data/raw/dukascopy_30m_clean/ethusd_30m.csv
+    load_path: data/raw/dukascopy_30m_clean/usoil_30m.csv
     raw_dir: data/raw
     processed_dir: data/processed
 features:
@@ -267,9 +267,9 @@ model:
     # previously untouched tail only. With 109005 rows and a 24-bar target,
     # train_size=78840 starts testing immediately after the old OOS end
     # (last old OOS prediction: 2024-09-17 10:30 UTC).
-    train_size: 78840
-    test_size: 30141
-    step_size: 30141
+    train_size: 35040
+    test_size: 4380
+    step_size: 4380
     expanding: true
     max_folds: 1
     purge_bars: 24
@@ -396,7 +396,7 @@ backtest:
   periods_per_year: 17520
   returns_type: simple
   missing_return_policy: raise_if_exposed
-  min_holding_bars: 24
+  min_holding_bars: 12
   subset: test
   vol_col: null
 portfolio:

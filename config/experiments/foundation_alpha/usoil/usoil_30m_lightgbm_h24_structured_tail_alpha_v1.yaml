@@ -1,10 +1,10 @@
 strategy:
-  name: eurusd_30m_lightgbm_h24_structured_tail_alpha_v1
+  name: usoil_30m_lightgbm_h24_structured_tail_alpha_v1
   timeframe: 30m
   assets:
-  - EURUSD
+  - USOIL
   description: >
-    EURUSD 30m structured feature-alpha experiment derived from the local
+    USOIL 30m structured feature-alpha experiment derived from the local
     research scan. It deliberately avoids pretrained/foundation models and
     tests whether causal trend, momentum, volatility expansion, overextension,
     and range-position features can forecast 24-bar returns. Trading is
@@ -15,7 +15,7 @@ data:
   start: null
   end: null
   alignment: inner
-  symbol: EURUSD
+  symbol: USOIL
   pit:
     timestamp_alignment:
       source_timezone: UTC
@@ -29,10 +29,10 @@ data:
       inactive_policy: raise
   storage:
     mode: cached_only
-    dataset_id: eurusd_30m_lightgbm_h24_structured_tail_alpha_v1
+    dataset_id: usoil_30m_lightgbm_h24_structured_tail_alpha_v1
     save_raw: false
     save_processed: true
-    load_path: data/raw/dukascopy_30m_clean/eurusd_30m.csv
+    load_path: data/raw/dukascopy_30m_clean/usoil_30m.csv
     raw_dir: data/raw
     processed_dir: data/processed
 features:
@@ -286,7 +286,7 @@ evaluation:
   strict_oos_only: true
 logging:
   output_dir: logs/experiments
-  run_name: eurusd_30m_lightgbm_h24_structured_tail_alpha_v1
+  run_name: usoil_30m_lightgbm_h24_structured_tail_alpha_v1
   save_model: false
   save_predictions: true
   save_processed: true
