@@ -1,6 +1,6 @@
 # Κατάλογος Targets
 
-Τελευταία ενημέρωση: 2026-06-29
+Τελευταία ενημέρωση: 2026-07-08
 
 Αυτό το αρχείο τεκμηριώνει τους target builders που είναι διαθέσιμοι μέσω του
 `TARGET_REGISTRY` στο `src/targets/registry.py`. Το παλιό
@@ -391,3 +391,390 @@ target:
   `directional_triple_barrier`.
 - Θέλεις να αξιολογήσεις manual long candidates σε risk units; χρησιμοποίησε
   `r_multiple`.
+
+## Regression targets για ML trading models
+
+Τα παρακάτω targets είναι continuous regression labels. Κοιτούν future candles
+μόνο στο target-construction στάδιο και γράφουν όλες τις τελικές και
+intermediate στήλες στο `meta.output_cols`, ώστε το model feature resolver να
+τις αποκλείει από features. Ο κοινός μηχανισμός υποστηρίζει `clip: [low, high]`
+και metadata με `kind`, `price_col`, `horizon`, `horizon_bars`, `fwd_col`,
+`label_col`, `labeled_rows`, `target_density`, `target_stats` και τα
+intermediate columns. Το `target_stats` περιέχει rows, mean, std, min, max,
+median, q01, q05, q25, q75, q95, q99, skew και kurtosis.
+
+### `volatility_normalized_future_return`
+
+- Τι κάνει: προβλέπει fixed-horizon return σε μονάδες τοπικής volatility.
+- Formula: `raw = close[t+h] / close[t] - 1`, `normalizer = volatility_col[t] / abs(price_col[t])`, `target = raw / normalizer`.
+- Required input columns: `price_col`, `volatility_col`, ή προαιρετικά `returns_col`.
+- Params: `price_col`, `volatility_col`, `horizon_bars`, `returns_col`, `returns_type`, `volatility_floor`, `raw_fwd_col`, `normalizer_col`, `fwd_col`, `label_col`, `clip`.
+- Output columns: `raw_fwd_col`, `normalizer_col`, `fwd_col`, και `label_col` αν διαφέρει.
+- Leakage: το future return είναι label-only. Το normalizer χρησιμοποιεί μόνο volatility και price στο timestamp `t`.
+- Πότε έχει νόημα: multi-asset ή multi-regime regressors όπου raw returns δεν είναι συγκρίσιμα.
+- Τι σημαίνει η πρόβλεψη: `pred_ret = 1.5` σημαίνει αναμενόμενη κίνηση 1.5 volatility units, όχι 150%.
+
+```yaml
+target:
+  kind: volatility_normalized_future_return
+  params:
+    price_col: close
+    volatility_col: atr_14
+    horizon_bars: 5
+    clip: [-5, 5]
+    fwd_col: target_vol_norm_return_5
+```
+
+### `risk_adjusted_future_return`
+
+- Τι κάνει: διαιρεί το future return με τη realized volatility του ίδιου future horizon.
+- Formula: `target = future_return / std(returns[t+1:t+h])`.
+- Required input columns: `price_col` ή `returns_col`.
+- Params: `price_col`, `returns_col`, `returns_type`, `horizon_bars`, `volatility_floor`, `raw_fwd_col`, `realized_vol_col`, `fwd_col`, `label_col`, `clip`.
+- Output columns: `raw_fwd_col`, `realized_vol_col`, `fwd_col`, και optional `label_col`.
+- Leakage: η future realized volatility είναι μέρος του label, όχι feature.
+- Πότε έχει νόημα: όταν θέλεις return scaled από τη μελλοντική διαδρομή risk που πράγματι ακολούθησε.
+- Τι σημαίνει η πρόβλεψη: θετικό value σημαίνει return που αποζημίωσε το realized future volatility.
+
+```yaml
+target:
+  kind: risk_adjusted_future_return
+  params:
+    price_col: close
+    horizon_bars: 5
+    fwd_col: target_risk_adjusted_return_5
+```
+
+### `r_multiple_regression`
+
+- Τι κάνει: μετατρέπει fixed-horizon return σε R units με ATR-based stop distance.
+- Formula: `risk_distance = atr_multiple * volatility_col[t] / abs(price_col[t])`, `target = future_return / risk_distance`.
+- Required input columns: `price_col`, `volatility_col`, ή optional `returns_col`.
+- Params: `price_col`, `volatility_col`, `atr_multiple`, `horizon_bars`, `returns_col`, `returns_type`, `volatility_floor`, `raw_fwd_col`, `risk_distance_col`, `fwd_col`, `label_col`, `clip`.
+- Output columns: `raw_fwd_col`, `risk_distance_col`, `fwd_col`, optional `label_col`.
+- Leakage: το risk distance είναι causal γιατί βασίζεται στο volatility στο `t`; μόνο το return κοιτάει `t+h`.
+- Πότε έχει νόημα: κύριο regression target για trading signals με stop/risk thinking.
+- Τι σημαίνει η πρόβλεψη: `pred_ret = 1.2` σημαίνει expected +1.2R στο horizon.
+
+```yaml
+target:
+  kind: r_multiple_regression
+  params:
+    price_col: close
+    volatility_col: atr_14
+    atr_multiple: 2.0
+    horizon_bars: 5
+    clip: [-5, 5]
+    fwd_col: target_r_multiple_5
+```
+
+### `mfe_regression`
+
+- Τι κάνει: μετρά maximum favorable excursion στο future path.
+- Formula long: `max(high[t+1:t+h]) / close[t] - 1`. Formula short: `close[t] / min(low[t+1:t+h]) - 1`.
+- Required input columns: `price_col`, `high_col`, `low_col`, και `volatility_col` αν γίνει volatility normalization.
+- Params: `direction` (`long`, `short`, `signed`), `horizon_bars`, `normalize_by_volatility`, `volatility_col`, `volatility_floor`, `fwd_col`, `label_col`, `clip`.
+- Output columns: `fwd_col`, optional `label_col`.
+- Signed convention: θετικό σημαίνει ότι κυριάρχησε upside favorable excursion, αρνητικό ότι κυριάρχησε downside favorable excursion.
+- Leakage: το high/low future path χρησιμοποιείται μόνο για label diagnostics.
+- Πότε έχει νόημα: upside potential modeling και ranking setups πριν από exit-policy design.
+- Τι σημαίνει η πρόβλεψη: μεγαλύτερο θετικό value σημαίνει μεγαλύτερο διαθέσιμο favorable move.
+
+```yaml
+target:
+  kind: mfe_regression
+  params:
+    price_col: close
+    high_col: high
+    low_col: low
+    direction: long
+    horizon_bars: 5
+    fwd_col: target_mfe_5
+```
+
+### `mae_regression`
+
+- Τι κάνει: μετρά maximum adverse excursion στο future path.
+- Formula long: `min(low[t+1:t+h]) / close[t] - 1`. Formula short: `close[t] / max(high[t+1:t+h]) - 1`.
+- Required input columns: `price_col`, `high_col`, `low_col`, και `volatility_col` αν γίνει normalization.
+- Params: `direction` (`long`, `short`, `signed`), `horizon_bars`, `normalize_by_volatility`, `volatility_col`, `volatility_floor`, `fwd_col`, `label_col`, `clip`.
+- Output columns: `fwd_col`, optional `label_col`.
+- Signed convention: αρνητικό σημαίνει downside adverse excursion, θετικό σημαίνει upside adverse excursion.
+- Leakage: future lows/highs μένουν target-only.
+- Πότε έχει νόημα: downside risk model, stop sizing και conservative filters.
+- Τι σημαίνει η πρόβλεψη: πιο αρνητικό value για long σημαίνει μεγαλύτερο adverse path risk.
+
+```yaml
+target:
+  kind: mae_regression
+  params:
+    price_col: close
+    high_col: high
+    low_col: low
+    direction: long
+    horizon_bars: 5
+    fwd_col: target_mae_5
+```
+
+### `mfe_mae_ratio_regression`
+
+- Τι κάνει: μετρά path reward/risk quality από MFE και MAE.
+- Formula ratio: `target = MFE / abs(MAE)`. Formula difference: `target = MFE - abs(MAE)`.
+- Required input columns: `price_col`, `high_col`, `low_col`.
+- Params: `direction` (`long` ή `short`), `mode` (`ratio` ή `difference`), `denominator_floor`, `mfe_col`, `mae_col`, `fwd_col`, `label_col`, `clip`.
+- Output columns: `mfe_col`, `mae_col`, `fwd_col`, optional `label_col`.
+- Leakage: MFE/MAE είναι label path diagnostics και αποκλείονται μέσω `output_cols`.
+- Πότε έχει νόημα: επιλογή setups που είχαν καθαρότερο upside/downside profile.
+- Τι σημαίνει η πρόβλεψη: σε ratio mode, `2.0` σημαίνει MFE περίπου διπλάσιο από το adverse excursion.
+
+```yaml
+target:
+  kind: mfe_mae_ratio_regression
+  params:
+    price_col: close
+    high_col: high
+    low_col: low
+    direction: long
+    mode: ratio
+    horizon_bars: 5
+    fwd_col: target_mfe_mae_ratio_5
+```
+
+### `downside_adjusted_future_return`
+
+- Τι κάνει: τιμωρεί future returns που είχαν μεγάλο adverse excursion.
+- Formula long: `future_return - penalty_lambda * abs(MAE)`. Για short χρησιμοποιεί short-oriented future return, ώστε θετικό target να σημαίνει καλή short ευκαιρία.
+- Required input columns: `price_col`, `high_col`, `low_col`, και `volatility_col` αν γίνει normalization.
+- Params: `direction`, `horizon_bars`, `penalty_lambda`, `normalize_by_volatility`, `raw_fwd_col`, `mae_col`, `fwd_col`, `label_col`, `clip`.
+- Output columns: `raw_fwd_col`, `mae_col`, `fwd_col`, optional `label_col`.
+- Leakage: το adverse path είναι label penalty, όχι feature.
+- Πότε έχει νόημα: conservative regression signal που προτιμά smooth winners.
+- Τι σημαίνει η πρόβλεψη: θετικό value σημαίνει expected return αφού αφαιρεθεί path-risk penalty.
+
+```yaml
+target:
+  kind: downside_adjusted_future_return
+  params:
+    price_col: close
+    high_col: high
+    low_col: low
+    direction: long
+    horizon_bars: 5
+    penalty_lambda: 1.0
+    clip: [-5, 5]
+    fwd_col: target_downside_adjusted_return_5
+```
+
+### `future_trend_slope`
+
+- Τι κάνει: μετρά linear-regression slope στο future price window, όχι μόνο terminal return.
+- Formula: slope πάνω στα `close[t+1:t+h]`, προαιρετικά normalized by price ή volatility.
+- Required input columns: `price_col`, και `volatility_col` αν `normalize_by_volatility=true`.
+- Params: `horizon_bars` (>=2), `normalize_by_price`, `normalize_by_volatility`, `volatility_col`, `volatility_floor`, `fwd_col`, `label_col`, `clip`.
+- Output columns: `fwd_col`, optional `label_col`.
+- Leakage: η slope είναι future-path label και δεν μπαίνει σε feature set.
+- Πότε έχει νόημα: trend quality/continuation targets όπου το terminal close είναι θορυβώδες.
+- Τι σημαίνει η πρόβλεψη: θετικό value σημαίνει ανοδική future slope στην target scale.
+
+```yaml
+target:
+  kind: future_trend_slope
+  params:
+    price_col: close
+    horizon_bars: 5
+    normalize_by_price: true
+    fwd_col: target_future_trend_slope_5
+```
+
+### `future_path_efficiency`
+
+- Τι κάνει: μετρά πόσο καθαρή ήταν η future κίνηση.
+- Formula: `abs(close[t+h]-close[t]) / sum(abs(close[i]-close[i-1]))`. Με `signed=true` πολλαπλασιάζεται με το sign του net move.
+- Required input columns: `price_col`.
+- Params: `horizon_bars` (>=2), `signed`, `path_floor`, `fwd_col`, `label_col`, `clip`.
+- Output columns: `fwd_col`, optional `label_col`.
+- Leakage: χρησιμοποιεί future path μόνο ως label.
+- Πότε έχει νόημα: trend-quality auxiliary target.
+- Τι σημαίνει η πρόβλεψη: κοντά στο `1` σημαίνει καθαρό path, κοντά στο `0` choppy path.
+
+```yaml
+target:
+  kind: future_path_efficiency
+  params:
+    price_col: close
+    horizon_bars: 5
+    signed: true
+    fwd_col: target_path_efficiency_5
+```
+
+### `excess_return_regression`
+
+- Τι κάνει: προβλέπει asset future return πάνω από benchmark future return.
+- Formula: `target = future_return_asset - future_return_benchmark`.
+- Required input columns: `price_col` και `benchmark_price_col`, ή αντίστοιχα returns columns.
+- Params: `benchmark_price_col`, `returns_col`, `benchmark_returns_col`, `returns_type`, `benchmark_fwd_col`, `fwd_col`, `label_col`, `clip`.
+- Output columns: `benchmark_fwd_col`, `fwd_col`, optional `label_col`.
+- Leakage: benchmark future return είναι μέρος του label relative-performance, όχι feature.
+- Πότε έχει νόημα: relative strength / alpha versus index or market proxy.
+- Τι σημαίνει η πρόβλεψη: θετικό value σημαίνει expected outperformance έναντι benchmark.
+
+```yaml
+target:
+  kind: excess_return_regression
+  params:
+    price_col: close
+    benchmark_price_col: benchmark_close
+    horizon_bars: 5
+    fwd_col: target_excess_return_5
+```
+
+### `residual_return_regression`
+
+- Τι κάνει: αφαιρεί rolling beta exposure προς benchmark από το asset future return.
+- Formula: `target = asset_future_return - beta[t] * benchmark_future_return`.
+- Required input columns: asset/benchmark price columns ή asset/benchmark returns columns.
+- Params: `benchmark_price_col`, `beta_window`, `min_periods`, `returns_col`, `benchmark_returns_col`, `returns_type`, `raw_fwd_col`, `benchmark_fwd_col`, `beta_col`, `fwd_col`, `label_col`, `clip`.
+- Output columns: `raw_fwd_col`, `benchmark_fwd_col`, `beta_col`, `fwd_col`, optional `label_col`.
+- Leakage: το `beta_col` είναι rolling beta από returns μέχρι και το timestamp `t`. Το future benchmark return χρησιμοποιείται μόνο για το residual label.
+- Πότε έχει νόημα: alpha modeling και market-neutral/relative-strength research.
+- Τι σημαίνει η πρόβλεψη: θετικό value σημαίνει expected return πέρα από το beta-implied benchmark move.
+
+```yaml
+target:
+  kind: residual_return_regression
+  params:
+    price_col: close
+    benchmark_price_col: benchmark_close
+    beta_window: 100
+    horizon_bars: 5
+    fwd_col: target_residual_return_5
+```
+
+### `future_range_regression`
+
+- Τι κάνει: προβλέπει το μέγεθος future high-low range ανεξάρτητα από κατεύθυνση.
+- Formula: `future_range = max(high[t+1:t+h]) - min(low[t+1:t+h])`; normalize by `price`, `volatility` ή `none`.
+- Required input columns: `high_col`, `low_col`, και `price_col` ή `volatility_col` ανά normalization.
+- Params: `normalize`, `volatility_col`, `volatility_floor`, `fwd_col`, `label_col`, `clip`.
+- Output columns: `fwd_col`, optional `label_col`.
+- Leakage: future range είναι volatility/range label, όχι feature.
+- Πότε έχει νόημα: volatility expansion, breakout potential και position sizing.
+- Τι σημαίνει η πρόβλεψη: μεγαλύτερο value σημαίνει μεγαλύτερο αναμενόμενο future range.
+
+```yaml
+target:
+  kind: future_range_regression
+  params:
+    price_col: close
+    high_col: high
+    low_col: low
+    normalize: price
+    horizon_bars: 5
+    fwd_col: target_future_range_5
+```
+
+### `future_realized_volatility`
+
+- Τι κάνει: προβλέπει realized volatility των future one-step returns.
+- Formula: `target = std(returns[t+1:t+h])`.
+- Required input columns: `returns_col` ή `price_col`.
+- Params: `returns_type`, `horizon_bars` (>=2), `annualize`, `periods_per_year`, `fwd_col`, `label_col`, `clip`.
+- Output columns: `fwd_col`, optional `label_col`.
+- Annualization convention: αν `annualize=true`, πολλαπλασιάζει με `sqrt(periods_per_year / horizon_bars)`.
+- Leakage: future returns χρησιμοποιούνται μόνο ως risk label.
+- Πότε έχει νόημα: risk model, volatility forecast και position sizing.
+- Τι σημαίνει η πρόβλεψη: expected future realized volatility στην ίδια convention με το target.
+
+```yaml
+target:
+  kind: future_realized_volatility
+  params:
+    price_col: close
+    horizon_bars: 5
+    annualize: false
+    fwd_col: target_future_realized_vol_5
+```
+
+### `future_drawdown_regression`
+
+- Τι κάνει: μετρά downside path risk στο future horizon.
+- Formula long: `min(low[t+1:t+h] / close[t] - 1)`. Formula short: `close[t] / max(high[t+1:t+h]) - 1`.
+- Required input columns: `price_col`, `high_col`, `low_col`, και `volatility_col` αν γίνει normalization.
+- Params: `direction`, `horizon_bars`, `normalize_by_volatility`, `volatility_col`, `volatility_floor`, `fwd_col`, `label_col`, `clip`.
+- Output columns: `fwd_col`, optional `label_col`.
+- Leakage: future drawdown είναι label-only path risk.
+- Πότε έχει νόημα: downside-aware filters, stop research και risk-aware regressors.
+- Τι σημαίνει η πρόβλεψη: πιο αρνητικό value σημαίνει βαθύτερο expected adverse move.
+
+```yaml
+target:
+  kind: future_drawdown_regression
+  params:
+    price_col: close
+    high_col: high
+    low_col: low
+    direction: long
+    horizon_bars: 5
+    fwd_col: target_future_drawdown_5
+```
+
+## Recommended regression targets for trading
+
+Προτεινόμενη σειρά χρήσης:
+
+1. `r_multiple_regression` ως βασικό target για trading signal, επειδή η κλίμακα είναι σε risk units.
+2. `volatility_normalized_future_return` ως auxiliary/diagnostic ή main target για multi-asset models.
+3. `downside_adjusted_future_return` για πιο conservative signal που τιμωρεί κακή διαδρομή.
+4. `future_path_efficiency` για trend quality.
+5. `mfe_regression` και `mae_regression` για upside/downside modeling.
+6. `future_realized_volatility` για risk model και position sizing.
+7. `excess_return_regression` και `residual_return_regression` για alpha/relative strength.
+
+M30 examples:
+
+```yaml
+target:
+  kind: r_multiple_regression
+  params:
+    price_col: close
+    volatility_col: atr_14
+    atr_multiple: 2.0
+    horizon_bars: 5
+    clip: [-5, 5]
+    fwd_col: target_r_multiple_5
+```
+
+```yaml
+target:
+  kind: volatility_normalized_future_return
+  params:
+    price_col: close
+    volatility_col: atr_14
+    horizon_bars: 5
+    clip: [-5, 5]
+    fwd_col: target_vol_norm_return_5
+```
+
+```yaml
+target:
+  kind: downside_adjusted_future_return
+  params:
+    price_col: close
+    high_col: high
+    low_col: low
+    direction: long
+    horizon_bars: 5
+    penalty_lambda: 1.0
+    clip: [-5, 5]
+    fwd_col: target_downside_adjusted_return_5
+```
+
+```yaml
+target:
+  kind: future_path_efficiency
+  params:
+    price_col: close
+    horizon_bars: 5
+    signed: true
+    fwd_col: target_path_efficiency_5
+```

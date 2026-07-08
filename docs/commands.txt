@@ -180,7 +180,7 @@ python -m src.experiments.optuna_search config/optuna/us100_30m_ehlers_tp_long_s
 Docker:
 
 ```bash
-docker compose run --rm app python -m src.experiments.optuna_search config/optuna/foundation_alpha/optuna_ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_signal_gates_lgbm_v1.yaml
+docker compose run --rm app python -m src.experiments.optuna_search config/optuna/foundation_alpha/optuna_ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_signal_gates_lgbm_v1_bars.yaml
 ```
 
 

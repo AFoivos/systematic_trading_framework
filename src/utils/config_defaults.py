@@ -13,6 +13,16 @@ from src.utils.paths import PROJECT_ROOT, enforce_safe_absolute_path, in_project
 
 _RUN_NAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
 _FIAT_CODES = {"AUD", "CAD", "CHF", "EUR", "GBP", "JPY", "NZD", "USD"}
+_RETURN_TARGET_KINDS = {
+    "forward_return",
+    "future_return_regression",
+    "volatility_normalized_future_return",
+    "risk_adjusted_future_return",
+    "r_multiple_regression",
+    "excess_return_regression",
+    "residual_return_regression",
+    "future_realized_volatility",
+}
 
 
 def _looks_like_pair_symbol(symbol: str) -> tuple[str, str] | None:
@@ -130,7 +140,7 @@ def default_model_block(model: dict[str, Any]) -> dict[str, Any]:
     model = dict(model) if model else {}
     target = dict(model.get("target", {}) or {})
     if target:
-        if str(target.get("kind", "forward_return")) in {"forward_return", "future_return_regression"}:
+        if str(target.get("kind", "forward_return")) in _RETURN_TARGET_KINDS:
             target.setdefault("returns_col", None)
             target.setdefault("returns_type", "simple")
         model["target"] = target

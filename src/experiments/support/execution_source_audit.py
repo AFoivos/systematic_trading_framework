@@ -45,8 +45,25 @@ _BASE_STAGE_MODULES: tuple[tuple[str, str, str], ...] = (
 
 _TARGET_MODULES = {
     "forward_return": "src/targets/forward_return.py",
+    "future_return_regression": "src/targets/future_return_regression.py",
+    "volatility_normalized_future_return": "src/targets/regression.py",
+    "risk_adjusted_future_return": "src/targets/regression.py",
+    "r_multiple_regression": "src/targets/regression.py",
+    "mfe_regression": "src/targets/regression.py",
+    "mae_regression": "src/targets/regression.py",
+    "mfe_mae_ratio_regression": "src/targets/regression.py",
+    "downside_adjusted_future_return": "src/targets/regression.py",
+    "future_trend_slope": "src/targets/regression.py",
+    "future_path_efficiency": "src/targets/regression.py",
+    "excess_return_regression": "src/targets/regression.py",
+    "residual_return_regression": "src/targets/regression.py",
+    "future_range_regression": "src/targets/regression.py",
+    "future_realized_volatility": "src/targets/regression.py",
+    "future_drawdown_regression": "src/targets/regression.py",
     "triple_barrier": "src/targets/triple_barrier.py",
+    "directional_triple_barrier": "src/targets/directional_triple_barrier.py",
     "r_multiple": "src/targets/r_multiple.py",
+    "candidate_expected_r": "src/targets/candidate_expected_r.py",
 }
 
 _BACKTEST_MODULES = {

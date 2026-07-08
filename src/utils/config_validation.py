@@ -41,6 +41,23 @@ _FORECASTER_MODEL_KINDS = {
     *_DEEP_FORECASTER_MODEL_KINDS,
     *_FOUNDATION_FORECASTER_MODEL_KINDS,
 }
+_REGRESSION_TARGET_KINDS = {
+    "future_return_regression",
+    "volatility_normalized_future_return",
+    "risk_adjusted_future_return",
+    "r_multiple_regression",
+    "mfe_regression",
+    "mae_regression",
+    "mfe_mae_ratio_regression",
+    "downside_adjusted_future_return",
+    "future_trend_slope",
+    "future_path_efficiency",
+    "excess_return_regression",
+    "residual_return_regression",
+    "future_range_regression",
+    "future_realized_volatility",
+    "future_drawdown_regression",
+}
 _GARCH_OVERLAY_COMPATIBLE_MODEL_KINDS = {
     "elastic_net_clf",
     "lightgbm_clf",
@@ -118,6 +135,14 @@ _FEATURE_NORMALIZATION_HELPERS = {
 _TARGET_OUTPUT_KEYS = {
     "label_col",
     "fwd_col",
+    "raw_fwd_col",
+    "normalizer_col",
+    "risk_distance_col",
+    "realized_vol_col",
+    "mfe_col",
+    "mae_col",
+    "beta_col",
+    "benchmark_fwd_col",
     "event_ret_col",
     "candidate_out_col",
     "r_col",
@@ -2321,26 +2346,62 @@ def validate_model_block(model: dict[str, Any]) -> None:
                     raise ConfigValidationError("model.target.returns_type must be 'simple' or 'log'.")
                 if target.get("returns_col") is None and returns_type != "simple":
                     raise ConfigValidationError("model.target.returns_type='log' requires model.target.returns_col.")
-            if target_kind == "future_return_regression":
+            if target_kind in _REGRESSION_TARGET_KINDS:
                 if model["kind"] not in _FORECASTER_MODEL_KINDS:
                     raise ConfigValidationError(
-                        "model.target.kind='future_return_regression' is supported only for regression forecasters."
+                        f"model.target.kind='{target_kind}' is supported only for regression forecasters."
                     )
                 _positive_int(
                     target.get("horizon_bars", target.get("horizon", 1)),
                     field="model.target.horizon_bars",
                 )
-                if "returns_col" in target and target["returns_col"] is not None and not isinstance(target["returns_col"], str):
-                    raise ConfigValidationError("model.target.returns_col must be a string or null.")
+                for key in (
+                    "price_col",
+                    "returns_col",
+                    "benchmark_price_col",
+                    "benchmark_returns_col",
+                    "volatility_col",
+                    "high_col",
+                    "low_col",
+                    "label_col",
+                    "fwd_col",
+                    "raw_fwd_col",
+                    "normalizer_col",
+                    "risk_distance_col",
+                    "realized_vol_col",
+                    "mfe_col",
+                    "mae_col",
+                    "beta_col",
+                    "benchmark_fwd_col",
+                ):
+                    if key in target and target[key] is not None and not isinstance(target[key], str):
+                        raise ConfigValidationError(f"model.target.{key} must be a string or null.")
                 returns_type = str(target.get("returns_type", "simple"))
                 if returns_type not in {"simple", "log"}:
                     raise ConfigValidationError("model.target.returns_type must be 'simple' or 'log'.")
-                if target.get("returns_col") is None and returns_type != "simple":
+                if (
+                    target_kind
+                    in {
+                        "future_return_regression",
+                        "volatility_normalized_future_return",
+                        "risk_adjusted_future_return",
+                        "r_multiple_regression",
+                    }
+                    and target.get("returns_col") is None
+                    and returns_type != "simple"
+                ):
                     raise ConfigValidationError("model.target.returns_type='log' requires model.target.returns_col.")
-                if "volatility_col" in target and not isinstance(target["volatility_col"], str):
-                    raise ConfigValidationError("model.target.volatility_col must be a string.")
-                if "normalize_by_volatility" in target and not isinstance(target["normalize_by_volatility"], bool):
-                    raise ConfigValidationError("model.target.normalize_by_volatility must be boolean.")
+                if target_kind in {"excess_return_regression", "residual_return_regression"}:
+                    if returns_type == "log" and (
+                        target.get("returns_col") is None or target.get("benchmark_returns_col") is None
+                    ):
+                        raise ConfigValidationError(
+                            "model.target.returns_type='log' requires model.target.returns_col "
+                            "and model.target.benchmark_returns_col."
+                        )
+                for key in ("normalize_by_volatility", "normalize_by_price", "annualize", "signed"):
+                    if key in target and not isinstance(target[key], bool):
+                        raise ConfigValidationError(f"model.target.{key} must be boolean.")
                 clip = target.get("clip")
                 if clip is not None:
                     if not isinstance(clip, (list, tuple)) or len(clip) != 2:
@@ -2852,7 +2913,7 @@ def validate_standalone_target_block(target: Any) -> None:
         )
     validate_model_block(
         {
-            "kind": "lightgbm_regressor" if target_kind == "future_return_regression" else "xgboost_clf",
+            "kind": "lightgbm_regressor" if target_kind in _REGRESSION_TARGET_KINDS else "xgboost_clf",
             "feature_cols": ["__standalone_target_validation__"],
             "target": target_cfg,
         }

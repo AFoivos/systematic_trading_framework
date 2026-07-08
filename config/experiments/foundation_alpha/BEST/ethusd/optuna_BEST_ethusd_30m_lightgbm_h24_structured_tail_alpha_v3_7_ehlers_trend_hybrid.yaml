@@ -353,7 +353,7 @@ model:
     pred_prob_col: pred_prob
     pred_is_oos_col: pred_is_oos
   preprocessing:
-    scaler: standar
+    scaler: none
   calibration: {}
   feature_cols:
   - close_ret

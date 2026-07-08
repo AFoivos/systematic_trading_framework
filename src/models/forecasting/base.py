@@ -33,6 +33,7 @@ from src.evaluation.model_metrics import (
 from src.models.common.overlay import resolve_garch_overlay
 from src.models.common.runtime import describe_feature_set, infer_feature_columns, resolve_runtime_for_model
 from src.targets.registry import build_target
+from src.targets.regression import REGRESSION_TARGET_KINDS
 from src.models.types import ForecasterFoldPredictor
 from src.models.forecasting.garch import make_garch_fold_predictor
 from src.models.forecasting.foundation import (
@@ -174,7 +175,7 @@ def prepare_forecaster_inputs(
     )
     target_cfg = dict(model_cfg.get("target", {}) or {})
     target_kind = target_cfg.get("kind", "forward_return")
-    if target_kind not in {"forward_return", "future_return_regression", "triple_barrier"}:
+    if target_kind not in {"forward_return", "triple_barrier", *REGRESSION_TARGET_KINDS}:
         raise ValueError(f"Unsupported target.kind: {target_kind}")
     out, label_col, fwd_col, target_meta = build_target(df=df, target_cfg=target_cfg)
     if target_kind == "triple_barrier":
