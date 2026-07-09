@@ -175,7 +175,7 @@ def prepare_forecaster_inputs(
     )
     target_cfg = dict(model_cfg.get("target", {}) or {})
     target_kind = target_cfg.get("kind", "forward_return")
-    if target_kind not in {"forward_return", "triple_barrier", *REGRESSION_TARGET_KINDS}:
+    if target_kind not in {"forward_return", "future_return_regression", "triple_barrier", *REGRESSION_TARGET_KINDS}:
         raise ValueError(f"Unsupported target.kind: {target_kind}")
     out, label_col, fwd_col, target_meta = build_target(df=df, target_cfg=target_cfg)
     if target_kind == "triple_barrier":

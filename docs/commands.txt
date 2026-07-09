@@ -109,7 +109,7 @@ python -m src.experiments.runner config/experiments/lab/feature_signal_target_la
 Run experiment μέσω Docker:
 
 ```bash
-docker compose run --rm app python -m src.experiments.runner config/experiments/foundation_alpha/ethusd/ethusd_30m_lightgbm_h24_structured_tail_alpha_v2_sparse_threshold_grid.yaml
+docker compose run --rm app python -m src.experiments.runner config/experiments/foundation_alpha/BEST/ethusd/BEST_ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0054_manual_barrier.yaml
 
 Παραδείγματα London/NY v3:
 
