@@ -357,6 +357,7 @@ def run_experiment_pipeline(
                 run_dir=run_dir,
                 cfg=cfg,
                 data=(asset_frames if is_portfolio else next(iter(asset_frames.values()))),
+                model=model,
                 performance=performance,
                 model_meta=model_meta,
                 evaluation=evaluation,

@@ -20,6 +20,7 @@ from src.execution.mt5_position_manager import MT5PositionManager
 from src.execution.mt5_risk_manager import MT5RiskManager, RiskConfig
 from src.execution.mt5_symbol_mapper import MT5SymbolMapper
 from src.experiments.orchestration.feature_stage import apply_feature_steps, apply_signal_step
+from src.models.artifacts import load_model_bundle, predict_with_model_bundle
 from src.utils.config import load_experiment_config
 
 
@@ -148,6 +149,17 @@ class MT5DemoBot:
             raise ValueError("strategy.config_path is required.")
         self.strategy_config_path = _resolve_path(strategy_path)
         self.strategy_config = load_experiment_config(self.strategy_config_path)
+        model_artifact_path = (
+            strategy_cfg.get("model_artifact_path")
+            or strategy_cfg.get("installed_model_artifact")
+            or strategy_cfg.get("model_path")
+        )
+        self.model_artifact_path = _resolve_path(model_artifact_path) if model_artifact_path else None
+        self.model_bundle = (
+            load_model_bundle(self.model_artifact_path)
+            if self.model_artifact_path is not None
+            else None
+        )
 
         self.mapper = MT5SymbolMapper.from_config(dict(self.config.get("symbols", {}) or {}))
         mt5_cfg = dict(self.execution_cfg.get("mt5", {}) or {})
@@ -244,8 +256,13 @@ class MT5DemoBot:
                 list(self.strategy_config.get("features", []) or []),
                 asset=framework_symbol,
             )
+            model_frame = (
+                predict_with_model_bundle(features, self.model_bundle, asset=framework_symbol)
+                if self.model_bundle is not None
+                else features
+            )
             signal_frame = apply_signal_step(
-                features,
+                model_frame,
                 dict(self.strategy_config.get("signals", {}) or {}),
                 asset=framework_symbol,
             )
@@ -420,6 +437,7 @@ class MT5DemoBot:
                 "strategy_config_path": str(self.strategy_config_path),
                 "poll_seconds": self.execution_cfg.get("poll_seconds"),
                 "lookback_bars": self.execution_cfg.get("lookback_bars"),
+                "model_artifact_path": str(self.model_artifact_path) if self.model_artifact_path is not None else None,
             },
             "market_data": _market_data_snapshot(candles),
             "strategy": {
@@ -429,6 +447,7 @@ class MT5DemoBot:
                     list(self.strategy_config.get("features", []) or []),
                     framework_symbol,
                 ),
+                "model": _model_trace(self.model_bundle, asset=framework_symbol),
             },
             "latest_values": _series_values(latest, list(signal_frame.columns)),
             "signal": {
@@ -617,6 +636,28 @@ def _market_data_snapshot(candles: pd.DataFrame) -> dict[str, Any]:
     }
 
 
+def _model_trace(bundle: Mapping[str, Any] | None, *, asset: str) -> dict[str, Any]:
+    if bundle is None:
+        return {"enabled": False}
+    meta = dict(bundle.get("model_meta", {}) or {})
+    per_asset = dict(meta.get("per_asset", {}) or {})
+    asset_meta = dict(per_asset.get(asset, {}) or {}) if per_asset else meta
+    model_config = dict(bundle.get("model_config", {}) or {})
+    feature_cols = (
+        list(asset_meta.get("feature_cols", []) or [])
+        or list(dict(asset_meta.get("feature_pipeline", {}) or {}).get("final_feature_names", []) or [])
+        or list(model_config.get("feature_cols", []) or [])
+    )
+    return {
+        "enabled": True,
+        "model_name": bundle.get("model_name"),
+        "model_kind": asset_meta.get("model_kind") or model_config.get("kind"),
+        "feature_count": int(len(feature_cols)),
+        "pred_ret_col": asset_meta.get("pred_ret_col") or model_config.get("pred_ret_col"),
+        "pred_prob_col": asset_meta.get("pred_prob_col") or model_config.get("pred_prob_col"),
+    }
+
+
 def _feature_snapshot_payload(
     *,
     asset: str,
@@ -675,7 +716,11 @@ def _frame_records(frame: pd.DataFrame) -> list[dict[str, Any]]:
 def _signal_input_columns(params: Mapping[str, Any], signal_col: str) -> list[str]:
     columns = {signal_col}
     for key, value in params.items():
-        if str(key).endswith("_col") and isinstance(value, str) and value.strip():
+        if (
+            (str(key).endswith("_col") or str(key) == "forecast_col")
+            and isinstance(value, str)
+            and value.strip()
+        ):
             columns.add(value.strip())
     return sorted(columns)
 

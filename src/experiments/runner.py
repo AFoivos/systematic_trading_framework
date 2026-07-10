@@ -210,6 +210,8 @@ def _print_artifact_context(artifacts: dict[str, str]) -> None:
         "missing_value_diagnostics",
         "monitoring",
         "fold_model_summary",
+        "installed_model_artifact",
+        "model_artifact",
         "trade_events",
     )
     shown = {key: artifacts.get(key) for key in preferred_keys if artifacts.get(key)}

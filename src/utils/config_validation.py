@@ -4114,6 +4114,15 @@ def validate_logging_block(logging_cfg: dict[str, Any]) -> None:
         raise ConfigValidationError("logging.run_name must be a non-empty string.")
     if not isinstance(logging_cfg.get("output_dir", ""), str) or not logging_cfg.get("output_dir", "").strip():
         raise ConfigValidationError("logging.output_dir must be a non-empty string.")
+    if "save_model" in logging_cfg and not isinstance(logging_cfg["save_model"], bool):
+        raise ConfigValidationError("logging.save_model must be boolean.")
+    if "install_model" in logging_cfg and not isinstance(logging_cfg["install_model"], bool):
+        raise ConfigValidationError("logging.install_model must be boolean.")
+    for key in ("model_name", "model_artifact_name", "model_filename", "model_install_dir", "installed_model_dir", "model_registry_dir"):
+        if key in logging_cfg and logging_cfg[key] is not None:
+            value = logging_cfg[key]
+            if not isinstance(value, str) or not value.strip():
+                raise ConfigValidationError(f"logging.{key} must be a non-empty string when provided.")
     stage_tails = logging_cfg.get("stage_tails", {})
     if not isinstance(stage_tails, dict):
         raise ConfigValidationError("logging.stage_tails must be a mapping.")

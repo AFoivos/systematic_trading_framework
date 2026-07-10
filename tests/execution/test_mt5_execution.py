@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 
 import pandas as pd
@@ -16,6 +17,7 @@ from src.execution.mt5_order_manager import MT5OrderManager, TradeParameters
 from src.execution.mt5_position_manager import MT5PositionManager
 from src.execution.mt5_risk_manager import MT5RiskManager, RiskConfig, calculate_position_size
 from src.execution.mt5_symbol_mapper import MT5SymbolMapper
+from src.models.artifacts import load_model_bundle, predict_with_model_bundle, save_model_artifacts
 
 
 MAGIC = 260607
@@ -105,6 +107,11 @@ class FakeConnector:
 
     def is_successful_order(self, result: object) -> bool:
         return getattr(result, "retcode") == 10009
+
+
+class ConstantRegressor:
+    def predict(self, frame: pd.DataFrame) -> list[float]:
+        return [float(value) * 2.0 + 1.0 for value in frame["feature_a"]]
 
 
 def test_symbol_mapping_resolves_enabled_broker_symbol() -> None:
@@ -388,6 +395,59 @@ def test_feature_snapshot_payload_keeps_recent_numeric_feature_rows() -> None:
     assert payload["feature_columns"] == ["ema_50", "atr_14"]
     assert payload["records"][0]["time"] == "2026-06-15T12:30:00+00:00"
     assert payload["records"][-1]["ema_50"] == 100.9
+
+
+def test_model_artifact_custom_name_installs_and_predicts(tmp_path: Path) -> None:
+    cfg = {
+        "config_path": "config/demo.yaml",
+        "logging": {
+            "save_model": True,
+            "model_name": "ETH Model v1.pkl",
+            "model_install_dir": str(tmp_path / "installed"),
+        },
+        "model": {
+            "kind": "lightgbm_regressor",
+            "feature_cols": ["feature_a"],
+            "pred_ret_col": "pred_ret",
+            "pred_prob_col": "pred_prob",
+            "pred_is_oos_col": "pred_is_oos",
+        },
+        "signals": {"kind": "forecast_threshold", "params": {"forecast_col": "pred_ret"}},
+    }
+    model_meta = {
+        "model_kind": "lightgbm_regressor",
+        "feature_cols": ["feature_a"],
+        "pred_ret_col": "pred_ret",
+        "pred_prob_col": "pred_prob",
+        "pred_is_oos_col": "pred_is_oos",
+    }
+
+    artifacts = save_model_artifacts(
+        run_dir=tmp_path / "run",
+        model=ConstantRegressor(),
+        cfg=cfg,
+        model_meta=model_meta,
+        run_metadata={"created_at_utc": NOW.isoformat(), "git": {}, "environment": {}},
+        config_hash_sha256="a" * 64,
+        data_fingerprint={"sha256": "b" * 64},
+    )
+
+    run_model_path = Path(artifacts["model_artifact"])
+    installed_model_path = Path(artifacts["installed_model_artifact"])
+    assert run_model_path.name == "ETH_Model_v1.pkl"
+    assert installed_model_path.name == "ETH_Model_v1.pkl"
+    assert installed_model_path.exists()
+    assert Path(artifacts["installed_model_manifest"]).exists()
+
+    bundle = load_model_bundle(installed_model_path)
+    frame = pd.DataFrame({"feature_a": [1.0, None, 3.0]})
+    out = predict_with_model_bundle(frame, bundle, asset="ETHUSD")
+
+    assert out["pred_ret"].iloc[0] == pytest.approx(3.0)
+    assert pd.isna(out["pred_ret"].iloc[1])
+    assert out["pred_ret"].iloc[2] == pytest.approx(7.0)
+    assert out["pred_is_oos"].eq(False).all()
+    assert "pred_prob" in out.columns
 
 
 def _order_manager(

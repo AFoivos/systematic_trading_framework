@@ -26,6 +26,7 @@ from src.evaluation.trade_path_diagnostics import (
 from src.experiments.orchestration.common import data_stats_payload, redact_sensitive_values, resolved_feature_columns
 from src.experiments.orchestration.reporting import build_experiment_report_markdown
 from src.experiments.support.execution_source_audit import write_execution_source_audit
+from src.models.artifacts import save_model_artifacts
 from src.plots.trade_diagnostics import (
     build_trade_event_frame,
 )
@@ -2094,6 +2095,7 @@ def save_artifacts(
     run_dir: Path,
     cfg: dict[str, Any],
     data: pd.DataFrame | dict[str, pd.DataFrame],
+    model: object | None = None,
     performance: BacktestResult | PortfolioPerformance,
     model_meta: dict[str, Any],
     evaluation: dict[str, Any],
@@ -2250,6 +2252,18 @@ def save_artifacts(
         artifacts["mark_to_market_returns"] = str(mtm_returns_path)
     if mtm_equity_path is not None:
         artifacts["mark_to_market_equity_curve"] = str(mtm_equity_path)
+
+    artifacts.update(
+        save_model_artifacts(
+            run_dir=run_dir,
+            model=model,
+            cfg=cfg,
+            model_meta=model_meta,
+            run_metadata=run_metadata,
+            config_hash_sha256=config_hash_sha256,
+            data_fingerprint=data_fingerprint,
+        )
+    )
 
     lab_chart_paths = _write_lab_feature_diagnostic_artifacts(
         run_dir=run_dir,
