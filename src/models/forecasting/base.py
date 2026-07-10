@@ -907,6 +907,23 @@ def train_xgboost_regressor(
     This forecaster trains XGBRegressor fold-by-fold on configured features and
     emits strict OOS future-return predictions through the shared forecasting
     pipeline.
+
+    YAML declaration::
+
+        model:
+          kind: xgboost_regressor
+          params:
+            returns_col: null
+
+    Required input columns
+    ----------------------
+    returns_col:
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
+
+    Parameters
+    ----------
+    returns_col:
+        Input dataframe column configured by ``returns_col``. Default: ``null``.
     """
     return train_forward_forecaster(
         df=df,

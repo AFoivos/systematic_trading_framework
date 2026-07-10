@@ -854,3 +854,37 @@ signals:
 - Θέλεις sizing και όχι on/off trades; χρησιμοποίησε
   `probability_conviction`, `probability_vol_adjusted`,
   `dense_return_forecast` ή `forecast_vol_adjusted`.
+## `meta_probability_side` OOS Gate Addendum
+
+`meta_probability_side` accepts an optional `pred_is_oos_col` parameter. When
+set, the signal remains flat unless that column is true. This is intended for
+stacked meta-filter workflows where the probability column is produced by a
+walk-forward classifier and must be out-of-sample before it can gate an existing
+candidate side.
+
+The signal never creates a new side. It reads `side_col`, optionally requires
+`candidate_col`, optionally requires `pred_is_oos_col`, and emits:
+
+```text
+side_col when prob_col >= threshold and all gates pass
+0 otherwise
+```
+
+Example:
+
+```yaml
+signals:
+  kind: meta_probability_side
+  params:
+    prob_col: meta_pred_prob
+    side_col: primary_candidate_side
+    candidate_col: primary_candidate
+    pred_is_oos_col: meta_pred_is_oos
+    threshold: 0.65
+    signal_col: signal_meta_filtered
+    mode: long_short
+```
+
+Leakage policy: `pred_is_oos_col` should refer to the meta-model prediction
+mask, not the primary model mask. Primary predictions must already be OOS before
+candidate construction and meta-feature construction.

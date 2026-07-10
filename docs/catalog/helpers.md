@@ -833,3 +833,34 @@ Leakage policy:
 
 - The helper does not build candidates. Callers must pass causal signal/candidate rows.
 - Targets that call it, such as `path_dependent_r`, keep non-candidates and incomplete tail rows unlabeled by default.
+## Stacked Trade-Filter Helpers
+
+`src.meta.stacked_trade_filter` builds the controlled feature matrix and
+walk-forward training loop for candidate-only meta filters.
+
+Core helpers:
+
+- `build_causal_meta_features`: adds primary forecast transforms, oriented
+  trend features, regime features, candle/path-risk features, and rolling price
+  slope/R2 trend-quality columns. Rolling transforms are trailing and causal.
+- `train_stacked_meta_filter`: trains sequential meta folds on older completed
+  candidates only. It rejects candidate rows whose primary `pred_ret` is not
+  OOS, applies purge before each meta test fold, fits preprocessing inside each
+  fold, and optionally fits sigmoid calibration on the last internal training
+  slice only.
+- `build_meta_filtered_signal`: emits `primary_candidate_side` only where
+  `meta_pred_is_oos=true`, the row is a candidate, and `meta_pred_prob` passes
+  the threshold.
+
+Output convention:
+
+```text
+meta_pred_raw_prob  raw classifier probability
+meta_pred_prob      calibrated probability when configured, otherwise raw
+meta_pred_is_oos    true only on meta test-fold candidate rows
+meta_fold           meta walk-forward fold id
+```
+
+Forbidden feature policy: target/path outcome columns such as `meta_net_r`,
+`meta_label_*`, `meta_exit_reason`, and meta prediction columns are rejected
+from the feature matrix.

@@ -13,6 +13,7 @@ def meta_probability_side_signal(
     prob_col: str = "pred_prob",
     side_col: str = "primary_side",
     candidate_col: str | None = None,
+    pred_is_oos_col: str | None = None,
     expected_value_col: str | None = None,
     signal_col: str | None = None,
     threshold: float | None = None,
@@ -36,6 +37,7 @@ def meta_probability_side_signal(
             prob_col: pred_prob
             side_col: primary_side
             candidate_col: null
+            pred_is_oos_col: null
             expected_value_col: null
             signal_col: null
             threshold: null
@@ -47,6 +49,7 @@ def meta_probability_side_signal(
             mode: long_short
             output_cols:
               - configured by candidate_col
+              - configured by pred_is_oos_col
               - configured by signal_col
     
     Required input columns
@@ -57,6 +60,8 @@ def meta_probability_side_signal(
         Input dataframe column configured by ``side_col``. Default: ``primary_side``.
     expected_value_col:
         Input dataframe column configured by ``expected_value_col``. Default: ``null``.
+    pred_is_oos_col:
+        Optional boolean OOS mask. When provided, rows with false values remain flat.
     
     Parameters
     ----------
@@ -66,6 +71,8 @@ def meta_probability_side_signal(
         Input dataframe column configured by ``side_col``. Default: ``primary_side``.
     candidate_col:
         Output dataframe column configured by ``candidate_col``. Default: ``null``.
+    pred_is_oos_col:
+        Optional boolean OOS mask column configured by ``pred_is_oos_col``. Default: ``null``.
     expected_value_col:
         Input dataframe column configured by ``expected_value_col``. Default: ``null``.
     signal_col:
@@ -91,6 +98,8 @@ def meta_probability_side_signal(
         raise KeyError(f"side_col '{side_col}' not found in DataFrame")
     if candidate_col is not None and candidate_col not in df.columns:
         raise KeyError(f"candidate_col '{candidate_col}' not found in DataFrame")
+    if pred_is_oos_col is not None and pred_is_oos_col not in df.columns:
+        raise KeyError(f"pred_is_oos_col '{pred_is_oos_col}' not found in DataFrame")
     if expected_value_col is not None and expected_value_col not in df.columns:
         raise KeyError(f"expected_value_col '{expected_value_col}' not found in DataFrame")
     if clip <= 0:
@@ -115,6 +124,8 @@ def meta_probability_side_signal(
     candidate = side.ne(0.0)
     if candidate_col is not None:
         candidate &= df[candidate_col].astype(float).fillna(0.0).ne(0.0)
+    if pred_is_oos_col is not None:
+        candidate &= df[pred_is_oos_col].fillna(False).astype(bool)
     if mode == "long_only":
         candidate &= side.gt(0.0)
     elif mode == "short_only":

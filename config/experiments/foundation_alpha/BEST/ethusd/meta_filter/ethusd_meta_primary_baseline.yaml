@@ -1,0 +1,22 @@
+experiment:
+  name: ethusd_meta_primary_baseline
+  kind: ethusd_stacked_meta_filter_diagnostic
+  role: locked_primary_baseline
+base_config: config/experiments/foundation_alpha/BEST/ethusd/BEST_ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0054_manual_barrier.yaml
+script: scripts/run_ethusd_meta_model_comparison.py
+candidate_dataset:
+  processed_dataset: data/processed/processed/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_179ecc87_trial_0054/dataset.csv
+  prediction_csv: logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_0058_20260710_111948_120452_ecc3f515/artifacts/diagnostics/prediction_distribution.csv
+  require_primary_oos: true
+meta_filter:
+  enabled: false
+  final_signal: primary_candidate_side
+  unchanged_primary_contract:
+    signal_kind: forecast_threshold
+    upper: 0.7
+    lower: -0.85
+    backtest_engine: manual_barrier
+    take_profit_r: 5.0
+    stop_loss_r: 2.0
+    max_holding_bars: 24
+    vol_col: atr_over_price_48

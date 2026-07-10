@@ -3341,7 +3341,7 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
         _non_negative_int(params.get("cooldown_bars", 0), field="signals.params.cooldown_bars")
         _non_negative_int(params.get("min_holding_bars", 0), field="signals.params.min_holding_bars")
     if signals["kind"] == "meta_probability_side":
-        for key in ("prob_col", "side_col", "candidate_col", "expected_value_col", "signal_col"):
+        for key in ("prob_col", "side_col", "candidate_col", "pred_is_oos_col", "expected_value_col", "signal_col"):
             if key in params and params[key] is not None and not isinstance(params[key], str):
                 raise ConfigValidationError(f"signals.params.{key} must be a string or null.")
         if "mode" in params and params.get("mode") is not None:
