@@ -16,6 +16,27 @@ class ExecutionStatus(BaseModel):
     files: list[dict[str, Any]]
 
 
+class ExecutionBotOption(BaseModel):
+    id: str
+    label: str
+    log_dir: str
+    resolved_log_dir: str
+    config_path: str | None = None
+    mode: str | None = None
+    state: str
+    pid: int | None = None
+    process_running: bool | None = None
+    last_heartbeat_at: str | None = None
+    modified_at: str | None = None
+    symbols: list[str]
+    has_logs: bool
+    is_default: bool
+
+
+class ExecutionBotOptionList(BaseModel):
+    options: list[ExecutionBotOption]
+
+
 class ExecutionRecordList(BaseModel):
     log_dir: str
     records: list[dict[str, Any]]
@@ -48,4 +69,11 @@ class MarketMakingSnapshot(BaseModel):
     summary: dict[str, Any]
 
 
-__all__ = ["ExecutionFeatureSnapshot", "ExecutionRecordList", "ExecutionStatus", "MarketMakingSnapshot"]
+__all__ = [
+    "ExecutionBotOption",
+    "ExecutionBotOptionList",
+    "ExecutionFeatureSnapshot",
+    "ExecutionRecordList",
+    "ExecutionStatus",
+    "MarketMakingSnapshot",
+]

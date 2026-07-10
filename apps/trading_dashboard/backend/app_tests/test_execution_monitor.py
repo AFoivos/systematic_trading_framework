@@ -66,6 +66,52 @@ def test_execution_log_dir_must_stay_under_project_logs(tmp_path: Path) -> None:
         service.status(log_dir=str(tmp_path / "elsewhere"))
 
 
+def test_execution_bot_options_merge_configs_and_existing_logs(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config" / "execution"
+    config_dir.mkdir(parents=True)
+    (config_dir / "eth_demo_trade.yaml").write_text(
+        "\n".join(
+            [
+                "execution:",
+                "  mode: demo_mt5",
+                "symbols:",
+                "  ETHUSD:",
+                "    enabled: true",
+                "logging:",
+                "  output_dir: logs/eth_demo_trade",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    now = datetime.now(timezone.utc).isoformat()
+    log_dir = tmp_path / "logs" / "eth_demo_trade"
+    log_dir.mkdir(parents=True)
+    _append_jsonl(log_dir / "account_equity.jsonl", {"logged_at": now, "equity": 100000.0})
+    (log_dir / "mt5_demo_bot.lock").write_text(
+        json.dumps(
+            {
+                "pid": 999999,
+                "execution_mode": "demo_mt5",
+                "config_path": str(config_dir / "eth_demo_trade.yaml"),
+            }
+        ),
+        encoding="utf-8",
+    )
+    stale_log_dir = tmp_path / "logs" / "old_bot"
+    stale_log_dir.mkdir(parents=True)
+    _append_jsonl(stale_log_dir / "signals.jsonl", {"asset": "SPX500", "logged_at": "2026-01-01T00:00:00+00:00"})
+
+    service = ExecutionMonitorService(paths=DashboardPaths.from_project_root(tmp_path))
+    options = service.bot_options()["options"]
+
+    assert [option["log_dir"] for option in options] == ["logs/eth_demo_trade", "logs/old_bot"]
+    assert options[0]["config_path"] == "config/execution/eth_demo_trade.yaml"
+    assert options[0]["mode"] == "demo_mt5"
+    assert options[0]["symbols"] == ["ETHUSD"]
+    assert options[0]["has_logs"] is True
+    assert options[1]["label"].startswith("old_bot")
+
+
 def test_execution_feature_snapshot_reads_asset_file(tmp_path: Path) -> None:
     log_dir = tmp_path / "logs" / "mt5_demo" / "feature_snapshots"
     log_dir.mkdir(parents=True)

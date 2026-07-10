@@ -611,6 +611,42 @@ textarea {
   background: #f6f7f9;
 }
 
+.execution-control-strip {
+  display: grid;
+  grid-template-columns: minmax(260px, 430px) minmax(0, 1fr);
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 12px;
+  border: 1px solid #d9dee5;
+  border-radius: 8px;
+  padding: 10px;
+  background: #ffffff;
+}
+
+.execution-bot-select {
+  margin-bottom: 0;
+}
+
+.execution-bot-meta {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: #667085;
+  font-size: 11px;
+  line-height: 1.25;
+  font-weight: 650;
+}
+
+.execution-bot-meta span,
+.execution-bot-meta small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.execution-bot-meta span {
+  color: #1f2933;
+}
+
 .execution-health-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(160px, 1fr));
@@ -1182,6 +1218,10 @@ textarea {
 
   .execution-monitor {
     padding: 10px;
+  }
+
+  .execution-control-strip {
+    grid-template-columns: 1fr;
   }
 
   .execution-health-strip {

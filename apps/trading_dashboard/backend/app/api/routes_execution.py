@@ -3,11 +3,26 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.api._errors import raise_http_error
-from app.schemas.execution import ExecutionFeatureSnapshot, ExecutionRecordList, ExecutionStatus, MarketMakingSnapshot
+from app.schemas.execution import (
+    ExecutionBotOptionList,
+    ExecutionFeatureSnapshot,
+    ExecutionRecordList,
+    ExecutionStatus,
+    MarketMakingSnapshot,
+)
 from app.services.execution_monitor import ExecutionMonitorService
 
 
 router = APIRouter()
+
+
+@router.get("/execution/bots", response_model=ExecutionBotOptionList)
+def get_execution_bots() -> dict:
+    try:
+        return ExecutionMonitorService().bot_options()
+    except Exception as exc:
+        raise_http_error(exc)
+        return {"options": []}
 
 
 @router.get("/execution/status", response_model=ExecutionStatus)

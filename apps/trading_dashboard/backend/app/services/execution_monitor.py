@@ -10,6 +10,8 @@ import os
 from pathlib import Path
 from typing import Any, Iterable
 
+import yaml
+
 from app.core.paths import DashboardPaths, get_paths
 from app.services.market_making_runs import latest_market_making_run, market_making_root
 
@@ -30,6 +32,22 @@ STREAMS = (
 class ExecutionMonitorService:
     def __init__(self, paths: DashboardPaths | None = None) -> None:
         self.paths = paths or get_paths()
+
+    def bot_options(self) -> dict[str, Any]:
+        logs_root = (self.paths.project_root / "logs").resolve()
+        config_entries = self._execution_config_entries()
+        candidates: dict[Path, list[dict[str, Any]]] = {}
+
+        for entry in config_entries:
+            log_dir = self._resolve_log_dir(str(entry["log_dir"]))
+            candidates.setdefault(log_dir, []).append(entry)
+
+        for log_dir in self._execution_log_dirs(logs_root):
+            candidates.setdefault(log_dir, [])
+
+        options = [self._bot_option(log_dir, entries) for log_dir, entries in candidates.items()]
+        options.sort(key=_bot_option_sort_key)
+        return {"options": options}
 
     def status(self, *, log_dir: str | None = None) -> dict[str, Any]:
         resolved = self._resolve_log_dir(log_dir)
@@ -235,6 +253,137 @@ class ExecutionMonitorService:
             raise ValueError("Execution log_dir must resolve under the project logs directory.") from exc
         return candidate
 
+    def _execution_config_entries(self) -> list[dict[str, Any]]:
+        config_root = self.paths.project_root / "config" / "execution"
+        if not config_root.exists():
+            return []
+
+        entries: list[dict[str, Any]] = []
+        for path in sorted(config_root.glob("*.y*ml")):
+            payload = self._read_yaml_mapping(path)
+            if not payload:
+                continue
+            logging_cfg = dict(payload.get("logging", {}) or {})
+            log_dir = logging_cfg.get("output_dir")
+            if not log_dir:
+                continue
+            try:
+                resolved_log_dir = self._resolve_log_dir(str(log_dir))
+            except ValueError:
+                continue
+            entries.append(
+                {
+                    "config_path": _relative_path(path, self.paths.project_root),
+                    "config_name": path.stem,
+                    "log_dir": _relative_path(resolved_log_dir, self.paths.project_root),
+                    "mode": str(dict(payload.get("execution", {}) or {}).get("mode") or ""),
+                    "symbols": _enabled_symbols(payload.get("symbols")),
+                }
+            )
+        return entries
+
+    def _execution_log_dirs(self, logs_root: Path) -> set[Path]:
+        if not logs_root.exists():
+            return set()
+
+        candidates: set[Path] = set()
+        marker_names = {
+            "account_equity.jsonl",
+            "decision_trace.jsonl",
+            "signals.jsonl",
+            "orders.jsonl",
+            "fills.jsonl",
+            "rejected_orders.jsonl",
+            "errors.jsonl",
+            "mt5_demo_bot.lock",
+            "bot.log",
+            "command.txt",
+        }
+        for child in logs_root.iterdir():
+            if child.is_dir() and any((child / marker).exists() for marker in marker_names):
+                candidates.add(child.resolve())
+        return candidates
+
+    def _bot_option(self, log_dir: Path, config_entries: list[dict[str, Any]]) -> dict[str, Any]:
+        account_tail = self._read_jsonl_tail(log_dir / "account_equity.jsonl", limit=3)
+        decision_tail = self._read_jsonl_tail(log_dir / "decision_trace.jsonl", limit=50)
+        lock = self._read_json(log_dir / "mt5_demo_bot.lock")
+        latest_account = account_tail[-1] if account_tail else None
+        health = self._health(
+            latest_account=latest_account,
+            lock=lock,
+            poll_seconds=_latest_poll_seconds(decision_tail),
+        )
+        primary_config = self._primary_config_entry(config_entries, lock)
+        relative_log_dir = _relative_path(log_dir, self.paths.project_root)
+        mode = str(health.get("execution_mode") or primary_config.get("mode") or "") or None
+        symbols = sorted(
+            {
+                symbol
+                for entry in config_entries
+                for symbol in entry.get("symbols", [])
+            }
+        )
+        if not symbols:
+            symbols = sorted(
+                {
+                    str(record.get("asset") or "").strip()
+                    for record in decision_tail
+                    if str(record.get("asset") or "").strip()
+                }
+            )
+        modified_at = self._latest_modified_at(log_dir)
+        raw_config_path = str(health.get("config_path") or primary_config.get("config_path") or "")
+        config_path = (
+            _relative_path(self.paths.resolve_project_path(raw_config_path), self.paths.project_root)
+            if raw_config_path
+            else None
+        )
+        return {
+            "id": relative_log_dir,
+            "label": _bot_label(
+                config_name=str(primary_config.get("config_name") or Path(relative_log_dir).name),
+                log_dir=relative_log_dir,
+                mode=mode,
+                state=str(health.get("state") or "no_data"),
+            ),
+            "log_dir": relative_log_dir,
+            "resolved_log_dir": str(log_dir),
+            "config_path": config_path,
+            "mode": mode,
+            "state": str(health.get("state") or "no_data"),
+            "pid": health.get("pid"),
+            "process_running": health.get("process_running"),
+            "last_heartbeat_at": health.get("last_heartbeat_at"),
+            "modified_at": modified_at,
+            "symbols": symbols,
+            "has_logs": any(file_info["exists"] for file_info in self._files(log_dir)),
+            "is_default": relative_log_dir.replace("\\", "/") == DEFAULT_LOG_DIR,
+        }
+
+    def _primary_config_entry(self, entries: list[dict[str, Any]], lock: dict[str, Any]) -> dict[str, Any]:
+        locked_path = str(lock.get("config_path") or "")
+        if locked_path:
+            for entry in entries:
+                config_path = str(entry.get("config_path") or "")
+                if config_path and (
+                    locked_path.endswith(config_path.replace("/", "\\"))
+                    or locked_path.endswith(config_path.replace("\\", "/"))
+                    or locked_path.endswith(config_path)
+                ):
+                    return entry
+        return entries[0] if entries else {}
+
+    def _latest_modified_at(self, log_dir: Path) -> str | None:
+        timestamps: list[float] = []
+        if log_dir.exists():
+            timestamps.append(log_dir.stat().st_mtime)
+        for stream in (*STREAMS, "mt5_demo_bot.lock", "bot.log", "command.txt"):
+            path = log_dir / (stream if "." in stream else f"{stream}.jsonl")
+            if path.exists():
+                timestamps.append(path.stat().st_mtime)
+        return _iso_from_timestamp(max(timestamps)) if timestamps else None
+
     def _resolve_market_making_dir(self, raw_run_dir: str | None) -> Path:
         if raw_run_dir is None:
             latest = latest_market_making_run(self.paths)
@@ -346,6 +495,14 @@ class ExecutionMonitorService:
         except OSError:
             return None
         return text or None
+
+    @staticmethod
+    def _read_yaml_mapping(path: Path) -> dict[str, Any]:
+        try:
+            payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError):
+            return {}
+        return payload if isinstance(payload, dict) else {}
 
     @staticmethod
     def _read_csv_records(path: Path) -> list[dict[str, str]]:
@@ -463,6 +620,44 @@ def _latest_poll_seconds(records: list[dict[str, Any]]) -> int | None:
         if value is not None:
             return value
     return None
+
+
+def _enabled_symbols(raw_symbols: Any) -> list[str]:
+    if not isinstance(raw_symbols, dict):
+        return []
+    symbols: list[str] = []
+    for symbol, payload in raw_symbols.items():
+        if isinstance(payload, dict) and payload.get("enabled") is False:
+            continue
+        normalized = str(symbol).strip()
+        if normalized:
+            symbols.append(normalized)
+    return sorted(symbols)
+
+
+def _relative_path(path: Path, root: Path) -> str:
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return str(resolved)
+
+
+def _bot_label(*, config_name: str, log_dir: str, mode: str | None, state: str) -> str:
+    suffix = " / ".join(part for part in (mode, state) if part)
+    return f"{config_name} ({suffix})" if suffix else f"{config_name} ({log_dir})"
+
+
+def _bot_option_sort_key(option: dict[str, Any]) -> tuple[int, int, str, str]:
+    process_rank = 0 if option.get("process_running") is True else 1
+    state_order = {"running": 0, "stale": 1, "no_data": 2}
+    state_rank = state_order.get(str(option.get("state") or ""), 3)
+    latest = str(option.get("last_heartbeat_at") or option.get("modified_at") or "")
+    return (process_rank, state_rank, _reverse_iso_key(latest), str(option.get("label") or ""))
+
+
+def _reverse_iso_key(value: str) -> str:
+    return "".join(chr(255 - ord(char)) for char in value)
 
 
 def _parse_time(value: str | None) -> datetime | None:

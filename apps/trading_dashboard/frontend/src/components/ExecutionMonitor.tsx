@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import type {
   ExecutionAssetSummary,
+  ExecutionBotOption,
   ExecutionFeatureSnapshot,
   ExecutionStatus,
   JsonRecord
@@ -9,6 +10,7 @@ import type {
 import { ExecutionChartWorkspace } from "./ExecutionChartWorkspace";
 
 const POLL_MS = 15_000;
+const SELECTED_BOT_STORAGE_KEY = "trading_dashboard.execution.selected_log_dir.v1";
 
 function asRecord(value: unknown): JsonRecord {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : {};
@@ -180,7 +182,51 @@ function EventsList({ records }: { records: JsonRecord[] }) {
   );
 }
 
+function BotSourceSelector({
+  options,
+  selectedLogDir,
+  statusLogDir,
+  onSelect
+}: {
+  options: ExecutionBotOption[];
+  selectedLogDir: string;
+  statusLogDir?: string;
+  onSelect: (logDir: string) => void;
+}) {
+  const selectedOption = options.find((option) => option.log_dir === selectedLogDir);
+  return (
+    <section className="execution-control-strip">
+      <label className="execution-bot-select field">
+        <span>Bot source</span>
+        <select value={selectedLogDir} onChange={(event) => onSelect(event.target.value)}>
+          {options.length === 0 ? <option value="">logs/mt5_demo</option> : null}
+          {options.map((option) => (
+            <option key={option.id} value={option.log_dir}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="execution-bot-meta">
+        <span>{selectedOption?.log_dir || statusLogDir || "logs/mt5_demo"}</span>
+        <small>
+          mode {selectedOption?.mode || "n/a"} · pid {formatValue(selectedOption?.pid)} · process{" "}
+          {formatValue(selectedOption?.process_running)}
+        </small>
+      </div>
+    </section>
+  );
+}
+
 export function ExecutionMonitor() {
+  const [botOptions, setBotOptions] = useState<ExecutionBotOption[]>([]);
+  const [selectedLogDir, setSelectedLogDir] = useState(() => {
+    try {
+      return window.localStorage.getItem(SELECTED_BOT_STORAGE_KEY) || "";
+    } catch {
+      return "";
+    }
+  });
   const [status, setStatus] = useState<ExecutionStatus | null>(null);
   const [events, setEvents] = useState<JsonRecord[]>([]);
   const [decisions, setDecisions] = useState<JsonRecord[]>([]);
@@ -193,17 +239,47 @@ export function ExecutionMonitor() {
     let cancelled = false;
     const load = () => {
       setLoading(true);
-      Promise.all([api.executionStatus(), api.executionEvents({ limit: 100 })])
-        .then(([statusPayload, eventPayload]) => {
+      api.executionBots()
+        .then((botPayload) => {
           if (cancelled) {
             return;
           }
+          const options = botPayload.options;
+          setBotOptions(options);
+          const nextLogDir =
+            selectedLogDir && options.some((option) => option.log_dir === selectedLogDir)
+              ? selectedLogDir
+              : options[0]?.log_dir || selectedLogDir;
+          if (nextLogDir && nextLogDir !== selectedLogDir) {
+            setSelectedLogDir(nextLogDir);
+            try {
+              window.localStorage.setItem(SELECTED_BOT_STORAGE_KEY, nextLogDir);
+            } catch {
+              // localStorage can be unavailable in restricted browser contexts.
+            }
+          }
+          return Promise.all([
+            api.executionStatus({ log_dir: nextLogDir }),
+            api.executionEvents({ log_dir: nextLogDir, limit: 100 })
+          ]);
+        })
+        .then((payloads) => {
+          if (cancelled || !payloads) {
+            return;
+          }
+          const [statusPayload, eventPayload] = payloads;
           setStatus(statusPayload);
           setEvents(eventPayload.records);
           setError(null);
-          if (!selectedAsset && statusPayload.latest_by_asset.length > 0) {
-            setSelectedAsset(statusPayload.latest_by_asset[0].asset);
-          }
+          setSelectedAsset((currentAsset) => {
+            if (
+              currentAsset &&
+              statusPayload.latest_by_asset.some((asset) => asset.asset === currentAsset)
+            ) {
+              return currentAsset;
+            }
+            return statusPayload.latest_by_asset[0]?.asset || "";
+          });
         })
         .catch((nextError: unknown) => {
           if (!cancelled) {
@@ -222,7 +298,7 @@ export function ExecutionMonitor() {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [selectedAsset]);
+  }, [selectedLogDir]);
 
   useEffect(() => {
     if (!selectedAsset) {
@@ -232,8 +308,8 @@ export function ExecutionMonitor() {
     }
     let cancelled = false;
     Promise.all([
-      api.executionDecisions({ asset: selectedAsset, limit: 80 }),
-      api.executionFeatures(selectedAsset)
+      api.executionDecisions({ log_dir: selectedLogDir, asset: selectedAsset, limit: 80 }),
+      api.executionFeatures(selectedAsset, { log_dir: selectedLogDir })
     ])
       .then(([decisionPayload, featurePayload]) => {
         if (!cancelled) {
@@ -250,7 +326,19 @@ export function ExecutionMonitor() {
     return () => {
       cancelled = true;
     };
-  }, [selectedAsset, status?.health?.last_heartbeat_at]);
+  }, [selectedAsset, selectedLogDir, status?.health?.last_heartbeat_at]);
+
+  const handleBotSelect = (logDir: string) => {
+    setSelectedLogDir(logDir);
+    setSelectedAsset("");
+    setDecisions([]);
+    setFeatureSnapshot(null);
+    try {
+      window.localStorage.setItem(SELECTED_BOT_STORAGE_KEY, logDir);
+    } catch {
+      // localStorage can be unavailable in restricted browser contexts.
+    }
+  };
 
   const health = asRecord(status?.health);
   const account = asRecord(status?.account);
@@ -273,6 +361,12 @@ export function ExecutionMonitor() {
     <main className="execution-monitor">
       {loading ? <div className="loading-banner">Refreshing execution monitor</div> : null}
       {error ? <div className="error-banner">{error}</div> : null}
+      <BotSourceSelector
+        options={botOptions}
+        selectedLogDir={selectedLogDir}
+        statusLogDir={status?.log_dir}
+        onSelect={handleBotSelect}
+      />
       <section className="execution-health-strip">
         <div className={`execution-health-card ${stateClass(health.state)}`}>
           <span>Bot</span>
@@ -300,7 +394,7 @@ export function ExecutionMonitor() {
         <section className="execution-section execution-main-section">
           <div className="execution-section-header">
             <h2>Symbols</h2>
-            <span>{status?.log_dir || "logs/mt5_demo"}</span>
+            <span>{selectedLogDir || status?.log_dir || "logs/mt5_demo"}</span>
           </div>
           <AssetGrid assets={status?.latest_by_asset ?? []} selectedAsset={selectedAsset} onSelect={setSelectedAsset} />
         </section>

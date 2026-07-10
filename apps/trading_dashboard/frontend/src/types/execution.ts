@@ -25,6 +25,27 @@ export interface ExecutionStatus {
   files: JsonRecord[];
 }
 
+export interface ExecutionBotOption {
+  id: string;
+  label: string;
+  log_dir: string;
+  resolved_log_dir: string;
+  config_path?: string | null;
+  mode?: string | null;
+  state: string;
+  pid?: number | null;
+  process_running?: boolean | null;
+  last_heartbeat_at?: string | null;
+  modified_at?: string | null;
+  symbols: string[];
+  has_logs: boolean;
+  is_default: boolean;
+}
+
+export interface ExecutionBotOptionList {
+  options: ExecutionBotOption[];
+}
+
 export interface ExecutionRecordList {
   log_dir: string;
   records: JsonRecord[];

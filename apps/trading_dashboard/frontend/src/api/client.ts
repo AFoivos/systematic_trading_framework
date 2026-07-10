@@ -8,7 +8,13 @@ import type {
   TradeRecord,
   TimeValuePoint
 } from "../types/market";
-import type { ExecutionFeatureSnapshot, ExecutionRecordList, ExecutionStatus, MarketMakingSnapshot } from "../types/execution";
+import type {
+  ExecutionBotOptionList,
+  ExecutionFeatureSnapshot,
+  ExecutionRecordList,
+  ExecutionStatus,
+  MarketMakingSnapshot
+} from "../types/execution";
 import type { DashboardLayout, LayoutSummary } from "../types/visualization";
 import type { ExperimentDetail, ExperimentSummary } from "../types/experiment";
 import type { BuilderDefinition, TransformSeriesRequest, TransformSeriesResponse } from "../types/transforms";
@@ -76,6 +82,7 @@ export const api = {
   experiment: (runId: string) => request<ExperimentDetail>(`/api/experiments/${encodeURIComponent(runId)}`),
   trades: (runId: string, params?: Params) => request<TradeRecord[]>(`/api/backtests/${encodeURIComponent(runId)}/trades`, params),
   equity: (runId: string) => request<TimeValuePoint[]>(`/api/backtests/${encodeURIComponent(runId)}/equity`),
+  executionBots: () => request<ExecutionBotOptionList>("/api/execution/bots"),
   executionStatus: (params?: Params) => request<ExecutionStatus>("/api/execution/status", params),
   executionDecisions: (params?: Params) => request<ExecutionRecordList>("/api/execution/decisions", params),
   executionEvents: (params?: Params) => request<ExecutionRecordList>("/api/execution/events", params),

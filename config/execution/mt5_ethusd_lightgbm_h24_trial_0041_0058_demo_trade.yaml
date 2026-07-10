@@ -1,5 +1,5 @@
 execution:
-  mode: dry_run
+  mode: demo_mt5
   mt5:
     login: 1513950005
     password: Xn1$N$9?3
@@ -38,10 +38,10 @@ risk:
   demo_only: true
 
 safety:
-  dry_run_default: true
+  dry_run_default: false
   require_demo_account: true
   kill_switch_path: STOP_TRADING
 
 logging:
-  output_dir: logs/mt5_ethusd_lightgbm_h24_trial_0041_0058
+  output_dir: logs/mt5_ethusd_lightgbm_h24_trial_0041_0058_demo_trade
   feature_snapshot_rows: 300
