@@ -12,7 +12,12 @@ from src.execution.mt5_connector import (
     MT5CredentialsError,
     MT5TradingDisabledError,
 )
-from src.execution.mt5_bot_runner import SingleInstanceLock, SingleInstanceLockError, _feature_snapshot_payload
+from src.execution.mt5_bot_runner import (
+    SingleInstanceLock,
+    SingleInstanceLockError,
+    _feature_snapshot_payload,
+    _order_side_for_signal,
+)
 from src.execution.mt5_order_manager import MT5OrderManager, TradeParameters
 from src.execution.mt5_position_manager import MT5PositionManager
 from src.execution.mt5_risk_manager import MT5RiskManager, RiskConfig, calculate_position_size
@@ -239,6 +244,61 @@ def test_demo_mt5_mode_calls_order_send_when_all_guards_pass() -> None:
     assert result.request["side"] == "buy"
 
 
+def test_sell_order_rejected_when_short_trading_disabled() -> None:
+    connector = FakeConnector()
+    order_manager = _order_manager(connector, dry_run=False, execution_mode="demo_mt5")
+
+    result = order_manager.place_market_order(
+        framework_symbol="SPX500",
+        mt5_symbol="US500.cash",
+        side="sell",
+        latest_row=pd.Series({"close": 100.0, "atr_14": 1.0}),
+        account_info=SimpleNamespace(equity=10_000.0),
+        trade_params=TradeParameters(stop_loss_r=3.0, take_profit_r=4.0, volatility_col="atr_14"),
+        now_utc=NOW,
+    )
+
+    assert result.status == "rejected"
+    assert result.reason == "short_trading_disabled"
+    assert connector.order_send_calls == 0
+
+
+def test_demo_mt5_mode_calls_order_send_for_sell_when_short_enabled() -> None:
+    connector = FakeConnector(bid=99.8, ask=100.2)
+    order_manager = _order_manager(
+        connector,
+        dry_run=False,
+        execution_mode="demo_mt5",
+        allow_short=True,
+    )
+
+    result = order_manager.place_market_order(
+        framework_symbol="SPX500",
+        mt5_symbol="US500.cash",
+        side="sell",
+        latest_row=pd.Series({"close": 100.0, "atr_14": 1.0}),
+        account_info=SimpleNamespace(equity=10_000.0),
+        trade_params=TradeParameters(stop_loss_r=3.0, take_profit_r=4.0, volatility_col="atr_14"),
+        now_utc=NOW,
+    )
+
+    assert result.status == "filled"
+    assert result.sent is True
+    assert connector.order_send_calls == 1
+    assert result.request is not None
+    assert result.request["symbol"] == "US500.cash"
+    assert result.request["side"] == "sell"
+    assert result.request["price"] == pytest.approx(99.8)
+    assert result.request["sl"] == pytest.approx(102.8)
+    assert result.request["tp"] == pytest.approx(95.8)
+
+
+def test_mt5_bot_maps_negative_signal_to_sell_order_side() -> None:
+    assert _order_side_for_signal(1) == "buy"
+    assert _order_side_for_signal(-1) == "sell"
+    assert _order_side_for_signal(0) is None
+
+
 def test_missing_mt5_credentials_fail_safely(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("MT5_LOGIN", raising=False)
     monkeypatch.delenv("MT5_PASSWORD", raising=False)
@@ -457,6 +517,7 @@ def _order_manager(
     execution_mode: str,
     max_spread_points: float = 50.0,
     max_spread_points_by_symbol: dict[str, float] | None = None,
+    allow_short: bool = False,
 ) -> MT5OrderManager:
     position_manager = MT5PositionManager(connector, magic_number=MAGIC)
     risk_manager = MT5RiskManager(
@@ -464,6 +525,7 @@ def _order_manager(
             max_spread_points=max_spread_points,
             max_spread_points_by_symbol=max_spread_points_by_symbol or {},
             disable_weekend_trading=False,
+            allow_short=allow_short,
         ),
         initial_equity=10_000.0,
         daily_start_equity=10_000.0,

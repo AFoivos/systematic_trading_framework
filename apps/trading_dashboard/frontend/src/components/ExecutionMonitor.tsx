@@ -210,8 +210,8 @@ function BotSourceSelector({
       <div className="execution-bot-meta">
         <span>{selectedOption?.log_dir || statusLogDir || "logs/mt5_demo"}</span>
         <small>
-          mode {selectedOption?.mode || "n/a"} · pid {formatValue(selectedOption?.pid)} · process{" "}
-          {formatValue(selectedOption?.process_running)}
+          mode {selectedOption?.mode || "n/a"} · state {selectedOption?.state || "n/a"} · heartbeat{" "}
+          {formatTime(selectedOption?.last_heartbeat_at)}
         </small>
       </div>
     </section>

@@ -271,6 +271,8 @@ class ExecutionMonitorService:
                 resolved_log_dir = self._resolve_log_dir(str(log_dir))
             except ValueError:
                 continue
+            if not _is_bot_config(payload, resolved_log_dir):
+                continue
             entries.append(
                 {
                     "config_path": _relative_path(path, self.paths.project_root),
@@ -334,11 +336,7 @@ class ExecutionMonitorService:
             )
         modified_at = self._latest_modified_at(log_dir)
         raw_config_path = str(health.get("config_path") or primary_config.get("config_path") or "")
-        config_path = (
-            _relative_path(self.paths.resolve_project_path(raw_config_path), self.paths.project_root)
-            if raw_config_path
-            else None
-        )
+        config_path = _project_relative_display_path(raw_config_path, self.paths.project_root) if raw_config_path else None
         return {
             "id": relative_log_dir,
             "label": _bot_label(
@@ -633,6 +631,31 @@ def _enabled_symbols(raw_symbols: Any) -> list[str]:
         if normalized:
             symbols.append(normalized)
     return sorted(symbols)
+
+
+def _is_bot_config(payload: dict[str, Any], resolved_log_dir: Path) -> bool:
+    mode = str(dict(payload.get("execution", {}) or {}).get("mode") or "").lower()
+    log_dir = str(resolved_log_dir).replace("\\", "/").lower()
+    if "mt5" in mode or "mt5" in log_dir:
+        return True
+    marker_names = {"account_equity.jsonl", "decision_trace.jsonl", "signals.jsonl", "mt5_demo_bot.lock"}
+    return any((resolved_log_dir / marker).exists() for marker in marker_names)
+
+
+def _project_relative_display_path(raw_path: str, root: Path) -> str:
+    normalized = raw_path.replace("\\", "/").strip()
+    path = Path(raw_path)
+    if path.is_absolute():
+        try:
+            return _relative_path(path, root)
+        except (OSError, ValueError):
+            pass
+    for marker in ("/workspace/", "systematic_trading_framework/"):
+        if marker in normalized:
+            return normalized.split(marker, 1)[1]
+    if normalized.startswith("./"):
+        return normalized[2:]
+    return normalized
 
 
 def _relative_path(path: Path, root: Path) -> str:

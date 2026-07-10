@@ -274,7 +274,8 @@ class MT5DemoBot:
             self._last_processed_bar[framework_symbol] = latest_bar
             trade_params, trade_params_error = self._safe_trade_params_for_asset(framework_symbol)
 
-            if signal_side == 1:
+            order_side = _order_side_for_signal(signal_side)
+            if order_side is not None:
                 if trade_params is None:
                     result = OrderResult(
                         "rejected",
@@ -293,14 +294,14 @@ class MT5DemoBot:
                         signal_side=signal_side,
                         trade_params=trade_params,
                         trade_params_error=trade_params_error,
-                        order_action="buy",
+                        order_action=order_side,
                         order_result=result,
                     )
                     return
                 result = self.order_manager.place_market_order(
                     framework_symbol=framework_symbol,
                     mt5_symbol=mt5_symbol,
-                    side="buy",
+                    side=order_side,
                     latest_row=latest,
                     account_info=account,
                     trade_params=trade_params,
@@ -318,34 +319,8 @@ class MT5DemoBot:
                     signal_side=signal_side,
                     trade_params=trade_params,
                     trade_params_error=trade_params_error,
-                    order_action="buy",
+                    order_action=order_side,
                     order_result=result,
-                )
-            elif signal_side < 0:
-                self.event_logger.write(
-                    "rejected_orders",
-                    {
-                        "asset": framework_symbol,
-                        "mt5_symbol": mt5_symbol,
-                        "bar_time": latest_bar.isoformat(),
-                        "reason": "short_signals_ignored",
-                        "signal_side": signal_side,
-                    },
-                )
-                self._log_decision_trace(
-                    framework_symbol=framework_symbol,
-                    mt5_symbol=mt5_symbol,
-                    latest_bar=latest_bar,
-                    candles=candles,
-                    signal_frame=signal_frame,
-                    latest=latest,
-                    signal_col=signal_col,
-                    signal_side=signal_side,
-                    trade_params=trade_params,
-                    trade_params_error=trade_params_error,
-                    order_action="short_ignored",
-                    order_result=None,
-                    order_reason="short_signals_ignored",
                 )
             else:
                 self._log_decision_trace(
@@ -792,6 +767,14 @@ def _series_value(row: pd.Series, column: str | None) -> Any:
 
 def _safe_filename(value: str) -> str:
     return "".join(char if char.isalnum() or char in {"-", "_"} else "_" for char in str(value))
+
+
+def _order_side_for_signal(signal_side: int) -> str | None:
+    if int(signal_side) > 0:
+        return "buy"
+    if int(signal_side) < 0:
+        return "sell"
+    return None
 
 
 def build_arg_parser() -> argparse.ArgumentParser:

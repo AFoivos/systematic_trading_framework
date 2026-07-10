@@ -21,6 +21,9 @@ from app.api import (
 from app.core.config import get_settings
 
 
+FRONTEND_INDEX_HEADERS = {"Cache-Control": "no-cache"}
+
+
 def _frontend_index_path(frontend_dist_root: Path) -> Path | None:
     index_path = frontend_dist_root / "index.html"
     return index_path if index_path.exists() else None
@@ -46,14 +49,15 @@ def _configure_frontend_routes(app: FastAPI) -> None:
 
     @app.get("/", include_in_schema=False)
     def frontend_index() -> FileResponse:
-        return FileResponse(index_path)
+        return FileResponse(index_path, headers=FRONTEND_INDEX_HEADERS)
 
     @app.get("/{full_path:path}", include_in_schema=False)
     def frontend_catchall(full_path: str) -> FileResponse:
         resolved = _resolve_frontend_asset(frontend_dist_root, full_path)
         if resolved is None:
-            return FileResponse(index_path)
-        return FileResponse(resolved)
+            return FileResponse(index_path, headers=FRONTEND_INDEX_HEADERS)
+        headers = FRONTEND_INDEX_HEADERS if resolved == index_path else None
+        return FileResponse(resolved, headers=headers)
 
 
 def create_app() -> FastAPI:
