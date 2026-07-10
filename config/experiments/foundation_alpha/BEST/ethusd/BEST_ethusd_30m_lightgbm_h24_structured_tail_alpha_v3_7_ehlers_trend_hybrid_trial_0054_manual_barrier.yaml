@@ -491,8 +491,8 @@ backtest:
   high_col: high
   low_col: low
   close_col: close
-  take_profit_r: 4.0
-  stop_loss_r: 1.5
+  take_profit_r: 5.0
+  stop_loss_r: 2.0
   volatility_col: null
   entry_price_mode: null
   profit_barrier_r: null
