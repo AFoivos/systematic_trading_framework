@@ -51,6 +51,15 @@ from src.src_data.storage import asset_frames_to_long_frame
 LoadAssetFramesFn = Callable[[dict[str, object]], tuple[dict[str, pd.DataFrame], dict[str, object]]]
 SaveProcessedFn = Callable[..., dict[str, object] | None]
 _RUN_DIR_TZ = ZoneInfo("Europe/Athens")
+_POST_MODEL_TARGET_KINDS = {"path_dependent_r"}
+
+
+def _flatten_target_kind(target_cfg: dict[str, object]) -> str:
+    cfg = dict(target_cfg or {})
+    params = cfg.pop("params", None)
+    if isinstance(params, dict):
+        cfg.update(params)
+    return str(cfg.get("kind", "forward_return"))
 
 
 def _run_dir_timestamp(now: datetime | None = None) -> str:
@@ -195,12 +204,18 @@ def run_experiment_pipeline(
 
         target_cfg = dict(cfg.get("target", {}) or {})
         target_model_cfg = dict(model_cfg)
+        post_model_target_layer = False
         if target_cfg:
-            if str(target_model_cfg.get("kind", "none")) != "none":
+            target_kind = _flatten_target_kind(target_cfg)
+            if str(target_model_cfg.get("kind", "none")) != "none" and target_kind in _POST_MODEL_TARGET_KINDS:
+                target_model_cfg = {"kind": "none", "target": target_cfg}
+                post_model_target_layer = True
+            elif str(target_model_cfg.get("kind", "none")) != "none":
                 raise ValueError("Top-level target diagnostics require model.kind='none'.")
-            if target_model_cfg.get("target") not in (None, {}):
+            elif target_model_cfg.get("target") not in (None, {}):
                 raise ValueError("Specify either top-level target or model.target, not both.")
-            target_model_cfg["target"] = target_cfg
+            else:
+                target_model_cfg["target"] = target_cfg
 
         target_asset_frames, target_only_meta = apply_post_signal_target_to_assets(
             asset_frames,
@@ -210,7 +225,15 @@ def run_experiment_pipeline(
         if target_only_meta:
             previous_asset_frames = asset_frames
             asset_frames = target_asset_frames
-            model_meta = dict(model_meta or {}) | target_only_meta
+            if post_model_target_layer:
+                target_layer_meta = dict(target_only_meta.get("target", {}) or {})
+                model_meta = dict(model_meta or {})
+                model_meta["post_model_target"] = target_layer_meta
+                model_meta["post_model_label_distribution"] = dict(
+                    target_only_meta.get("label_distribution", {}) or {}
+                )
+            else:
+                model_meta = dict(model_meta or {}) | target_only_meta
             _record_stage_tail(
                 traces=stage_tails,
                 stage="target_applied",

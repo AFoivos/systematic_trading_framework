@@ -339,6 +339,46 @@ prediction. In-sample probability μέσα σε trading signal είναι leakag
   ξεπερνά το trade threshold και δίνει long. Forecast `0.0004` μένει flat γιατί
   είναι μικρό σε σχέση με costs και estimation error.
 
+### `forecast_threshold_candidate`
+
+What it measures:
+
+- The same discrete forecast-threshold signal as `forecast_threshold`.
+- OOS-only candidate metadata for downstream path-dependent target construction.
+
+Outputs:
+
+- Signal output from `signal_col`, for example `signal_structured_tail`.
+- `primary_candidate`: `1` only when the row is OOS, thresholded, and all activation filters pass.
+- `primary_candidate_side`: `+1` for long candidates, `-1` for short candidates, `0` otherwise.
+- `primary_candidate_strength`: `abs(pred_ret)` on candidate rows, `0` otherwise.
+- `primary_candidate_threshold_distance`: `pred_ret - upper` for long candidates and `abs(pred_ret) - abs(lower)` for short candidates.
+
+Leakage policy:
+
+- `pred_is_oos_col` is required by default.
+- In-sample predictions never create candidates even if `pred_ret` crosses the forecast threshold.
+- Activation filters are evaluated on already-materialized point-in-time feature columns.
+
+Minimal YAML:
+
+```yaml
+signals:
+  kind: forecast_threshold_candidate
+  params:
+    forecast_col: pred_ret
+    pred_is_oos_col: pred_is_oos
+    signal_col: signal_structured_tail
+    upper: 0.7
+    lower: -0.85
+    mode: long_short
+    activation_filters:
+      - {col: atr_pct_rank_192, op: ge, value: 0.25}
+      - {col: atr_pct_rank_192, op: le, value: 0.85}
+      - {col: range_to_atr, op: ge, value: 0.9}
+      - {col: bollinger_bandwidth_rank_192, op: ge, value: 0.4}
+```
+
 ### `forecast_vol_adjusted`
 
 Τι μετρά:

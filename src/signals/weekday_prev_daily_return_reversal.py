@@ -47,6 +47,42 @@ def weekday_prev_daily_return_reversal_signal(
     The signal is causal at intraday timestamp ``t``: the daily return mapped to
     each row is the previous completed local trading day's close-to-close return.
     The framework backtester then enters on the next bar open.
+
+    YAML declaration::
+
+        signals:
+          kind: weekday_prev_daily_return_reversal
+          params:
+            close_col: close
+            timestamp_col: timestamp
+            timezone_input: UTC
+            timezone: America/New_York
+            weekday: 3
+            signal_hour: 9
+            signal_minute: 0
+            prev_daily_return_max: -0.0006369942365362478
+            side: 1.0
+            signal_col: signal_side
+            candidate_col: signal_candidate
+            prev_daily_return_col: prev_daily_return
+            local_weekday_col: local_weekday
+            local_hour_col: local_hour
+
+    Required input columns
+    ----------------------
+    close_col:
+        Intraday close price used to build completed local daily returns.
+    timestamp_col:
+        Timestamp column, or the dataframe index when the column is absent.
+
+    Parameters
+    ----------
+    timezone_input, timezone:
+        Source and local timezone used for day and signal-time boundaries.
+    weekday, signal_hour, signal_minute:
+        Local calendar trigger for candidate rows.
+    prev_daily_return_max:
+        Maximum previous completed daily return allowed for the reversal setup.
     """
     if close_col not in df.columns:
         raise KeyError(f"Missing close column for weekday_prev_daily_return_reversal: {close_col}")

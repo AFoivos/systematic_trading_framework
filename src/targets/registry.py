@@ -11,6 +11,7 @@ from .candidate_expected_r import build_candidate_expected_r_target
 from .directional_triple_barrier import build_directional_triple_barrier_target
 from .forward_return import build_forward_return_target
 from .future_return_regression import build_future_return_regression_target
+from .path_dependent_r import build_path_dependent_r_target
 from .r_multiple import build_r_multiple_target
 from .regression import (
     build_downside_adjusted_future_return_target,
@@ -53,6 +54,7 @@ _TARGET_COMPONENTS: tuple[tuple[str, TargetBuilder], ...] = (
     ("triple_barrier", build_triple_barrier_target),
     ("directional_triple_barrier", build_directional_triple_barrier_target),
     ("r_multiple", build_r_multiple_target),
+    ("path_dependent_r", build_path_dependent_r_target),
     ("candidate_expected_r", build_candidate_expected_r_target),
 )
 

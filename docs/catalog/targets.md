@@ -778,3 +778,63 @@ target:
     signed: true
     fwd_col: target_path_efficiency_5
 ```
+### `path_dependent_r`
+
+What it measures:
+
+- A side-oriented, path-dependent R outcome for already-built primary candidates.
+- It is post-model only: it consumes OOS predictions/candidates and is not a primary training target.
+
+Core convention:
+
+- Signal is observed at the close of bar `t`.
+- Default entry is `open[t+1]`, matching `manual_barrier`.
+- The same shared barrier outcome helper used by the manual backtest computes entry, exit, TP/SL/time exit, costs, slippage, gross R, net R, MFE, and MAE.
+
+R definition:
+
+- `risk_distance = volatility_col[t] * stop_loss_r` when `stop_mode = volatility_stop`.
+- `gross_r = gross_return / risk_distance`.
+- `net_r = net_return / risk_distance`.
+- Returns and R are side-oriented: profitable long and profitable short trades are positive; losing long and losing short trades are negative.
+
+Costs and slippage:
+
+- Gross return is measured before transaction costs and slippage.
+- Net return subtracts fixed round-trip cost `2 * cost_per_unit_turnover` and slippage drag.
+- `meta_net_r` is computed after those deductions.
+
+Same-bar TP/SL:
+
+- Default `tie_break = conservative` resolves a bar that touches TP and SL to the stop side.
+- With `legacy_same_bar_stop_reason = true`, the target reports `stop_and_target_same_bar_stop_first`, matching the legacy manual backtest reason.
+
+Outputs:
+
+- Candidate metadata: `meta_candidate`, `meta_side`.
+- Path outcomes: `meta_entry_price`, `meta_exit_price`, `meta_exit_reason`, `meta_hit_type`, `meta_hit_step`, `meta_holding_bars`, `meta_gross_return`, `meta_net_return`, `meta_gross_r`, `meta_net_r`, `meta_mfe_r`, `meta_mae_r`.
+- Deterministic labels on candidate rows only: `meta_label_positive`, `meta_label_min_0_25r`, `meta_label_min_0_50r`, `meta_label_min_1_00r`.
+
+Leakage policy:
+
+- `require_oos = true` by default, so a row must have `pred_is_oos = true` as well as `candidate_col = 1`.
+- Non-candidate rows keep NaN outcomes and NaN labels, not negative labels.
+- Tail rows without the full future path keep NaN outcomes/labels unless `allow_partial_horizon = true`.
+
+Minimal YAML:
+
+```yaml
+target:
+  kind: path_dependent_r
+  params:
+    candidate_col: primary_candidate
+    side_col: primary_candidate_side
+    pred_is_oos_col: pred_is_oos
+    volatility_col: atr_over_price_48
+    stop_mode: volatility_stop
+    take_profit_r: 5.0
+    stop_loss_r: 2.0
+    max_holding_bars: 24
+    cost_per_turnover: 0.0001
+    slippage_per_turnover: 0.0
+```

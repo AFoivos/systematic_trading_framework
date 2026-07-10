@@ -58,6 +58,7 @@ _REGRESSION_TARGET_KINDS = {
     "future_realized_volatility",
     "future_drawdown_regression",
 }
+_POST_MODEL_TARGET_KINDS = {"path_dependent_r"}
 _GARCH_OVERLAY_COMPATIBLE_MODEL_KINDS = {
     "elastic_net_clf",
     "lightgbm_clf",
@@ -157,8 +158,18 @@ _TARGET_OUTPUT_KEYS = {
     "bars_held_col",
     "hit_step_col",
     "hit_type_col",
+    "meta_candidate_col",
+    "gross_return_col",
+    "net_return_col",
+    "gross_r_col",
+    "net_r_col",
     "mfe_r_col",
     "mae_r_col",
+    "holding_bars_col",
+    "positive_label_col",
+    "min_025_label_col",
+    "min_050_label_col",
+    "min_100_label_col",
     "time_to_mfe_col",
     "time_to_mae_col",
     "upper_barrier_col",
@@ -2206,6 +2217,77 @@ def _validate_candidate_expected_r_target_block(target: dict[str, Any]) -> None:
         raise ConfigValidationError("model.target.allow_partial_horizon must be boolean.")
 
 
+def _validate_path_dependent_r_target_block(target: dict[str, Any], *, field_prefix: str = "model.target") -> None:
+    _validate_string_mapping(
+        target.get("outputs"),
+        field=f"{field_prefix}.outputs",
+        allowed_keys=_TARGET_OUTPUT_KEYS,
+    )
+    for key in (
+        "candidate_col",
+        "side_col",
+        "pred_is_oos_col",
+        "meta_candidate_col",
+        "meta_side_col",
+        "entry_price_col",
+        "exit_price_col",
+        "exit_reason_col",
+        "hit_type_col",
+        "hit_step_col",
+        "holding_bars_col",
+        "gross_return_col",
+        "net_return_col",
+        "gross_r_col",
+        "net_r_col",
+        "mfe_r_col",
+        "mae_r_col",
+        "positive_label_col",
+        "min_025_label_col",
+        "min_050_label_col",
+        "min_100_label_col",
+        "price_col",
+        "open_col",
+        "high_col",
+        "low_col",
+        "close_col",
+        "volatility_col",
+    ):
+        if key in target and target[key] is not None and not isinstance(target[key], str):
+            raise ConfigValidationError(f"{field_prefix}.{key} must be a string or null.")
+    stop_mode = str(target.get("stop_mode", "volatility_stop"))
+    if stop_mode not in {"volatility_stop", "fixed_return"}:
+        raise ConfigValidationError(f"{field_prefix}.stop_mode must be one of: volatility_stop, fixed_return.")
+    entry_price_mode = str(target.get("entry_price_mode", "next_open"))
+    if entry_price_mode not in {"next_open", "current_close"}:
+        raise ConfigValidationError(f"{field_prefix}.entry_price_mode must be one of: next_open, current_close.")
+    tie_break = str(target.get("tie_break", "conservative"))
+    if tie_break not in {"conservative", "take_profit", "stop_loss", "closest_to_open"}:
+        raise ConfigValidationError(
+            f"{field_prefix}.tie_break must be one of: conservative, take_profit, stop_loss, closest_to_open."
+        )
+    for key, default in (
+        ("take_profit_r", 5.0),
+        ("stop_loss_r", 2.0),
+        ("risk_per_trade", 0.006),
+        ("max_leverage", 1.0),
+    ):
+        value = _finite_number(target.get(key, default), field=f"{field_prefix}.{key}")
+        if value <= 0.0:
+            raise ConfigValidationError(f"{field_prefix}.{key} must be > 0.")
+    for key in ("cost_per_unit_turnover", "cost_per_turnover", "slippage_per_unit_turnover", "slippage_per_turnover"):
+        if key in target and target[key] is not None:
+            value = _finite_number(target.get(key), field=f"{field_prefix}.{key}")
+            if value < 0.0:
+                raise ConfigValidationError(f"{field_prefix}.{key} must be >= 0.")
+    if "max_holding_bars" in target and target["max_holding_bars"] is not None:
+        _positive_int(target["max_holding_bars"], field=f"{field_prefix}.max_holding_bars")
+    if "max_holding" in target and target["max_holding"] is not None:
+        _positive_int(target["max_holding"], field=f"{field_prefix}.max_holding")
+    for key in ("require_oos", "allow_partial_horizon", "apply_risk_sizing", "legacy_same_bar_stop_reason"):
+        if key in target and not isinstance(target.get(key), bool):
+            raise ConfigValidationError(f"{field_prefix}.{key} must be boolean.")
+
+
 def validate_model_block(model: dict[str, Any]) -> None:
     if "kind" not in model:
         raise ConfigValidationError("model.kind is required.")
@@ -2234,16 +2316,18 @@ def validate_model_block(model: dict[str, Any]) -> None:
                 allowed_keys=_TARGET_OUTPUT_KEYS,
             )
             target_kind = target_for_validation.get("kind", "forward_return")
-            if target_kind not in {"r_multiple", "candidate_expected_r"}:
+            if target_kind not in {"r_multiple", "candidate_expected_r", "path_dependent_r"}:
                 raise ConfigValidationError(
                     "model.kind='none' currently supports only model.target.kind='r_multiple' or "
-                    "'candidate_expected_r' "
+                    "'candidate_expected_r' or 'path_dependent_r' "
                     "for target-only diagnostics."
                 )
             if target_kind == "r_multiple":
                 _validate_r_multiple_target_block(target_for_validation)
-            else:
+            elif target_kind == "candidate_expected_r":
                 _validate_candidate_expected_r_target_block(target_for_validation)
+            else:
+                _validate_path_dependent_r_target_block(target_for_validation)
         return
 
     if model["kind"] != "none":
@@ -2291,6 +2375,10 @@ def validate_model_block(model: dict[str, Any]) -> None:
                 allowed_targets = "', '".join(sorted(TARGET_KINDS))
                 raise ConfigValidationError(
                     f"model.target.kind must be one of: '{allowed_targets}'."
+                )
+            if target_kind == "path_dependent_r":
+                raise ConfigValidationError(
+                    "model.target.kind='path_dependent_r' is post-model only; configure it as top-level target."
                 )
             if model["kind"] in _FOUNDATION_FORECASTER_MODEL_KINDS and target_kind not in {
                 "forward_return",
@@ -2911,6 +2999,9 @@ def validate_standalone_target_block(target: Any) -> None:
         raise ConfigValidationError(
             f"target.kind must be one of: '{allowed_targets}'."
         )
+    if target_kind in _POST_MODEL_TARGET_KINDS:
+        _validate_path_dependent_r_target_block(target_cfg, field_prefix="target")
+        return
     validate_model_block(
         {
             "kind": "lightgbm_regressor" if target_kind in _REGRESSION_TARGET_KINDS else "xgboost_clf",
@@ -4230,9 +4321,10 @@ def validate_resolved_config(cfg: dict[str, Any]) -> dict[str, Any]:
     validate_model_stages_block(cfg.get("model_stages"))
     validate_model_block(cfg["model"])
     if cfg.get("target") not in (None, {}):
-        if str(cfg["model"].get("kind", "none")) != "none":
+        target_kind = _flatten_target_cfg_for_validation(dict(cfg.get("target", {}) or {})).get("kind", "forward_return")
+        if str(cfg["model"].get("kind", "none")) != "none" and target_kind not in _POST_MODEL_TARGET_KINDS:
             raise ConfigValidationError("Top-level target diagnostics require model.kind='none'.")
-        if cfg["model"].get("target") not in (None, {}):
+        if cfg["model"].get("target") not in (None, {}) and target_kind not in _POST_MODEL_TARGET_KINDS:
             raise ConfigValidationError("Specify either top-level target or model.target, not both.")
         validate_standalone_target_block(cfg["target"])
     validate_signals_block(cfg["signals"])

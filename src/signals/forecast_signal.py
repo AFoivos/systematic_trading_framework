@@ -122,6 +122,71 @@ def compute_forecast_threshold_signal(
     return out
 
 
+def compute_forecast_threshold_candidates(
+    df: pd.DataFrame,
+    forecast_col: str = "pred_ret",
+    *,
+    pred_is_oos_col: str = "pred_is_oos",
+    upper: float = 0.0,
+    lower: float | None = None,
+    mode: str = "long_short",
+    activation_filters: list[dict[str, object]] | None = None,
+    candidate_col: str = "primary_candidate",
+    side_col: str = "primary_candidate_side",
+    strength_col: str = "primary_candidate_strength",
+    threshold_distance_col: str = "primary_candidate_threshold_distance",
+) -> pd.DataFrame:
+    """
+    Build causal OOS-only forecast candidates and side metadata.
+
+    A row can become a candidate only when ``pred_is_oos_col`` is true, the
+    configured forecast threshold fires, and all activation filters pass on
+    already-materialized feature columns.
+    """
+    if forecast_col not in df.columns:
+        raise KeyError(f"forecast_col '{forecast_col}' not found in DataFrame")
+    if pred_is_oos_col not in df.columns:
+        raise KeyError(f"pred_is_oos_col '{pred_is_oos_col}' not found in DataFrame")
+    if mode not in {"long_only", "short_only", "long_short"}:
+        raise ValueError("candidate mode must be one of: long_only, short_only, long_short.")
+    output_cols = [candidate_col, side_col, strength_col, threshold_distance_col]
+    if any(not isinstance(col, str) or not col.strip() for col in output_cols):
+        raise ValueError("candidate output column names must be non-empty strings.")
+    if len(set(output_cols)) != len(output_cols):
+        raise ValueError("candidate output column names must be unique.")
+
+    out = df.copy()
+    forecast = pd.to_numeric(out[forecast_col], errors="coerce")
+    if lower is None:
+        lower = -abs(float(upper))
+    upper_value = float(upper)
+    lower_value = float(lower)
+    oos_mask = out[pred_is_oos_col].fillna(False).astype(bool)
+    activation_mask = _resolve_activation_filter_mask(
+        out,
+        index=out.index,
+        activation_filters=activation_filters,
+    )
+    valid = oos_mask & activation_mask & forecast.notna()
+
+    long_mask = valid & forecast.gt(upper_value) if mode in {"long_only", "long_short"} else pd.Series(False, index=out.index)
+    short_mask = valid & forecast.lt(lower_value) if mode in {"short_only", "long_short"} else pd.Series(False, index=out.index)
+    side = pd.Series(0.0, index=out.index, dtype=float)
+    side.loc[long_mask] = 1.0
+    side.loc[short_mask] = -1.0
+    candidate = side.ne(0.0)
+
+    threshold_distance = pd.Series(0.0, index=out.index, dtype=float)
+    threshold_distance.loc[long_mask] = forecast.loc[long_mask] - upper_value
+    threshold_distance.loc[short_mask] = forecast.loc[short_mask].abs() - abs(lower_value)
+
+    out[candidate_col] = candidate.astype("float32")
+    out[side_col] = side.astype("float32")
+    out[strength_col] = forecast.abs().where(candidate, 0.0).astype("float32")
+    out[threshold_distance_col] = threshold_distance.astype("float32")
+    return out
+
+
 def compute_forecast_vol_adjusted_signal(
     df: pd.DataFrame,
     forecast_col: str = "pred_ret",
@@ -265,6 +330,7 @@ def compute_probability_vol_adjusted_signal(
 
 
 __all__ = [
+    "compute_forecast_threshold_candidates",
     "compute_forecast_threshold_signal",
     "compute_forecast_vol_adjusted_signal",
     "compute_probability_vol_adjusted_signal",

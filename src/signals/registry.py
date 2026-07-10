@@ -20,6 +20,7 @@ from .ema_rms_ppo_vwap_signal import ema_rms_ppo_vwap_signal
 from .ema_stoch_rsi_pullback_signal import ema_stoch_rsi_pullback_signal
 from .eurusd_session_bb_reversion import eurusd_session_bb_reversion_signal
 from .forecast_threshold_signal import forecast_threshold_signal
+from .forecast_threshold_candidate_signal import forecast_threshold_candidate_signal
 from .forecast_threshold_hysteresis_signal import forecast_threshold_hysteresis_signal
 from .forecast_vol_adjusted_signal import forecast_vol_adjusted_signal
 from .indicator_model_adaptive_pullback import indicator_model_adaptive_pullback_signal
@@ -70,6 +71,7 @@ _SIGNAL_COMPONENTS: tuple[tuple[str, SignalFn], ...] = (
     ("manual_long_model_filter", manual_long_model_filter_signal),
     ("dense_return_forecast", dense_return_forecast_signal),
     ("forecast_threshold", forecast_threshold_signal),
+    ("forecast_threshold_candidate", forecast_threshold_candidate_signal),
     ("forecast_threshold_hysteresis", forecast_threshold_hysteresis_signal),
     ("forecast_vol_adjusted", forecast_vol_adjusted_signal),
     ("rsi", rsi_strategy),

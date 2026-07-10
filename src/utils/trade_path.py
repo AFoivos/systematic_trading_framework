@@ -167,6 +167,268 @@ def _double_touch_exit(
     raise ValueError("tie_break must be one of: conservative, take_profit, stop_loss, closest_to_open.")
 
 
+def _empty_barrier_outcome(
+    *,
+    signal_idx: int,
+    side: int,
+    exit_reason: str,
+) -> dict[str, Any]:
+    return {
+        "valid": False,
+        "signal_idx": int(signal_idx),
+        "entry_idx": None,
+        "exit_idx": None,
+        "side": int(side),
+        "side_name": "short" if int(side) < 0 else "long",
+        "raw_entry_price": np.nan,
+        "raw_exit_price": np.nan,
+        "entry_price": np.nan,
+        "exit_price": np.nan,
+        "stop_loss_price": np.nan,
+        "take_profit_price": np.nan,
+        "effective_stop_price": np.nan,
+        "exit_reason": str(exit_reason),
+        "hit_type": str(exit_reason),
+        "hit_step": np.nan,
+        "bars_held": np.nan,
+        "size": np.nan,
+        "stop_distance_pct": np.nan,
+        "target_distance_pct": np.nan,
+        "gross_return": np.nan,
+        "net_return": np.nan,
+        "gross_r": np.nan,
+        "net_r": np.nan,
+        "cost_paid": np.nan,
+        "slippage_drag": np.nan,
+        "max_favorable_r": np.nan,
+        "max_adverse_r": np.nan,
+        "breakeven_activated": False,
+        "profit_lock_activated": False,
+    }
+
+
+def leg_raw_return(*, is_short: bool, entry_price: float, exit_price: float) -> float:
+    if is_short:
+        return 1.0 - float(exit_price) / float(entry_price)
+    return float(exit_price) / float(entry_price) - 1.0
+
+
+def leg_slippage_adjusted_return(
+    *,
+    is_short: bool,
+    entry_price: float,
+    exit_price: float,
+    slippage_per_unit_turnover: float,
+) -> float:
+    slip = float(slippage_per_unit_turnover)
+    if is_short:
+        adjusted_entry = float(entry_price) * (1.0 - slip)
+        adjusted_exit = float(exit_price) * (1.0 + slip)
+        return 1.0 - adjusted_exit / adjusted_entry
+    adjusted_entry = float(entry_price) * (1.0 + slip)
+    adjusted_exit = float(exit_price) * (1.0 - slip)
+    return adjusted_exit / adjusted_entry - 1.0
+
+
+def simulate_barrier_trade_outcome(
+    *,
+    opens: np.ndarray,
+    highs: np.ndarray,
+    lows: np.ndarray,
+    closes: np.ndarray,
+    signals: np.ndarray | None,
+    signal_idx: int,
+    side: int | float,
+    take_profit_r: float,
+    stop_loss_r: float,
+    risk_per_trade: float = 0.006,
+    max_holding_bars: int | None = 16,
+    cost_per_unit_turnover: float = 0.0,
+    slippage_per_unit_turnover: float = 0.0,
+    max_leverage: float = 1.0,
+    stop_mode: str = "fixed_return",
+    volatility: np.ndarray | None = None,
+    vol_col: str | None = None,
+    dynamic_exits: Mapping[str, Any] | None = None,
+    entry_price_mode: str = "next_open",
+    tie_break: str = "conservative",
+    allow_partial_horizon: bool = True,
+    apply_risk_sizing: bool = True,
+    signal_size: float | None = None,
+    legacy_same_bar_stop_reason: bool = False,
+) -> dict[str, Any]:
+    """
+    Simulate one manual-barrier trade and compute side-oriented return/R outcomes.
+
+    The causal default matches ``manual_barrier``: the signal is observed on bar
+    ``signal_idx`` and the trade enters at the next bar open. The lower-level
+    long/short path helpers still own intrabar barrier handling; this wrapper
+    centralizes entry/exit levels, costs, slippage, and R accounting for both
+    backtests and path-dependent targets.
+    """
+    n = len(opens)
+    if not (len(highs) == len(lows) == len(closes) == n):
+        raise ValueError("opens/highs/lows/closes must have the same length.")
+    side_int = 1 if float(side) > 0.0 else -1 if float(side) < 0.0 else 0
+    if side_int == 0:
+        return _empty_barrier_outcome(signal_idx=signal_idx, side=0, exit_reason="no_side")
+    if stop_mode not in {"fixed_return", "volatility_stop"}:
+        raise ValueError("stop_mode must be 'fixed_return' or 'volatility_stop'.")
+    if entry_price_mode not in {"next_open", "current_close"}:
+        raise ValueError("entry_price_mode must be 'next_open' or 'current_close'.")
+    if max_holding_bars is not None and int(max_holding_bars) <= 0:
+        raise ValueError("max_holding_bars must be positive when provided.")
+    if float(take_profit_r) <= 0.0 or float(stop_loss_r) <= 0.0:
+        raise ValueError("take_profit_r and stop_loss_r must be positive.")
+    if float(risk_per_trade) <= 0.0:
+        raise ValueError("risk_per_trade must be positive.")
+    if float(max_leverage) <= 0.0:
+        raise ValueError("max_leverage must be positive.")
+    if float(cost_per_unit_turnover) < 0.0 or float(slippage_per_unit_turnover) < 0.0:
+        raise ValueError("cost_per_unit_turnover and slippage_per_unit_turnover must be >= 0.")
+
+    signal_idx = int(signal_idx)
+    if signal_idx < 0 or signal_idx >= n:
+        return _empty_barrier_outcome(signal_idx=signal_idx, side=side_int, exit_reason="invalid_signal_idx")
+    entry_idx = signal_idx + 1 if entry_price_mode == "next_open" else signal_idx
+    if entry_idx >= n:
+        return _empty_barrier_outcome(signal_idx=signal_idx, side=side_int, exit_reason="unavailable_tail")
+
+    if max_holding_bars is None:
+        max_exit_idx = n - 1
+    else:
+        full_max_exit_idx = entry_idx + int(max_holding_bars) - 1
+        if full_max_exit_idx >= n and not allow_partial_horizon:
+            return _empty_barrier_outcome(signal_idx=signal_idx, side=side_int, exit_reason="unavailable_tail")
+        max_exit_idx = min(n - 1, full_max_exit_idx)
+
+    raw_entry_price = float(opens[entry_idx] if entry_price_mode == "next_open" else closes[signal_idx])
+    if not np.isfinite(raw_entry_price) or raw_entry_price <= 0.0:
+        return _empty_barrier_outcome(signal_idx=signal_idx, side=side_int, exit_reason="invalid_entry")
+
+    if stop_mode == "volatility_stop":
+        if volatility is None:
+            raise ValueError("volatility is required when stop_mode='volatility_stop'.")
+        signal_volatility = float(volatility[signal_idx]) if signal_idx < len(volatility) else np.nan
+        if not np.isfinite(signal_volatility) or signal_volatility <= 0.0:
+            return _empty_barrier_outcome(signal_idx=signal_idx, side=side_int, exit_reason="invalid_volatility")
+        stop_distance_pct = max(signal_volatility * float(stop_loss_r), 1e-8)
+        target_distance_pct = max(signal_volatility * float(take_profit_r), 1e-8)
+        risk_sized_cap = float(risk_per_trade) / stop_distance_pct
+    else:
+        stop_distance_pct = max(float(risk_per_trade) * float(stop_loss_r), 1e-8)
+        target_distance_pct = max(float(risk_per_trade) * float(take_profit_r), 1e-8)
+        risk_sized_cap = float(max_leverage)
+
+    requested_size = abs(float(signal_size)) if signal_size is not None else float(max_leverage)
+    if not np.isfinite(requested_size) or requested_size <= 0.0:
+        return _empty_barrier_outcome(signal_idx=signal_idx, side=side_int, exit_reason="invalid_size")
+    if apply_risk_sizing:
+        size = min(requested_size, risk_sized_cap, float(max_leverage))
+    else:
+        size = min(requested_size, float(max_leverage))
+    if not np.isfinite(size) or size <= 0.0:
+        return _empty_barrier_outcome(signal_idx=signal_idx, side=side_int, exit_reason="invalid_size")
+
+    if side_int < 0:
+        stop_price = raw_entry_price * (1.0 + stop_distance_pct)
+        take_profit_price = raw_entry_price * (1.0 - target_distance_pct)
+        path = simulate_short_trade_path(
+            opens=opens,
+            highs=highs,
+            lows=lows,
+            closes=closes,
+            signals=signals,
+            entry_idx=entry_idx,
+            max_exit_idx=max_exit_idx,
+            entry_price=raw_entry_price,
+            initial_stop_price=stop_price,
+            take_profit_price=take_profit_price,
+            dynamic_exits=dynamic_exits,
+            volatility=volatility,
+            tie_break=tie_break,
+            legacy_same_bar_stop_reason=legacy_same_bar_stop_reason,
+        )
+    else:
+        stop_price = raw_entry_price * (1.0 - stop_distance_pct)
+        take_profit_price = raw_entry_price * (1.0 + target_distance_pct)
+        path = simulate_long_trade_path(
+            opens=opens,
+            highs=highs,
+            lows=lows,
+            closes=closes,
+            signals=signals,
+            entry_idx=entry_idx,
+            max_exit_idx=max_exit_idx,
+            entry_price=raw_entry_price,
+            initial_stop_price=stop_price,
+            take_profit_price=take_profit_price,
+            dynamic_exits=dynamic_exits,
+            volatility=volatility,
+            tie_break=tie_break,
+            legacy_same_bar_stop_reason=legacy_same_bar_stop_reason,
+        )
+
+    exit_idx = int(path["exit_idx"])
+    raw_exit_price = float(path["raw_exit_price"])
+    if not np.isfinite(raw_exit_price) or raw_exit_price <= 0.0:
+        return _empty_barrier_outcome(signal_idx=signal_idx, side=side_int, exit_reason="invalid_exit")
+
+    is_short = side_int < 0
+    slip = float(slippage_per_unit_turnover)
+    entry_price = raw_entry_price * (1.0 - slip) if is_short else raw_entry_price * (1.0 + slip)
+    exit_price = raw_exit_price * (1.0 + slip) if is_short else raw_exit_price * (1.0 - slip)
+    gross_return = size * leg_raw_return(
+        is_short=is_short,
+        entry_price=raw_entry_price,
+        exit_price=raw_exit_price,
+    )
+    gross_after_slippage = size * leg_slippage_adjusted_return(
+        is_short=is_short,
+        entry_price=raw_entry_price,
+        exit_price=raw_exit_price,
+        slippage_per_unit_turnover=slip,
+    )
+    slippage_drag = max(gross_return - gross_after_slippage, 0.0)
+    fixed_cost = size * 2.0 * float(cost_per_unit_turnover)
+    total_cost = fixed_cost + slippage_drag
+    net_return = gross_return - total_cost
+    risk_capital = max(size * stop_distance_pct, 1e-12)
+
+    return {
+        "valid": True,
+        "signal_idx": int(signal_idx),
+        "entry_idx": int(entry_idx),
+        "exit_idx": int(exit_idx),
+        "side": int(side_int),
+        "side_name": "short" if is_short else "long",
+        "raw_entry_price": float(raw_entry_price),
+        "raw_exit_price": float(raw_exit_price),
+        "entry_price": float(entry_price),
+        "exit_price": float(exit_price),
+        "stop_loss_price": float(stop_price),
+        "take_profit_price": float(take_profit_price),
+        "effective_stop_price": float(path["effective_stop_price"]),
+        "exit_reason": str(path["exit_reason"]),
+        "hit_type": str(path["exit_reason"]),
+        "hit_step": int(exit_idx - entry_idx),
+        "bars_held": int(path["bars_held"]),
+        "size": float(size),
+        "stop_distance_pct": float(stop_distance_pct),
+        "target_distance_pct": float(target_distance_pct),
+        "gross_return": float(gross_return),
+        "net_return": float(net_return),
+        "gross_r": float(gross_return / risk_capital),
+        "net_r": float(net_return / risk_capital),
+        "cost_paid": float(total_cost),
+        "slippage_drag": float(slippage_drag),
+        "max_favorable_r": float(path["max_favorable_r"]),
+        "max_adverse_r": float(path["max_adverse_r"]),
+        "breakeven_activated": bool(path["breakeven_activated"]),
+        "profit_lock_activated": bool(path["profit_lock_activated"]),
+    }
+
+
 def simulate_long_trade_path(
     *,
     opens: np.ndarray,
@@ -583,8 +845,11 @@ def simulate_short_trade_path(
 
 
 __all__ = [
+    "leg_raw_return",
+    "leg_slippage_adjusted_return",
     "normalize_dynamic_exit_config",
     "normalize_partial_exit_config",
+    "simulate_barrier_trade_outcome",
     "simulate_long_trade_path",
     "simulate_short_trade_path",
 ]

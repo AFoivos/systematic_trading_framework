@@ -9,6 +9,7 @@ from src.backtesting.engine import BacktestResult
 from src.utils.trade_path import (
     normalize_dynamic_exit_config,
     normalize_partial_exit_config,
+    simulate_barrier_trade_outcome,
     simulate_long_trade_path,
     simulate_short_trade_path,
 )
@@ -217,7 +218,51 @@ def run_manual_barrier_backtest(
             else min(n - 1, entry_idx + int(max_holding_bars) - 1)
         )
         is_short = raw_signal < 0.0
-        if is_short:
+        outcome: dict[str, Any] | None = None
+        if not partial_enabled:
+            outcome = simulate_barrier_trade_outcome(
+                opens=opens,
+                highs=highs,
+                lows=lows,
+                closes=closes,
+                signals=signals,
+                signal_idx=i,
+                side=-1 if is_short else 1,
+                take_profit_r=float(take_profit_r),
+                stop_loss_r=float(stop_loss_r),
+                risk_per_trade=float(risk_per_trade),
+                max_holding_bars=max_holding_bars,
+                cost_per_unit_turnover=float(cost_per_unit_turnover),
+                slippage_per_unit_turnover=float(slippage_per_unit_turnover),
+                max_leverage=float(max_leverage),
+                stop_mode=stop_mode,
+                volatility=volatility,
+                vol_col=str(vol_col) if vol_col is not None else None,
+                dynamic_exits=dynamic_cfg,
+                entry_price_mode="next_open",
+                tie_break="conservative",
+                allow_partial_horizon=True,
+                apply_risk_sizing=True,
+                signal_size=raw_signal,
+                legacy_same_bar_stop_reason=not bool(dynamic_cfg.get("enabled", False)),
+            )
+            if not bool(outcome["valid"]):
+                raise ValueError(f"manual barrier outcome invalid: {outcome['exit_reason']}")
+            stop_price = float(outcome["stop_loss_price"])
+            take_profit_price = float(outcome["take_profit_price"])
+            path = {
+                "exit_idx": int(outcome["exit_idx"]),
+                "raw_exit_price": float(outcome["raw_exit_price"]),
+                "exit_reason": str(outcome["exit_reason"]),
+                "bars_held": int(outcome["bars_held"]),
+                "max_favorable_r": float(outcome["max_favorable_r"]),
+                "max_adverse_r": float(outcome["max_adverse_r"]),
+                "breakeven_activated": bool(outcome["breakeven_activated"]),
+                "profit_lock_activated": bool(outcome["profit_lock_activated"]),
+                "effective_stop_price": float(outcome["effective_stop_price"]),
+                "partial_exits": [],
+            }
+        elif is_short:
             stop_price = entry_open * (1.0 + stop_distance_pct)
             take_profit_price = entry_open * (1.0 - target_distance_pct)
             path = simulate_short_trade_path(
@@ -316,16 +361,27 @@ def run_manual_barrier_backtest(
             total_cost = fixed_cost + slippage_drag
             net_return = gross_before_cost - total_cost
         else:
-            if is_short:
-                gross_before_cost = size * (1.0 - raw_exit_price / entry_open)
-                gross_after_slippage = size * (1.0 - exit_price / entry_price)
+            if outcome is not None:
+                size = float(outcome["size"])
+                stop_distance_pct = float(outcome["stop_distance_pct"])
+                target_distance_pct = float(outcome["target_distance_pct"])
+                entry_price = float(outcome["entry_price"])
+                exit_price = float(outcome["exit_price"])
+                gross_before_cost = float(outcome["gross_return"])
+                slippage_drag = float(outcome["slippage_drag"])
+                total_cost = float(outcome["cost_paid"])
+                net_return = float(outcome["net_return"])
             else:
-                gross_before_cost = size * (raw_exit_price / entry_open - 1.0)
-                gross_after_slippage = size * (exit_price / entry_price - 1.0)
-            slippage_drag = max(gross_before_cost - gross_after_slippage, 0.0)
-            fixed_cost = size * 2.0 * float(cost_per_unit_turnover)
-            total_cost = fixed_cost + slippage_drag
-            net_return = gross_before_cost - total_cost
+                if is_short:
+                    gross_before_cost = size * (1.0 - raw_exit_price / entry_open)
+                    gross_after_slippage = size * (1.0 - exit_price / entry_price)
+                else:
+                    gross_before_cost = size * (raw_exit_price / entry_open - 1.0)
+                    gross_after_slippage = size * (exit_price / entry_price - 1.0)
+                slippage_drag = max(gross_before_cost - gross_after_slippage, 0.0)
+                fixed_cost = size * 2.0 * float(cost_per_unit_turnover)
+                total_cost = fixed_cost + slippage_drag
+                net_return = gross_before_cost - total_cost
         risk_capital = max(size * stop_distance_pct, 1e-12)
         trade_r = net_return / risk_capital
         partial_realized_r = (

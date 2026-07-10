@@ -36,9 +36,11 @@ from .ehlers_semiscalp_long_signal import (
     ehlers_semiscalp_long_signal,
 )
 from .forecast_threshold_signal import forecast_threshold_signal
+from .forecast_threshold_candidate_signal import forecast_threshold_candidate_signal
 from .forecast_vol_adjusted_signal import forecast_vol_adjusted_signal
 from .rsi_signal import compute_rsi_signal
 from .forecast_signal import (
+    compute_forecast_threshold_candidates,
     compute_forecast_threshold_signal,
     compute_forecast_vol_adjusted_signal,
     compute_probability_vol_adjusted_signal,
@@ -113,10 +115,12 @@ __all__ = [
     "compute_momentum_signal",
     "compute_stochastic_signal",
     "compute_volatility_regime_signal",
+    "compute_forecast_threshold_candidates",
     "compute_forecast_threshold_signal",
     "compute_forecast_vol_adjusted_signal",
     "compute_probability_vol_adjusted_signal",
     "forecast_threshold_signal",
+    "forecast_threshold_candidate_signal",
     "forecast_vol_adjusted_signal",
     "build_indicator_model_adaptive_pullback_signal",
     "build_vwap_rms_ema_cross_long_fractal_filter_signal",

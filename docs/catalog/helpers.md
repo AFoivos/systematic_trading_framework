@@ -806,3 +806,30 @@ normalizations:
   έχει κλείσει το candle, συνήθως next bar/open.
 - Για HMM, beta residuals ή οποιοδήποτε learned/estimated regime, κράτα σαφές
   τι εκτιμάται στο train history και τι εφαρμόζεται out-of-sample.
+## Shared Trade-Path Helpers
+
+### `simulate_barrier_trade_outcome`
+
+Location: `src/utils/trade_path.py`
+
+Purpose:
+
+- Central deterministic manual-barrier outcome simulation for single-entry, single-exit trades.
+- Used by `manual_barrier` backtests and by `path_dependent_r` target construction.
+
+Contract:
+
+- Default causal timing is signal at close `t`, entry at `open[t+1]`.
+- The helper delegates intrabar TP/SL/time-path decisions to the existing long/short path simulators.
+- It centralizes stop/take-profit distances, long/short orientation, same-bar TP/SL tie-break, costs, slippage, gross/net return, gross/net R, MFE, and MAE.
+
+R math:
+
+- `risk_distance = volatility[t] * stop_loss_r` under `volatility_stop`.
+- `gross_r = gross_return / risk_distance`.
+- `net_r = (gross_return - round_trip_cost - slippage_drag) / risk_distance`.
+
+Leakage policy:
+
+- The helper does not build candidates. Callers must pass causal signal/candidate rows.
+- Targets that call it, such as `path_dependent_r`, keep non-candidates and incomplete tail rows unlabeled by default.
