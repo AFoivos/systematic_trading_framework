@@ -36,6 +36,39 @@ def _finite_positive(value: Any, *, field: str) -> float:
     return out
 
 
+_DEFAULT_TREND_BREAK_INDICATORS = [
+    "mama_minus_fama_over_atr",
+    "roofing_filter_over_atr",
+    "decycler_slope_over_atr",
+    "instantaneous_trendline_slope_over_atr",
+    "frama_slope_over_atr",
+]
+
+
+def _trend_break_arrays(
+    frame: pd.DataFrame,
+    *,
+    dynamic_cfg: dict[str, Any],
+) -> tuple[np.ndarray | None, np.ndarray | None, list[str]]:
+    trend_cfg = dict(dynamic_cfg.get("trend_break", {}) or {})
+    if not bool(trend_cfg.get("enabled", False)):
+        return None, None, []
+    raw_indicator_cols = trend_cfg.get("indicator_cols") or _DEFAULT_TREND_BREAK_INDICATORS
+    indicator_cols = [
+        str(col)
+        for col in list(raw_indicator_cols)
+        if str(col).strip()
+    ]
+    if not indicator_cols:
+        raise ValueError("dynamic_exits.trend_break.indicator_cols must not be empty when enabled.")
+    _require_columns(frame, indicator_cols)
+    values = frame[indicator_cols].apply(pd.to_numeric, errors="coerce")
+    min_disagreeing = int(trend_cfg.get("min_disagreeing_indicators", 2))
+    long_break = values.lt(0.0).sum(axis=1).ge(min_disagreeing).to_numpy(dtype=bool)
+    short_break = values.gt(0.0).sum(axis=1).ge(min_disagreeing).to_numpy(dtype=bool)
+    return long_break, short_break, indicator_cols
+
+
 def _apply_mark_to_market_trade_path(
     mark_to_market_returns: pd.Series,
     *,
@@ -114,6 +147,7 @@ def run_manual_barrier_backtest(
     allow_short: bool = False,
     stop_mode: str = "fixed_return",
     vol_col: str | None = None,
+    forecast_col: str | None = None,
 ) -> BacktestResult:
     """
     Event-based backtest for manual rule signals.
@@ -151,14 +185,20 @@ def run_manual_barrier_backtest(
     partial_cfg = normalize_partial_exit_config(partial_exits)
     partial_enabled = bool(partial_cfg.get("enabled", False))
     needs_volatility = stop_mode == "volatility_stop" or bool(dynamic_cfg["atr_trailing"]["enabled"])
+    needs_forecast = bool(dynamic_cfg["forecast_decay"]["enabled"]) or bool(dynamic_cfg["trend_break"]["enabled"])
     if needs_volatility and (vol_col is None or not str(vol_col).strip()):
         raise ValueError("vol_col is required for volatility_stop or dynamic_exits.atr_trailing.")
+    if needs_forecast and (forecast_col is None or not str(forecast_col).strip()):
+        raise ValueError("forecast_col is required for forecast_decay or trend_break dynamic exits.")
     required_cols = [signal_col, open_col, high_col, low_col, close_col]
     if needs_volatility:
         required_cols.append(str(vol_col))
+    if needs_forecast:
+        required_cols.append(str(forecast_col))
     _require_columns(df, required_cols)
 
     frame = df.copy()
+    long_trend_break, short_trend_break, _ = _trend_break_arrays(frame, dynamic_cfg=dynamic_cfg)
     signal = pd.to_numeric(frame[signal_col], errors="coerce").fillna(0.0).astype(float)
     if allow_short:
         signal = signal.clip(lower=-float(max_leverage), upper=float(max_leverage))
@@ -173,6 +213,11 @@ def run_manual_barrier_backtest(
     volatility = (
         pd.to_numeric(frame[str(vol_col)], errors="coerce").to_numpy(dtype=float)
         if needs_volatility
+        else None
+    )
+    forecasts = (
+        pd.to_numeric(frame[str(forecast_col)], errors="coerce").to_numpy(dtype=float)
+        if needs_forecast
         else None
     )
 
@@ -238,6 +283,9 @@ def run_manual_barrier_backtest(
                 stop_mode=stop_mode,
                 volatility=volatility,
                 vol_col=str(vol_col) if vol_col is not None else None,
+                forecasts=forecasts,
+                long_trend_break=long_trend_break,
+                short_trend_break=short_trend_break,
                 dynamic_exits=dynamic_cfg,
                 entry_price_mode="next_open",
                 tie_break="conservative",
@@ -278,6 +326,8 @@ def run_manual_barrier_backtest(
                 take_profit_price=take_profit_price,
                 dynamic_exits=dynamic_cfg,
                 partial_exits=partial_cfg,
+                forecasts=forecasts,
+                short_trend_break=short_trend_break,
                 volatility=volatility,
                 tie_break="conservative",
                 legacy_same_bar_stop_reason=not bool(dynamic_cfg.get("enabled", False)),
@@ -298,6 +348,8 @@ def run_manual_barrier_backtest(
                 take_profit_price=take_profit_price,
                 dynamic_exits=dynamic_cfg,
                 partial_exits=partial_cfg,
+                forecasts=forecasts,
+                long_trend_break=long_trend_break,
                 volatility=volatility,
                 tie_break="conservative",
                 legacy_same_bar_stop_reason=not bool(dynamic_cfg.get("enabled", False)),

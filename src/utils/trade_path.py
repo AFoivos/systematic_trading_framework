@@ -17,6 +17,24 @@ def normalize_dynamic_exit_config(dynamic_exits: Mapping[str, Any] | None) -> di
     disabled_defaults = {
         "enabled": False,
         "signal_off_exit": {"enabled": False, "min_bars_held": 1, "exit_price": "next_open"},
+        "forecast_decay": {
+            "enabled": False,
+            "min_bars_held": 1,
+            "exit_price": "next_open",
+            "long_hold_threshold": 0.70,
+            "long_exit_threshold": 0.0,
+            "short_hold_threshold": -0.85,
+            "short_exit_threshold": 0.0,
+        },
+        "trend_break": {
+            "enabled": False,
+            "min_bars_held": 1,
+            "exit_price": "next_open",
+            "min_disagreeing_indicators": 2,
+            "indicator_cols": [],
+            "long_weakening_level": 0.0,
+            "short_weakening_level": 0.0,
+        },
         "breakeven": {"enabled": False, "trigger_r": 0.8, "lock_r": 0.0},
         "profit_lock": {"enabled": False, "trigger_r": 1.2, "lock_r": 0.3},
         "atr_trailing": {"enabled": False, "activation_r": 0.0, "distance_mult": 1.0},
@@ -26,6 +44,8 @@ def normalize_dynamic_exit_config(dynamic_exits: Mapping[str, Any] | None) -> di
         return disabled_defaults
 
     signal_off = dict(cfg.get("signal_off_exit", {}) or {})
+    forecast_decay = dict(cfg.get("forecast_decay", {}) or {})
+    trend_break = dict(cfg.get("trend_break", {}) or {})
     breakeven = dict(cfg.get("breakeven", {}) or {})
     profit_lock = dict(cfg.get("profit_lock", {}) or {})
     atr_trailing = dict(cfg.get("atr_trailing", {}) or {})
@@ -37,6 +57,24 @@ def normalize_dynamic_exit_config(dynamic_exits: Mapping[str, Any] | None) -> di
             "enabled": enabled and _enabled(signal_off),
             "min_bars_held": int(signal_off.get("min_bars_held", 1)),
             "exit_price": str(signal_off.get("exit_price", "next_open")),
+        },
+        "forecast_decay": {
+            "enabled": enabled and _enabled(forecast_decay),
+            "min_bars_held": int(forecast_decay.get("min_bars_held", 1)),
+            "exit_price": str(forecast_decay.get("exit_price", "next_open")),
+            "long_hold_threshold": float(forecast_decay.get("long_hold_threshold", 0.70)),
+            "long_exit_threshold": float(forecast_decay.get("long_exit_threshold", 0.0)),
+            "short_hold_threshold": float(forecast_decay.get("short_hold_threshold", -0.85)),
+            "short_exit_threshold": float(forecast_decay.get("short_exit_threshold", 0.0)),
+        },
+        "trend_break": {
+            "enabled": enabled and _enabled(trend_break),
+            "min_bars_held": int(trend_break.get("min_bars_held", 1)),
+            "exit_price": str(trend_break.get("exit_price", "next_open")),
+            "min_disagreeing_indicators": int(trend_break.get("min_disagreeing_indicators", 2)),
+            "indicator_cols": list(trend_break.get("indicator_cols", []) or []),
+            "long_weakening_level": float(trend_break.get("long_weakening_level", 0.0)),
+            "short_weakening_level": float(trend_break.get("short_weakening_level", 0.0)),
         },
         "breakeven": {
             "enabled": enabled and _enabled(breakeven),
@@ -61,14 +99,21 @@ def normalize_dynamic_exit_config(dynamic_exits: Mapping[str, Any] | None) -> di
         },
     }
 
-    for path in ("signal_off_exit", "no_progress"):
+    for path in ("signal_off_exit", "forecast_decay", "trend_break", "no_progress"):
         exit_price = out[path]["exit_price"]
         if exit_price not in {"close", "next_open"}:
             raise ValueError(f"dynamic_exits.{path}.exit_price must be 'close' or 'next_open'.")
-    if out["signal_off_exit"]["min_bars_held"] < 0:
-        raise ValueError("dynamic_exits.signal_off_exit.min_bars_held must be >= 0.")
+    for path in ("signal_off_exit", "forecast_decay", "trend_break"):
+        if out[path]["min_bars_held"] < 0:
+            raise ValueError(f"dynamic_exits.{path}.min_bars_held must be >= 0.")
     if out["no_progress"]["bars"] <= 0:
         raise ValueError("dynamic_exits.no_progress.bars must be > 0.")
+    if out["forecast_decay"]["long_exit_threshold"] > out["forecast_decay"]["long_hold_threshold"]:
+        raise ValueError("dynamic_exits.forecast_decay.long_exit_threshold must be <= long_hold_threshold.")
+    if out["forecast_decay"]["short_exit_threshold"] < out["forecast_decay"]["short_hold_threshold"]:
+        raise ValueError("dynamic_exits.forecast_decay.short_exit_threshold must be >= short_hold_threshold.")
+    if out["trend_break"]["min_disagreeing_indicators"] <= 0:
+        raise ValueError("dynamic_exits.trend_break.min_disagreeing_indicators must be > 0.")
     for path in ("breakeven", "profit_lock"):
         if out[path]["trigger_r"] <= 0.0:
             raise ValueError(f"dynamic_exits.{path}.trigger_r must be > 0.")
@@ -131,6 +176,22 @@ def _exit_on_price_mode(
     if mode == "next_open" and current_idx + 1 < len(opens):
         return current_idx + 1, float(opens[current_idx + 1])
     return current_idx, float(closes[current_idx])
+
+
+def _dynamic_exit_on_price_mode(
+    *,
+    mode: str,
+    current_idx: int,
+    max_exit_idx: int,
+    opens: np.ndarray,
+    closes: np.ndarray,
+) -> tuple[int, float] | None:
+    if mode == "next_open":
+        next_idx = int(current_idx) + 1
+        if next_idx <= int(max_exit_idx) and next_idx < len(opens):
+            return next_idx, float(opens[next_idx])
+        return None
+    return int(current_idx), float(closes[current_idx])
 
 
 def _partial_exit_price(
@@ -249,6 +310,9 @@ def simulate_barrier_trade_outcome(
     stop_mode: str = "fixed_return",
     volatility: np.ndarray | None = None,
     vol_col: str | None = None,
+    forecasts: np.ndarray | None = None,
+    long_trend_break: np.ndarray | None = None,
+    short_trend_break: np.ndarray | None = None,
     dynamic_exits: Mapping[str, Any] | None = None,
     entry_price_mode: str = "next_open",
     tie_break: str = "conservative",
@@ -345,6 +409,8 @@ def simulate_barrier_trade_outcome(
             initial_stop_price=stop_price,
             take_profit_price=take_profit_price,
             dynamic_exits=dynamic_exits,
+            forecasts=forecasts,
+            short_trend_break=short_trend_break,
             volatility=volatility,
             tie_break=tie_break,
             legacy_same_bar_stop_reason=legacy_same_bar_stop_reason,
@@ -364,6 +430,8 @@ def simulate_barrier_trade_outcome(
             initial_stop_price=stop_price,
             take_profit_price=take_profit_price,
             dynamic_exits=dynamic_exits,
+            forecasts=forecasts,
+            long_trend_break=long_trend_break,
             volatility=volatility,
             tie_break=tie_break,
             legacy_same_bar_stop_reason=legacy_same_bar_stop_reason,
@@ -443,6 +511,8 @@ def simulate_long_trade_path(
     take_profit_price: float,
     dynamic_exits: Mapping[str, Any] | None = None,
     partial_exits: Mapping[str, Any] | None = None,
+    forecasts: np.ndarray | None = None,
+    long_trend_break: np.ndarray | None = None,
     volatility: np.ndarray | None = None,
     tie_break: str = "conservative",
     legacy_same_bar_stop_reason: bool = False,
@@ -604,6 +674,48 @@ def simulate_long_trade_path(
                 exit_reason = "signal_off_exit"
                 break
 
+        forecast_decay = dynamic_cfg["forecast_decay"]
+        if forecast_decay["enabled"] and bars_held >= forecast_decay["min_bars_held"] and forecasts is not None:
+            current_forecast = float(forecasts[idx]) if idx < len(forecasts) else np.nan
+            if np.isfinite(current_forecast) and current_forecast <= forecast_decay["long_exit_threshold"]:
+                exit_payload = _dynamic_exit_on_price_mode(
+                    mode=forecast_decay["exit_price"],
+                    current_idx=idx,
+                    max_exit_idx=max_exit_idx,
+                    opens=opens,
+                    closes=closes,
+                )
+                if exit_payload is not None:
+                    exit_idx, raw_exit_price = exit_payload
+                    exit_reason = "forecast_decay_exit"
+                    break
+
+        trend_break = dynamic_cfg["trend_break"]
+        if (
+            trend_break["enabled"]
+            and bars_held >= trend_break["min_bars_held"]
+            and forecasts is not None
+            and long_trend_break is not None
+        ):
+            current_forecast = float(forecasts[idx]) if idx < len(forecasts) else np.nan
+            disagreement = bool(long_trend_break[idx]) if idx < len(long_trend_break) else False
+            if (
+                disagreement
+                and np.isfinite(current_forecast)
+                and current_forecast <= trend_break["long_weakening_level"]
+            ):
+                exit_payload = _dynamic_exit_on_price_mode(
+                    mode=trend_break["exit_price"],
+                    current_idx=idx,
+                    max_exit_idx=max_exit_idx,
+                    opens=opens,
+                    closes=closes,
+                )
+                if exit_payload is not None:
+                    exit_idx, raw_exit_price = exit_payload
+                    exit_reason = "trend_break_exit"
+                    break
+
         no_progress = dynamic_cfg["no_progress"]
         if (
             no_progress["enabled"]
@@ -652,6 +764,8 @@ def simulate_short_trade_path(
     take_profit_price: float,
     dynamic_exits: Mapping[str, Any] | None = None,
     partial_exits: Mapping[str, Any] | None = None,
+    forecasts: np.ndarray | None = None,
+    short_trend_break: np.ndarray | None = None,
     volatility: np.ndarray | None = None,
     tie_break: str = "conservative",
     legacy_same_bar_stop_reason: bool = False,
@@ -809,6 +923,48 @@ def simulate_short_trade_path(
                 )
                 exit_reason = "signal_off_exit"
                 break
+
+        forecast_decay = dynamic_cfg["forecast_decay"]
+        if forecast_decay["enabled"] and bars_held >= forecast_decay["min_bars_held"] and forecasts is not None:
+            current_forecast = float(forecasts[idx]) if idx < len(forecasts) else np.nan
+            if np.isfinite(current_forecast) and current_forecast >= forecast_decay["short_exit_threshold"]:
+                exit_payload = _dynamic_exit_on_price_mode(
+                    mode=forecast_decay["exit_price"],
+                    current_idx=idx,
+                    max_exit_idx=max_exit_idx,
+                    opens=opens,
+                    closes=closes,
+                )
+                if exit_payload is not None:
+                    exit_idx, raw_exit_price = exit_payload
+                    exit_reason = "forecast_decay_exit"
+                    break
+
+        trend_break = dynamic_cfg["trend_break"]
+        if (
+            trend_break["enabled"]
+            and bars_held >= trend_break["min_bars_held"]
+            and forecasts is not None
+            and short_trend_break is not None
+        ):
+            current_forecast = float(forecasts[idx]) if idx < len(forecasts) else np.nan
+            disagreement = bool(short_trend_break[idx]) if idx < len(short_trend_break) else False
+            if (
+                disagreement
+                and np.isfinite(current_forecast)
+                and current_forecast >= trend_break["short_weakening_level"]
+            ):
+                exit_payload = _dynamic_exit_on_price_mode(
+                    mode=trend_break["exit_price"],
+                    current_idx=idx,
+                    max_exit_idx=max_exit_idx,
+                    opens=opens,
+                    closes=closes,
+                )
+                if exit_payload is not None:
+                    exit_idx, raw_exit_price = exit_payload
+                    exit_reason = "trend_break_exit"
+                    break
 
         no_progress = dynamic_cfg["no_progress"]
         if (
