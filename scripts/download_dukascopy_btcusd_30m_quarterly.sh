@@ -36,8 +36,8 @@ FAILED_LOG="${FAILED_LOG:-$OUT_ROOT/failed_downloads.txt}"
 FRAMEWORK_SYMBOL="${FRAMEWORK_SYMBOL:-BTCUSD}"
 INSTRUMENT="${INSTRUMENT:-btcusd}"
 FILE_SYMBOL="${FILE_SYMBOL:-btcusd}"
-TIMEFRAME_LABEL="${TIMEFRAME_LABEL:-30m}"
-DUKAS_TIMEFRAME="${DUKAS_TIMEFRAME:-m30}"
+TIMEFRAME_LABEL="${TIMEFRAME_LABEL:-15m}"
+DUKAS_TIMEFRAME="${DUKAS_TIMEFRAME:-m15}"
 SOURCE_PRICE_SIDE="${SOURCE_PRICE_SIDE:-bid}"
 DUKASCOPY_NODE_VERSION="${DUKASCOPY_NODE_VERSION:-1.46.4}"
 
@@ -95,7 +95,7 @@ mkdir -p "$OUT_ROOT" || exit 1
 
 printf 'timestamp_utc|quarter|symbol|instrument|source_side|from_date|to_date|reason\n' > "$FAILED_LOG"
 
-echo "Downloading Dukascopy BTCUSD 30-minute quarterly data"
+echo "Downloading Dukascopy BTCUSD 15-minute quarterly data"
 echo "START_YEAR: $START_YEAR"
 echo "FIRST_AVAILABLE_DATE: $FIRST_AVAILABLE_DATE"
 echo "END_DATE: $END_DATE"

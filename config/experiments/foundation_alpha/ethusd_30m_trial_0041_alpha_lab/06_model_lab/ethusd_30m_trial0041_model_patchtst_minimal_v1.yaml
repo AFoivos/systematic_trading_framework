@@ -1,9 +1,11 @@
 # ETHUSD Trial 0041 Alpha Research Lab.
-# Family: target; phase: screening.
+# Family: model; phase: screening.
 # Baseline: config/experiments/foundation_alpha/BEST/ethusd/optuna_BEST_ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid.yaml
 # Parent: baseline_local_replay
-# Hypothesis: A 48-bar ATR-normalized return may align better with the fixed 24-bar holding policy.
-# Expected mechanism: Tests horizon alignment while retaining target units, model, features, and stateless signal logic.
+# Hypothesis: A tiny PatchTST sequence forecaster may capture short ETHUSD h24 temporal
+# structure while keeping the trial_0041 target, features, gates, and backtest contract.
+# Expected mechanism: Changes only the regression estimator family to a minimal neural
+# quantile forecaster.
 # Causality: target/diagnostic columns are excluded from model features; only prior/current-bar features are used.
 data:
   source: dukascopy_csv
@@ -341,20 +343,24 @@ features:
   outputs: {}
   enabled: true
 model:
-  kind: lightgbm_regressor
+  kind: patchtst_forecaster
   params:
-    n_estimators: 800
-    learning_rate: 0.0549537895493607
-    max_depth: 6
-    num_leaves: 15
-    min_child_samples: 200
-    subsample: 0.9
-    colsample_bytree: 0.75
-    reg_alpha: 0.019934229992965794
-    reg_lambda: 1.8786413727433209
-    random_state: 7
-    n_jobs: 1
-    verbosity: -1
+    lookback: 64
+    patch_len: 8
+    patch_stride: 4
+    hidden_dim: 32
+    num_heads: 4
+    num_layers: 1
+    dropout: 0.1
+    epochs: 2
+    batch_size: 128
+    learning_rate: 0.0007
+    weight_decay: 0.0005
+    quantiles:
+    - 0.1
+    - 0.5
+    - 0.9
+    scale_target: true
   outputs:
     pred_ret_col: pred_ret
     pred_prob_col: pred_prob
@@ -414,23 +420,23 @@ model:
     price_col: close
     returns_col: close_ret
     returns_type: simple
-    horizon_bars: 48
+    horizon_bars: 24
     normalize_by_volatility: true
     volatility_col: atr_48
     clip:
     - -4.0
     - 4.0
-    fwd_col: target_trial0041_h48
-    label_col: target_trial0041_h48
+    fwd_col: target_future_return_h24_atr
+    label_col: target_future_return_h24_atr
   split:
     method: purged
     train_size: 35040
     test_size: 4380
     step_size: 4380
     expanding: true
-    max_folds: 10
-    purge_bars: 48
-    embargo_bars: 48
+    max_folds: 2
+    purge_bars: 24
+    embargo_bars: 24
   runtime: {}
   env: {}
   use_features: true
@@ -444,7 +450,7 @@ model:
 signals:
   kind: forecast_threshold
   params:
-    forecast_col: pred_ret
+    forecast_col: pred_q50
     signal_col: signal_structured_tail
     upper: 0.7
     lower: -0.85
@@ -468,7 +474,7 @@ runtime:
   repro_mode: strict
   deterministic: true
   threads: 1
-  seed_torch: false
+  seed_torch: true
 risk:
   cost_per_turnover: 0.0001
   slippage_per_turnover: 0.0
@@ -545,7 +551,7 @@ diagnostics:
     random_seed: 7
   threshold_grid:
     enabled: true
-    forecast_col: pred_ret
+    forecast_col: pred_q50
     symmetric_thresholds:
     - 0.35
     - 0.5
@@ -556,9 +562,9 @@ diagnostics:
   regime_performance:
     enabled: true
   model:
-    enabled: true
+    enabled: false
     shap:
-      enabled: true
+      enabled: false
       max_rows: 200
       top_n_features: 12
       per_prediction_top_k: 5
@@ -572,9 +578,9 @@ diagnostics:
     - 4
     - 8
     - 16
-    volatility_col: atr_pct_rank_100
+    volatility_col: atr_pct_rank_192
   robustness:
-    enabled: true
+    enabled: false
     cost_multipliers:
     - 1.0
     - 2.0
@@ -628,7 +634,7 @@ execution:
   current_prices: {}
 logging:
   enabled: true
-  run_name: ethusd_30m_trial0041_tgt_atrnorm_h48_v1
+  run_name: ethusd_30m_trial0041_model_patchtst_minimal_v1
   output_dir: logs/experiments/foundation_alpha/trial0041_alpha_lab
   stage_tails:
     enabled: false
@@ -655,21 +661,22 @@ strategy:
     '
 validation:
   method: purged_walk_forward
-  purge_bars: 48
-  embargo_bars: 48
+  purge_bars: 24
+  embargo_bars: 24
 evaluation:
   strict_oos_only: true
 research_metadata:
   lab: ethusd_30m_trial_0041_alpha_lab
   baseline_source: config/experiments/foundation_alpha/BEST/ethusd/optuna_BEST_ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid.yaml
   baseline_artifact: logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260712_190851_716023_013d079c
-  family: target
-  experiment_id: ethusd_30m_trial0041_tgt_atrnorm_h48_v1
+  family: model
+  experiment_id: ethusd_30m_trial0041_model_patchtst_minimal_v1
   parent_experiment: baseline_local_replay
-  hypothesis: A 48-bar ATR-normalized return may align better with the fixed 24-bar
-    holding policy.
-  expected_effect: Tests horizon alignment while retaining target units, model, features,
-    and stateless signal logic.
+  hypothesis: A tiny PatchTST sequence forecaster may capture short ETHUSD h24 temporal
+    structure while keeping the trial_0041 target, features, gates, and backtest
+    contract.
+  expected_effect: Changes only the regression estimator family to a minimal neural
+    quantile forecaster.
   phase: screening
   selection_era: folds_0_to_9
   leakage_note: Feature values are causal at t; targets are future-only labels and
