@@ -1,0 +1,106 @@
+strategy:
+  name: documentation_minimal_spx500
+  description: >
+    Ελάχιστο τοπικό πείραμα τεκμηρίωσης με επίπεδο σήμα, χωρίς εκπαίδευση
+    μοντέλου, αποστολή εντολών ή δικτυακή πρόσβαση.
+
+data:
+  source: dukascopy_csv
+  symbol: SPX500
+  interval: 30m
+  start: "2024-06-03"
+  end: "2024-06-22"
+  alignment: inner
+  pit:
+    timestamp_alignment:
+      source_timezone: UTC
+      output_timezone: UTC
+      normalize_daily: false
+      duplicate_policy: last
+    corporate_actions:
+      policy: none
+      adj_close_col: adj_close
+    universe_snapshot:
+      inactive_policy: raise
+  storage:
+    mode: cached_only
+    dataset_id: docs_minimal_spx500_30m
+    save_raw: false
+    save_processed: false
+    load_path: data/raw/dukascopy_30m_clean/spx500_30m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed
+
+features:
+  - step: returns
+    enabled: true
+    params:
+      log: false
+      col_name: close_ret
+
+model:
+  kind: none
+
+signals:
+  kind: none
+  params:
+    signal_col: flat_signal
+
+target:
+  kind: forward_return
+  price_col: close
+  horizon: 2
+  threshold: 0.0
+  fwd_col: target_fwd_2
+  label_col: label
+
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+
+risk:
+  cost_per_turnover: 0.00015
+  slippage_per_turnover: 0.00010
+  target_vol: null
+  max_leverage: 1.0
+  sizing: {}
+  dd_guard:
+    enabled: false
+  portfolio_guard: {}
+  drawdown_sizing: {}
+  vol_col: null
+
+backtest:
+  engine: vectorized
+  returns_col: close_ret
+  signal_col: flat_signal
+  returns_type: simple
+  periods_per_year: 12096
+  missing_return_policy: raise_if_exposed
+  subset: full
+  min_holding_bars: 0
+
+portfolio:
+  enabled: false
+  construction: signal_weights
+  long_short: false
+
+monitoring:
+  enabled: false
+
+diagnostics:
+  enabled: false
+
+execution:
+  enabled: false
+  mode: paper
+  capital: 100000.0
+  price_col: close
+
+logging:
+  enabled: false
+  run_name: documentation_minimal_spx500
+  output_dir: logs/documentation

@@ -39,12 +39,16 @@ def compute_rolling_linear_regression(
     """
     Compute trailing linear-regression slope, intercept, and R2.
 
+    Each value at timestamp ``t`` is fitted only on the trailing window ending
+    at ``t``. A complete finite window is required, so warm-up rows and windows
+    containing NaN or infinity produce NaN outputs. For a constant finite
+    series, the fitted slope is zero and R2 is defined as 1.0.
+
     YAML declaration::
 
         transforms:
           rolling_linear_regression:
-            params:
-              window: 96
+            window: 96
 
     Required input columns
     ----------------------
@@ -95,16 +99,20 @@ def add_rolling_linear_regression_transform(
     """
     Apply the ``rolling_linear_regression`` feature helper transformation.
 
+    The transform delegates all numerical work to
+    :func:`compute_rolling_linear_regression`; it does not add direction or
+    threshold flags. Compose those separately with ``rising_flag`` and
+    ``threshold_flag`` when needed.
+
     YAML declaration::
 
         transforms:
           rolling_linear_regression:
-            params:
-              source_col: close
-              window: 96
-              r2_col: rolling_r2_trend_quality_96
-              slope_col: rolling_r2_slope_96
-              intercept_col: rolling_r2_intercept_96
+            source_col: close
+            window: 96
+            slope_col: rolling_r2_slope_96
+            intercept_col: rolling_r2_intercept_96
+            r2_col: rolling_r2_96
 
     Required input columns
     ----------------------

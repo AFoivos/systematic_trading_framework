@@ -280,17 +280,34 @@ transforms:
 Παράδειγμα:
 
 ```yaml
-transforms:
-  rolling_linear_regression:
+features:
+  - step: returns
     params:
-      source_col: close
-      window: 96
-      slope_col: close_slope_96
-      r2_col: close_r2_96
+      log: true
+      col_name: close_logret
+    transforms:
+      rolling_linear_regression:
+        source_col: close
+        window: 96
+        slope_col: rolling_r2_slope_96
+        intercept_col: rolling_r2_intercept_96
+        r2_col: rolling_r2_96
+      rising_flag:
+        source_col: rolling_r2_96
+        periods: 1
+        output_col: rolling_r2_96_rising
+      threshold_flag:
+        source_col: rolling_r2_96
+        threshold: 0.60
+        op: ge
+        output_col: rolling_r2_96_ok
 ```
 
-`close_slope_96 > 0` και `close_r2_96=0.75` σημαίνουν ανοδικό και σχετικά καθαρό
-linear trend.
+Το `rolling_r2_slope_96 > 0` με `rolling_r2_96=0.75` σημαίνει ανοδικό και
+σχετικά καθαρό linear trend. Το helper χρησιμοποιεί πλήρες trailing window που
+τελειώνει στο current timestamp· warm-up rows και windows με NaN/infinity
+παραμένουν NaN. Σε finite flat window, slope είναι `0` και R2 `1`, σύμφωνα με
+το canonical numerical contract.
 
 ### `rms`
 

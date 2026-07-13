@@ -83,6 +83,23 @@ def _parse_clock(value: str, *, field: str) -> time:
     return time(hour=hour, minute=minute)
 
 
+def _positive_int(value: object, *, field: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or int(value) <= 0:
+        raise ValueError(f"{field} must be a positive integer.")
+    return int(value)
+
+
+def _finite_float(value: object, *, field: str, minimum: float, strict: bool = False) -> float:
+    try:
+        resolved = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field} must be a finite number.") from exc
+    if not np.isfinite(resolved) or (resolved <= minimum if strict else resolved < minimum):
+        comparator = ">" if strict else ">="
+        raise ValueError(f"{field} must be finite and {comparator} {minimum:g}.")
+    return resolved
+
+
 def _coerce_utc_index(values: pd.Index | pd.Series, *, timezone: str) -> pd.DatetimeIndex:
     idx = pd.DatetimeIndex(pd.to_datetime(values, errors="raise"))
     if idx.tz is None:
@@ -149,10 +166,10 @@ def _normalize_sessions(sessions: Sequence[Mapping[str, object]] | None) -> dict
                 str(session["extended_trade_until_time"]),
                 field=f"sessions.{name}.extended_trade_until_time",
             )
-        bars = int(session.get("opening_range_bars", 2))
-        if bars <= 0:
-            raise ValueError(f"ORB session '{name}' opening_range_bars must be positive.")
-        session["opening_range_bars"] = bars
+        session["opening_range_bars"] = _positive_int(
+            session.get("opening_range_bars", 2),
+            field=f"ORB session '{name}' opening_range_bars",
+        )
         out[name] = session
     return out
 
@@ -382,7 +399,10 @@ def _apply_session_to_asset(
     tz_name = str(session["timezone"])
     open_time = session["session_open_time"]  # type: ignore[assignment]
     end_time = _session_end_time(session, use_extended_trade_until=use_extended_trade_until)
-    range_bars = int(opening_range_bars_override or session.get("opening_range_bars", 2))
+    range_bars = _positive_int(
+        opening_range_bars_override or session.get("opening_range_bars", 2),
+        field="opening_range_bars",
+    )
 
     local_index = pd.DatetimeIndex(frame.index).tz_convert(tz_name)
     local_dates = pd.Index(local_index.date).unique()
@@ -715,20 +735,40 @@ def add_opening_range_breakout_features(
         Configuration parameter accepted by this feature. Default: ``null``.
     """
     _ = price_col, open_col  # Kept for config symmetry with other OHLCV feature steps.
-    if int(post_breakout_active_bars) <= 0:
-        raise ValueError("post_breakout_active_bars must be positive.")
-    if int(max_breakouts_per_session) <= 0:
-        raise ValueError("max_breakouts_per_session must be positive.")
-    if opening_range_bars is not None and int(opening_range_bars) <= 0:
-        raise ValueError("opening_range_bars must be positive when provided.")
-    if min_range_atr is not None and float(min_range_atr) < 0.0:
-        raise ValueError("min_range_atr must be >= 0 when provided.")
-    if max_range_atr is not None and float(max_range_atr) <= 0.0:
-        raise ValueError("max_range_atr must be > 0 when provided.")
-    if min_range_atr is not None and max_range_atr is not None and float(min_range_atr) > float(max_range_atr):
+    resolved_post_breakout_active_bars = _positive_int(
+        post_breakout_active_bars,
+        field="post_breakout_active_bars",
+    )
+    resolved_max_breakouts_per_session = _positive_int(
+        max_breakouts_per_session,
+        field="max_breakouts_per_session",
+    )
+    resolved_opening_range_bars = (
+        _positive_int(opening_range_bars, field="opening_range_bars")
+        if opening_range_bars is not None
+        else None
+    )
+    resolved_min_range_atr = (
+        _finite_float(min_range_atr, field="min_range_atr", minimum=0.0)
+        if min_range_atr is not None
+        else None
+    )
+    resolved_max_range_atr = (
+        _finite_float(max_range_atr, field="max_range_atr", minimum=0.0, strict=True)
+        if max_range_atr is not None
+        else None
+    )
+    if (
+        resolved_min_range_atr is not None
+        and resolved_max_range_atr is not None
+        and resolved_min_range_atr > resolved_max_range_atr
+    ):
         raise ValueError("min_range_atr must be <= max_range_atr.")
-    if float(breakout_buffer_atr) < 0.0:
-        raise ValueError("breakout_buffer_atr must be >= 0.")
+    resolved_breakout_buffer_atr = _finite_float(
+        breakout_buffer_atr,
+        field="breakout_buffer_atr",
+        minimum=0.0,
+    )
 
     if timestamp_col in df.columns and asset_col in df.columns:
         frames: list[pd.DataFrame] = []
@@ -748,14 +788,14 @@ def add_opening_range_breakout_features(
                     close_col=close_col,
                     atr_col=atr_col,
                     volatility_col=volatility_col,
-                    min_range_atr=min_range_atr,
-                    max_range_atr=max_range_atr,
-                    breakout_buffer_atr=float(breakout_buffer_atr),
-                    post_breakout_active_bars=int(post_breakout_active_bars),
-                    max_breakouts_per_session=int(max_breakouts_per_session),
+                    min_range_atr=resolved_min_range_atr,
+                    max_range_atr=resolved_max_range_atr,
+                    breakout_buffer_atr=resolved_breakout_buffer_atr,
+                    post_breakout_active_bars=resolved_post_breakout_active_bars,
+                    max_breakouts_per_session=resolved_max_breakouts_per_session,
                     use_close_breakout=bool(use_close_breakout),
                     allow_reversal_same_session=bool(allow_reversal_same_session),
-                    opening_range_bars=int(opening_range_bars) if opening_range_bars is not None else None,
+                    opening_range_bars=resolved_opening_range_bars,
                     use_extended_trade_until=bool(use_extended_trade_until),
                 )
             )
@@ -780,14 +820,14 @@ def add_opening_range_breakout_features(
         close_col=close_col,
         atr_col=atr_col,
         volatility_col=volatility_col,
-        min_range_atr=min_range_atr,
-        max_range_atr=max_range_atr,
-        breakout_buffer_atr=float(breakout_buffer_atr),
-        post_breakout_active_bars=int(post_breakout_active_bars),
-        max_breakouts_per_session=int(max_breakouts_per_session),
+        min_range_atr=resolved_min_range_atr,
+        max_range_atr=resolved_max_range_atr,
+        breakout_buffer_atr=resolved_breakout_buffer_atr,
+        post_breakout_active_bars=resolved_post_breakout_active_bars,
+        max_breakouts_per_session=resolved_max_breakouts_per_session,
         use_close_breakout=bool(use_close_breakout),
         allow_reversal_same_session=bool(allow_reversal_same_session),
-        opening_range_bars=int(opening_range_bars) if opening_range_bars is not None else None,
+        opening_range_bars=resolved_opening_range_bars,
         use_extended_trade_until=bool(use_extended_trade_until),
     )
 

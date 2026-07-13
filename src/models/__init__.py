@@ -19,6 +19,7 @@ _EXPORTS = {
     "resolve_feature_selectors": ("src.models.common.runtime", "resolve_feature_selectors"),
     "resolve_garch_overlay": ("src.models.common.overlay", "resolve_garch_overlay"),
     "resolve_runtime_for_model": ("src.models.common.runtime", "resolve_runtime_for_model"),
+    "validate_model_feature_columns": ("src.models.common.runtime", "validate_model_feature_columns"),
     "train_forward_classifier": ("src.models.classification", "train_forward_classifier"),
     "train_event_transformer_encoder": (
         "src.models.classification.event_transformer",

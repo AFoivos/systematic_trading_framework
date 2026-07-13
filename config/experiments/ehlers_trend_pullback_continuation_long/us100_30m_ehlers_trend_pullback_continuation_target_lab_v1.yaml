@@ -101,11 +101,6 @@ features:
     k_period: 3
     d_period: 3
     prefix: stoch_rsi
-- step: rolling_r2_trend_quality
-  params:
-    price_col: close
-    window: 96
-    output_col: rolling_r2_96
 - step: atr
   params:
     high_col: high
@@ -117,6 +112,21 @@ features:
     atr_col: atr_14
     add_over_price: false
   transforms:
+    rolling_linear_regression:
+      source_col: close
+      window: 96
+      slope_col: rolling_r2_slope_96
+      intercept_col: rolling_r2_intercept_96
+      r2_col: rolling_r2_96
+    rising_flag:
+      source_col: rolling_r2_96
+      periods: 1
+      output_col: rolling_r2_96_rising
+    threshold_flag:
+      source_col: rolling_r2_96
+      threshold: 0.60
+      op: ge
+      output_col: rolling_r2_96_ok
     ratio:
       items:
       - numerator_col: atr_14

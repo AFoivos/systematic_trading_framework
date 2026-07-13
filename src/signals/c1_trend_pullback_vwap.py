@@ -21,7 +21,7 @@ _DEFAULT_CFG: dict[str, Any] = {
     "stoch_d_col": "stoch_rsi_d",
     "zscore_momentum_col": "zscore_momentum_20",
     "volatility_regime_col": "volatility_regime",
-    "trend_quality_col": "rolling_r2_trend_quality_96",
+    "trend_quality_col": "rolling_r2_96",
     "mfi_long_min": 40.0,
     "mfi_long_max": 80.0,
     "mfi_short_min": 20.0,
@@ -310,7 +310,7 @@ def c1_trend_pullback_vwap_signal(df: pd.DataFrame, **params: Any) -> pd.DataFra
             stoch_d_col: stoch_rsi_d
             zscore_momentum_col: zscore_momentum_20
             volatility_regime_col: volatility_regime
-            trend_quality_col: rolling_r2_trend_quality_96
+            trend_quality_col: rolling_r2_96
             mfi_long_min: 40.0
             mfi_long_max: 80.0
             mfi_short_min: 20.0
@@ -388,7 +388,7 @@ def c1_trend_pullback_vwap_signal(df: pd.DataFrame, **params: Any) -> pd.DataFra
     volatility_regime_col:
         Input dataframe column configured by ``volatility_regime_col``. Default: ``volatility_regime``.
     trend_quality_col:
-        Input dataframe column configured by ``trend_quality_col``. Default: ``rolling_r2_trend_quality_96``.
+        Input dataframe column configured by ``trend_quality_col``. Default: ``rolling_r2_96``.
     mfi_long_min:
         Numeric threshold used by this signal. Default: ``40.0``.
     mfi_long_max:

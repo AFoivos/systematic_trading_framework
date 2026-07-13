@@ -26,7 +26,7 @@ def _frame() -> pd.DataFrame:
             "stoch_rsi_d": [float("nan"), 0.50, 0.50, 0.50, 0.50],
             "zscore_momentum_20": [float("nan"), 0.60, -0.60, 0.20, -0.20],
             "volatility_regime": [float("nan"), 1.0, 1.0, 2.0, 1.0],
-            "rolling_r2_trend_quality_96": [float("nan"), 0.40, 0.40, 0.40, 0.20],
+            "rolling_r2_96": [float("nan"), 0.40, 0.40, 0.40, 0.20],
         },
         index=idx,
     )

@@ -3,7 +3,11 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from src.models.common.runtime import infer_feature_columns, resolve_feature_selectors
+from src.models.common.runtime import (
+    infer_feature_columns,
+    resolve_feature_selectors,
+    validate_model_feature_columns,
+)
 
 
 def test_resolve_feature_selectors_supports_exact_include_exclude_and_strict_count() -> None:
@@ -134,9 +138,44 @@ def test_infer_feature_columns_excludes_future_looking_extrema_research_and_raw_
             "swing_raw_local_high": [1.0],
             "swing_raw_local_high_price": [1.2],
             "pre_local_high_3": [0.0],
+            "research_pre_local_low_3": [0.0],
         }
     )
 
     feature_cols = infer_feature_columns(df)
 
     assert feature_cols == ["swing_last_high", "swing_structure_score"]
+
+
+@pytest.mark.parametrize("unsafe", ["swing_raw_local_high", "pre_local_low_3"])
+def test_explicit_feature_columns_reject_future_research_columns(unsafe: str) -> None:
+    df = pd.DataFrame({"safe_feature": [1.0], unsafe: [0.0]})
+
+    with pytest.raises(ValueError, match=rf"future/research-only.*{unsafe}"):
+        infer_feature_columns(df, explicit_cols=["safe_feature", unsafe])
+
+
+def test_feature_selector_rejects_prefixed_future_research_columns() -> None:
+    df = pd.DataFrame(
+        {
+            "safe_feature": [1.0],
+            "swing_raw_local_high": [0.0],
+            "research_pre_local_low_3": [0.0],
+        }
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        resolve_feature_selectors(df, {"include": [{"contains": "local_"}]})
+
+    message = str(exc_info.value)
+    assert "future/research-only" in message
+    assert "not allowed as model features" in message
+    assert "swing_raw_local_high" in message
+    assert "research_pre_local_low_3" in message
+
+
+def test_model_feature_contract_validator_checks_final_resolved_names() -> None:
+    validate_model_feature_columns(["safe_feature", "swing_confirmed_local_high"])
+
+    with pytest.raises(ValueError, match="research_pre_local_low_3"):
+        validate_model_feature_columns(["safe_feature", "research_pre_local_low_3"])

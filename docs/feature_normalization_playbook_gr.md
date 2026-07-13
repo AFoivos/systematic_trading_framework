@@ -114,7 +114,7 @@ features = scale-free state when the candidate appeared
 - `range_position`
 - `regime_context`
 - `session_context`
-- `rolling_r2_trend_quality`
+- `rolling_linear_regression` helper
 - `trend_slope_volatility`
 - `volatility_regime`
 
@@ -243,7 +243,7 @@ features = scale-free state when the candidate appeared
 | P2 | `hurst_exponent` | Persistence/mean-reversion statistic | Trendiness vs anti-persistence | Helps choose momentum vs reversal regimes | raw bounded-ish; percent rank, flags above/below 0.5 | `fractal_dimension`, `trend_r2` |
 | P2 | `fractal_dimension` | Price path roughness | Choppiness/complexity | Separates smooth trends from noisy paths | percent rank, flags, zscore | `frama`, `hurst_exponent`, `adx` |
 | P2 | `zscore_momentum` | Z-scored momentum | Standardized momentum surprise | Useful if raw momentum distribution drifts | already zscored; clip, lag, threshold | `return_momentum`, `volatility` |
-| P0 | `rolling_r2_trend_quality` | Rolling regression R2 on price | Trend quality/noise ratio | High slope alone is not enough; quality matters | R2 raw `[0,1]`, slope/ATR or slope/price, threshold flags | `trend_slope_volatility`, `adx` |
+| P0 | `rolling_linear_regression` helper | Rolling regression R2 on price | Trend quality/noise ratio | High slope alone is not enough; quality matters | R2 raw `[0,1]`, slope/ATR or slope/price, `rising_flag`, `threshold_flag` | `trend_slope_volatility`, `adx` |
 | P0 | `trend_slope_volatility` | Price slope scaled by volatility | Trend per unit risk | Cross-asset trend strength | already normalized if vol col relative; add zscore/flags | `rolling_r2`, `volatility_regime` |
 | P1 | `volatility_of_volatility` | Rolling std/change of volatility | Stability of risk regime | Stops/edges degrade in unstable vol | percent rank, ratio to long mean, zscore, rising flag | `regime_context`, `shock_context` |
 | P0 | `volatility_regime` | Volatility state flags/ratios | High/low vol regime | Controls strategy applicability | raw states ok; ratios zscore/percent rank | `return_momentum`, `triple_barrier R` |

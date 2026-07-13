@@ -27,6 +27,33 @@ Session breakout research για XAU/indices με raw, tree meta και stacked 
 - Portfolio layer: one-sided variants και basket normalization με FTMO-style leverage/drawdown guards.
 - Evaluation: raw-vs-meta-vs-stack σύγκριση, cost drag, turnover, FTMO breaches και fold-level stability.
 
+## Round 1 raw baseline contract
+
+Το Round 1 κρατά μόνο το causal component chain:
+
+```text
+OHLCV + ATR + volatility
+  -> opening_range_breakout
+  -> orb_candidate + orb_side
+  -> orb_candidate_side
+  -> raw long/short signal
+```
+
+Το `opening_range_breakout` είναι feature/candidate generator: ολοκληρώνει το
+opening range, εφαρμόζει range-width και point-in-time buffer checks και μετά
+παράγει `orb_candidate`/`orb_side`. Το `orb_candidate_side` είναι μόνο mapping
+αυτών των δύο columns σε raw signal και δεν ξαναϋπολογίζει breakout ούτε
+ενσωματώνει ML, trend/regime filters, stops, targets ή position sizing.
+
+Με `post_breakout_active_bars = 1`, η ένδειξη είναι one-bar event. Με μεγαλύτερη
+τιμή, το ίδιο candidate κρατά side για fixed exposure window· δεν αποτελεί σειρά
+από ανεξάρτητα breakout trades. Entry convention, execution lag και trade exits
+παραμένουν ευθύνη του backtest/execution layer.
+
+Αυτό το raw benchmark πρέπει να αξιολογηθεί πριν από οποιοδήποτε trend, regime
+ή model filtering. Τέτοια layers ανήκουν σε μεταγενέστερα research rounds. Το
+Round 1 δεν ορίζει ακόμη experiment YAML ή parameter selection.
+
 ## Causality, leakage και reproducibility guardrails
 
 - Τα features πρέπει να υπολογίζονται μόνο από διαθέσιμες τιμές στο timestamp απόφασης. Rolling windows, lags και session aggregates δεν πρέπει να κοιτούν future bars.

@@ -340,16 +340,6 @@ FEATURE_PARAM_DEFAULTS: dict[str, dict[str, Any]] = {
         "output_col": "hmm_regime",
         "include_probabilities": False,
     },
-    "rolling_r2_trend_quality": {
-        "price_col": "close",
-        "window": 96,
-        "output_col": "rolling_r2_96",
-        "slope_col": "rolling_r2_slope_96",
-        "intercept_col": "rolling_r2_intercept_96",
-        "rising_col": "rolling_r2_96_rising",
-        "trend_quality_col": "rolling_r2_96_ok",
-        "trend_quality_threshold": 0.60,
-    },
     "trend_slope_volatility": {
         "price_col": "close",
         "volatility_col": "atr_over_price_20",

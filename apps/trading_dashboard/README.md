@@ -1,32 +1,48 @@
-# Trading Research Dashboard
+# Dashboard έρευνας trading
 
-Local-first FastAPI + React dashboard for inspecting market data, engineered features, signals, targets, predictions, trades, and experiment artifacts from this repository.
+Το `apps/trading_dashboard` είναι ένα τοπικό dashboard FastAPI και React για
+επιθεώρηση δεδομένων αγοράς, χαρακτηριστικών, σημάτων, targets, προβλέψεων,
+συναλλαγών και artifacts πειραμάτων. Δεν εκτελεί το experiment pipeline και δεν
+τροποποιεί datasets ή YAML configs.
 
-## What It Reads
+## Δεδομένα που διαβάζει
 
-- CSV/parquet datasets anywhere under `data/**`, grouped in the UI by folder path
-- Experiment runs under `logs/experiments` and bot run artifacts under `logs/bot`
-- Trade overlays from `report_assets/trades.csv` or `trade_events.csv`
-- Equity curves from `equity_curve.csv`
-- Saved dashboard layouts under `apps/trading_dashboard/layouts`
+- Αρχεία CSV και Parquet κάτω από `data/**`.
+- Runs κάτω από `logs/experiments/**` και `logs/bot/**`.
+- Συναλλαγές από `report_assets/trades.csv` ή `trade_events.csv`.
+- Καμπύλες κεφαλαίου από `equity_curve.csv`.
+- Αποθηκευμένες διατάξεις από `apps/trading_dashboard/layouts/`.
 
-## Backend
+Η ανακάλυψη βασίζεται σε paths, metadata και ονόματα στηλών. Οι ακριβείς
+συμβάσεις περιγράφονται στις
+[τεχνικές παραδοχές](../../docs/trading_dashboard_assumptions.md).
+
+## Εκκίνηση backend
+
+Από το repository root:
 
 ```bash
 cd apps/trading_dashboard/backend
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Optional path override:
+Σε PowerShell, η ενεργοποίηση του περιβάλλοντος είναι:
 
-```bash
-TRADING_DASHBOARD_PROJECT_ROOT=/path/to/systematic_trading_framework uvicorn app.main:app --reload
+```powershell
+.\.venv\Scripts\Activate.ps1
 ```
 
-## Frontend
+Αν το repository root δεν μπορεί να εξαχθεί από τη θέση του package:
+
+```bash
+TRADING_DASHBOARD_PROJECT_ROOT=/path/to/systematic_trading_framework \
+  uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+## Εκκίνηση frontend
 
 ```bash
 cd apps/trading_dashboard/frontend
@@ -34,45 +50,55 @@ npm install
 npm run dev
 ```
 
-Open `http://127.0.0.1:5173`.
-
-Set a custom backend URL if needed:
+Η τοπική διεπαφή είναι διαθέσιμη στο `http://127.0.0.1:5173`. Για διαφορετικό
+backend:
 
 ```bash
 VITE_API_BASE_URL=http://127.0.0.1:8000 npm run dev
 ```
 
-## Docker
+## Εκκίνηση με Docker
 
-The Dockerized dashboard serves the built React app from the FastAPI container, so the UI stays available for as long as the container is running.
-
-From the repository root:
+Η Docker εικόνα σερβίρει το έτοιμο React bundle από το FastAPI container:
 
 ```bash
-docker compose up --build trading-dashboard
+docker compose up -d --build trading-dashboard
 ```
 
-Open `http://127.0.0.1:8000`.
-
-Notes:
-
-- The container serves both the API and the frontend on port `8000`.
-- Local `data/`, `logs/`, and `apps/trading_dashboard/layouts/` are mounted into the container, so new datasets, experiment outputs, and saved layouts remain visible without rebuilding.
-- Stop it with `docker compose stop trading-dashboard` or remove it with `docker compose down`.
-
-## Example API Calls
+Η διεπαφή και το API είναι διαθέσιμα στο `http://127.0.0.1:8000`. Τα τοπικά
+`data/`, `logs/` και `apps/trading_dashboard/layouts/` προσαρτώνται ως volumes,
+οπότε νέα artifacts γίνονται ορατά χωρίς rebuild.
 
 ```bash
+docker compose logs -f trading-dashboard
+docker compose stop trading-dashboard
+```
+
+## Βασικά API endpoints
+
+```bash
+curl http://127.0.0.1:8000/health
 curl http://127.0.0.1:8000/api/datasets
-curl "http://127.0.0.1:8000/api/ohlcv?dataset_id=data/raw/dukascopy_30m_clean/xauusd_30m.csv&start=2024-01-01&end=2024-02-01"
-curl "http://127.0.0.1:8000/api/features/catalog?dataset_id=data/raw/dukascopy_30m_clean/xauusd_30m.csv"
+curl http://127.0.0.1:8000/api/assets
 curl http://127.0.0.1:8000/api/features/builders
 curl http://127.0.0.1:8000/api/signals/builders
 curl http://127.0.0.1:8000/api/targets/builders
 curl http://127.0.0.1:8000/api/experiments
+curl http://127.0.0.1:8000/api/layouts
 ```
 
-Parameterized preview example:
+Παράδειγμα χρονικού φίλτρου:
+
+```bash
+curl "http://127.0.0.1:8000/api/ohlcv?dataset_id=data/raw/dukascopy_30m_clean/xauusd_30m.csv&start=2024-01-01&end=2024-02-01"
+```
+
+Το `start` είναι συμπεριληπτικό και το `end` αποκλειστικό.
+
+## Προεπισκόπηση builders
+
+Το `POST /api/transform/series` εφαρμόζει επιλεγμένους builders σε αντίγραφο
+του dataset στη μνήμη:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/transform/series \
@@ -81,90 +107,37 @@ curl -X POST http://127.0.0.1:8000/api/transform/series \
     "dataset_id": "data/raw/dukascopy_30m_clean/xauusd_30m.csv",
     "limit": 5000,
     "features": [
-      {"step": "trend", "params": {"price_col": "close", "sma_windows": [20, 50], "ema_spans": [20]}, "enabled": true},
-      {"step": "rsi", "params": {"price_col": "close", "windows": [14]}, "enabled": true}
-    ],
-    "signals": [],
-    "targets": [
-      {"step": "forward_return", "params": {"price_col": "close", "horizon": 4, "threshold": 0.0}, "enabled": true}
-    ]
-  }'
-```
-
-## Example Layout JSON
-
-```json
-{
-  "name": "xauusd-m30-research",
-  "selection": {
-    "datasetId": "data/raw/dukascopy_30m_clean/xauusd_30m.csv",
-    "start": "2024-01-01",
-    "end": "2024-06-01",
-    "runId": "01_xauusd_roc_long_only_xgboost_r_multiple_filter_BEST"
-  },
-  "series": [
-    {
-      "series_id": "ema_20",
-      "source_type": "feature",
-      "display_name": "EMA 20",
-      "chart_target": "main_price_chart",
-      "panel_id": null,
-      "render_type": "line",
-      "y_axis": "right",
-      "visible": true,
-      "style": {
-        "color": "#0f766e",
-        "lineWidth": 2
-      }
-    },
-    {
-      "series_id": "rsi_14",
-      "source_type": "feature",
-      "display_name": "RSI 14",
-      "chart_target": "lower_panel",
-      "panel_id": "oscillators",
-      "render_type": "line",
-      "y_axis": "right",
-      "visible": true,
-      "style": {
-        "color": "#d97706",
-        "lineWidth": 2
-      }
-    }
-  ],
-  "transformations": {
-    "features": [
       {
         "step": "trend",
         "params": {
           "price_col": "close",
           "sma_windows": [20, 50],
-          "ema_spans": [20],
-          "inplace": false
+          "ema_spans": [20]
         },
         "enabled": true
       }
     ],
     "signals": [],
-    "targets": [
-      {
-        "step": "forward_return",
-        "params": {
-          "price_col": "close",
-          "horizon": 4,
-          "threshold": 0.0
-        },
-        "enabled": true
-      }
-    ]
-  },
-  "panels": {}
-}
+    "targets": [],
+    "models": []
+  }'
 ```
 
-## Notes
+Οι previews δεν γράφουν computed columns πίσω στο dataset. Αν προστεθεί target,
+η μελλοντική πληροφορία χρησιμοποιείται μόνο για οπτική έρευνα/label
+construction και δεν επιτρέπεται να ερμηνευθεί ως διαθέσιμο live feature.
 
-- The API is read-only for research artifacts except `POST /api/layouts`, which writes layout JSON under this app directory.
-- Parameterized feature/signal/target runs are in-memory previews. They do not update datasets, experiment configs, or logged artifacts.
-- The first MVP uses folder path, filename, metadata, and column-name inference where this repo does not yet expose a dashboard-specific manifest.
-- See `docs/trading_dashboard_assumptions.md` for the explicit assumptions.
+## Αποθήκευση διατάξεων
+
+Το `POST /api/layouts` είναι το μόνο endpoint που γράφει αρχείο. Αποθηκεύει JSON
+κάτω από `apps/trading_dashboard/layouts/`. Η διάταξη περιέχει επιλογές και
+ρυθμίσεις απεικόνισης, όχι αντίγραφο δεδομένων αγοράς.
+
+## Έλεγχοι
+
+```bash
+python -m pytest -q apps/trading_dashboard/backend/app_tests
+```
+
+Οι βασικές πηγές αλήθειας είναι τα `backend/app/api/routes_*.py`, οι services
+κάτω από `backend/app/services/` και τα παραπάνω tests.

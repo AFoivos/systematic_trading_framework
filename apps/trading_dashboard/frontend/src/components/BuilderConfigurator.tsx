@@ -576,17 +576,6 @@ function deriveFeatureOutputColumns(stepName: string, params: Record<string, unk
       return [outputOrParam(params, "output_col", `fractal_dimension_${asInteger(params.window, 128)}`)];
     case "zscore_momentum":
       return [outputOrParam(params, "output_col", `zscore_momentum_${window}`)];
-    case "rolling_r2_trend_quality": {
-      const r2Window = asInteger(params.window, 96);
-      const r2Base = `rolling_r2_trend_quality_${r2Window}`;
-      return [
-        outputOrParam(params, "output_col", r2Base),
-        outputOrParam(params, "slope_col", `rolling_r2_slope_${r2Window}`),
-        outputOrParam(params, "intercept_col", `rolling_r2_intercept_${r2Window}`),
-        outputOrParam(params, "rising_col", `${r2Base}_rising`),
-        outputOrParam(params, "trend_quality_col", `${r2Base}_ok`)
-      ];
-    }
     case "trend_slope_volatility": {
       const slopeWindow = asInteger(params.window, 96);
       const ratioBase = `trend_slope_vol_ratio_${slopeWindow}`;

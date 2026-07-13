@@ -8,7 +8,6 @@ from src.features.technical.extrema import (
     build_last_confirmed_extrema_context,
     confirm_extrema_without_lookahead,
     detect_local_extrema,
-    make_pre_extrema_research_label,
 )
 
 
@@ -31,8 +30,12 @@ def swing_extrema_context(
 ) -> pd.DataFrame:
     """
     Apply the registered ``swing_extrema_context`` feature transformation.
-    
-    This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
+
+    Only confirmed extrema and context derived from those confirmed events are
+    emitted. Raw extrema require ``right_bars`` future observations and remain
+    internal to the confirmation calculation; they are never live/model
+    feature outputs. A pivot at bar ``i`` first appears as confirmed at
+    ``i + right_bars``.
     
     YAML declaration::
     
@@ -49,8 +52,6 @@ def swing_extrema_context(
               near_high_threshold_atr: 0.25
               near_low_threshold_atr: 0.25
               overextended_long_threshold_atr: 2.0
-              include_research_labels: false
-              research_label_lead_bars: 3
               prefix: swing
     
     Required input columns
@@ -86,10 +87,6 @@ def swing_extrema_context(
         Numeric threshold used by this feature. Default: ``0.25``.
     overextended_long_threshold_atr:
         Numeric threshold used by this feature. Default: ``2.0``.
-    include_research_labels:
-        Configuration parameter accepted by this feature. Default: ``false``.
-    research_label_lead_bars:
-        Configuration parameter accepted by this feature. Default: ``3``.
     prefix:
         Configuration parameter accepted by this feature. Default: ``swing``.
     """
@@ -115,6 +112,13 @@ def swing_extrema_context(
 
     if not isinstance(include_research_labels, bool):
         raise TypeError("include_research_labels must be boolean.")
+    if include_research_labels:
+        raise ValueError(
+            "include_research_labels=True is not allowed in the live "
+            "swing_extrema_context feature builder because pre_local_* labels "
+            "contain future/research-only information and cannot be model features. "
+            "Use make_pre_extrema_research_label explicitly in a research or target workflow."
+        )
     if isinstance(research_label_lead_bars, bool) or not isinstance(research_label_lead_bars, int) or int(
         research_label_lead_bars
     ) < 1:
@@ -161,30 +165,12 @@ def swing_extrema_context(
         prefix=prefix.strip(),
     )
 
-    prefixed_raw = raw.rename(columns={col: f"{prefix.strip()}_{col}" for col in raw.columns})
     prefixed_confirmed = confirmed.rename(
         columns={col: f"{prefix.strip()}_{col}" for col in confirmed.columns}
     )
 
-    out = out.join(prefixed_raw)
     out = out.join(prefixed_confirmed)
     out = out.join(context)
-
-    if include_research_labels:
-        out[make_pre_extrema_research_label(raw, lead_bars=int(research_label_lead_bars), kind="high").name] = (
-            make_pre_extrema_research_label(
-                raw,
-                lead_bars=int(research_label_lead_bars),
-                kind="high",
-            )
-        )
-        out[make_pre_extrema_research_label(raw, lead_bars=int(research_label_lead_bars), kind="low").name] = (
-            make_pre_extrema_research_label(
-                raw,
-                lead_bars=int(research_label_lead_bars),
-                kind="low",
-            )
-        )
 
     return out
 

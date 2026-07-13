@@ -52,6 +52,7 @@ _FEATURE_SELECTOR_PROFILES: dict[str, tuple[str, ...]] = {
         "atr_adx_range",
     ),
 }
+_UNSAFE_MODEL_FEATURE_PATTERNS = ("raw_local_", "pre_local_")
 
 
 @lru_cache(maxsize=1)
@@ -279,6 +280,20 @@ def _dedupe_preserve_order(columns: Iterable[str]) -> list[str]:
     return out
 
 
+def validate_model_feature_columns(feature_columns: Sequence[str]) -> None:
+    """Reject columns known to contain future/research-only information."""
+    unsafe = [
+        str(column)
+        for column in feature_columns
+        if any(pattern in str(column) for pattern in _UNSAFE_MODEL_FEATURE_PATTERNS)
+    ]
+    if unsafe:
+        raise ValueError(
+            "Unsafe model feature columns contain future/research-only information "
+            f"and are not allowed as model features: {_dedupe_preserve_order(unsafe)}"
+        )
+
+
 def classify_feature_family(column: str) -> str | None:
     name = str(column)
     if name in {
@@ -479,6 +494,7 @@ def resolve_feature_selectors(
                 "feature_selectors resolved too few feature columns: "
                 f"{len(selected)} < min_count={int(min_count)}."
             )
+    validate_model_feature_columns(selected)
     return selected
 
 
@@ -501,10 +517,13 @@ def infer_feature_columns(
         selected.extend(explicit)
         if feature_selectors:
             selected.extend(resolve_feature_selectors(df, feature_selectors))
-        return [col for col in _dedupe_preserve_order(selected) if col not in exclude_set]
+        resolved = [col for col in _dedupe_preserve_order(selected) if col not in exclude_set]
+        validate_model_feature_columns(resolved)
+        return resolved
 
     inferred = default_feature_columns(df)
     if inferred:
+        validate_model_feature_columns(inferred)
         return inferred
 
     exclude_set = set(exclude or [])
@@ -517,11 +536,12 @@ def infer_feature_columns(
             continue
         if col.startswith(("signal_", "pred_", "target_")):
             continue
-        if col.startswith("pre_local_"):
+        if "pre_local_" in str(col):
             continue
         if "raw_local_" in str(col):
             continue
         features.append(col)
+    validate_model_feature_columns(features)
     return features
 
 
@@ -535,4 +555,5 @@ __all__ = [
     "probe_xgboost_runtime",
     "resolve_feature_selectors",
     "resolve_runtime_for_model",
+    "validate_model_feature_columns",
 ]

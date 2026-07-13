@@ -1,0 +1,649 @@
+data:
+  source: dukascopy_csv
+  interval: 30m
+  start: null
+  end: null
+  alignment: inner
+  symbol: ETHUSD
+  symbols: null
+  api_key: null
+  api_key_env: null
+  pit:
+    timestamp_alignment:
+      source_timezone: UTC
+      output_timezone: UTC
+      normalize_daily: false
+      duplicate_policy: last
+    corporate_actions:
+      policy: none
+      adj_close_col: adj_close
+    universe_snapshot:
+      inactive_policy: raise
+  storage:
+    mode: cached_only
+    dataset_id: ethusd_30m_lightgbm_h24_v37_roll_2y_long_q05
+    save_raw: false
+    save_processed: false
+    load_path: /workspace/data/raw/dukascopy_30m_clean/ethusd_30m.csv
+    raw_dir: /workspace/data/raw
+    processed_dir: /workspace/data/processed
+    load_paths: null
+features:
+- step: returns
+  params:
+    log: false
+    col_name: close_ret
+  outputs: {}
+  enabled: true
+  transforms:
+    lag:
+      enabled: true
+      items:
+      - source_col: close_ret
+        lag: 1
+        output_col: lag_close_ret_1
+      - source_col: close_ret
+        lag: 2
+        output_col: lag_close_ret_2
+      - source_col: close_ret
+        lag: 4
+        output_col: lag_close_ret_4
+      - source_col: close_ret
+        lag: 8
+        output_col: lag_close_ret_8
+      - source_col: close_ret
+        lag: 16
+        output_col: lag_close_ret_16
+      - source_col: close_ret
+        lag: 24
+        output_col: lag_close_ret_24
+      - source_col: close_ret
+        lag: 48
+        output_col: lag_close_ret_48
+- step: volatility
+  params:
+    returns_col: close_ret
+    rolling_windows:
+    - 24
+    - 48
+    - 96
+    - 192
+    ewma_spans: []
+    annualization_factor: null
+  outputs: {}
+  enabled: true
+- step: trend
+  params:
+    price_col: close
+    sma_windows: []
+    ema_spans:
+    - 24
+    - 48
+    - 96
+    - 192
+    ema_col_template: ema_{span}
+    add_ratios: false
+  outputs: {}
+  enabled: true
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: ema_24
+        denominator_col: ema_96
+        output_col: ema_trend_24_96
+        subtract: 1.0
+      - numerator_col: ema_48
+        denominator_col: ema_192
+        output_col: ema_trend_48_192
+        subtract: 1.0
+      - numerator_col: close
+        denominator_col: ema_96
+        output_col: close_over_ema_96
+        subtract: 1.0
+      - numerator_col: close
+        denominator_col: ema_192
+        output_col: close_over_ema_192
+        subtract: 1.0
+- step: atr
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    window: 48
+    windows:
+    - 48
+    method: wilder
+    add_over_price: false
+    atr_col: atr_48
+  outputs: {}
+  enabled: true
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: atr_48
+        denominator_col: close
+        output_col: atr_over_price_48
+- step: hilbert_transform
+  params:
+    price_col: close
+    window: 64
+    amplitude_col: hilbert_amplitude
+    phase_col: hilbert_phase
+    instantaneous_frequency_col: hilbert_instantaneous_frequency
+    add_derived: false
+  outputs: {}
+  enabled: true
+- step: dominant_cycle_period
+  params:
+    price_col: close
+    output_col: dominant_cycle_period
+  outputs: {}
+  enabled: true
+- step: dominant_cycle_phase
+  params:
+    price_col: close
+    output_col: dominant_cycle_phase
+    unit: degrees
+  outputs: {}
+  enabled: true
+- step: mama
+  params:
+    price_col: close
+    fast_limit: 0.5
+    slow_limit: 0.05
+    output_col: mama
+  outputs: {}
+  enabled: true
+- step: fama
+  params:
+    price_col: close
+    fast_limit: 0.5
+    slow_limit: 0.05
+    output_col: fama
+  outputs: {}
+  enabled: true
+- step: decycler
+  params:
+    price_col: close
+    period: 60
+    output_col: decycler
+  outputs: {}
+  enabled: true
+- step: decycler_oscillator
+  params:
+    price_col: close
+    fast_period: 30
+    slow_period: 60
+    output_col: decycler_oscillator_30_60
+  outputs: {}
+  enabled: true
+- step: instantaneous_trendline
+  params:
+    price_col: close
+    alpha: 0.07
+    output_col: instantaneous_trendline
+    add_trigger: false
+  outputs: {}
+  enabled: true
+- step: frama
+  params:
+    price_col: close
+    high_col: high
+    low_col: low
+    window: 16
+    fast_period: 4
+    slow_period: 300
+    output_col: frama
+    add_diagnostics: false
+  outputs: {}
+  enabled: true
+- step: supersmoother
+  params:
+    price_col: close
+    period: 10
+    output_col: supersmoother
+  outputs: {}
+  enabled: true
+- step: roofing_filter
+  params:
+    price_col: close
+    high_pass_period: 48
+    low_pass_period: 10
+    output_col: roofing_filter
+  outputs: {}
+  enabled: true
+- step: ehlers_ml_long_candidate
+  params:
+    amplitude_col: hilbert_amplitude
+    cycle_period_col: dominant_cycle_period
+    roofing_col: roofing_filter
+    mama_col: mama
+    fama_col: fama
+    close_col: close
+    decycler_col: decycler
+    instantaneous_trendline_col: instantaneous_trendline
+    frama_col: frama
+    supersmoother_col: supersmoother
+    dominant_cycle_phase_col: dominant_cycle_phase
+    dominant_cycle_phase_unit: degrees
+    atr_col: atr_48
+    amplitude_lookback: 128
+    amplitude_min_quantile: 0.5
+    min_cycle_period: 8.0
+    max_cycle_period: 60.0
+    slope_bars: 1
+    candidate_col: ehlers_ml_candidate
+    side_col: ehlers_ml_side
+  outputs: {}
+  enabled: true
+- step: macd
+  params:
+    price_col: close
+    fast: 12
+    slow: 26
+    signal: 9
+  outputs:
+    macd_12_26: macd
+    macd_signal_9: macd_signal
+    macd_hist_12_26_9: macd_hist
+  enabled: true
+- step: rsi
+  params:
+    price_col: close
+    windows:
+    - 14
+    method: wilder
+  outputs:
+    close_rsi_14: rsi_14
+  enabled: true
+- step: stochastic_rsi
+  params:
+    price_col: close
+    rsi_period: 14
+    stoch_period: 14
+    k_period: 3
+    d_period: 3
+    oversold: 0.2
+    overbought: 0.8
+    prefix: stoch_rsi
+  outputs:
+    stoch_rsi_k: stoch_rsi_k
+    stoch_rsi_d: stoch_rsi_d
+  enabled: true
+- step: bollinger
+  params:
+    price_col: close
+    window: 192
+    n_std: 2.0
+  outputs:
+    bb_ma_192: bollinger_mid_192
+    bb_upper_192_2.0: bollinger_upper_192
+    bb_lower_192_2.0: bollinger_lower_192
+    bb_width_192_2.0: bollinger_bandwidth
+    bb_percent_b_192_2.0: bollinger_percent_b
+  enabled: true
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: close
+        denominator_col: bb_upper_192_2.0
+        output_col: close_over_bb_upper_192
+        subtract: 1.0
+      - numerator_col: close
+        denominator_col: bb_ma_192
+        output_col: close_over_bb_mid_192
+        subtract: 1.0
+- step: indicator_pullback
+  params:
+    asset_vocab:
+    - ETHUSD
+    open_col: open
+    high_col: high
+    low_col: low
+    close_col: close
+    ema_fast_period: 24
+    ema_mid_period: 96
+    ema_slow_period: 192
+    atr_period: 48
+    atr_pct_rank_window: 192
+    macd_hist_col: macd_hist
+    rsi_period: 14
+    stoch_k_col: stoch_rsi_k
+    stoch_d_col: stoch_rsi_d
+    bollinger_bandwidth_col: bollinger_bandwidth
+    bollinger_percent_b_col: bollinger_percent_b
+    bb_bandwidth_rank_window: 192
+    realized_vol_windows:
+    - 24
+    - 48
+    - 96
+    - 192
+    return_windows:
+    - 1
+    - 4
+    - 8
+    - 16
+    - 24
+    - 48
+    rolling_return_windows:
+    - 24
+    - 48
+  outputs: {}
+  enabled: true
+model:
+  kind: lightgbm_regressor
+  params:
+    n_estimators: 800
+    learning_rate: 0.0549537895493607
+    max_depth: 6
+    num_leaves: 15
+    min_child_samples: 200
+    subsample: 0.9
+    colsample_bytree: 0.75
+    reg_alpha: 0.019934229992965794
+    reg_lambda: 1.8786413727433209
+    random_state: 7
+    n_jobs: 1
+    verbosity: -1
+  outputs:
+    pred_ret_col: pred_ret
+    pred_prob_col: pred_prob
+    pred_is_oos_col: pred_is_oos
+  preprocessing:
+    scaler: none
+  calibration: {}
+  feature_cols:
+  - close_ret
+  - lag_close_ret_1
+  - lag_close_ret_2
+  - lag_close_ret_4
+  - lag_close_ret_8
+  - lag_close_ret_16
+  - lag_close_ret_24
+  - lag_close_ret_48
+  - ret_1
+  - ret_4
+  - ret_8
+  - ret_16
+  - ret_24
+  - ret_48
+  - rolling_return_24
+  - rolling_return_48
+  - atr_over_price_48
+  - atr_pct_rank_192
+  - ema_trend_48_192
+  - close_over_bb_upper_192
+  - close_over_bb_mid_192
+  - bollinger_percent_b
+  - bollinger_bandwidth_rank_192
+  - ema_alignment_score
+  - distance_from_ema24_atr
+  - distance_from_ema96_atr
+  - mama_minus_fama_over_atr
+  - close_minus_decycler_over_atr
+  - instantaneous_trendline_slope_over_atr
+  - decycler_slope_over_atr
+  - frama_slope_over_atr
+  - supersmoother_slope_over_atr
+  - roofing_filter_over_atr
+  - dominant_cycle_phase_normalized
+  - body_ratio
+  - upper_wick_ratio
+  - lower_wick_ratio
+  - close_location
+  - range_to_atr
+  target:
+    kind: future_return_regression
+    price_col: close
+    returns_col: close_ret
+    returns_type: simple
+    horizon_bars: 24
+    normalize_by_volatility: true
+    volatility_col: atr_48
+    clip:
+    - -4.0
+    - 4.0
+    fwd_col: target_future_return_h24_atr
+    label_col: target_future_return_h24_atr
+  split:
+    method: purged
+    train_size: 35040
+    test_size: 4380
+    step_size: 4380
+    expanding: false
+    max_folds: 12
+    purge_bars: 24
+    embargo_bars: 24
+  runtime: {}
+  env: {}
+  use_features: true
+  pred_prob_col: pred_prob
+  pred_raw_prob_col: null
+  pred_ret_col: pred_ret
+  pred_is_oos_col: pred_is_oos
+  returns_input_col: null
+  signal_col: null
+  action_col: null
+signals:
+  kind: probability_vol_adjusted
+  params:
+    prob_col: pred_prob
+    vol_col: atr_over_price_48
+    signal_col: signal_structured_tail
+    prob_center: 0.5
+    upper: null
+    lower: null
+    vol_target: null
+    clip: 1.0
+    vol_floor: 1.0e-06
+    min_signal_abs: 0.0
+    activation_filters:
+    - col: atr_pct_rank_192
+      op: ge
+      value: 0.2
+    - col: atr_pct_rank_192
+      op: le
+      value: 0.9
+    - col: bollinger_bandwidth_rank_192
+      op: ge
+      value: 0.25
+    - col: pred_prob
+      op: ge
+      value: 0.5
+    max_trade_rate: 0.05
+    top_quantile_window: 4380
+  outputs: {}
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+risk:
+  cost_per_turnover: 0.0001
+  slippage_per_turnover: 0.0
+  target_vol: null
+  max_leverage: 1.0
+  dd_guard:
+    enabled: false
+    max_drawdown: 0.2
+    cooloff_bars: 20
+    rearm_drawdown: 0.2
+  portfolio_guard: {}
+  sizing: {}
+  drawdown_sizing: {}
+  vol_col: null
+backtest:
+  engine: vectorized
+  returns_col: close_ret
+  signal_col: signal_structured_tail
+  periods_per_year: 17520
+  returns_type: simple
+  missing_return_policy: raise_if_exposed
+  min_holding_bars: 24
+  subset: test
+  stop_mode: fixed_return
+  vol_col: null
+  open_col: open
+  high_col: high
+  low_col: low
+  close_col: close
+  take_profit_r: null
+  stop_loss_r: null
+  volatility_col: null
+  entry_price_mode: null
+  profit_barrier_r: null
+  stop_barrier_r: null
+  vertical_barrier_bars: null
+  tie_break: null
+  event_time_remap_policy: null
+  max_cost_r: null
+  risk_per_trade: null
+  max_holding_bars: null
+  asset_params: {}
+  dynamic_exits: {}
+  partial_exits: {}
+  allow_short: false
+portfolio:
+  enabled: false
+  construction: signal_weights
+  gross_target: 1.0
+  long_short: true
+  expected_return_col: null
+  covariance_window: 60
+  covariance_rebalance_step: 1
+  risk_aversion: 5.0
+  trade_aversion: 0.0
+  selection:
+    enabled: false
+    top_k: 1
+    min_expected_net_return: 0.0
+    rank_by_abs: true
+    weighting: score
+    rebalance_every_n_bars: 1
+  constraints:
+    enforce_target_net_exposure: true
+  asset_groups: {}
+monitoring:
+  enabled: true
+  psi_threshold: 0.2
+  n_bins: 10
+diagnostics:
+  enabled: true
+  baselines:
+    enabled: true
+    random_seed: 7
+  threshold_grid:
+    enabled: false
+    forecast_col: pred_ret
+    symmetric_thresholds:
+    - 0.35
+    - 0.5
+    - 0.75
+    - 1.0
+    - 1.25
+    asymmetric_thresholds: []
+  regime_performance:
+    enabled: true
+  model:
+    enabled: false
+    shap:
+      enabled: false
+      max_rows: 200
+      top_n_features: 12
+      per_prediction_top_k: 5
+      per_prediction_row_limit: 3
+      random_state: 42
+  forecast:
+    quantiles: 10
+    autocorrelation_lags:
+    - 1
+    - 2
+    - 4
+    - 8
+    - 16
+    volatility_col: atr_pct_rank_192
+  robustness:
+    enabled: true
+    cost_multipliers:
+    - 1.0
+    - 2.0
+    - 3.0
+    - 5.0
+    entry_delay_bars:
+    - 1
+    - 2
+    walk_forward_frequency: YE
+    gap_loss_per_exposure: 0.0
+    max_gap_multiple: 3.0
+    strict_no_remap: true
+    combined_cost_multipliers: []
+    gross_cap_values: []
+    cost_filter_max_cost_r_values: []
+  trade_path:
+    enabled: true
+    include_executed_trades: true
+    include_target_trades: true
+    include_probability_quality: true
+    include_counterfactuals: true
+    write_trade_paths: true
+    write_probability_quality: true
+    thresholds_r:
+    - 0.5
+    - 1.0
+    - 1.5
+    - 2.0
+    bars_held_buckets:
+    - 1
+    - 2
+    - 4
+    - 8
+    - 16
+    plots:
+      enabled: true
+      max_trades: 500
+      max_path_points: 200000
+execution:
+  enabled: false
+  mode: paper
+  capital: 1000000.0
+  price_col: close
+  min_trade_notional: 0.0
+  hysteresis:
+    enabled: false
+    entry_threshold: 0.0
+    exit_threshold: 0.0
+    min_holding_bars: 0
+  current_weights: {}
+  current_prices: {}
+logging:
+  enabled: true
+  run_name: ethusd_30m_lightgbm_h24_v37_roll_2y_long_q05
+  output_dir: /workspace/logs/experiments
+  stage_tails:
+    enabled: false
+    stdout: false
+    report: false
+    limit: 10
+    max_columns: 16
+    max_assets: 3
+  execution_source_audit:
+    enabled: false
+  save_model: false
+  save_predictions: true
+  save_processed: false
+strategy:
+  name: ethusd_30m_lightgbm_h24_v37_roll_2y_long_q05
+  timeframe: 30m
+  assets:
+  - ETHUSD
+  description: Rolling 2y LightGBM, separately fitted long-side run, normalized/rank volatility model inputs and causal rolling top-5% probability-conviction selection.
+validation:
+  method: purged_walk_forward
+  purge_bars: 24
+  embargo_bars: 24
+evaluation:
+  strict_oos_only: true

@@ -10,6 +10,7 @@ from src.models.common.runtime import (
     probe_xgboost_runtime,
     resolve_feature_selectors,
     resolve_runtime_for_model,
+    validate_model_feature_columns,
 )
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "probe_xgboost_runtime",
     "resolve_feature_selectors",
     "resolve_runtime_for_model",
+    "validate_model_feature_columns",
 ]

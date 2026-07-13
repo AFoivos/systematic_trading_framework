@@ -71,7 +71,6 @@ Canonical feature steps:
 - `hurst_exponent`
 - `fractal_dimension`
 - `zscore_momentum`
-- `rolling_r2_trend_quality`
 - `trend_slope_volatility`
 - `volatility_of_volatility`
 - `volatility_regime`
@@ -97,6 +96,10 @@ Feature-compatible legacy signal steps:
 
 Σημείωση: τα legacy entries είναι resolvable για παλιά configs, αλλά δεν είναι
 canonical raw feature builders.
+
+Rolling slope, intercept και R2 δεν είναι raw feature step. Το canonical
+reusable implementation είναι το transform helper `rolling_linear_regression`,
+προαιρετικά συντεθειμένο με `rising_flag` και `threshold_flag`.
 
 ## Signals
 

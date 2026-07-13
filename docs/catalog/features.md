@@ -25,7 +25,7 @@ diagnostic/research column δεν πρέπει να μπει σε model features
   z-scores και rolling aggregations δηλώνονται ως helpers στο YAML.
 - Τα παλιά helper-equivalent steps `lags`, `return_momentum`,
   `vol_normalized_momentum`, `volume_features`, `zscore_momentum`,
-  `rolling_r2_trend_quality`, `trend_slope_volatility` και
+  τα legacy rolling-R2/trend-quality steps, `trend_slope_volatility` και
   `volatility_of_volatility` δεν είναι canonical feature registry entries.
   Νέα configs πρέπει να τα εκφράζουν με `transforms` / `normalizations`.
 
@@ -118,7 +118,7 @@ triple-barrier labels.
 | `adx` | Directional movement strength με `+DI`, `-DI` και ADX. | Υψηλό ADX σημαίνει ισχυρή directional δομή, όχι απαραίτητα long. Το long/short bias έρχεται από `+DI` vs `-DI`. | `adx_14=32` και `plus_di_14 > minus_di_14` δείχνουν ισχυρότερο ανοδικό directional pressure. |
 | `bollinger` | Rolling mean, bands, band width και `%B`. | `%B > 1` είναι πάνω από upper band, `%B < 0` κάτω από lower band, `0.5` στο μέσο. Μεγάλο width δείχνει volatility expansion. | `bb_percent_b_20_2=1.15` σημαίνει close πάνω από το upper band, πιθανό overextension ή breakout. |
 | `vwap` | Rolling volume-weighted fair-value anchor. | Close πάνω από VWAP δείχνει τιμή πάνω από πρόσφατη volume-weighted consensus. Απόσταση από VWAP θέλει ratio ή ATR scaling. | `close_over_vwap_20=0.004` σημαίνει close 0.4% πάνω από rolling VWAP. |
-| `rolling_r2_trend_quality` | Πόσο καλά η πρόσφατη τιμή εξηγείται από ευθεία γραμμή. | `R2` κοντά στο `1` σημαίνει καθαρό linear trend, κοντά στο `0` σημαίνει chop/noise. Δεν λέει direction χωρίς slope. | `rolling_r2_96=0.78` δείχνει καθαρότερη τάση από `0.18`. |
+| `rolling_linear_regression` helper | Πόσο καλά η πρόσφατη τιμή εξηγείται από ευθεία γραμμή. | `R2` κοντά στο `1` σημαίνει καθαρό linear trend, κοντά στο `0` σημαίνει chop/noise. Δεν λέει direction χωρίς slope. | `rolling_r2_96=0.78` δείχνει καθαρότερη τάση από `0.18`. |
 | `trend_slope_volatility` | Trend slope κανονικοποιημένο με volatility. | Θετικό σημαίνει ανοδική κλίση, αρνητικό καθοδική. Απόλυτη τιμή `> 1` δείχνει slope μεγάλη σε σχέση με το noise. | `trend_slope_vol_ratio_96=1.25` σημαίνει ανοδικό trend ισχυρότερο από το τρέχον volatility unit. |
 | `support_resistance` | Rolling support/resistance από πρόσφατα min/max levels. | Μικρή απόσταση από support/resistance δείχνει κοντινό structural level. Breakout flags δείχνουν υπέρβαση level. | `(close - support) / ATR = 0.3` σημαίνει close μόλις 0.3 ATR πάνω από support. |
 | `support_resistance_v2` | Confirmed pivots, ages, touches και breakout/retest context. | Περισσότερα touches/νεότερα levels δείχνουν πιο σχετικό structure. Breakout/retest flags δείχνουν event state. | `resistance_touch_count=4` και μικρή ATR distance δείχνουν σημαντικό nearby resistance. |
@@ -339,29 +339,31 @@ normalization statistics.
 
 ## quant trend/volatility snippet
 
-Παράδειγμα για τα standalone quant feature steps που μετρούν trend quality,
-trend slope σε σχέση με volatility, και volatility-of-volatility:
+Παράδειγμα για canonical helper-based rolling R2 και τα standalone quant
+feature steps που μετρούν trend slope και volatility-of-volatility:
 
 ```yaml
 features:
-  - step: rolling_r2_trend_quality
+  - step: returns
     params:
-      price_col: close
-      window: 96
-      output_col: rolling_r2_96
+      log: true
+      col_name: close_logret
     transforms:
       rolling_linear_regression:
-        params:
-          source_col: close
-          window: 96
-          slope_col: rolling_r2_slope_96
-          r2_col: rolling_r2_96
+        source_col: close
+        window: 96
+        slope_col: rolling_r2_slope_96
+        intercept_col: rolling_r2_intercept_96
+        r2_col: rolling_r2_96
+      rising_flag:
+        source_col: rolling_r2_96
+        periods: 1
+        output_col: rolling_r2_96_rising
       threshold_flag:
-        params:
-          source_col: rolling_r2_96
-          threshold: 0.60
-          op: ge
-          output_col: rolling_r2_96_ok
+        source_col: rolling_r2_96
+        threshold: 0.60
+        op: ge
+        output_col: rolling_r2_96_ok
 
   - step: trend_slope_volatility
     params:
@@ -666,10 +668,32 @@ Higher-timeframe raw candles aligned στο base timeframe.
 
 Πλαίσιο επιβεβαιωμένων τοπικών swing high/low.
 
-- Έξοδοι: raw local extrema, confirmed extrema, last confirmed high/low distances, near-high/near-low flags, overextension context. Τα exact names είναι prefixed με `prefix`, default `swing`.
+- Live-safe έξοδοι: `swing_confirmed_local_high`,
+  `swing_confirmed_local_low`, οι αντίστοιχες confirmed price columns και το
+  context τελευταίων confirmed extrema (distances, ages, structure, near και
+  overextension flags). Τα exact names ακολουθούν το configured `prefix`.
 - Χρησιμότητα: market structure context, απόσταση από τελευταίο swing high/low.
 - Θεωρία: swing highs/lows είναι structural pivots για trend, support/resistance και exhaustion.
-- Αιτιότητα: confirmed extrema είναι live-safe μετά από `right_bars`. Raw local extrema και optional research labels είναι diagnostic/research-only και δεν πρέπει να μπουν σε production model features.
+- Αιτιότητα: pivot στο `i` γίνεται γνωστό και γράφεται ως confirmed μόνο στο
+  `i + right_bars`. Τα `raw_local_*` και `pre_local_*` χρησιμοποιούν future
+  information, είναι research/target-only και δεν επιστρέφονται από το live
+  builder ούτε επιτρέπονται ως model features. Για explicit research/target
+  generation χρησιμοποιείται χωριστά το utility
+  `make_pre_extrema_research_label`.
+
+```yaml
+features:
+  - step: swing_extrema_context
+    params:
+      high_col: high
+      low_col: low
+      close_col: close
+      normalizer_col: mtf_1h_atr
+      normalizer_mode: price
+      left_bars: 3
+      right_bars: 3
+      prefix: swing
+```
 
 ## indicator_pullback
 
@@ -911,11 +935,14 @@ Z-score momentum τιμής.
 - Θεωρία: mean-reversion ή trend continuation μπορούν να εξαρτώνται από standardized displacement.
 - Αιτιότητα: rolling statistics είναι trailing.
 
-## rolling_r2_trend_quality
+## rolling_linear_regression helper
 
-Rolling ποιότητα τάσης από γραμμική παλινδρόμηση.
+Canonical rolling ποιότητα τάσης από γραμμική παλινδρόμηση. Δεν είναι entry του
+main feature registry· εφαρμόζεται ως `transforms.rolling_linear_regression`
+κάτω από ένα υπάρχον feature step.
 
-- Έξοδοι: R2 column και optional slope, intercept, rising flag, trend-quality flag.
+- Έξοδοι: configured slope, intercept και R2 columns. Rising/threshold flags
+  προστίθενται χωριστά με `rising_flag` και `threshold_flag`.
 - Τύπος: rolling regression of price on time index και `R^2` ως quality/linearity measure.
 - Χρησιμότητα: ξεχωρίζει directional, clean trends από noisy drift.
 - Θεωρία: υψηλό R2 σημαίνει ότι η πρόσφατη τιμή εξηγείται καλά από linear trend.

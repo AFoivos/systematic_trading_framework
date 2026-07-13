@@ -290,7 +290,6 @@ def test_spx500_roc_ml_strong_config_wires_validated_gates_and_diagnostics() -> 
     ))
 
     feature_steps = [step["step"] for step in cfg["features"]]
-    assert "rolling_r2_trend_quality" in feature_steps
     assert "trend_slope_volatility" in feature_steps
     assert "volatility_of_volatility" in feature_steps
 

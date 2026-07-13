@@ -1,80 +1,101 @@
-# Trading Dashboard Assumptions
+# Τεχνικές παραδοχές του trading dashboard
 
-This MVP is intentionally additive and local-first. It does not import, modify, or execute the existing experiment pipeline.
+Τελευταία ενημέρωση: 2026-07-11
 
-## Repository Discovery
+Το dashboard είναι πρόσθετη, local-first επιφάνεια ανάγνωσης. Δεν εισάγει ούτε
+εκτελεί το υπάρχον experiment pipeline. Μοναδική ελεγχόμενη εγγραφή είναι η
+αποθήκευση layout JSON.
 
-- CSV/parquet datasets are discovered anywhere under `data/**`.
-- The dashboard's dataset selector groups entries by folder path, so nested data folders become category/subcategory groups in the UI.
-- Experiment runs are discovered under `logs/experiments/**` when a directory contains one of:
-  - `run_metadata.json`
-  - `summary.json`
-  - `artifact_manifest.json`
-  - `study_summary.json`
-- Existing artifact manifests may contain container paths beginning with `/workspace`; the dashboard maps those back to the local repository root when possible.
+## Ανακάλυψη repository
 
-## Asset and Timeframe Inference
+- Αναζητούνται CSV και Parquet σε όλο το `data/**`.
+- Τα datasets ομαδοποιούνται στη διεπαφή σύμφωνα με το directory path.
+- Run directory θεωρείται directory κάτω από `logs/experiments/**` ή
+  `logs/bot/**` που περιέχει τουλάχιστον ένα από `run_metadata.json`,
+  `summary.json`, `artifact_manifest.json` ή `study_summary.json`.
+- Container paths που αρχίζουν από `/workspace` αντιστοιχίζονται στο τοπικό
+  repository root όταν είναι δυνατό.
 
-- Raw single-asset CSVs infer asset and timeframe from filenames such as:
-  - `xauusd_h1.csv` -> `XAUUSD`, `H1`
-  - `xauusd_30m.csv` -> `XAUUSD`, `M30`
-  - `XAUUSD_M5_bid.csv` -> `XAUUSD`, `M5`
-- Processed snapshot assets are read from adjacent `metadata.json` when available.
-- Processed snapshot timeframe is read from metadata context if present; otherwise it falls back to filename or directory inference.
-- Dataset-id based API calls do not require an explicit asset or timeframe. If a dataset declares exactly one asset and contains an `asset` column, the loader uses that asset as the implicit row filter.
+## Εξαγωγή asset και timeframe
 
-## Date Filtering
+- Τα raw single-asset filenames μπορούν να δώσουν asset/timeframe, όπως
+  `xauusd_h1.csv`, `xauusd_30m.csv` και `XAUUSD_M5_bid.csv`.
+- Για processed snapshots προτιμάται το γειτονικό `metadata.json`.
+- Το timeframe αναζητείται πρώτα στα metadata και έπειτα στο filename ή στο
+  directory name.
+- Με `dataset_id` δεν απαιτείται ρητό asset ή timeframe. Αν το dataset δηλώνει
+  ακριβώς ένα asset και περιέχει στήλη `asset`, αυτό χρησιμοποιείται ως
+  implicit row filter.
 
-- API `start` is inclusive.
-- API `end` is exclusive, matching the existing storage loader behavior in `src/src_data/storage.py`.
+Οι παραπάνω κανόνες είναι heuristics ανακάλυψης και δεν αντικαθιστούν canonical
+dataset manifests.
 
-## Column Normalization
+## Χρονικά φίλτρα
 
-- Timestamp columns are detected case-insensitively from:
-  - `timestamp`
-  - `datetime`
-  - `date`
-  - `time`
-- OHLCV columns are normalized case-insensitively to:
-  - `open`
-  - `high`
-  - `low`
-  - `close`
-  - `volume`
-- `/api/ohlcv` requires all OHLCV columns. Missing columns return a clear API error.
-- Numeric epoch timestamps are interpreted as UTC seconds, milliseconds, microseconds, or nanoseconds by magnitude.
+- Το `start` είναι συμπεριληπτικό.
+- Το `end` είναι αποκλειστικό.
+- Τα όρια μετατρέπονται σε UTC timestamps πριν από το filtering.
 
-## Dynamic Catalogs
+## Κανονικοποίηση στηλών
 
-- Feature, signal, target, and prediction catalogs are inferred from dataset columns.
-- Feature categories are heuristic and based on column names. This avoids hardcoding a closed feature registry into the dashboard.
-- Signal columns are inferred from names containing `signal`, `candidate`, `side`, or `position`.
-- Target columns are inferred from names containing `target`, `r_target`, or `label`.
-- Prediction columns are inferred from names beginning with `pred` or containing `prediction`, `probability`, or `_prob`.
+- Η timestamp στήλη εντοπίζεται case-insensitively μεταξύ `timestamp`,
+  `datetime`, `date` και `time`.
+- Οι `open`, `high`, `low`, `close` και `volume` κανονικοποιούνται
+  case-insensitively.
+- Το `/api/ohlcv` απαιτεί και τις πέντε OHLCV στήλες.
+- Αριθμητικά epochs ερμηνεύονται ως seconds, milliseconds, microseconds ή
+  nanoseconds σύμφωνα με το μέγεθός τους.
+- Μετά την κανονικοποίηση, το index ταξινομείται και σε duplicate timestamps
+  διατηρείται η τελευταία γραμμή.
 
-## Parameterized Builders
+## Δυναμικοί κατάλογοι
 
-- The dashboard should resolve builders through the category registries (`src.features.registry`, `src.signals.registry`, `src.targets.registry`, `src.models.registry`). `src.experiments.registry` remains only as a compatibility facade.
-- Target builders are exposed from `src.targets` as `forward_return`, `triple_barrier`, `r_multiple`, and `classifier`.
-- Parameterized builder execution is a read-only preview path. It applies selected builders to an in-memory copy of the selected dataset and returns chartable numeric output columns.
-- The dashboard does not persist computed feature/signal/target columns back into datasets, configs, or experiment artifacts.
-- Builder parameter forms are generated from Python function signatures where possible. Target builder forms use explicit defaults from the existing target implementations because the target API accepts a single config dictionary.
-- If a builder needs upstream columns, the user must include the required earlier feature/signal steps in the dashboard sequence. For example, a target depending on `manual_long_signal` must run or load a step that creates that column first.
-- When no date range is selected, the frontend requests a capped preview for returned chart series. The backend computes the selected builder sequence before applying that return cap, so rolling/windowed features retain earlier context within the loaded dataset.
+Οι κατάλογοι στηλών ενός ήδη υπολογισμένου dataset είναι heuristic:
 
-## Layout Storage
+- signal columns: ονόματα με `signal`, `candidate`, `side` ή `position`,
+- target columns: ονόματα με `target`, `r_target` ή `label`,
+- prediction columns: ονόματα που αρχίζουν από `pred` ή περιέχουν
+  `prediction`, `probability` ή `_prob`.
 
-- Saved dashboard layouts are JSON files under `apps/trading_dashboard/layouts`.
-- Layouts store selection state and visualization series configs only; they do not snapshot market data.
+Αντίθετα, οι parameterized builders επιλύονται από τα registries
+`src.features.registry`, `src.signals.registry` και `src.targets.registry`.
+Το `src.experiments.registry` είναι μόνο facade συμβατότητας.
 
-## Panel Defaults
+## Parameterized builders
 
-- Dataset and computed feature series default to one dedicated lower panel each when `panel_id` is empty.
-- Assigning the same non-empty `panel_id` to multiple lower-panel series groups them into a shared panel.
-- `vwap_*` price series default to the main price chart as overlays, while derived distance series such as `close_over_vwap_*` remain lower-panel series by default.
+- Οι builders εφαρμόζονται σε in-memory αντίγραφο και δεν αποθηκεύουν στήλες.
+- Η σειρά των steps έχει σημασία: ένα step πρέπει να ακολουθεί όποιο προηγούμενο
+  step παράγει τις εισόδους του.
+- Τα parameter forms προκύπτουν από Python signatures όπου αυτό είναι ασφαλές.
+- Χωρίς date range, το backend υπολογίζει πρώτα ολόκληρη την επιλεγμένη
+  ακολουθία και εφαρμόζει έπειτα το όριο επιστρεφόμενων σημείων. Έτσι τα rolling
+  features διατηρούν το προγενέστερο context.
+- Targets που κοιτούν το μέλλον είναι κατάλληλα μόνο για research preview.
+  Δεν αποτελούν διαθέσιμες πληροφορίες στο timestamp απόφασης.
 
-## Current MVP Boundaries
+## Αποθήκευση και panels
 
-- The dashboard reads existing datasets and experiment outputs but does not launch experiments.
-- The frontend renders candlesticks, line overlays, lower-panel line/histogram series, and simple trade entry/exit markers.
-- Background regime shading, probability bands, and full prediction diagnostics are represented in the visualization schema but not fully rendered in the first MVP.
+- Τα layouts αποθηκεύονται κάτω από `apps/trading_dashboard/layouts`.
+- Αποθηκεύουν selection state και series configuration, όχι market data.
+- Μία lower-panel σειρά χωρίς `panel_id` λαμβάνει ξεχωριστό panel.
+- Κοινό μη κενό `panel_id` ομαδοποιεί σειρές στο ίδιο panel.
+- Οι `vwap_*` price-level σειρές προβάλλονται συνήθως πάνω στο κύριο chart,
+  ενώ αποστάσεις όπως `close_over_vwap_*` παραμένουν σε lower panel.
+
+## Όρια της τρέχουσας διεπαφής
+
+- Το dashboard δεν ξεκινά experiments.
+- Απεικονίζει candlesticks, line overlays, lower-panel line/histogram σειρές
+  και απλούς trade markers.
+- Regime shading, probability bands και ορισμένα πλήρη prediction diagnostics
+  υπάρχουν στο schema αλλά δεν αποδίδονται όλα από το frontend.
+- Τα inferred catalogs δεν αποτελούν εγγύηση ότι μια στήλη είναι causal ή
+  κατάλληλη ως model input.
+
+## Πηγές αλήθειας
+
+- `apps/trading_dashboard/backend/app/services/data_loader.py`
+- `apps/trading_dashboard/backend/app/services/schema_mapper.py`
+- `apps/trading_dashboard/backend/app/services/experiment_loader.py`
+- `apps/trading_dashboard/backend/app/api/routes_*.py`
+- `apps/trading_dashboard/backend/app_tests/`

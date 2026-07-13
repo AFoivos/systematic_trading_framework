@@ -6,7 +6,6 @@ from pandas.testing import assert_series_equal
 from src.features.helpers import apply_feature_helpers
 from src.features.helpers.normalizations.returns import add_close_returns, compute_returns
 from src.features.lags import add_lagged_features
-from src.features.rolling_r2_trend_quality import add_rolling_r2_trend_quality
 from src.features.technical.return_momentum import add_return_momentum_features
 from src.features.technical.vol_normalized_momentum import add_vol_normalized_momentum_features
 from src.features.trend_slope_volatility import add_trend_slope_volatility
@@ -211,19 +210,8 @@ def test_trend_slope_volatility_can_be_composed_from_helpers() -> None:
         _assert_equal(helper[column], legacy[column])
 
 
-def test_rolling_linear_regression_helper_replaces_rolling_r2_trend_quality() -> None:
+def test_rolling_linear_regression_composes_with_canonical_flag_helpers() -> None:
     df = synthetic_ohlcv()
-    legacy = add_rolling_r2_trend_quality(
-        df,
-        price_col="close",
-        window=12,
-        output_col="rolling_r2_12",
-        slope_col="rolling_r2_slope_12",
-        intercept_col="rolling_r2_intercept_12",
-        rising_col="rolling_r2_12_rising",
-        trend_quality_col="rolling_r2_12_ok",
-        trend_quality_threshold=0.60,
-    )
     helper = apply_feature_helpers(
         df,
         transforms={
@@ -244,11 +232,8 @@ def test_rolling_linear_regression_helper_replaces_rolling_r2_trend_quality() ->
         },
     )
 
-    for column in [
-        "rolling_r2_12",
-        "rolling_r2_slope_12",
-        "rolling_r2_intercept_12",
-        "rolling_r2_12_rising",
-        "rolling_r2_12_ok",
-    ]:
-        _assert_equal(helper[column], legacy[column])
+    assert helper["rolling_r2_12"].iloc[:11].isna().all()
+    assert helper["rolling_r2_slope_12"].dropna().abs().gt(0.0).any()
+    assert helper["rolling_r2_12"].dropna().between(0.0, 1.0).all()
+    assert helper["rolling_r2_12_rising"].dtype == "int8"
+    assert helper["rolling_r2_12_ok"].dtype == "int8"

@@ -1,0 +1,195 @@
+strategy:
+  name: us100_30m_ny_cash_orb_round1_raw_v1
+  timeframe: 30m
+  assets:
+  - US100
+  description: >-
+    Round 1 diagnostic baseline for a raw New York cash-session Opening Range
+    Breakout on US100. No model, meta-filter, trend filter, or parameter search.
+
+data:
+  source: dukascopy_csv
+  interval: 30m
+  start: null
+  end: null
+  alignment: inner
+  symbol: US100
+  storage:
+    mode: cached_only
+    dataset_id: us100_30m_ny_cash_orb_round1_raw_v1
+    save_raw: false
+    save_processed: true
+    load_path: data/raw/dukascopy_30m_clean/us100_30m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed
+
+features:
+- step: returns
+  params:
+    log: false
+    col_name: close_ret
+
+- step: volatility
+  params:
+    returns_col: close_ret
+    rolling_windows:
+    - 24
+    ewma_spans: []
+    annualization_factor: 12096.0
+
+- step: atr
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    window: 14
+    windows:
+    - 14
+    method: wilder
+    add_over_price: false
+    atr_col: atr_14
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: atr_14
+        denominator_col: close
+        output_col: atr_over_price_14
+
+- step: opening_range_breakout
+  params:
+    timestamp_col: timestamp
+    timezone_input: UTC
+    price_col: close
+    open_col: open
+    high_col: high
+    low_col: low
+    close_col: close
+    atr_col: atr_14
+    volatility_col: vol_rolling_24
+    enabled_sessions:
+    - new_york_cash
+    sessions:
+    - name: new_york_cash
+      timezone: America/New_York
+      session_open_time: '09:30'
+      opening_range_bars: 2
+      trade_until_time: '12:00'
+    asset_session_map:
+      US100:
+      - new_york_cash
+      NAS100:
+      - new_york_cash
+    asset_alias_map:
+      NAS100: US100
+    opening_range_bars: 2
+    min_range_atr: 0.4
+    max_range_atr: 2.5
+    breakout_buffer_atr: 0.10
+    post_breakout_active_bars: 1
+    max_breakouts_per_session: 1
+    use_close_breakout: true
+    allow_reversal_same_session: false
+    use_extended_trade_until: false
+
+model:
+  kind: none
+
+signals:
+  kind: orb_candidate_side
+  params:
+    candidate_col: orb_candidate
+    side_col: orb_side
+    signal_col: signal_orb_side
+    mode: long_short
+
+target: {}
+
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+
+risk:
+  cost_per_turnover: 0.00015
+  slippage_per_turnover: 0.00010
+  target_vol: null
+  max_leverage: 1.0
+  sizing: {}
+  dd_guard:
+    enabled: false
+    max_drawdown: 0.08
+    rearm_drawdown: 0.04
+    cooloff_bars: 48
+  portfolio_guard: {}
+  drawdown_sizing: {}
+  vol_col: null
+
+backtest:
+  engine: manual_barrier
+  signal_col: signal_orb_side
+  returns_col: close_ret
+  returns_type: simple
+  subset: full
+  periods_per_year: 12096
+  missing_return_policy: raise_if_exposed
+  allow_short: true
+  long_only: false
+  stop_mode: volatility_stop
+  vol_col: atr_over_price_14
+  open_col: open
+  high_col: high
+  low_col: low
+  close_col: close
+  stop_loss_r: 1.25
+  take_profit_r: 1.875
+  risk_per_trade: 0.0035
+  max_holding_bars: 12
+  dynamic_exits: {}
+  partial_exits: {}
+
+portfolio:
+  enabled: false
+  construction: signal_weights
+  long_short: true
+  gross_target: 1.0
+
+monitoring:
+  enabled: false
+  psi_threshold: 0.2
+  n_bins: 10
+
+diagnostics:
+  enabled: true
+  robustness:
+    enabled: true
+    cost_multipliers:
+    - 2.0
+    - 3.0
+    - 5.0
+    entry_delay_bars:
+    - 1
+    - 2
+    walk_forward_frequency: YE
+
+execution:
+  enabled: false
+  mode: paper
+  capital: 100000.0
+  price_col: close
+
+logging:
+  enabled: true
+  run_name: us100_30m_ny_cash_orb_round1_raw_v1
+  output_dir: logs/experiments
+  stage_tails:
+    enabled: true
+    stdout: true
+    report: true
+    limit: 10
+    max_columns: 18
+    max_assets: 1
+  execution_source_audit:
+    enabled: true

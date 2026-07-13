@@ -410,13 +410,24 @@ signals:
 Τι μετρά:
 
 - Τη raw πλευρά ενός Opening Range Breakout candidate.
-- Είναι diagnostic baseline πριν από model filtering.
+- Είναι diagnostic baseline πριν από model filtering και δεν χρησιμοποιεί ML.
+- Διαβάζει μόνο τα ήδη υπολογισμένα `orb_candidate` και `orb_side` από το
+  `opening_range_breakout` feature· δεν ξαναϋπολογίζει session, range, buffer
+  ή breakout condition.
 
 Τι σημαίνουν οι τιμές:
 
 - `candidate_col = 1` -> γράφει την πλευρά του `side_col`.
 - `candidate_col = 0` -> flat.
-- Δεν χρησιμοποιεί probabilities ή thresholds.
+- `mode: long_only` κρατά μόνο positive side, `short_only` μόνο negative side
+  και `long_short` και τις δύο πλευρές.
+- Δεν χρησιμοποιεί probabilities, thresholds, ATR/trend filters ή risk logic.
+
+Το `post_breakout_active_bars` ανήκει στο upstream feature. Με τιμή `1`, το
+raw signal είναι event-like και εμφανίζεται μόνο στο πρώτο breakout bar. Με
+μεγαλύτερη τιμή, το ίδιο candidate/side παραμένει ενεργό για τόσα bars και
+εκφράζει exposure window, όχι πολλαπλά ανεξάρτητα breakout trades. Η entry
+timing, execution lag και exits αξιολογούνται στο backtest/execution layer.
 
 Παράδειγμα:
 

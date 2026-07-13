@@ -5,7 +5,7 @@ import pytest
 
 from src.experiments.registry import SIGNAL_REGISTRY
 from src.signals.orb_candidate_side_signal import orb_candidate_side_signal
-from src.utils.config_validation import validate_signals_block
+from src.utils.config_validation import ConfigValidationError, validate_signals_block
 
 
 def test_orb_candidate_side_signal_gates_side_by_candidate() -> None:
@@ -59,3 +59,12 @@ def test_orb_candidate_side_signal_requires_columns() -> None:
 
     with pytest.raises(KeyError, match="side_col"):
         orb_candidate_side_signal(pd.DataFrame({"orb_candidate": [1.0]}))
+
+
+def test_orb_candidate_side_signal_rejects_invalid_mode_directly_and_in_config() -> None:
+    frame = pd.DataFrame({"orb_candidate": [1.0], "orb_side": [1.0]})
+
+    with pytest.raises(ValueError, match="mode"):
+        orb_candidate_side_signal(frame, mode="invalid")
+    with pytest.raises(ConfigValidationError, match="signals.params.mode"):
+        validate_signals_block({"kind": "orb_candidate_side", "params": {"mode": "invalid"}})
