@@ -1,0 +1,370 @@
+{
+  "created_at_utc": "2026-07-13T09:00:07.908011+00:00",
+  "files": {
+    "config": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/config_used.yaml",
+      "bytes": 15315,
+      "sha256": "5a2a68e1456f9e7388c2b504916f37ce17c72caa7b3a4650f90c79e3de9d9abc"
+    },
+    "costs": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/costs.csv",
+      "bytes": 1777047,
+      "sha256": "843e82a17e594596d43ee387f33e93ed003803fb05aca2d49dd397905856248e"
+    },
+    "counterfactual_exit_summary": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/report_assets/counterfactual_exit_summary.csv",
+      "bytes": 2561,
+      "sha256": "208d6083204f92671af9b18189cf25a7609b2525c7b530c0a514be502395e8b5"
+    },
+    "counterfactual_exit_trades": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/report_assets/counterfactual_exit_trades.csv",
+      "bytes": 92817,
+      "sha256": "a08c8dd903c6e3a8d13b659c5e1eb3796d43a20e04d2862f075b7671be161cbf"
+    },
+    "cumulative_cost_drag": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/report_assets/cumulative_cost_drag.png",
+      "bytes": 39143,
+      "sha256": "363f5b9a7ef4ed96b572d405734c2235259f8592975861c2c42b1edb97fb81d1"
+    },
+    "cumulative_returns": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/report_assets/cumulative_returns.png",
+      "bytes": 66107,
+      "sha256": "67b5b5a1e5993ea3377b2bb237f3b7a10dd15995815ad55e38bd3ec2aab3ef1b"
+    },
+    "diagnostics_cost_vs_gross_pnl": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/cost_vs_gross_pnl.png",
+      "bytes": 45425,
+      "sha256": "09e3e356214e44d42e774310a41df57bcf417b41cf8368f06f09e58acc9667f4"
+    },
+    "diagnostics_lgbm_gain_importance": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/lgbm_gain_importance.png",
+      "bytes": 91811,
+      "sha256": "fb2d3736181377b80034cd79d04813bd63b44d836bc8352ddd2a69267401bbcf"
+    },
+    "diagnostics_lgbm_split_importance": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/lgbm_split_importance.png",
+      "bytes": 88283,
+      "sha256": "b4480dfe37bdccf65244bd2fa0bf8632e5e9ed225cbc6728bb887005ef914425"
+    },
+    "diagnostics_lightgbm_importance": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/lightgbm_importance.csv",
+      "bytes": 62968,
+      "sha256": "5f97ffa5620269f90a64b65a5032edc9e071b3c3285bd27b79d1f9a742ff3eb1"
+    },
+    "diagnostics_prediction_autocorrelation": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/prediction_autocorrelation.png",
+      "bytes": 21705,
+      "sha256": "0f90b264c32b0f5baf1eb4b74d146d91c6a22348876b447485038539c917a53b"
+    },
+    "diagnostics_prediction_distribution": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/prediction_distribution.csv",
+      "bytes": 3636583,
+      "sha256": "b3ac8dacfa9b0ea94bb93e5d5f64c205e1232ab9976346cc8e781dbbf04720e6"
+    },
+    "diagnostics_prediction_histogram": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/prediction_histogram.png",
+      "bytes": 31060,
+      "sha256": "e626995450688aa0bc022a5091dd435fc317328449e2c077ab0c1afea0a6d977"
+    },
+    "diagnostics_prediction_metrics": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/prediction_metrics.csv",
+      "bytes": 387,
+      "sha256": "f9aadaf60fdfa8c0b719887ff7d499d48b83f8732201c909ba34e7ad99c5851c"
+    },
+    "diagnostics_prediction_quantiles": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/prediction_quantiles.png",
+      "bytes": 47685,
+      "sha256": "1d2989d868438eb54f5cdd76a7633bc9057febc5a0e023ef4a4a1b7cceffaec4"
+    },
+    "diagnostics_prediction_timeseries": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/prediction_timeseries.png",
+      "bytes": 353973,
+      "sha256": "6e24fa479c220e52659f15436eaf8b050d05aa8b88846f43e77e46a03facf043"
+    },
+    "diagnostics_prediction_vs_realized": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/prediction_vs_realized.png",
+      "bytes": 289543,
+      "sha256": "d30e7b7778b1209dff40deb6f8d25bbb5f42a094ebcd1db997d95eb4adec1937"
+    },
+    "diagnostics_regime_diagnostics": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/regime_diagnostics.csv",
+      "bytes": 235,
+      "sha256": "ea450e830d19993eac0cce98b10751c663c7f983a3055e621c0eb5f57a75ae94"
+    },
+    "diagnostics_residual_histogram": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/residual_histogram.png",
+      "bytes": 32294,
+      "sha256": "ce6398fe9abd25f827b324a4a6de8a3cb256a62a512e031d5904fb096462761e"
+    },
+    "diagnostics_shap_dependence_atr_48": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/shap_dependence_atr_48.png",
+      "bytes": 140865,
+      "sha256": "e1d310900c8b988fedb380378d95fb92b639fe0c78a9d487d90cfcd8fb346bc8"
+    },
+    "diagnostics_shap_dependence_atr_over_price_48": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/shap_dependence_atr_over_price_48.png",
+      "bytes": 122310,
+      "sha256": "fa4ad6545a81c55d22379e65263a9b8bdd0a414926e6317a2ce0e4f251b22ad2"
+    },
+    "diagnostics_shap_dependence_ema_trend_48_192": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/shap_dependence_ema_trend_48_192.png",
+      "bytes": 120576,
+      "sha256": "c78eabb493c13a4b5cc1c34c949f30f743d87aeff0e429ab7bb6c73036f6fa5c"
+    },
+    "diagnostics_shap_dependence_vol_rolling_192": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/shap_dependence_vol_rolling_192.png",
+      "bytes": 126367,
+      "sha256": "b6666771a464af492383f867eb529c5551f0cd4aa48848f601da48cb75ea1207"
+    },
+    "diagnostics_shap_dependence_vol_rolling_24": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/shap_dependence_vol_rolling_24.png",
+      "bytes": 98820,
+      "sha256": "a583be428c6e140da8e1401f287bc8ffbeba0591f9ecbb52b6a6b389dc9b7732"
+    },
+    "diagnostics_shap_dependence_vol_rolling_96": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/shap_dependence_vol_rolling_96.png",
+      "bytes": 122835,
+      "sha256": "3d98c036ede912baf4c2c22e498d457b789b6d0fdb32bcb6f521dd1f3d742572"
+    },
+    "diagnostics_shap_feature_importance": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/shap_feature_importance.csv",
+      "bytes": 23059,
+      "sha256": "b1e4397428f25584e4e6ccc077fb7c33b8a5e823fcde644fafa2999c773419b1"
+    },
+    "diagnostics_shap_per_prediction": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/shap_per_prediction.csv",
+      "bytes": 80355,
+      "sha256": "5f1645d3d1c55b05b84ae4764359faed58029836b56b8ad5eaaad5ffdd7be55a"
+    },
+    "diagnostics_shap_status": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/shap_status.csv",
+      "bytes": 322,
+      "sha256": "d35970cb105cf1bb67c48b67d51d6a20881a1b1527a0a2f72f54f226defd4bcd"
+    },
+    "diagnostics_shap_summary": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/shap_summary.png",
+      "bytes": 212444,
+      "sha256": "1e520537ed2d42225b2a0692af61a7098cb9b07835649402b0a859a3746b2868"
+    },
+    "diagnostics_shap_values_sample": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/shap_values_sample.csv",
+      "bytes": 2903607,
+      "sha256": "19eda87856d12214a9cac37057c97f2f0a798d3944db406b6b9ffe8472d067fd"
+    },
+    "diagnostics_summary": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/summary.json",
+      "bytes": 4331,
+      "sha256": "509d192c3dc969711f81c97a369159c2a46a21ee14a984fbe329fc030903d280"
+    },
+    "diagnostics_turnover_cost_timeseries": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/turnover_cost_timeseries.csv",
+      "bytes": 7945315,
+      "sha256": "609da0686b7ff95425fa401f66a960d1ed93be0fcddae9eefd119163e427e1bb"
+    },
+    "diagnostics_turnover_timeseries": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/turnover_timeseries.png",
+      "bytes": 54088,
+      "sha256": "c56b9f7cb9f6edd265924ed5303deb87cdd0409791b4d67cdde05e261920ed80"
+    },
+    "diagnostics_turnover_vs_net_pnl": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/turnover_vs_net_pnl.png",
+      "bytes": 36798,
+      "sha256": "1a19c66c0297a372be4974273070d86043f218e34dc0b1d2b6bf2f303942470a"
+    },
+    "drawdown_curve": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/report_assets/drawdown_curve.png",
+      "bytes": 66568,
+      "sha256": "5f30198afb6d34baa386e95a7d8de60b00993d2190e5a26577780ad0bcb71ba5"
+    },
+    "equity_curve": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/equity_curve.csv",
+      "bytes": 2863000,
+      "sha256": "9fc13536d88915f9484fc65d837d6bf763c1c57a1e4b38bc76e005c3f6540763"
+    },
+    "equity_curve_chart": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/report_assets/equity_curve.png",
+      "bytes": 44866,
+      "sha256": "c5bf67e6876220d186bb1b4e5936e45550a35681c7da1900e209dbc5e2434622"
+    },
+    "feature_importance": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/feature_importance.csv",
+      "bytes": 1468,
+      "sha256": "58ed8ba105b2bf500c25a9d5de02b15af0997362011d2d70a4e72f9ff69a48e2"
+    },
+    "feature_importance_chart": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/report_assets/feature_importance.png",
+      "bytes": 87441,
+      "sha256": "623b9439d4fa18557d9ac2d7baba1dddb1733f28fc0c58d5d1201516d8ce0737"
+    },
+    "fold_backtest_diagnostics": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/fold_backtest_diagnostics.csv",
+      "bytes": 3420,
+      "sha256": "b831bfaa28cbe45e080bbddc4378d4f0ff3d10c802850330d789ae2d6a076a51"
+    },
+    "fold_cost_to_gross_pnl": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/report_assets/fold_cost_to_gross_pnl.png",
+      "bytes": 23498,
+      "sha256": "33a410b187475432a6283b9dd7daae7006b1c317136e8ae00b24e5f112acd9dd"
+    },
+    "fold_cumulative_return": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/report_assets/fold_cumulative_return.png",
+      "bytes": 21145,
+      "sha256": "ae7861333b6c74c8f75ddc678b3ef7f867b3bd0ceb526834ba0ad56d04ca467b"
+    },
+    "fold_model_summary": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/fold_model_summary.csv",
+      "bytes": 1122,
+      "sha256": "46bb22547aa22f7ff67d3410973d1e3102def65ffc0fde78819befe88505faa6"
+    },
+    "fold_net_pnl": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/report_assets/fold_net_pnl.png",
+      "bytes": 18411,
+      "sha256": "83c15ff682b5a33eb756c362079441e4546f3cce98278c8d17ed09e4219c8849"
+    },
+    "fold_sharpe": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/report_assets/fold_sharpe.png",
+      "bytes": 18936,
+      "sha256": "cc12f172623ed1e8fcbb415bf0cddd6ab6de9d587b29159886d681482cd13017"
+    },
+    "forecast_alpha_diagnostics_summary": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/forecast_alpha_diagnostics_summary.json",
+      "bytes": 24134,
+      "sha256": "e0c9964f581bbd0e3cfde0062bcbec694cb2e9735317a48773d7e0b1b284060c"
+    },
+    "forecast_baselines": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/forecast_baselines.csv",
+      "bytes": 2189,
+      "sha256": "4f730a4ea264531caabbe7b31591cdf0a250d849666b2700775af1195a980a40"
+    },
+    "gross_returns": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/gross_returns.csv",
+      "bytes": 1942929,
+      "sha256": "fe65c46acd647aa29e1b3ac554285c0e6a60dbabb5e749eaef19b0c33778745b"
+    },
+    "lab_feature_diagnostics_ETHUSD": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/lab_feature_diagnostics_ETHUSD.json",
+      "bytes": 2620,
+      "sha256": "fe9796ca769372f29cdfcc514a86b0d784456748301f1c3cf73d139b59f796d4"
+    },
+    "missing_value_diagnostics": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/missing_value_diagnostics.json",
+      "bytes": 75,
+      "sha256": "7dce850be8b86dbdecced86830e34766c79c45352b7eedb0012c995efb7bb460"
+    },
+    "monitoring": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/monitoring_report.json",
+      "bytes": 24897,
+      "sha256": "e56af236ccd455415d39aa7805a476a3f744487f1b30a2f8682d7bd186355e15"
+    },
+    "monthly_returns": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/report_assets/monthly_returns.png",
+      "bytes": 46891,
+      "sha256": "8024ba0b3a48bba2dc7d30732ce1b90d5522ba9a4098488d9d489ffd49e3d57b"
+    },
+    "positions": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/positions.csv",
+      "bytes": 1778427,
+      "sha256": "4b29dd3c193488e275f55de8d43c57714d9a172ca54c7728797dec5d531df70b"
+    },
+    "positions_turnover": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/report_assets/positions_turnover.png",
+      "bytes": 77636,
+      "sha256": "f8a2b865ad4eb914af57eb1afeffdaefb035b7e5e0621805641ee8a48e23c736"
+    },
+    "prediction_coverage_by_fold": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/report_assets/prediction_coverage_by_fold.png",
+      "bytes": 25473,
+      "sha256": "27d5daea021a2504b7cd16dce5fc94be42cc49b3bd7162adbac743c53085da9f"
+    },
+    "prediction_diagnostics": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/prediction_diagnostics.json",
+      "bytes": 1913,
+      "sha256": "b0ab235e8d349acf74c035b9b764ff2aad58bc9849d07adf539cd2493c122abc"
+    },
+    "probability_trade_quality": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/report_assets/probability_trade_quality.csv",
+      "bytes": 2591,
+      "sha256": "f188d3d10239833052a728162452d88d68cd531e2afb178a6bbdcbd23fcad03f"
+    },
+    "regime_performance": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/regime_performance.csv",
+      "bytes": 2670,
+      "sha256": "e33c51918dbd4c35e0e8a5ac72dd39f74a9bec201b4761686833d30e18267394"
+    },
+    "report": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/report.md",
+      "bytes": 94682,
+      "sha256": "ff11c1b68e068fddd57975411059577a07092aa5c293ae9b125406987cb38b10"
+    },
+    "returns": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/returns.csv",
+      "bytes": 1944013,
+      "sha256": "6b3e9bca7e21a711dca4816c6bf97d41af1a19d8f855607be1de0f3cbfa66f02"
+    },
+    "rolling_behavior": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/report_assets/rolling_behavior.png",
+      "bytes": 123560,
+      "sha256": "211cb92b10043b59735563ec1bb7d213a9dbfcdc0edbad401a0ff21c76fdc051"
+    },
+    "rolling_pnl": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/report_assets/rolling_pnl.png",
+      "bytes": 78389,
+      "sha256": "dc4958fe98e2ac21ca5957fcfcff61103d0e54a848adb9eabc1c0d06d9d3f7bc"
+    },
+    "run_metadata": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/run_metadata.json",
+      "bytes": 8322219,
+      "sha256": "c31eb582795a56efd9f25cc04c509a0782cafae88adadcda14f544ed4ef51a93"
+    },
+    "signal_distribution": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/report_assets/signal_distribution.png",
+      "bytes": 31534,
+      "sha256": "19efa6dc556a53690219a0f1d8fc4317dfa2b3c711ea1eaa2165dafe54e0cdd8"
+    },
+    "stage_tails": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/stage_tails.json",
+      "bytes": 161,
+      "sha256": "2bda34625b04850c2c773d11e7220b3588cb7c493cc5c556acede1a2af2ca0e8"
+    },
+    "summary": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/summary.json",
+      "bytes": 8422681,
+      "sha256": "e320a18bbe4e5b06af496f1cd852fe93b48beaa904ff19eb5869d4a11f00c417"
+    },
+    "threshold_grid": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/artifacts/diagnostics/threshold_grid.csv",
+      "bytes": 2132,
+      "sha256": "8d8caee6dc7a9ef75c00bf47b1c40309b665d97d767f7d4ce4f9bd099de78054"
+    },
+    "trade_events": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/report_assets/trade_events.csv",
+      "bytes": 65931,
+      "sha256": "e461904e539f87c7fcc4e92354e5910d9ce356338561bacfafdb6fc6bd4ce052"
+    },
+    "trade_path_diagnostics": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/report_assets/trade_path_diagnostics.json",
+      "bytes": 69,
+      "sha256": "b5959a7b3596bdf695d7529552ecdeecd2194337a9cb4a17896207544754e302"
+    },
+    "trade_path_summary": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/report_assets/trade_path_summary.json",
+      "bytes": 7443,
+      "sha256": "f319038e0311b1052bfe029ce915dd01c0f2a8dac937fb95066a05276d4db175"
+    },
+    "trade_paths": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/report_assets/trade_paths.parquet",
+      "bytes": 501698,
+      "sha256": "4240c181d439bbf7b6f7126db729d1bf52282fb12a0b38f5ef1c3e49afcb7982"
+    },
+    "trades_enriched": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/report_assets/trades_enriched.csv",
+      "bytes": 155170,
+      "sha256": "a7701f7a0727c7797853831e12c07f92664cdf2c9f96fe55d694212864c5bd2e"
+    },
+    "turnover": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_norm_ema48_atr_distance_v1_20260713_115848_523835_ed1a5c39/turnover.csv",
+      "bytes": 1775193,
+      "sha256": "e1ac85025a3bba1eedcdf71c1e2388db0b53ccdbcc2efd85615e4fc338997af7"
+    }
+  }
+}

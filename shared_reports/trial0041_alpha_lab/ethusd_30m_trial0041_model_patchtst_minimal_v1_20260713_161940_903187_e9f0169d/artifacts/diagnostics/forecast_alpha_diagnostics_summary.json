@@ -1,0 +1,48 @@
+{
+  "sections": {
+    "fold_backtest_diagnostics": {
+      "fold_count": 2.0,
+      "median_fold_return": 0.13263880513046533,
+      "mean_fold_return": 0.13263880513046533,
+      "fold_return_std": 0.14928741891097658,
+      "worst_fold_return": 0.027076658872676962,
+      "best_fold_return": 0.2382009513882537,
+      "worst_3_fold_average_return": 0.13263880513046533,
+      "profitable_fold_count": 2.0,
+      "profitable_fold_rate": 1.0,
+      "median_fold_sharpe": 2.9290185120048364,
+      "feature_importance_rank_stability": {
+        "available": false,
+        "folds_with_importance": 0,
+        "top_features": []
+      }
+    },
+    "threshold_grid": {
+      "name": "sym_1.25",
+      "upper": 1.25,
+      "lower": -1.25,
+      "net_pnl": 0.10119295057676436,
+      "profitable_fold_count": 2.0,
+      "median_fold_return": 0.0498245324586476,
+      "worst_3_fold_average_return": 0.0498245324586476,
+      "cumulative_return": 0.10119295057676436,
+      "annualized_return": 0.21262591439996026,
+      "annualized_vol": 0.3725276393995209,
+      "sharpe": 0.5707654732483555,
+      "sortino": 0.8391470884065465,
+      "calmar": 1.0605484216554253,
+      "max_drawdown": -0.20048675766078594,
+      "profit_factor": 1.0499374371251007,
+      "hit_rate": 0.4891416752843847,
+      "total_turnover": 62.0,
+      "total_cost": 0.0062,
+      "cost_to_gross_pnl": 0.045187178579819715,
+      "active_rows": 740.0,
+      "long_rate": 0.08070776255707762,
+      "short_rate": 0.003767123287671233,
+      "flat_rate": 0.9155251141552512
+    },
+    "forecast_baselines": null,
+    "regime_performance": null
+  }
+}

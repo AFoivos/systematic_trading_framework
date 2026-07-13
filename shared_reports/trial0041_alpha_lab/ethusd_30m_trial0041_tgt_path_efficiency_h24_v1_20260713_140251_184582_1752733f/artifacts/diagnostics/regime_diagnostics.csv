@@ -1,0 +1,2 @@
+regime,rows,realized_mean,sharpe,hit_rate,calibration_slope,prediction_correlation,turnover_mean,cost_mean,asset
+all,43800,0.004629012607325438,0.018043708967384275,0.5185159817351598,0.11424178902943805,0.04615603776983686,,,ETHUSD

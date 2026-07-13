@@ -1,0 +1,753 @@
+{
+  "sections": {
+    "fold_backtest_diagnostics": {
+      "fold_count": 10.0,
+      "median_fold_return": 0.0,
+      "mean_fold_return": 0.0,
+      "fold_return_std": 0.0,
+      "worst_fold_return": 0.0,
+      "best_fold_return": 0.0,
+      "worst_3_fold_average_return": 0.0,
+      "profitable_fold_count": 0.0,
+      "profitable_fold_rate": 0.0,
+      "median_fold_sharpe": 0.0,
+      "feature_importance_rank_stability": {
+        "available": true,
+        "folds_with_importance": 10,
+        "top_features": [
+          {
+            "feature": "ema_trend_48_192",
+            "family": "unclassified",
+            "fold_count": 10,
+            "fold_coverage": 1.0,
+            "mean_rank": 1.0,
+            "best_rank": 1,
+            "mean_importance": 1666.7,
+            "mean_importance_normalized": 0.1580379184422482,
+            "folds": [
+              {
+                "fold": 0,
+                "rank": 1,
+                "importance": 1670.0,
+                "importance_normalized": 0.16146185826162623
+              },
+              {
+                "fold": 1,
+                "rank": 1,
+                "importance": 1553.0,
+                "importance_normalized": 0.15009181405238234
+              },
+              {
+                "fold": 2,
+                "rank": 1,
+                "importance": 1662.0,
+                "importance_normalized": 0.15822543792840824
+              },
+              {
+                "fold": 3,
+                "rank": 1,
+                "importance": 1706.0,
+                "importance_normalized": 0.16114102200812316
+              },
+              {
+                "fold": 4,
+                "rank": 1,
+                "importance": 1664.0,
+                "importance_normalized": 0.15921921347239498
+              },
+              {
+                "fold": 5,
+                "rank": 1,
+                "importance": 1648.0,
+                "importance_normalized": 0.1555010379316852
+              },
+              {
+                "fold": 6,
+                "rank": 1,
+                "importance": 1674.0,
+                "importance_normalized": 0.15776081424936386
+              },
+              {
+                "fold": 7,
+                "rank": 1,
+                "importance": 1740.0,
+                "importance_normalized": 0.16356457980823463
+              },
+              {
+                "fold": 8,
+                "rank": 1,
+                "importance": 1714.0,
+                "importance_normalized": 0.16050191965539845
+              },
+              {
+                "fold": 9,
+                "rank": 1,
+                "importance": 1636.0,
+                "importance_normalized": 0.15291148705486493
+              }
+            ],
+            "stability_rank": 1
+          },
+          {
+            "feature": "mama_minus_fama_over_atr",
+            "family": "unclassified",
+            "fold_count": 10,
+            "fold_coverage": 1.0,
+            "mean_rank": 2.4,
+            "best_rank": 2,
+            "mean_importance": 1168.1,
+            "mean_importance_normalized": 0.11074359390076363,
+            "folds": [
+              {
+                "fold": 0,
+                "rank": 2,
+                "importance": 1156.0,
+                "importance_normalized": 0.11176641206613168
+              },
+              {
+                "fold": 1,
+                "rank": 3,
+                "importance": 1140.0,
+                "importance_normalized": 0.11017686285879966
+              },
+              {
+                "fold": 2,
+                "rank": 2,
+                "importance": 1135.0,
+                "importance_normalized": 0.10805407463823305
+              },
+              {
+                "fold": 3,
+                "rank": 3,
+                "importance": 1088.0,
+                "importance_normalized": 0.10276754510248418
+              },
+              {
+                "fold": 4,
+                "rank": 3,
+                "importance": 1103.0,
+                "importance_normalized": 0.10554013969955028
+              },
+              {
+                "fold": 5,
+                "rank": 2,
+                "importance": 1143.0,
+                "importance_normalized": 0.1078505378373278
+              },
+              {
+                "fold": 6,
+                "rank": 2,
+                "importance": 1225.0,
+                "importance_normalized": 0.11544623503911036
+              },
+              {
+                "fold": 7,
+                "rank": 3,
+                "importance": 1181.0,
+                "importance_normalized": 0.11101710847903741
+              },
+              {
+                "fold": 8,
+                "rank": 2,
+                "importance": 1232.0,
+                "importance_normalized": 0.11536660736023972
+              },
+              {
+                "fold": 9,
+                "rank": 2,
+                "importance": 1278.0,
+                "importance_normalized": 0.11945041592672212
+              }
+            ],
+            "stability_rank": 2
+          },
+          {
+            "feature": "ema_trend_24_96",
+            "family": "unclassified",
+            "fold_count": 10,
+            "fold_coverage": 1.0,
+            "mean_rank": 2.6,
+            "best_rank": 2,
+            "mean_importance": 1153.8,
+            "mean_importance_normalized": 0.10940190096095384,
+            "folds": [
+              {
+                "fold": 0,
+                "rank": 3,
+                "importance": 1107.0,
+                "importance_normalized": 0.10702890844049115
+              },
+              {
+                "fold": 1,
+                "rank": 2,
+                "importance": 1177.0,
+                "importance_normalized": 0.1137527785831642
+              },
+              {
+                "fold": 2,
+                "rank": 3,
+                "importance": 1113.0,
+                "importance_normalized": 0.10595963442498096
+              },
+              {
+                "fold": 3,
+                "rank": 2,
+                "importance": 1184.0,
+                "importance_normalized": 0.11183526967035043
+              },
+              {
+                "fold": 4,
+                "rank": 2,
+                "importance": 1109.0,
+                "importance_normalized": 0.10611424744043632
+              },
+              {
+                "fold": 5,
+                "rank": 3,
+                "importance": 1133.0,
+                "importance_normalized": 0.10690696357803359
+              },
+              {
+                "fold": 6,
+                "rank": 3,
+                "importance": 1142.0,
+                "importance_normalized": 0.10762416360380737
+              },
+              {
+                "fold": 7,
+                "rank": 2,
+                "importance": 1184.0,
+                "importance_normalized": 0.11129911637525851
+              },
+              {
+                "fold": 8,
+                "rank": 3,
+                "importance": 1177.0,
+                "importance_normalized": 0.11021631238880045
+              },
+              {
+                "fold": 9,
+                "rank": 3,
+                "importance": 1212.0,
+                "importance_normalized": 0.11328161510421535
+              }
+            ],
+            "stability_rank": 3
+          },
+          {
+            "feature": "distance_from_ema96_atr",
+            "family": "unclassified",
+            "fold_count": 10,
+            "fold_coverage": 1.0,
+            "mean_rank": 4.1,
+            "best_rank": 4,
+            "mean_importance": 834.7,
+            "mean_importance_normalized": 0.07914755114187914,
+            "folds": [
+              {
+                "fold": 0,
+                "rank": 4,
+                "importance": 797.0,
+                "importance_normalized": 0.07705694672725515
+              },
+              {
+                "fold": 1,
+                "rank": 4,
+                "importance": 811.0,
+                "importance_normalized": 0.07838020682323378
+              },
+              {
+                "fold": 2,
+                "rank": 4,
+                "importance": 845.0,
+                "importance_normalized": 0.08044554455445545
+              },
+              {
+                "fold": 3,
+                "rank": 5,
+                "importance": 811.0,
+                "importance_normalized": 0.0766033815056201
+              },
+              {
+                "fold": 4,
+                "rank": 4,
+                "importance": 846.0,
+                "importance_normalized": 0.08094919146493158
+              },
+              {
+                "fold": 5,
+                "rank": 4,
+                "importance": 864.0,
+                "importance_normalized": 0.08152481600301943
+              },
+              {
+                "fold": 6,
+                "rank": 4,
+                "importance": 830.0,
+                "importance_normalized": 0.07822071435302988
+              },
+              {
+                "fold": 7,
+                "rank": 4,
+                "importance": 854.0,
+                "importance_normalized": 0.08027824779093815
+              },
+              {
+                "fold": 8,
+                "rank": 4,
+                "importance": 864.0,
+                "importance_normalized": 0.08090645191497331
+              },
+              {
+                "fold": 9,
+                "rank": 4,
+                "importance": 825.0,
+                "importance_normalized": 0.0771100102813347
+              }
+            ],
+            "stability_rank": 4
+          },
+          {
+            "feature": "close_over_ema_192",
+            "family": "trend",
+            "fold_count": 10,
+            "fold_coverage": 1.0,
+            "mean_rank": 5.0,
+            "best_rank": 4,
+            "mean_importance": 785.4,
+            "mean_importance_normalized": 0.07448899467712504,
+            "folds": [
+              {
+                "fold": 0,
+                "rank": 5,
+                "importance": 765.0,
+                "importance_normalized": 0.0739630668084695
+              },
+              {
+                "fold": 1,
+                "rank": 5,
+                "importance": 780.0,
+                "importance_normalized": 0.07538416932444186
+              },
+              {
+                "fold": 2,
+                "rank": 5,
+                "importance": 830.0,
+                "importance_normalized": 0.07901751713632901
+              },
+              {
+                "fold": 3,
+                "rank": 4,
+                "importance": 854.0,
+                "importance_normalized": 0.08066496646831019
+              },
+              {
+                "fold": 4,
+                "rank": 5,
+                "importance": 798.0,
+                "importance_normalized": 0.07635632953784327
+              },
+              {
+                "fold": 5,
+                "rank": 5,
+                "importance": 719.0,
+                "importance_normalized": 0.06784298924325344
+              },
+              {
+                "fold": 6,
+                "rank": 5,
+                "importance": 800.0,
+                "importance_normalized": 0.07539345961737819
+              },
+              {
+                "fold": 7,
+                "rank": 5,
+                "importance": 780.0,
+                "importance_normalized": 0.07332205301748448
+              },
+              {
+                "fold": 8,
+                "rank": 5,
+                "importance": 733.0,
+                "importance_normalized": 0.06863938571027249
+              },
+              {
+                "fold": 9,
+                "rank": 6,
+                "importance": 795.0,
+                "importance_normalized": 0.07430600990746798
+              }
+            ],
+            "stability_rank": 5
+          },
+          {
+            "feature": "close_over_ema_96",
+            "family": "trend",
+            "fold_count": 10,
+            "fold_coverage": 1.0,
+            "mean_rank": 5.9,
+            "best_rank": 5,
+            "mean_importance": 718.9,
+            "mean_importance_normalized": 0.06814001872326096,
+            "folds": [
+              {
+                "fold": 0,
+                "rank": 6,
+                "importance": 635.0,
+                "importance_normalized": 0.06139417963840278
+              },
+              {
+                "fold": 1,
+                "rank": 6,
+                "importance": 689.0,
+                "importance_normalized": 0.06658934956992366
+              },
+              {
+                "fold": 2,
+                "rank": 6,
+                "importance": 734.0,
+                "importance_normalized": 0.06987814166031987
+              },
+              {
+                "fold": 3,
+                "rank": 6,
+                "importance": 724.0,
+                "importance_normalized": 0.0683857561159913
+              },
+              {
+                "fold": 4,
+                "rank": 6,
+                "importance": 682.0,
+                "importance_normalized": 0.0652569132140465
+              },
+              {
+                "fold": 5,
+                "rank": 6,
+                "importance": 700.0,
+                "importance_normalized": 0.06605019815059446
+              },
+              {
+                "fold": 6,
+                "rank": 6,
+                "importance": 748.0,
+                "importance_normalized": 0.07049288474224862
+              },
+              {
+                "fold": 7,
+                "rank": 6,
+                "importance": 758.0,
+                "importance_normalized": 0.07125399511186313
+              },
+              {
+                "fold": 8,
+                "rank": 6,
+                "importance": 702.0,
+                "importance_normalized": 0.06573649218091582
+              },
+              {
+                "fold": 9,
+                "rank": 5,
+                "importance": 817.0,
+                "importance_normalized": 0.07636227684830357
+              }
+            ],
+            "stability_rank": 6
+          },
+          {
+            "feature": "fama_minus_close_over_atr",
+            "family": "unclassified",
+            "fold_count": 10,
+            "fold_coverage": 1.0,
+            "mean_rank": 7.5,
+            "best_rank": 7,
+            "mean_importance": 587.0,
+            "mean_importance_normalized": 0.055644474325511485,
+            "folds": [
+              {
+                "fold": 0,
+                "rank": 10,
+                "importance": 530.0,
+                "importance_normalized": 0.05124238615488736
+              },
+              {
+                "fold": 1,
+                "rank": 8,
+                "importance": 547.0,
+                "importance_normalized": 0.05286556489803808
+              },
+              {
+                "fold": 2,
+                "rank": 8,
+                "importance": 597.0,
+                "importance_normalized": 0.056835491241431835
+              },
+              {
+                "fold": 3,
+                "rank": 7,
+                "importance": 588.0,
+                "importance_normalized": 0.05553981297818079
+              },
+              {
+                "fold": 4,
+                "rank": 7,
+                "importance": 592.0,
+                "importance_normalized": 0.05664529710075591
+              },
+              {
+                "fold": 5,
+                "rank": 7,
+                "importance": 591.0,
+                "importance_normalized": 0.055765238724287604
+              },
+              {
+                "fold": 6,
+                "rank": 7,
+                "importance": 587.0,
+                "importance_normalized": 0.05531995099425125
+              },
+              {
+                "fold": 7,
+                "rank": 7,
+                "importance": 620.0,
+                "importance_normalized": 0.0582816318856928
+              },
+              {
+                "fold": 8,
+                "rank": 7,
+                "importance": 611.0,
+                "importance_normalized": 0.05721509504635265
+              },
+              {
+                "fold": 9,
+                "rank": 7,
+                "importance": 607.0,
+                "importance_normalized": 0.056734274231236566
+              }
+            ],
+            "stability_rank": 7
+          },
+          {
+            "feature": "frama_slope_over_atr",
+            "family": "unclassified",
+            "fold_count": 10,
+            "fold_coverage": 1.0,
+            "mean_rank": 8.5,
+            "best_rank": 7,
+            "mean_importance": 556.6,
+            "mean_importance_normalized": 0.05279899330712402,
+            "folds": [
+              {
+                "fold": 0,
+                "rank": 8,
+                "importance": 552.0,
+                "importance_normalized": 0.0533694285990525
+              },
+              {
+                "fold": 1,
+                "rank": 7,
+                "importance": 555.0,
+                "importance_normalized": 0.05363873586546825
+              },
+              {
+                "fold": 2,
+                "rank": 7,
+                "importance": 598.0,
+                "importance_normalized": 0.05693069306930693
+              },
+              {
+                "fold": 3,
+                "rank": 10,
+                "importance": 531.0,
+                "importance_normalized": 0.0501558515160102
+              },
+              {
+                "fold": 4,
+                "rank": 8,
+                "importance": 589.0,
+                "importance_normalized": 0.05635824323031289
+              },
+              {
+                "fold": 5,
+                "rank": 9,
+                "importance": 574.0,
+                "importance_normalized": 0.05416116248348745
+              },
+              {
+                "fold": 6,
+                "rank": 8,
+                "importance": 580.0,
+                "importance_normalized": 0.05466025822259919
+              },
+              {
+                "fold": 7,
+                "rank": 9,
+                "importance": 540.0,
+                "importance_normalized": 0.050761421319796954
+              },
+              {
+                "fold": 8,
+                "rank": 9,
+                "importance": 540.0,
+                "importance_normalized": 0.05056653244685832
+              },
+              {
+                "fold": 9,
+                "rank": 10,
+                "importance": 507.0,
+                "importance_normalized": 0.04738760631834751
+              }
+            ],
+            "stability_rank": 8
+          },
+          {
+            "feature": "mama_minus_close_over_atr",
+            "family": "unclassified",
+            "fold_count": 10,
+            "fold_coverage": 1.0,
+            "mean_rank": 9.1,
+            "best_rank": 7,
+            "mean_importance": 537.4,
+            "mean_importance_normalized": 0.050969094809420246,
+            "folds": [
+              {
+                "fold": 0,
+                "rank": 7,
+                "importance": 593.0,
+                "importance_normalized": 0.057333462244996615
+              },
+              {
+                "fold": 1,
+                "rank": 9,
+                "importance": 540.0,
+                "importance_normalized": 0.05218904030153668
+              },
+              {
+                "fold": 2,
+                "rank": 10,
+                "importance": 499.0,
+                "importance_normalized": 0.047505712109672506
+              },
+              {
+                "fold": 3,
+                "rank": 8,
+                "importance": 548.0,
+                "importance_normalized": 0.051761594408236515
+              },
+              {
+                "fold": 4,
+                "rank": 10,
+                "importance": 522.0,
+                "importance_normalized": 0.04994737345708545
+              },
+              {
+                "fold": 5,
+                "rank": 11,
+                "importance": 512.0,
+                "importance_normalized": 0.04831100207586337
+              },
+              {
+                "fold": 6,
+                "rank": 12,
+                "importance": 462.0,
+                "importance_normalized": 0.04353972292903591
+              },
+              {
+                "fold": 7,
+                "rank": 8,
+                "importance": 547.0,
+                "importance_normalized": 0.05141943974431284
+              },
+              {
+                "fold": 8,
+                "rank": 8,
+                "importance": 591.0,
+                "importance_normalized": 0.055342260511283825
+              },
+              {
+                "fold": 9,
+                "rank": 8,
+                "importance": 560.0,
+                "importance_normalized": 0.05234134031217871
+              }
+            ],
+            "stability_rank": 9
+          },
+          {
+            "feature": "close_minus_decycler_over_atr",
+            "family": "unclassified",
+            "fold_count": 10,
+            "fold_coverage": 1.0,
+            "mean_rank": 9.9,
+            "best_rank": 9,
+            "mean_importance": 523.8,
+            "mean_importance_normalized": 0.04969667685280262,
+            "folds": [
+              {
+                "fold": 0,
+                "rank": 9,
+                "importance": 546.0,
+                "importance_normalized": 0.05278932611428019
+              },
+              {
+                "fold": 1,
+                "rank": 10,
+                "importance": 533.0,
+                "importance_normalized": 0.051512515705035275
+              },
+              {
+                "fold": 2,
+                "rank": 9,
+                "importance": 523.0,
+                "importance_normalized": 0.04979055597867479
+              },
+              {
+                "fold": 3,
+                "rank": 9,
+                "importance": 533.0,
+                "importance_normalized": 0.05034476244450742
+              },
+              {
+                "fold": 4,
+                "rank": 9,
+                "importance": 578.0,
+                "importance_normalized": 0.055305712372021816
+              },
+              {
+                "fold": 5,
+                "rank": 10,
+                "importance": 543.0,
+                "importance_normalized": 0.05123608227967541
+              },
+              {
+                "fold": 6,
+                "rank": 10,
+                "importance": 503.0,
+                "importance_normalized": 0.04740363773442654
+              },
+              {
+                "fold": 7,
+                "rank": 11,
+                "importance": 487.0,
+                "importance_normalized": 0.04577928181989096
+              },
+              {
+                "fold": 8,
+                "rank": 11,
+                "importance": 491.0,
+                "importance_normalized": 0.04597808783593969
+              },
+              {
+                "fold": 9,
+                "rank": 11,
+                "importance": 501.0,
+                "importance_normalized": 0.046826806243574166
+              }
+            ],
+            "stability_rank": 10
+          }
+        ]
+      }
+    },
+    "forecast_baselines": null
+  }
+}

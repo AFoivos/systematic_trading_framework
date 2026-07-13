@@ -1,0 +1,235 @@
+{
+  "created_at_utc": "2026-07-13T11:21:05.207969+00:00",
+  "files": {
+    "config": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/config_used.yaml",
+      "bytes": 15227,
+      "sha256": "ed3caf51a3e140a512c3d55f811947200cc4207cacdef7788baf95f708ec22e8"
+    },
+    "costs": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/costs.csv",
+      "bytes": 1779746,
+      "sha256": "c3cb31e274b30ac4473d2f184f10af51d840aa3cbb682b6f609452dfd4ffe77a"
+    },
+    "counterfactual_exit_summary": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/report_assets/counterfactual_exit_summary.csv",
+      "bytes": 2574,
+      "sha256": "b8d71c2b272022e1c6406d76fd54138633966bbbb41539104eec4f1e97926cc3"
+    },
+    "counterfactual_exit_trades": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/report_assets/counterfactual_exit_trades.csv",
+      "bytes": 237847,
+      "sha256": "13aacebb33242ab23a93a7faffc3c9d2cc2c7f793f9165bea8f7fadc08a338e3"
+    },
+    "cumulative_cost_drag": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/report_assets/cumulative_cost_drag.png",
+      "bytes": 40721,
+      "sha256": "8fecbaf56c999169ca1d7f3a9bd5ee41c50e281e1ad0dd613637ab1c25747ef2"
+    },
+    "cumulative_returns": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/report_assets/cumulative_returns.png",
+      "bytes": 73554,
+      "sha256": "090b71cac3925c953c8c59208d1d9a3a26ada9639a95b209995695383572d8cc"
+    },
+    "drawdown_curve": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/report_assets/drawdown_curve.png",
+      "bytes": 49560,
+      "sha256": "fb4cfa0e1ccb587a9ef6ff4bbff88c7bd5286b253a5cfa04eeee182453fc146d"
+    },
+    "equity_curve": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/equity_curve.csv",
+      "bytes": 2913428,
+      "sha256": "df7f0519d8d60790798ad1585203f610c03fc511e44c0ce949f9eab734d1b13f"
+    },
+    "equity_curve_chart": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/report_assets/equity_curve.png",
+      "bytes": 50579,
+      "sha256": "37706d992f16c29476803194de8f06e044f64d1c85f0a6b67d00b90029a10529"
+    },
+    "feature_importance": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/feature_importance.csv",
+      "bytes": 1500,
+      "sha256": "c6de8c023e860e31358699936990da0c88802fbb02233bffd59c702676b2b876"
+    },
+    "feature_importance_chart": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/report_assets/feature_importance.png",
+      "bytes": 93322,
+      "sha256": "b7787c0fe2c5f7124cced191feda7e72ba33dadafd67eeec9851242b973289b5"
+    },
+    "fold_backtest_diagnostics": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/artifacts/diagnostics/fold_backtest_diagnostics.csv",
+      "bytes": 3457,
+      "sha256": "c2b4329611daa7cc57c1510bf2a6e225359f2495ed478749a3c03e2822ed4d39"
+    },
+    "fold_cost_to_gross_pnl": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/report_assets/fold_cost_to_gross_pnl.png",
+      "bytes": 24078,
+      "sha256": "384a191e762194443a7d438c045994775f478f27231935f1b5e71ebcf3529c1c"
+    },
+    "fold_cumulative_return": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/report_assets/fold_cumulative_return.png",
+      "bytes": 19495,
+      "sha256": "d771bf779d7300ee6b555721a042bcac4e6ad55ef5e1f122a42cb5c6d7e51566"
+    },
+    "fold_model_summary": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/fold_model_summary.csv",
+      "bytes": 979,
+      "sha256": "8fea7d551da23f6237c564bbae260329eefd01c98d7a480503af9cbbb14f5d8b"
+    },
+    "fold_net_pnl": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/report_assets/fold_net_pnl.png",
+      "bytes": 17718,
+      "sha256": "604bf4de96eefc35eca5a03a4b0ca8f7ead0f67bffb2d829859d59e48afa87d2"
+    },
+    "fold_sharpe": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/report_assets/fold_sharpe.png",
+      "bytes": 16767,
+      "sha256": "25c3bd3d6b2552faf48f933bda1a2f829341d31a63aedf26f378f25903144284"
+    },
+    "forecast_alpha_diagnostics_summary": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/artifacts/diagnostics/forecast_alpha_diagnostics_summary.json",
+      "bytes": 23274,
+      "sha256": "12eace60174b76b016b1e95d88f362d26bf58814e07a3d5a2d3d51f09404b458"
+    },
+    "forecast_baselines": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/artifacts/diagnostics/forecast_baselines.csv",
+      "bytes": 2218,
+      "sha256": "d06ac5939b903ef733e8544011163d5a418a17300e97de181ecc241e23378cd5"
+    },
+    "gross_returns": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/gross_returns.csv",
+      "bytes": 2257670,
+      "sha256": "d8e16411e7c3bf4d09be8cab82835e1a4ece1323fd30c0e70908447740c2cbf7"
+    },
+    "lab_feature_diagnostics_ETHUSD": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/artifacts/diagnostics/lab_feature_diagnostics_ETHUSD.json",
+      "bytes": 2595,
+      "sha256": "721da35372fd316f55bd8c5d141fdb2948952520e59ab89111a2fb2736edc754"
+    },
+    "label_distribution": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/label_distribution.csv",
+      "bytes": 96,
+      "sha256": "5c963e4d748b49e0a5e5722ff0615727efce2206cccc3b3c50eb7934dcc7f486"
+    },
+    "label_distribution_chart": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/report_assets/label_distribution.png",
+      "bytes": 23838,
+      "sha256": "92564ef303dd4b336e590da657b5a01c040cece37174e03c3fc06451db8d0d75"
+    },
+    "missing_value_diagnostics": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/missing_value_diagnostics.json",
+      "bytes": 248,
+      "sha256": "c3efa34a3dd5a86ce6c5b751c772d730e6abb3c2a408cd75b2d39edf238b294b"
+    },
+    "monitoring": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/monitoring_report.json",
+      "bytes": 24385,
+      "sha256": "480fe8402c0836dbd02417db2c91fb8238c876158e2be3fa07a91b6591718971"
+    },
+    "monthly_returns": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/report_assets/monthly_returns.png",
+      "bytes": 44455,
+      "sha256": "0c58eed5c41c90ca1137884f3a70e3a3ce3bc20c7b6a5a40b344ef3e2a25f267"
+    },
+    "positions": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/positions.csv",
+      "bytes": 1799205,
+      "sha256": "4f7b2de4bc51c304e88b123741ca732c1ac610a2bdc6af7eef5a06f7baed47f3"
+    },
+    "positions_turnover": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/report_assets/positions_turnover.png",
+      "bytes": 48721,
+      "sha256": "cfa4092e0e6141e665fa64e7ecac2c275e22d0d91b30a2c2bb25bb84bd98690e"
+    },
+    "prediction_coverage_by_fold": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/report_assets/prediction_coverage_by_fold.png",
+      "bytes": 25473,
+      "sha256": "27d5daea021a2504b7cd16dce5fc94be42cc49b3bd7162adbac743c53085da9f"
+    },
+    "prediction_diagnostics": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/prediction_diagnostics.json",
+      "bytes": 1806,
+      "sha256": "24bc6ff2c4c2329c250edf39d15bf505fe022fa629847169ad99f409cda8cd6b"
+    },
+    "probability_trade_quality": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/report_assets/probability_trade_quality.csv",
+      "bytes": 2685,
+      "sha256": "506ba93cdd644b1ce622c2d5a51b6603981cd0a9944a44358d25cc92d927184a"
+    },
+    "regime_performance": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/artifacts/diagnostics/regime_performance.csv",
+      "bytes": 3394,
+      "sha256": "83223e947f866439e2f5552c1538cd3c39cbe724fa34a011cb5d18b0cba942c7"
+    },
+    "report": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/report.md",
+      "bytes": 87501,
+      "sha256": "c4057c36c6b14de1b164da37db50e1f970b8cf5a82dbf011eb5aaad70e71b524"
+    },
+    "returns": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/returns.csv",
+      "bytes": 2260304,
+      "sha256": "136bbc49cfd67d4d2d03dfe2bed0f7b62918a0abbea95ac5169f611f2662c9a0"
+    },
+    "rolling_behavior": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/report_assets/rolling_behavior.png",
+      "bytes": 112565,
+      "sha256": "accd20d938a869b1025a2e15fb86a9865e0803b2950ab9ae97c291b24122b85f"
+    },
+    "rolling_pnl": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/report_assets/rolling_pnl.png",
+      "bytes": 83878,
+      "sha256": "410118a4eafeb497fec073c9b4ab1bfcfb3af66eb0731cebb879c4be90b2d682"
+    },
+    "run_metadata": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/run_metadata.json",
+      "bytes": 193717,
+      "sha256": "102e0e07e47777cf8404ec049a02528171c4a1c6d665b02519a478fd42d7a7f8"
+    },
+    "signal_distribution": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/report_assets/signal_distribution.png",
+      "bytes": 29573,
+      "sha256": "2a175f458645e273f6b9bb0c4a6879b5e6dfbfd8a0af6bce0211b7cf44fa20bd"
+    },
+    "stage_tails": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/stage_tails.json",
+      "bytes": 161,
+      "sha256": "2bda34625b04850c2c773d11e7220b3588cb7c493cc5c556acede1a2af2ca0e8"
+    },
+    "summary": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/summary.json",
+      "bytes": 288382,
+      "sha256": "93e5494559411c1bf3aafacd18cce2c955af2f2e8f78a479e29172ee284c6c2c"
+    },
+    "trade_events": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/report_assets/trade_events.csv",
+      "bytes": 246548,
+      "sha256": "731c85a2f892a7a1992c9ceaf96a9c47a79780322b8e58bc72b6de3d3f357cc1"
+    },
+    "trade_path_diagnostics": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/report_assets/trade_path_diagnostics.json",
+      "bytes": 69,
+      "sha256": "56b628c49f141f98c7d04907b5041e154531eb32d32a7900a0de736695fe6f42"
+    },
+    "trade_path_summary": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/report_assets/trade_path_summary.json",
+      "bytes": 7538,
+      "sha256": "f42e897a27483dacd51c10cdfe433bae5fc0968e925b6428d9844ed4b66692e3"
+    },
+    "trade_paths": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/report_assets/trade_paths.parquet",
+      "bytes": 1647941,
+      "sha256": "7e42c48f882839f6e97f5395058fbfd112d6658de3b6a72c7089fa2ab1469f70"
+    },
+    "trades_enriched": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/report_assets/trades_enriched.csv",
+      "bytes": 391416,
+      "sha256": "3ae852e4b81f912b8425556f0f5370317fb3fe80cf4940297024831efd0ef754"
+    },
+    "turnover": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_alpha_lab/ethusd_30m_trial0041_tgt_triple_barrier_h24_lgbmclf_v1_20260713_141916_119376_94b21ff8/turnover.csv",
+      "bytes": 1775192,
+      "sha256": "dca67d7acbbed0c2da1551ae66f7e6cf730aa383357963efd15679e2c04aad7e"
+    }
+  }
+}

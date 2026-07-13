@@ -1,0 +1,17 @@
+feature,mean_importance,mean_importance_normalized,fold_count,source,rank
+ema_trend_48_192,1666.7,0.1580379184422482,10,feature_importances_,1
+mama_minus_fama_over_atr,1168.1,0.11074359390076363,10,feature_importances_,2
+ema_trend_24_96,1153.8,0.10940190096095384,10,feature_importances_,3
+distance_from_ema96_atr,834.7,0.07914755114187914,10,feature_importances_,4
+close_over_ema_192,785.4,0.07448899467712504,10,feature_importances_,5
+close_over_ema_96,718.9,0.06814001872326096,10,feature_importances_,6
+fama_minus_close_over_atr,587.0,0.055644474325511485,10,feature_importances_,7
+frama_slope_over_atr,556.6,0.05279899330712402,10,feature_importances_,8
+mama_minus_close_over_atr,537.4,0.050969094809420246,10,feature_importances_,9
+close_minus_decycler_over_atr,523.8,0.04969667685280262,10,feature_importances_,10
+distance_from_ema24_atr,514.1,0.048724344022839934,10,feature_importances_,11
+roofing_filter_slope_over_atr,466.7,0.044260366338506066,10,feature_importances_,12
+supersmoother_slope_over_atr,342.4,0.03249845520365264,10,feature_importances_,13
+instantaneous_trendline_slope_over_atr,339.9,0.03224818531049368,10,feature_importances_,14
+decycler_slope_over_atr,289.7,0.02745895244556672,10,feature_importances_,15
+ema_alignment_score,60.5,0.005740479537851778,10,feature_importances_,16

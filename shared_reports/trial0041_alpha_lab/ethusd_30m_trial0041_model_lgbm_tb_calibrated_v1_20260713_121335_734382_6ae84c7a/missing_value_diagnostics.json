@@ -1,0 +1,9 @@
+{
+  "train_rows_dropped_missing": 3820,
+  "train_rows_not_labeled": 771,
+  "train_rows_without_fit": 4591,
+  "test_rows_missing_features": 0,
+  "test_rows_not_candidates": 0,
+  "test_rows_without_prediction": 0,
+  "folds_with_zero_predictions": 0
+}

@@ -1,0 +1,155 @@
+{
+  "prediction_distribution": {
+    "rows": 43800,
+    "mean": 0.01776065550046075,
+    "std": 0.979675025432442,
+    "min": -4.289093971252441,
+    "max": 3.7719178199768066,
+    "median": 0.025564217008650303,
+    "q01": -2.498426194190979,
+    "q05": -1.620550537109375,
+    "q25": -0.585350438952446,
+    "q75": 0.6315722614526749,
+    "q95": 1.6439803838729847,
+    "q99": 2.354209945201874,
+    "skew": -0.09680917414039292,
+    "kurtosis": 0.4152386187067356,
+    "positive_rate": 0.5121232876712328,
+    "negative_rate": 0.4878767123287671,
+    "zero_rate": 0.0
+  },
+  "expected_net_return_distribution": {
+    "rows": 0,
+    "mean": null,
+    "std": null,
+    "min": null,
+    "max": null,
+    "median": null,
+    "q01": null,
+    "q05": null,
+    "q25": null,
+    "q75": null,
+    "q95": null,
+    "q99": null,
+    "skew": null,
+    "kurtosis": null,
+    "positive_rate": null,
+    "negative_rate": null,
+    "zero_rate": null
+  },
+  "prediction_vs_realized": {
+    "evaluation_rows": 43800,
+    "correlation": 0.048086224254329825,
+    "spearman_rank_correlation": 0.05055186037247,
+    "calibration_slope": 0.12265188737307212,
+    "calibration_intercept": 0.001634131287393122,
+    "directional_accuracy": 0.5189269406392694,
+    "mean_prediction": 0.01776065550046075,
+    "mean_realized": 0.0038125092055075675
+  },
+  "quantile_monotonicity": {
+    "monotonicity": 0.9515151515151514,
+    "monotonic_increasing_steps": 5,
+    "quantile_count": 10
+  },
+  "residuals": {
+    "ETHUSD": {
+      "rows": 43800,
+      "distribution": {
+        "rows": 43800,
+        "mean": -0.013948146294953173,
+        "std": 2.6397819792680677,
+        "min": -7.771917819976807,
+        "max": 8.15125036239624,
+        "median": -0.06043091659468988,
+        "q01": -5.291566286519579,
+        "q05": -4.305392408370972,
+        "q25": -1.9599174715068353,
+        "q75": 1.960453282898431,
+        "q95": 4.255656183923903,
+        "q99": 5.5118487167358525,
+        "skew": 0.04119635174592957,
+        "kurtosis": -0.6946527778655374,
+        "positive_rate": 0.4917123287671233,
+        "negative_rate": 0.5082876712328767,
+        "zero_rate": 0.0
+      },
+      "autocorrelation": [
+        {
+          "lag": 1,
+          "autocorrelation": 0.9456530425589207
+        },
+        {
+          "lag": 2,
+          "autocorrelation": 0.8974275675067819
+        },
+        {
+          "lag": 4,
+          "autocorrelation": 0.8074762074707035
+        },
+        {
+          "lag": 8,
+          "autocorrelation": 0.6433378254905321
+        }
+      ],
+      "residual_vs_forecast_abs_correlation": 0.019594568140218583,
+      "residual_vs_volatility_correlation": null
+    }
+  },
+  "turnover_cost": {
+    "rows": 73965,
+    "total_turnover": 622.0,
+    "avg_turnover": 0.00840938281619685,
+    "rebalance_frequency": 0.008355303183938349,
+    "churn_frequency": 0.008355303183938349,
+    "total_cost": 0.062200000000000005,
+    "gross_pnl": 1.5014064702092673,
+    "net_pnl": 1.4392064702092673,
+    "cost_to_abs_gross_pnl": 0.0024971643254962156,
+    "turnover_vs_net_pnl_correlation": -0.011508138989402707
+  },
+  "residual_diagnostics": {
+    "ETHUSD": {
+      "rows": 43800,
+      "distribution": {
+        "rows": 43800,
+        "mean": -0.013948146294953173,
+        "std": 2.6397819792680677,
+        "min": -7.771917819976807,
+        "max": 8.15125036239624,
+        "median": -0.06043091659468988,
+        "q01": -5.291566286519579,
+        "q05": -4.305392408370972,
+        "q25": -1.9599174715068353,
+        "q75": 1.960453282898431,
+        "q95": 4.255656183923903,
+        "q99": 5.5118487167358525,
+        "skew": 0.04119635174592957,
+        "kurtosis": -0.6946527778655374,
+        "positive_rate": 0.4917123287671233,
+        "negative_rate": 0.5082876712328767,
+        "zero_rate": 0.0
+      },
+      "autocorrelation": [
+        {
+          "lag": 1,
+          "autocorrelation": 0.9456530425589207
+        },
+        {
+          "lag": 2,
+          "autocorrelation": 0.8974275675067819
+        },
+        {
+          "lag": 4,
+          "autocorrelation": 0.8074762074707035
+        },
+        {
+          "lag": 8,
+          "autocorrelation": 0.6433378254905321
+        }
+      ],
+      "residual_vs_forecast_abs_correlation": 0.019594568140218583,
+      "residual_vs_volatility_correlation": null
+    }
+  }
+}
