@@ -8,6 +8,7 @@ execution:
   timeframe: M30
   lookback_bars: 1500
   poll_seconds: 30
+  mt5_reconnect_after_failures: 3
   deviation_points: 20
   magic_number: 260708
   comment: ethusd_lgbm_h24_0041_0058

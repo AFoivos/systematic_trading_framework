@@ -10,9 +10,11 @@ import pytest
 from src.execution.mt5_connector import (
     MT5Connector,
     MT5CredentialsError,
+    MT5DemoAccountError,
     MT5TradingDisabledError,
 )
 from src.execution.mt5_bot_runner import (
+    MT5DemoBot,
     SingleInstanceLock,
     SingleInstanceLockError,
     _feature_snapshot_payload,
@@ -112,6 +114,45 @@ class FakeConnector:
 
     def is_successful_order(self, result: object) -> bool:
         return getattr(result, "retcode") == 10009
+
+
+class LoopTestConnector:
+    def __init__(self) -> None:
+        self.shutdown_calls = 0
+
+    def shutdown(self) -> None:
+        self.shutdown_calls += 1
+
+
+class LoopTestLogger:
+    def __init__(self) -> None:
+        self.messages: list[str] = []
+
+    def warning(self, message: str, *args: object) -> None:
+        self.messages.append(message % args if args else message)
+
+    def info(self, message: str, *args: object) -> None:
+        self.messages.append(message % args if args else message)
+
+
+class LoopTestEventLogger:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict[str, object]]] = []
+
+    def write(self, stream: str, event: dict[str, object]) -> None:
+        self.events.append((stream, event))
+
+
+def _bare_loop_bot(*, reconnect_after_failures: int) -> MT5DemoBot:
+    bot = object.__new__(MT5DemoBot)
+    bot.execution_cfg = {"poll_seconds": 30}
+    bot.connector = LoopTestConnector()
+    bot.event_logger = LoopTestEventLogger()
+    bot.logger = LoopTestLogger()
+    bot._loop_connected = True
+    bot._mt5_failure_streak = 0
+    bot.mt5_reconnect_after_failures = reconnect_after_failures
+    return bot
 
 
 class ConstantRegressor:
@@ -345,6 +386,108 @@ def test_algo_trading_preflight_rejects_disabled_terminal() -> None:
 
     with pytest.raises(MT5TradingDisabledError, match="terminal.trade_allowed=false"):
         connector.ensure_algo_trading_enabled()
+
+
+def test_mt5_loop_retries_transient_trading_disabled_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    bot = _bare_loop_bot(reconnect_after_failures=3)
+    attempts: list[str] = []
+
+    def run_once() -> None:
+        attempts.append("run")
+        if len(attempts) == 1:
+            raise MT5TradingDisabledError("MT5 automated trading is disabled: account.trade_allowed=false")
+
+    sleeps: list[int] = []
+
+    def sleep(delay: int) -> None:
+        sleeps.append(delay)
+        if len(sleeps) == 2:
+            raise StopIteration
+
+    bot.run_once = run_once  # type: ignore[method-assign]
+    monkeypatch.setattr("src.execution.mt5_bot_runner.time.sleep", sleep)
+
+    with pytest.raises(StopIteration):
+        bot.run_loop(sleep_seconds=30)
+
+    assert attempts == ["run", "run"]
+    assert bot._mt5_failure_streak == 0
+    assert bot.connector.shutdown_calls == 0
+    assert bot.event_logger.events[0][0] == "connection_events"
+    assert bot.event_logger.events[0][1]["event"] == "mt5_cycle_skipped"
+
+
+def test_mt5_loop_reinitializes_after_repeated_connection_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bot = _bare_loop_bot(reconnect_after_failures=2)
+    attempts: list[str] = []
+    reconnects: list[str] = []
+
+    def run_once() -> None:
+        attempts.append("run")
+        if len(attempts) <= 2:
+            raise MT5TradingDisabledError("MT5 automated trading is disabled: account.trade_allowed=false")
+
+    sleeps: list[int] = []
+
+    def sleep(delay: int) -> None:
+        sleeps.append(delay)
+        if len(sleeps) == 3:
+            raise StopIteration
+
+    def connect() -> None:
+        reconnects.append("connected")
+        bot._loop_connected = True
+
+    bot.run_once = run_once  # type: ignore[method-assign]
+    bot.connect = connect  # type: ignore[method-assign]
+    monkeypatch.setattr("src.execution.mt5_bot_runner.time.sleep", sleep)
+
+    with pytest.raises(StopIteration):
+        bot.run_loop(sleep_seconds=30)
+
+    assert attempts == ["run", "run", "run"]
+    assert reconnects == ["connected"]
+    assert bot.connector.shutdown_calls == 1
+    assert bot._mt5_failure_streak == 0
+
+
+def test_mt5_loop_keeps_non_demo_account_as_hard_stop(monkeypatch: pytest.MonkeyPatch) -> None:
+    bot = _bare_loop_bot(reconnect_after_failures=2)
+
+    def run_once() -> None:
+        raise MT5DemoAccountError("not DEMO")
+
+    bot.run_once = run_once  # type: ignore[method-assign]
+    monkeypatch.setattr("src.execution.mt5_bot_runner.time.sleep", lambda _: None)
+
+    with pytest.raises(MT5DemoAccountError, match="not DEMO"):
+        bot.run_loop(sleep_seconds=30)
+
+    assert bot.connector.shutdown_calls == 0
+
+
+def test_mt5_loop_connects_before_its_first_cycle(monkeypatch: pytest.MonkeyPatch) -> None:
+    bot = _bare_loop_bot(reconnect_after_failures=3)
+    bot._loop_connected = False
+    connections: list[str] = []
+
+    def connect() -> None:
+        connections.append("connected")
+        bot._loop_connected = True
+
+    def run_once() -> None:
+        raise StopIteration
+
+    bot.connect = connect  # type: ignore[method-assign]
+    bot.run_once = run_once  # type: ignore[method-assign]
+    monkeypatch.setattr("src.execution.mt5_bot_runner.time.sleep", lambda _: None)
+
+    with pytest.raises(StopIteration):
+        bot.run_loop(sleep_seconds=30)
+
+    assert connections == ["connected"]
 
 
 def test_single_instance_lock_rejects_second_active_holder(tmp_path) -> None:

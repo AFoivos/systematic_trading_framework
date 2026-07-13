@@ -14,7 +14,11 @@ from typing import Any, Mapping
 import pandas as pd
 import yaml
 
-from src.execution.mt5_connector import MT5Connector
+from src.execution.mt5_connector import (
+    MT5Connector,
+    MT5ConnectorError,
+    MT5DemoAccountError,
+)
 from src.execution.mt5_order_manager import MT5OrderManager, OrderResult, TradeParameters
 from src.execution.mt5_position_manager import MT5PositionManager
 from src.execution.mt5_risk_manager import MT5RiskManager, RiskConfig
@@ -191,6 +195,12 @@ class MT5DemoBot:
             dry_run=self.dry_run,
         )
         self._last_processed_bar: dict[str, pd.Timestamp] = {}
+        self._loop_connected = False
+        self._mt5_failure_streak = 0
+        self.mt5_reconnect_after_failures = max(
+            1,
+            int(self.execution_cfg.get("mt5_reconnect_after_failures", 3)),
+        )
 
     def connect(self) -> None:
         mt5_cfg = dict(self.execution_cfg.get("mt5", {}) or {})
@@ -214,10 +224,12 @@ class MT5DemoBot:
         equity = float(_attr(account, "equity"))
         self.risk_manager.update_equity_baselines(equity, now_utc=datetime.now(timezone.utc))
         self._log_account(account)
+        self._loop_connected = True
         self.logger.info("connected to MT5 in mode=%s dry_run=%s", self.execution_mode, self.dry_run)
 
     def shutdown(self) -> None:
         self.connector.shutdown()
+        self._loop_connected = False
 
     def run_once(self) -> None:
         self.connector.ensure_algo_trading_enabled(
@@ -231,8 +243,77 @@ class MT5DemoBot:
     def run_loop(self, *, sleep_seconds: int | None = None) -> None:
         delay = int(sleep_seconds or self.execution_cfg.get("poll_seconds", 30))
         while True:
-            self.run_once()
+            try:
+                if not self._loop_connected:
+                    self.connect()
+                self.run_once()
+            except MT5DemoAccountError:
+                # A non-demo account is a hard safety stop, not a transient connection error.
+                raise
+            except MT5ConnectorError as exc:
+                self._handle_mt5_cycle_error(exc=exc, retry_seconds=delay)
+            else:
+                self._mt5_failure_streak = 0
             time.sleep(delay)
+
+    def _handle_mt5_cycle_error(self, *, exc: MT5ConnectorError, retry_seconds: int) -> None:
+        """Skip an unsafe MT5 cycle and recover without placing an order."""
+        self._mt5_failure_streak += 1
+        failure_number = self._mt5_failure_streak
+        self.logger.warning(
+            "MT5 cycle skipped (%s). No order was sent; retrying in %s seconds "
+            "[consecutive_failures=%s].",
+            exc,
+            retry_seconds,
+            failure_number,
+        )
+        self.event_logger.write(
+            "connection_events",
+            {
+                "event": "mt5_cycle_skipped",
+                "error": str(exc),
+                "consecutive_failures": failure_number,
+                "retry_seconds": retry_seconds,
+            },
+        )
+        if failure_number < self.mt5_reconnect_after_failures:
+            return
+
+        self.logger.warning(
+            "MT5 remained unavailable for %s consecutive checks; attempting a local reconnect.",
+            failure_number,
+        )
+        try:
+            self.connector.shutdown()
+            self._loop_connected = False
+            self.connect()
+        except MT5DemoAccountError:
+            raise
+        except MT5ConnectorError as reconnect_exc:
+            self.logger.warning(
+                "MT5 reconnect did not complete (%s). The bot will remain idle and retry.",
+                reconnect_exc,
+            )
+            self.event_logger.write(
+                "connection_events",
+                {
+                    "event": "mt5_reconnect_failed",
+                    "error": str(reconnect_exc),
+                    "consecutive_failures": failure_number,
+                    "retry_seconds": retry_seconds,
+                },
+            )
+            return
+
+        self._mt5_failure_streak = 0
+        self.logger.info("MT5 reconnect completed; normal processing will resume on the next cycle.")
+        self.event_logger.write(
+            "connection_events",
+            {
+                "event": "mt5_reconnect_completed",
+                "retry_seconds": retry_seconds,
+            },
+        )
 
     def _process_symbol(self, framework_symbol: str, account: Any) -> None:
         mt5_symbol = self.mapper.to_mt5(framework_symbol)
@@ -799,10 +880,10 @@ def main(argv: list[str] | None = None) -> int:
             metadata={"config_path": str(bot.config_path), "execution_mode": bot.execution_mode},
         ):
             try:
-                bot.connect()
                 if args.loop:
                     bot.run_loop(sleep_seconds=args.sleep_seconds)
                 else:
+                    bot.connect()
                     bot.run_once()
             finally:
                 bot.shutdown()
