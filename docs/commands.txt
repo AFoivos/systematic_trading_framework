@@ -60,9 +60,8 @@ python -m src.experiments.runner docs/examples/minimal_experiment.yaml
 Το αντίστοιχο Docker command:
 
 ```bash
-docker compose run --rm app \
-  python -m src.experiments.runner config/experiments/foundation_alpha/ethusd_30m_trial_0041_alpha_lab/01_target_lab/ethusd_30m_trial0041_tgt_risk_adjusted_h24_v1.yaml
-  
+docker compose run --rm app python -m src.experiments.runner config/experiments/foundation_alpha/ethusd_30m_trial_0041_alpha_lab/05_signal_lab/ethusd_30m_trial0041_sig_dense_net_v1.yaml
+
 Το οπτικό feature/signal/target lab:
 
 ```bash
