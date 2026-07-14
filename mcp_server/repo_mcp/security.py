@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import mimetypes
 import fnmatch
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 
 TEXT_EXTENSIONS = {
@@ -44,7 +44,8 @@ PROTECTED_WRITE_PATTERNS = (
 def normalize_repo_path(path: str | None) -> str:
     raw = "." if path in (None, "") else str(path)
     normalized = raw.replace("\\", "/")
-    if normalized.startswith("/"):
+    windows_path = PureWindowsPath(raw)
+    if normalized.startswith("/") or windows_path.is_absolute() or windows_path.drive:
         raise PathSecurityError("Absolute paths are not allowed; use repository-relative paths")
     return normalized
 
@@ -72,20 +73,35 @@ def reject_protected_write_path(repo_relative_path: str) -> None:
 
 
 def is_probably_text(path: Path, sample_size: int = 4096) -> bool:
+    try:
+        with path.open("rb") as fh:
+            sample = fh.read(sample_size)
+    except OSError:
+        return False
+    if b"\x00" in sample:
+        return False
+    if sample:
+        controls = sum(byte < 9 or 13 < byte < 32 for byte in sample)
+        if controls / len(sample) > 0.20:
+            return False
+        try:
+            sample.decode("utf-8")
+            return True
+        except UnicodeDecodeError:
+            pass
     if path.suffix.lower() in TEXT_EXTENSIONS:
         return True
     mime, _ = mimetypes.guess_type(path.name)
-    if mime and mime.startswith("text/"):
-        return True
-    try:
-        sample = path.read_bytes()[:sample_size]
-    except OSError:
-        return False
-    return b"\x00" not in sample
+    return bool(mime and mime.startswith("text/"))
 
 
 def read_text_limited(path: Path, max_bytes: int) -> tuple[str, bool]:
-    payload = path.read_bytes()
-    truncated = len(payload) > max_bytes
-    payload = payload[:max_bytes]
+    if max_bytes < 0:
+        raise ValueError("max_bytes must be non-negative")
+    try:
+        with path.open("rb") as fh:
+            payload = fh.read(max_bytes)
+            truncated = bool(fh.read(1))
+    except OSError:
+        raise
     return payload.decode("utf-8", errors="replace"), truncated

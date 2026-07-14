@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from .config import ServerConfig
+from .runtime import get_runtime
+from .scan_policy import DEFAULT_SOURCE_ROOTS, as_posix_relative
 from .security import (
     PathSecurityError,
     reject_protected_write_path,
@@ -38,6 +40,12 @@ def _preview(content: str, limit: int = 500) -> str:
     return content[:limit]
 
 
+def _invalidate_source_index(config: ServerConfig, *paths: str) -> None:
+    source_roots = set(DEFAULT_SOURCE_ROOTS)
+    if any((as_posix_relative(path).split("/", 1)[0] in source_roots) for path in paths):
+        get_runtime(config.repo_root).source_index.invalidate()
+
+
 def write_file(
     config: ServerConfig,
     path: str,
@@ -58,6 +66,7 @@ def write_file(
     elif not target.parent.is_dir():
         raise FileNotFoundError(target.parent.as_posix())
     target.write_text(content, encoding="utf-8")
+    _invalidate_source_index(config, rel)
     return {
         "ok": True,
         "path": rel,
@@ -85,6 +94,7 @@ def append_file(
         raise FileNotFoundError(target.parent.as_posix())
     with target.open("a", encoding="utf-8") as fh:
         fh.write(content)
+    _invalidate_source_index(config, rel)
     return {
         "ok": True,
         "path": rel,
@@ -143,12 +153,15 @@ def apply_patch(
         text=True,
         timeout=_timeout(config, timeout_seconds),
     )
-    return {
+    response = {
         "command": "git apply",
         "return_code": proc.returncode,
         "stdout": proc.stdout[-config.full_access.max_output_bytes :],
         "stderr": proc.stderr[-config.full_access.max_output_bytes :],
     }
+    if proc.returncode == 0:
+        _invalidate_source_index(config, *_patch_paths(patch))
+    return response
 
 
 def delete_path(
@@ -173,6 +186,7 @@ def delete_path(
         shutil.rmtree(target)
     else:
         target.unlink()
+    _invalidate_source_index(config, rel)
     return {"ok": True, "path": rel, "deleted": True, "recursive": recursive}
 
 
@@ -201,4 +215,5 @@ def move_path(
             destination.unlink()
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(source), str(destination))
+    _invalidate_source_index(config, src_rel, dst_rel)
     return {"ok": True, "src": src_rel, "dst": dst_rel, "overwrote": overwrite}

@@ -2090,6 +2090,143 @@ def _write_trade_path_lifecycle_artifacts(
     return artifacts
 
 
+def _write_panel_artifacts(
+    *,
+    run_dir: Path,
+    data: pd.DataFrame | dict[str, pd.DataFrame],
+    cfg: dict[str, Any],
+    portfolio_meta: dict[str, Any],
+) -> dict[str, str]:
+    """Write compact, tabular audit artifacts for optional panel strategies."""
+    if not isinstance(data, dict) or not (cfg.get("panel_features") or cfg.get("panel_signals")):
+        return {}
+    frames = {str(asset): frame for asset, frame in data.items() if isinstance(frame, pd.DataFrame)}
+    panel_dir = run_dir / "panel"
+    panel_dir.mkdir(parents=True, exist_ok=True)
+    artifacts: dict[str, str] = {}
+    eligibility_rows: list[pd.DataFrame] = []
+    context_rows: list[pd.DataFrame] = []
+    signal_rows: list[pd.DataFrame] = []
+    cluster_rows: list[dict[str, Any]] = []
+    module_rows: list[dict[str, Any]] = []
+    for asset, frame in sorted(frames.items()):
+        base = pd.DataFrame({"timestamp": frame.index, "asset": asset})
+        eligibility_cols = [
+            column for column in frame.columns
+            if column.endswith("_cluster_eligible") or column.endswith("_eligible") or column == "entry_eligible"
+        ]
+        if eligibility_cols:
+            eligibility_rows.append(pd.concat([base.reset_index(drop=True), frame[eligibility_cols].reset_index(drop=True)], axis=1))
+        age_cols = [column for column in frame.columns if "context_age_bars" in column]
+        for column in age_cols:
+            context_rows.append(
+                pd.DataFrame({"timestamp": frame.index, "asset": asset, "context": column, "age_bars": frame[column]})
+            )
+        for column in (column for column in frame.columns if column.endswith("_cluster_eligible")):
+            cluster = column[: -len("_cluster_eligible")]
+            values = frame[column].fillna(False).astype(bool)
+            active = values[values]
+            cluster_rows.append(
+                {
+                    "cluster": cluster,
+                    "asset": asset,
+                    "eligible_start": active.index.min() if not active.empty else pd.NaT,
+                    "eligible_end": active.index.max() if not active.empty else pd.NaT,
+                    "eligible_timestamp_count": int(active.sum()),
+                }
+            )
+            module_rows.append({"module": f"intra_{cluster}", "asset": asset, "eligible_count": int(active.sum())})
+        for module, column in (("asia_to_europe", "asia_to_europe_eligible"), ("europe_to_usa", "europe_to_usa_eligible"), ("macro_context", "macro_context_eligible")):
+            if column in frame:
+                module_rows.append({"module": module, "asset": asset, "eligible_count": int(frame[column].fillna(False).astype(bool).sum())})
+        if "signal_global_session_relay" in frame:
+            signal_rows.append(pd.DataFrame({
+                "timestamp": frame.index,
+                "asset": asset,
+                "signal": pd.to_numeric(frame["signal_global_session_relay"], errors="coerce").fillna(0.0),
+                "module": frame.get("signal_module", pd.Series("none", index=frame.index)).astype("object"),
+                "cluster": frame.get("entry_cluster", pd.Series(pd.NA, index=frame.index)).astype("object"),
+                "candidate": frame.get("entry_candidate", pd.Series(False, index=frame.index)).fillna(False).astype(bool),
+                "accepted": frame.get("entry_eligible", pd.Series(False, index=frame.index)).fillna(False).astype(bool),
+                "reason": frame.get("entry_rejection_reason", pd.Series(pd.NA, index=frame.index)).astype("object"),
+                "signal_strength": pd.to_numeric(frame.get("signal_strength"), errors="coerce"),
+                "cluster_impulse": pd.to_numeric(frame.get("entry_cluster_impulse"), errors="coerce"),
+                "relay_score": pd.to_numeric(frame.get("entry_relay_score"), errors="coerce"),
+                "context_age_bars": pd.to_numeric(frame.filter(like="context_age_bars").max(axis=1), errors="coerce"),
+            }))
+    asset_eligibility = pd.concat(eligibility_rows, ignore_index=True) if eligibility_rows else pd.DataFrame(columns=["timestamp", "asset"])
+    path = panel_dir / "panel_asset_eligibility.csv"
+    asset_eligibility.to_csv(path, index=False)
+    artifacts["panel_asset_eligibility"] = str(path.relative_to(run_dir))
+    cluster_coverage = pd.DataFrame(cluster_rows, columns=["cluster", "asset", "eligible_start", "eligible_end", "eligible_timestamp_count"])
+    path = panel_dir / "panel_cluster_coverage.csv"
+    cluster_coverage.to_csv(path, index=False)
+    artifacts["panel_cluster_coverage"] = str(path.relative_to(run_dir))
+    module_coverage = pd.DataFrame(module_rows, columns=["module", "asset", "eligible_count"])
+    path = panel_dir / "panel_module_coverage.csv"
+    module_coverage.to_csv(path, index=False)
+    artifacts["panel_module_coverage"] = str(path.relative_to(run_dir))
+    freshness = pd.concat(context_rows, ignore_index=True) if context_rows else pd.DataFrame(columns=["timestamp", "asset", "context", "age_bars"])
+    path = panel_dir / "panel_context_freshness.csv"
+    freshness.to_csv(path, index=False)
+    artifacts["panel_context_freshness"] = str(path.relative_to(run_dir))
+    diagnostics_columns = [
+        "module", "asset", "side", "cluster", "calendar_year", "candidate_count", "accepted_count", "rejected_count",
+        "long_count", "short_count", "mean_signal_strength", "mean_cluster_impulse", "mean_relay_score", "mean_context_age_bars",
+    ]
+    rejection_columns = ["asset", "reason", "rejected_count"]
+    if signal_rows:
+        signals = pd.concat(signal_rows, ignore_index=True)
+        signals["calendar_year"] = pd.to_datetime(signals["timestamp"]).dt.year
+        signals["side"] = np.where(signals["signal"] > 0.0, "long", np.where(signals["signal"] < 0.0, "short", "none"))
+        signals["module"] = signals["module"].where(signals["module"].ne("none"), "rejected_or_none")
+        diagnostics = signals.groupby(["module", "asset", "side", "cluster", "calendar_year"], dropna=False).agg(
+            candidate_count=("candidate", "sum"), accepted_count=("accepted", "sum"),
+            rejected_count=("reason", lambda value: int(value.notna().sum())),
+            long_count=("signal", lambda value: int((value > 0.0).sum())),
+            short_count=("signal", lambda value: int((value < 0.0).sum())),
+            mean_signal_strength=("signal_strength", "mean"), mean_cluster_impulse=("cluster_impulse", "mean"),
+            mean_relay_score=("relay_score", "mean"), mean_context_age_bars=("context_age_bars", "mean"),
+        ).reset_index()
+        rejections = signals.loc[signals["reason"].notna()].groupby(["asset", "reason"], dropna=False).size().reset_index(name="rejected_count")
+    else:
+        diagnostics = pd.DataFrame(columns=diagnostics_columns)
+        rejections = pd.DataFrame(columns=rejection_columns)
+    barrier = dict(portfolio_meta.get("barrier", {}) or {})
+    events = pd.DataFrame(list(barrier.get("correlation_guard_events", []) or []))
+    portfolio_rejections: list[dict[str, object]] = []
+    if not events.empty:
+        portfolio_rejections = [
+            {"asset": str(asset), "reason": "correlation_guard", "rejected_count": int(count)}
+            for asset, count in events.groupby("asset").size().items()
+        ]
+    for key, reason in (
+        ("skipped_no_capacity", "portfolio_capacity"),
+        ("skipped_max_open_trades", "portfolio_capacity"),
+        ("skipped_group_max_open_trades", "group_capacity"),
+        ("skipped_group_cap", "group_capacity"),
+        ("skipped_spread_filter", "spread_filter"),
+        ("skipped_cost_filter", "cost_filter"),
+    ):
+        count = int(barrier.get(key, 0) or 0)
+        if count:
+            portfolio_rejections.append({"asset": "__portfolio__", "reason": reason, "rejected_count": count})
+    if portfolio_rejections:
+        rejections = pd.concat([rejections, pd.DataFrame(portfolio_rejections)], ignore_index=True)
+        rejections = rejections.groupby(["asset", "reason"], as_index=False)["rejected_count"].sum()
+    path = panel_dir / "panel_signal_diagnostics.csv"
+    diagnostics.reindex(columns=diagnostics_columns).to_csv(path, index=False)
+    artifacts["panel_signal_diagnostics"] = str(path.relative_to(run_dir))
+    path = panel_dir / "panel_rejection_reasons.csv"
+    rejections.reindex(columns=rejection_columns).to_csv(path, index=False)
+    artifacts["panel_rejection_reasons"] = str(path.relative_to(run_dir))
+    if not events.empty:
+        path = panel_dir / "correlation_guard_events.csv"
+        events.to_csv(path, index=False)
+        artifacts["correlation_guard_events"] = str(path.relative_to(run_dir))
+    return artifacts
+
+
 def save_artifacts(
     *,
     run_dir: Path,
@@ -2252,6 +2389,15 @@ def save_artifacts(
         artifacts["mark_to_market_returns"] = str(mtm_returns_path)
     if mtm_equity_path is not None:
         artifacts["mark_to_market_equity_curve"] = str(mtm_equity_path)
+
+    artifacts.update(
+        _write_panel_artifacts(
+            run_dir=run_dir,
+            data=data,
+            cfg=cfg,
+            portfolio_meta=portfolio_meta,
+        )
+    )
 
     artifacts.update(
         save_model_artifacts(

@@ -1,7 +1,7 @@
 strategy:
   name: EURUSD_30m_session_bb_reversion_long_only_v1
   description: >
-    Independent Codex-researched EURUSD 30m long-only intraday mean-reversion
+    Independent EURUSD 30m long-only intraday mean-reversion
     candidate. The rule buys London/NY-session washouts when EURUSD is below
     the lower Bollinger tail, RSI is depressed, the 8-bar return is negative,
     medium-term trend is not extended, ATR is in a normal regime, and spread

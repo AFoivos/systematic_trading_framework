@@ -60,8 +60,9 @@ python -m src.experiments.runner docs/examples/minimal_experiment.yaml
 Το αντίστοιχο Docker command:
 
 ```bash
-docker compose run --rm app python -m src.experiments.runner config/experiments/foundation_alpha/ethusd_30m_trial_0041_alpha_lab/06_model_lab/ethusd_30m_trial0041_model_xgboost_reg_v1.yaml
-docker compose run --rm app python -m src.experiments.runner config/experiments/foundation_alpha/ethusd_30m_trial_0041_alpha_lab/06_model_lab/ethusd_30m_trial0041_model_patchtst_minimal_v1.yaml
+docker compose run --rm app python -m src.experiments.runner config/experiments/global_session_relay/global_session_relay_laggard_v1_intra_cluster.yaml
+docker compose run --rm app python -m src.experiments.runner config/lab/09_temporal_robustness_chronos_bolt_spx500_h24.yaml
+
 Το οπτικό feature/signal/target lab:
 
 ```bash
@@ -259,6 +260,7 @@ PnL ή live evidence.
 ```bash
 docker compose up -d --build mcp
 docker compose logs -f mcp
+docker compose up -d --build --force-recreate mcp
 ```
 
 Το streamable HTTP endpoint είναι:

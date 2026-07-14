@@ -152,6 +152,7 @@ def _simulate_barrier_event(
     vertical_barrier_bars: int | None,
     tie_break: str,
     asset: str,
+    dynamic_exit: Mapping[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     if vertical_barrier_bars is not None and signal_idx >= len(frame) - int(vertical_barrier_bars):
         return None
@@ -182,9 +183,22 @@ def _simulate_barrier_event(
         profit_level = entry_price - profit_distance
         stop_level = entry_price + risk_distance
 
+    dynamic_cfg = dict(dynamic_exit or {})
+    dynamic_enabled = bool(dynamic_cfg.get("enabled", False))
+    dynamic_exit_col = str(dynamic_cfg.get("exit_col", "")) if dynamic_enabled else ""
+    dynamic_reason_col = str(dynamic_cfg.get("reason_col", "")) if dynamic_enabled else ""
+    dynamic_flags = (
+        frame[dynamic_exit_col].fillna(False).astype(bool).to_numpy()
+        if dynamic_enabled and dynamic_exit_col in frame.columns
+        else np.zeros(len(frame), dtype=bool)
+    )
+    dynamic_reasons = frame[dynamic_reason_col] if dynamic_enabled and dynamic_reason_col in frame.columns else None
+
     chosen_type: str | None = None
     chosen_idx: int | None = None
     exit_price: float | None = None
+    dynamic_signal_idx: int | None = None
+    dynamic_reason: str | None = None
     path_mfe = -np.inf
     path_mae = np.inf
     time_to_mfe = 0
@@ -195,7 +209,19 @@ def _simulate_barrier_event(
         else min(len(frame), signal_idx + int(vertical_barrier_bars) + 1)
     )
 
-    for step_idx in range(signal_idx + 1, horizon_end):
+    barrier_last_idx = horizon_end - 1
+    # A dynamic exit detected on the final vertical-barrier close is allowed to execute at
+    # the following *real* asset open.  No intrabar event is evaluated on that extra bar.
+    scan_end = min(len(frame), barrier_last_idx + 2) if vertical_barrier_bars is not None else len(frame)
+    scheduled_dynamic = False
+    for step_idx in range(signal_idx + 1, scan_end):
+        if scheduled_dynamic:
+            chosen_type = "dynamic"
+            chosen_idx = step_idx
+            exit_price = float(opens[step_idx])
+            if not np.isfinite(exit_price) or exit_price <= 0.0:
+                return None
+            break
         if side > 0.0:
             bar_mfe = (float(highs[step_idx]) - entry_price) / risk_distance
             bar_mae = (float(lows[step_idx]) - entry_price) / risk_distance
@@ -231,9 +257,22 @@ def _simulate_barrier_event(
             chosen_idx = step_idx
             exit_price = profit_level if chosen_type == "profit" else stop_level
             break
+        if dynamic_enabled and bool(dynamic_flags[step_idx]) and step_idx + 1 < len(frame):
+            scheduled_dynamic = True
+            dynamic_signal_idx = step_idx
+            if dynamic_reasons is not None and pd.notna(dynamic_reasons.iloc[step_idx]):
+                dynamic_reason = str(dynamic_reasons.iloc[step_idx])
+            else:
+                dynamic_reason = "stale_context"
+            continue
+        if step_idx == barrier_last_idx:
+            chosen_idx = step_idx
+            exit_price = float(closes[step_idx])
+            chosen_type = "end_of_data" if vertical_barrier_bars is None else "neutral"
+            break
 
     if chosen_type is None:
-        chosen_idx = horizon_end - 1
+        chosen_idx = barrier_last_idx
         exit_price = float(closes[chosen_idx])
         chosen_type = "end_of_data" if vertical_barrier_bars is None else "neutral"
 
@@ -258,6 +297,8 @@ def _simulate_barrier_event(
             if chosen_type == "profit"
             else "stop_loss"
             if chosen_type == "stop"
+            else str(dynamic_reason or "stale_context")
+            if chosen_type == "dynamic"
             else "end_of_data_close"
             if chosen_type == "end_of_data"
             else "vertical"
@@ -267,6 +308,9 @@ def _simulate_barrier_event(
         "max_adverse_r": float(path_mae) if np.isfinite(path_mae) else np.nan,
         "time_to_mfe": int(time_to_mfe),
         "time_to_mae": int(time_to_mae),
+        "dynamic_exit_signal_time": frame.index[dynamic_signal_idx] if dynamic_signal_idx is not None else pd.NaT,
+        "dynamic_exit_execution_time": frame.index[chosen_idx] if chosen_type == "dynamic" else pd.NaT,
+        "dynamic_exit_reason": dynamic_reason if chosen_type == "dynamic" else pd.NA,
     }
 
 
@@ -287,12 +331,13 @@ def _apply_mark_to_market_trade_path(
     active_index = aligned_index[(aligned_index >= entry_time) & (aligned_index <= exit_time)]
     if len(active_index) == 0:
         return
-    closes = pd.to_numeric(frame[close_col], errors="coerce").reindex(active_index).ffill()
+    # Missing native bars remain missing.  This routine must not manufacture a mark or an
+    # execution price by forward-filling an OHLC series onto another asset's timestamp.
+    closes = pd.to_numeric(frame[close_col], errors="coerce").reindex(active_index)
     previous_price = float(entry_price)
     for ts in active_index:
         mark_price = float(exit_price) if ts == exit_time else float(closes.loc[ts])
         if not np.isfinite(mark_price) or mark_price <= 0.0 or previous_price <= 0.0:
-            previous_price = mark_price
             continue
         if side > 0.0:
             gross_return = abs(float(weight)) * (mark_price / previous_price - 1.0)
@@ -363,6 +408,120 @@ def _estimated_roundtrip_cost_filter_stats(
     }
 
 
+def _resolve_dynamic_exit_for_trade(
+    cfg: Mapping[str, Any], *, side: float, module: str | None
+) -> dict[str, Any]:
+    """Resolve side- and optional module-aware dynamic exit columns for one trade."""
+    base = dict(cfg or {})
+    if not bool(base.get("enabled", False)):
+        return {"enabled": False}
+    module_cfg = dict(dict(base.get("module_exit_columns", {}) or {}).get(str(module or ""), {}) or {})
+    long_col = module_cfg.get("long_exit_col", base.get("long_exit_col"))
+    short_col = module_cfg.get("short_exit_col", base.get("short_exit_col"))
+    reason_col = module_cfg.get("reason_col", base.get("reason_col"))
+    return {
+        "enabled": True,
+        "exit_col": str(long_col if side > 0.0 else short_col),
+        "reason_col": str(reason_col),
+    }
+
+
+def _validate_dynamic_exit_config(cfg: Mapping[str, Any] | None) -> dict[str, Any]:
+    out = dict(cfg or {})
+    if not out:
+        return {"enabled": False}
+    if not isinstance(out.get("enabled", False), bool):
+        raise ValueError("portfolio_barrier dynamic_exit.enabled must be boolean.")
+    if not bool(out.get("enabled", False)):
+        return {"enabled": False}
+    if str(out.get("execution", "next_open")) != "next_open":
+        raise ValueError("portfolio_barrier dynamic_exit.execution currently supports only 'next_open'.")
+    for key in ("long_exit_col", "short_exit_col", "reason_col"):
+        if not isinstance(out.get(key), str) or not str(out[key]).strip():
+            raise ValueError(f"portfolio_barrier dynamic_exit.{key} must be a non-empty string.")
+    module_exit_columns = out.get("module_exit_columns", {}) or {}
+    if not isinstance(module_exit_columns, Mapping):
+        raise ValueError("portfolio_barrier dynamic_exit.module_exit_columns must be a mapping.")
+    for module, module_cfg in module_exit_columns.items():
+        if not isinstance(module, str) or not module.strip() or not isinstance(module_cfg, Mapping):
+            raise ValueError("portfolio_barrier dynamic_exit.module_exit_columns must map names to mappings.")
+        for key in ("long_exit_col", "short_exit_col", "reason_col"):
+            if key in module_cfg and (not isinstance(module_cfg[key], str) or not str(module_cfg[key]).strip()):
+                raise ValueError(f"portfolio_barrier dynamic_exit.module_exit_columns.{module}.{key} must be a string.")
+    return out
+
+
+def _validate_correlation_guard_config(cfg: Mapping[str, Any] | None) -> dict[str, Any]:
+    out = dict(cfg or {})
+    if not out:
+        return {"enabled": False}
+    if not isinstance(out.get("enabled", False), bool):
+        raise ValueError("portfolio_barrier correlation_guard.enabled must be boolean.")
+    if not bool(out.get("enabled", False)):
+        return {"enabled": False}
+    returns_col = out.get("returns_col", "close_ret")
+    if not isinstance(returns_col, str) or not returns_col.strip():
+        raise ValueError("portfolio_barrier correlation_guard.returns_col must be a non-empty string.")
+    window = _positive_int(out.get("window_bars", 960), field="correlation_guard.window_bars")
+    minimum = _positive_int(out.get("minimum_observations", 240), field="correlation_guard.minimum_observations")
+    if minimum > window:
+        raise ValueError("portfolio_barrier correlation_guard.minimum_observations must be <= window_bars.")
+    maximum = float(out.get("maximum_abs_correlation", 0.80))
+    if not np.isfinite(maximum) or not 0.0 < maximum <= 1.0:
+        raise ValueError("portfolio_barrier correlation_guard.maximum_abs_correlation must be in (0, 1].")
+    if not isinstance(out.get("same_direction_only", True), bool):
+        raise ValueError("portfolio_barrier correlation_guard.same_direction_only must be boolean.")
+    if str(out.get("action", "reject")) != "reject":
+        raise ValueError("portfolio_barrier correlation_guard.action currently supports only 'reject'.")
+    out.update({"returns_col": returns_col, "window_bars": window, "minimum_observations": minimum, "maximum_abs_correlation": maximum})
+    return out
+
+
+def _evaluate_correlation_guard(
+    frames: Mapping[str, pd.DataFrame],
+    *,
+    asset: str,
+    timestamp: Any,
+    side: float,
+    active_by_asset: Mapping[str, Mapping[str, Any]],
+    cfg: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Compare returns on timestamp intersection strictly before the candidate signal bar."""
+    if not bool(cfg.get("enabled", False)):
+        return {"passed": True, "max_correlation": np.nan, "rejected_against": pd.NA, "insufficient_history": False}
+    returns_col = str(cfg["returns_col"])
+    target_returns = pd.to_numeric(frames[asset][returns_col], errors="coerce")
+    correlations: list[tuple[str, float]] = []
+    insufficient = False
+    for active_asset, active in sorted(active_by_asset.items()):
+        if bool(cfg.get("same_direction_only", True)) and float(active.get("side", 0.0)) != float(side):
+            continue
+        active_returns = pd.to_numeric(frames[active_asset][returns_col], errors="coerce")
+        pair = pd.concat(
+            [target_returns.loc[target_returns.index < timestamp], active_returns.loc[active_returns.index < timestamp]],
+            axis=1,
+            join="inner",
+        ).dropna().tail(int(cfg["window_bars"]))
+        if len(pair) < int(cfg["minimum_observations"]):
+            insufficient = True
+            continue
+        correlation = float(pair.iloc[:, 0].corr(pair.iloc[:, 1]))
+        if np.isfinite(correlation):
+            correlations.append((active_asset, correlation))
+        else:
+            insufficient = True
+    if not correlations:
+        return {"passed": True, "max_correlation": np.nan, "rejected_against": pd.NA, "insufficient_history": insufficient}
+    rejected_asset, correlation = sorted(correlations, key=lambda item: (-abs(item[1]), item[0]))[0]
+    passed = abs(correlation) <= float(cfg["maximum_abs_correlation"])
+    return {
+        "passed": bool(passed),
+        "max_correlation": float(correlation),
+        "rejected_against": pd.NA if passed else rejected_asset,
+        "insufficient_history": bool(insufficient),
+    }
+
+
 def run_portfolio_barrier_backtest(
     asset_frames: Mapping[str, pd.DataFrame],
     *,
@@ -390,6 +549,8 @@ def run_portfolio_barrier_backtest(
     portfolio_guard: Mapping[str, Any] | None = None,
     event_time_remap_policy: str = "next_aligned",
     max_cost_r: float | None = None,
+    dynamic_exit: Mapping[str, Any] | None = None,
+    correlation_guard: Mapping[str, Any] | None = None,
 ) -> tuple[PortfolioPerformance, pd.DataFrame, pd.DataFrame, dict[str, Any]]:
     """
     Event-based multi-asset portfolio backtest using directional triple-barrier exits.
@@ -427,6 +588,8 @@ def run_portfolio_barrier_backtest(
         raise ValueError("portfolio_barrier costs and slippage must be >= 0.")
     if max_cost_r is not None:
         max_cost_r = _positive_float(max_cost_r, field="max_cost_r")
+    dynamic_exit_cfg = _validate_dynamic_exit_config(dynamic_exit)
+    correlation_guard_cfg = _validate_correlation_guard_config(correlation_guard)
 
     asset_params_by_asset = {str(k): dict(v or {}) for k, v in dict(asset_params or {}).items()}
     asset_groups = {str(k): str(v) for k, v in dict(asset_to_group or {}).items()}
@@ -469,6 +632,8 @@ def run_portfolio_barrier_backtest(
                 field=f"asset_params.{asset}.max_spread_points",
             )
         _require_columns(frame, asset=asset, columns=asset_required_columns)
+        if bool(correlation_guard_cfg.get("enabled", False)):
+            _require_columns(frame, asset=asset, columns=[str(correlation_guard_cfg["returns_col"])])
     signals = _align_signal_index(frames, signal_col=signal_col, alignment=alignment)
     if signals.empty:
         raise ValueError("portfolio_barrier aligned signal frame is empty.")
@@ -509,6 +674,10 @@ def run_portfolio_barrier_backtest(
     skipped_spread_filter = 0
     skipped_invalid_spread = 0
     risk_sized_trade_count = 0
+    correlation_guard_rejections = 0
+    correlation_guard_checked = 0
+    correlation_guard_insufficient_history = 0
+    correlation_guard_events: list[dict[str, Any]] = []
     guard_equity = 1.0
     guard_peak_equity = 1.0
     guard_daily_start_equity = 1.0
@@ -596,6 +765,31 @@ def run_portfolio_barrier_backtest(
             if timestamp not in frame.index:
                 continue
             side = float(np.sign(signal_value))
+            correlation_result = _evaluate_correlation_guard(
+                frames,
+                asset=asset,
+                timestamp=timestamp,
+                side=side,
+                active_by_asset=active_by_asset,
+                cfg=correlation_guard_cfg,
+            )
+            if bool(correlation_guard_cfg.get("enabled", False)):
+                correlation_guard_checked += 1
+                correlation_guard_insufficient_history += int(correlation_result["insufficient_history"])
+            if not bool(correlation_result["passed"]):
+                correlation_guard_rejections += 1
+                correlation_guard_events.append(
+                    {
+                        "timestamp": timestamp,
+                        "asset": asset,
+                        "side": "long" if side > 0.0 else "short",
+                        "entry_max_active_correlation": correlation_result["max_correlation"],
+                        "entry_correlation_guard_passed": False,
+                        "entry_correlation_rejected_against": correlation_result["rejected_against"],
+                        "entry_correlation_insufficient_history": correlation_result["insufficient_history"],
+                    }
+                )
+                continue
             remaining_group_gross = None
             if group is not None and constraints.group_max_exposure and group in constraints.group_max_exposure:
                 current_group_gross = sum(
@@ -627,6 +821,11 @@ def run_portfolio_barrier_backtest(
                 field=f"asset_params.{asset}.vertical_barrier_bars",
             )
             asset_volatility_col = str(params.get("volatility_col", params.get("vol_col", volatility_col)))
+            module_col = str(dynamic_exit_cfg.get("module_col", "signal_module"))
+            signal_module = str(frame.iloc[signal_idx].get(module_col, "")) if module_col in frame.columns else ""
+            trade_dynamic_exit = _resolve_dynamic_exit_for_trade(
+                dynamic_exit_cfg, side=side, module=signal_module
+            )
             event = _simulate_barrier_event(
                 frame,
                 signal_idx=signal_idx,
@@ -642,6 +841,7 @@ def run_portfolio_barrier_backtest(
                 vertical_barrier_bars=asset_vertical_barrier_bars,
                 tie_break=tie_break,
                 asset=asset,
+                dynamic_exit=trade_dynamic_exit,
             )
             if event is None:
                 skipped_tail += 1
@@ -746,7 +946,7 @@ def run_portfolio_barrier_backtest(
             if len(active_index) > 0:
                 weights.loc[active_index, asset] = weight
 
-            active_by_asset[asset] = {"exit_time": exit_time, "weight": weight}
+            active_by_asset[asset] = {"exit_time": exit_time, "weight": weight, "side": side}
             current_gross += abs(weight)
             side_name = "long" if side > 0.0 else "short"
             trade = {
@@ -766,6 +966,7 @@ def run_portfolio_barrier_backtest(
                 "exit_time_remapped": bool(exit_remapped),
                 "side": side_name,
                 "signal": float(signal_value),
+                "signal_module": signal_module or pd.NA,
                 "position_weight": float(weight),
                 "entry_price": float(event["entry_price"]),
                 "exit_price": float(event["exit_price"]),
@@ -803,6 +1004,13 @@ def run_portfolio_barrier_backtest(
                 "fixed_cost": pnl["fixed_cost"],
                 "slippage": pnl["slippage"],
                 "was_oos": bool(oos_mask.loc[timestamp]) if oos_mask is not None else True,
+                "dynamic_exit_signal_time": event.get("dynamic_exit_signal_time", pd.NaT),
+                "dynamic_exit_execution_time": event.get("dynamic_exit_execution_time", pd.NaT),
+                "dynamic_exit_reason": event.get("dynamic_exit_reason", pd.NA),
+                "entry_max_active_correlation": correlation_result["max_correlation"],
+                "entry_correlation_guard_passed": bool(correlation_result["passed"]),
+                "entry_correlation_rejected_against": correlation_result["rejected_against"],
+                "entry_correlation_insufficient_history": bool(correlation_result["insufficient_history"]),
             }
             trades.append(trade)
 
@@ -852,6 +1060,13 @@ def run_portfolio_barrier_backtest(
                 "cost",
                 "slippage",
                 "was_oos",
+                "dynamic_exit_signal_time",
+                "dynamic_exit_execution_time",
+                "dynamic_exit_reason",
+                "entry_max_active_correlation",
+                "entry_correlation_guard_passed",
+                "entry_correlation_rejected_against",
+                "entry_correlation_insufficient_history",
             ]
         )
     else:
@@ -899,6 +1114,10 @@ def run_portfolio_barrier_backtest(
             "equity_source": guard_equity_source,
             "skipped_spread_filter": int(skipped_spread_filter),
             "skipped_invalid_spread": int(skipped_invalid_spread),
+            "correlation_guard_enabled": bool(correlation_guard_cfg.get("enabled", False)),
+            "correlation_guard_checked": int(correlation_guard_checked),
+            "correlation_guard_rejections": int(correlation_guard_rejections),
+            "correlation_guard_insufficient_history": int(correlation_guard_insufficient_history),
         },
         risk_guard_timeline=pd.DataFrame(index=weights.index),
         trades=trades_df,
@@ -939,6 +1158,14 @@ def run_portfolio_barrier_backtest(
         "remapped_exit_timestamps": int(remapped_exit_timestamps),
         "ignored_open_signals": int(ignored_open_signals),
         "oos_filtered": bool(oos_mask is not None),
+        "dynamic_exit": dict(dynamic_exit_cfg),
+        "correlation_guard": {
+            **dict(correlation_guard_cfg),
+            "checked": int(correlation_guard_checked),
+            "rejections": int(correlation_guard_rejections),
+            "insufficient_history": int(correlation_guard_insufficient_history),
+        },
+        "correlation_guard_events": correlation_guard_events,
     }
     return performance, weights, diagnostics, meta
 

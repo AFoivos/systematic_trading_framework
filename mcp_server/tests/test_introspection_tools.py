@@ -263,3 +263,16 @@ def test_server_import_registers_new_tools(monkeypatch: pytest.MonkeyPatch, tmp_
     assert callable(server.run_shell_command)
     assert callable(server.run_experiment)
     assert callable(server.git_add)
+    assert callable(server.search_source)
+    assert callable(server.stat_files)
+    assert callable(server.read_files)
+    assert callable(server.list_changed_paths)
+    assert callable(server.read_changed_files)
+    assert callable(server.get_repo_snapshot)
+    assert callable(server.get_code_review_bundle)
+    assert callable(server.mcp_health)
+    assert callable(server.mcp_diagnostics)
+
+    _write(tmp_path / "src/module.py", "VALUE = 1\n")
+    assert server.read_files(["src/module.py"])["files"][0]["content"].replace("\r\n", "\n") == "VALUE = 1\n"
+    assert server.mcp_diagnostics()["tools"]["read_files"]["call_count"] == 1

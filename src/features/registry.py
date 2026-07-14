@@ -27,6 +27,7 @@ from .homodyne_discriminator import add_homodyne_discriminator
 from .hurst_exponent import add_hurst_exponent
 from .instantaneous_trendline import add_instantaneous_trendline
 from .inverse_fisher_transform import add_inverse_fisher_transform
+from .impulse import add_impulse_12_96
 from .laguerre_rsi import add_laguerre_rsi
 from .macro import add_macro_context_features
 from .mama import add_mama
@@ -62,7 +63,9 @@ from .technical.stochastic_rsi import add_stochastic_rsi_features
 from .technical.trend import add_trend_features
 from .technical.vwap import add_vwap_features
 from .trend_regime import add_trend_regime
+from .trend_slope_volatility import add_trend_slope_volatility
 from .volatility import add_volatility_features
+from .volatility_of_volatility import add_volatility_of_volatility
 from .volatility_regime import add_volatility_regime
 from .vpin import add_vpin
 from .yang_zhang_volatility import add_yang_zhang_volatility
@@ -72,9 +75,11 @@ FeatureFn = Callable[..., pd.DataFrame]
 
 _FEATURE_COMPONENTS: tuple[tuple[str, FeatureFn], ...] = (
     ("returns", add_close_returns),
+    ("impulse_12_96", add_impulse_12_96),
     ("volatility", add_volatility_features),
     ("trend", add_trend_features),
     ("trend_regime", add_trend_regime),
+    ("trend_slope_volatility", add_trend_slope_volatility),
     ("bollinger", add_bollinger_features),
     ("macd", add_macd_features),
     ("ppo", add_ppo_features),
@@ -121,6 +126,7 @@ _FEATURE_COMPONENTS: tuple[tuple[str, FeatureFn], ...] = (
     ("hurst_exponent", add_hurst_exponent),
     ("fractal_dimension", add_fractal_dimension),
     ("volatility_regime", add_volatility_regime),
+    ("volatility_of_volatility", add_volatility_of_volatility),
     ("hmm_regime", add_hmm_regime),
     ("hilbert_transform", add_hilbert_transform),
     ("roofing_filter", add_roofing_filter),

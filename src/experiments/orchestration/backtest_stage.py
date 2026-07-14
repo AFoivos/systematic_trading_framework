@@ -348,6 +348,8 @@ def run_portfolio_backtest(
             portfolio_guard=dict(risk_cfg.get("portfolio_guard", {}) or {}),
             event_time_remap_policy=str(backtest_cfg.get("event_time_remap_policy", "next_aligned")),
             max_cost_r=backtest_cfg.get("max_cost_r"),
+            dynamic_exit=dict(backtest_cfg.get("dynamic_exit", {}) or {}),
+            correlation_guard=dict(backtest_cfg.get("correlation_guard", {}) or {}),
         )
         portfolio_meta = PortfolioMetaPayload(
             construction="portfolio_barrier",

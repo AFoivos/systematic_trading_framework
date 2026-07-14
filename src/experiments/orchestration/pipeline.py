@@ -21,6 +21,8 @@ from src.experiments.orchestration.common import build_storage_context, resolve_
 from src.experiments.orchestration.execution_stage import build_execution_output
 from src.experiments.orchestration.feature_stage import apply_signals_to_assets, apply_steps_to_assets
 from src.experiments.orchestration.model_stage import apply_model_pipeline_to_assets
+from src.experiments.orchestration.panel_feature_stage import apply_panel_feature_steps
+from src.experiments.orchestration.panel_signal_stage import apply_panel_signal_steps
 from src.experiments.orchestration.reporting import (
     build_portfolio_evaluation,
     build_single_asset_evaluation,
@@ -147,8 +149,20 @@ def run_experiment_pipeline(
             previous_asset_frames=raw_asset_frames,
             stage_tail_cfg=stage_tail_cfg,
         )
-        processed_snapshot = save_processed_snapshot_fn(
+        panel_feature_asset_frames = apply_panel_feature_steps(
             feature_asset_frames,
+            panel_feature_steps=list(cfg.get("panel_features", []) or []),
+        )
+        if cfg.get("panel_features"):
+            _record_stage_tail(
+                traces=stage_tails,
+                stage="panel_features_applied",
+                asset_frames=panel_feature_asset_frames,
+                previous_asset_frames=feature_asset_frames,
+                stage_tail_cfg=stage_tail_cfg,
+            )
+        processed_snapshot = save_processed_snapshot_fn(
+            panel_feature_asset_frames,
             data_cfg=data_cfg,
             config_hash_sha256=config_hash_sha256,
             feature_steps=list(cfg.get("features", []) or []),
@@ -177,7 +191,7 @@ def run_experiment_pipeline(
         enabled_model_stage_count = sum(1 for stage_cfg in model_stages_cfg if bool(stage_cfg.get("enabled", True)))
         returns_col = cfg.get("backtest", {}).get("returns_col")
         model_asset_frames, model, model_meta = apply_model_pipeline_to_assets(
-            feature_asset_frames,
+            panel_feature_asset_frames,
             model_cfg=model_cfg,
             model_stages=model_stages_cfg,
             returns_col=returns_col,
@@ -186,7 +200,7 @@ def run_experiment_pipeline(
             traces=stage_tails,
             stage="model_applied" if enabled_model_stage_count == 0 else f"model_applied[{enabled_model_stage_count}_stages]",
             asset_frames=model_asset_frames,
-            previous_asset_frames=feature_asset_frames,
+            previous_asset_frames=panel_feature_asset_frames,
             stage_tail_cfg=stage_tail_cfg,
         )
 
@@ -201,6 +215,19 @@ def run_experiment_pipeline(
             previous_asset_frames=model_asset_frames,
             stage_tail_cfg=stage_tail_cfg,
         )
+        panel_signal_asset_frames = apply_panel_signal_steps(
+            asset_frames,
+            panel_signal_steps=list(cfg.get("panel_signals", []) or []),
+        )
+        if cfg.get("panel_signals"):
+            _record_stage_tail(
+                traces=stage_tails,
+                stage="panel_signals_applied",
+                asset_frames=panel_signal_asset_frames,
+                previous_asset_frames=asset_frames,
+                stage_tail_cfg=stage_tail_cfg,
+            )
+        asset_frames = panel_signal_asset_frames
 
         target_cfg = dict(cfg.get("target", {}) or {})
         target_model_cfg = dict(model_cfg)

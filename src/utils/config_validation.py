@@ -1597,6 +1597,14 @@ def validate_features_block(features: Any) -> None:
                         raise ConfigValidationError(f"{field_prefix}.{key} must be a non-empty string.")
                 if "unit" in params:
                     _validate_phase_unit(params["unit"], field=f"{field_prefix}.unit")
+        if step["step"] == "impulse_12_96":
+            for field_prefix, params in _iter_feature_param_blocks(step):
+                for key in ("return_bars", "volatility_window"):
+                    if key in params:
+                        _positive_int(params[key], field=f"{field_prefix}.{key}")
+                for key in ("close_col", "returns_col", "output_col"):
+                    if key in params and (not isinstance(params[key], str) or not params[key].strip()):
+                        raise ConfigValidationError(f"{field_prefix}.{key} must be a non-empty string.")
         if step["step"] == "roc_long_only_conditions":
             _validate_roc_long_only_conditions_params(step.get("params") or {}, field_prefix="features[].params")
         if step["step"] == "ehlers_semiscalp_long":
@@ -3776,6 +3784,66 @@ def validate_backtest_block(backtest: dict[str, Any]) -> None:
             raise ConfigValidationError(
                 "backtest.engine='portfolio_barrier' uses vertical_barrier_bars and requires min_holding_bars=0."
             )
+        _validate_portfolio_barrier_dynamic_exit(backtest.get("dynamic_exit", {}) or {})
+        _validate_correlation_guard(backtest.get("correlation_guard", {}) or {})
+
+
+def _validate_portfolio_barrier_dynamic_exit(dynamic_exit: Any) -> None:
+    if dynamic_exit in ({}, None):
+        return
+    if not isinstance(dynamic_exit, dict):
+        raise ConfigValidationError("backtest.dynamic_exit must be a mapping when provided.")
+    if "enabled" in dynamic_exit and not isinstance(dynamic_exit.get("enabled"), bool):
+        raise ConfigValidationError("backtest.dynamic_exit.enabled must be boolean.")
+    if not bool(dynamic_exit.get("enabled", False)):
+        return
+    if dynamic_exit.get("execution", "next_open") != "next_open":
+        raise ConfigValidationError("backtest.dynamic_exit.execution currently supports only 'next_open'.")
+    for key in ("long_exit_col", "short_exit_col", "reason_col"):
+        value = dynamic_exit.get(key)
+        if not isinstance(value, str) or not value.strip():
+            raise ConfigValidationError(f"backtest.dynamic_exit.{key} must be a non-empty string.")
+    modules = dynamic_exit.get("module_exit_columns", {}) or {}
+    if not isinstance(modules, dict):
+        raise ConfigValidationError("backtest.dynamic_exit.module_exit_columns must be a mapping.")
+    for module, values in modules.items():
+        if not isinstance(module, str) or not module.strip() or not isinstance(values, dict):
+            raise ConfigValidationError("backtest.dynamic_exit.module_exit_columns must map non-empty names to mappings.")
+        for key in ("long_exit_col", "short_exit_col", "reason_col"):
+            if key in values and (not isinstance(values[key], str) or not values[key].strip()):
+                raise ConfigValidationError(
+                    f"backtest.dynamic_exit.module_exit_columns.{module}.{key} must be a non-empty string."
+                )
+
+
+def _validate_correlation_guard(correlation_guard: Any) -> None:
+    if correlation_guard in ({}, None):
+        return
+    if not isinstance(correlation_guard, dict):
+        raise ConfigValidationError("backtest.correlation_guard must be a mapping when provided.")
+    if "enabled" in correlation_guard and not isinstance(correlation_guard.get("enabled"), bool):
+        raise ConfigValidationError("backtest.correlation_guard.enabled must be boolean.")
+    if not bool(correlation_guard.get("enabled", False)):
+        return
+    returns_col = correlation_guard.get("returns_col", "close_ret")
+    if not isinstance(returns_col, str) or not returns_col.strip():
+        raise ConfigValidationError("backtest.correlation_guard.returns_col must be a non-empty string.")
+    window = _positive_int(correlation_guard.get("window_bars", 960), field="backtest.correlation_guard.window_bars")
+    minimum = _positive_int(
+        correlation_guard.get("minimum_observations", 240), field="backtest.correlation_guard.minimum_observations"
+    )
+    if minimum > window:
+        raise ConfigValidationError("backtest.correlation_guard.minimum_observations must be <= window_bars.")
+    threshold = _finite_number(
+        correlation_guard.get("maximum_abs_correlation", 0.80),
+        field="backtest.correlation_guard.maximum_abs_correlation",
+    )
+    if not 0.0 < threshold <= 1.0:
+        raise ConfigValidationError("backtest.correlation_guard.maximum_abs_correlation must be in (0, 1].")
+    if "same_direction_only" in correlation_guard and not isinstance(correlation_guard["same_direction_only"], bool):
+        raise ConfigValidationError("backtest.correlation_guard.same_direction_only must be boolean.")
+    if correlation_guard.get("action", "reject") != "reject":
+        raise ConfigValidationError("backtest.correlation_guard.action currently supports only 'reject'.")
 
 
 def _validate_dynamic_exits_block(dynamic_exits: Any) -> None:
@@ -4312,12 +4380,130 @@ def _validate_portfolio_barrier_parity(cfg: dict[str, Any]) -> None:
         )
 
 
+def _validate_session_time(value: Any, *, field: str, allow_24: bool = False) -> None:
+    if not isinstance(value, str) or not re.fullmatch(r"\d{2}:\d{2}", value):
+        raise ConfigValidationError(f"{field} must be a HH:MM string.")
+    hour, minute = (int(part) for part in value.split(":"))
+    if allow_24 and hour == 24 and minute == 0:
+        return
+    if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+        raise ConfigValidationError(f"{field} must be a valid HH:MM time.")
+
+
+def _validate_panel_step_list(value: Any, *, field: str, supported: set[str]) -> list[dict[str, Any]]:
+    if value in (None, []):
+        return []
+    if not isinstance(value, list):
+        raise ConfigValidationError(f"{field} must be a list of steps.")
+    steps: list[dict[str, Any]] = []
+    for idx, step in enumerate(value):
+        if not isinstance(step, dict) or not isinstance(step.get("step"), str) or not step["step"].strip():
+            raise ConfigValidationError(f"{field}[{idx}].step must be a non-empty string.")
+        if step["step"] not in supported:
+            raise ConfigValidationError(f"Unknown {field} step: {step['step']}")
+        if "enabled" in step and not isinstance(step["enabled"], bool):
+            raise ConfigValidationError(f"{field}[{idx}].enabled must be boolean when provided.")
+        if "params" in step and step["params"] is not None and not isinstance(step["params"], dict):
+            raise ConfigValidationError(f"{field}[{idx}].params must be a mapping when provided.")
+        steps.append(step)
+    return steps
+
+
+def _validate_cluster_definitions(clusters: Any, *, symbols: set[str], field: str) -> None:
+    if not isinstance(clusters, dict) or not clusters:
+        raise ConfigValidationError(f"{field} must be a non-empty mapping.")
+    for cluster, spec in clusters.items():
+        if not isinstance(cluster, str) or not cluster.strip() or not isinstance(spec, dict):
+            raise ConfigValidationError(f"{field} must map non-empty cluster names to mappings.")
+        members = spec.get("assets", [])
+        if not isinstance(members, list) or not members or any(not isinstance(asset, str) or not asset.strip() for asset in members):
+            raise ConfigValidationError(f"{field}.{cluster}.assets must be a non-empty list[str].")
+        unknown = sorted(set(members) - symbols)
+        if unknown:
+            raise ConfigValidationError(f"{field}.{cluster}.assets contains assets absent from data.symbols: {unknown}")
+        minimum = spec.get("minimum_active_assets")
+        if isinstance(minimum, bool) or not isinstance(minimum, int) or minimum <= 0:
+            raise ConfigValidationError(f"{field}.{cluster}.minimum_active_assets must be a positive integer.")
+        if minimum > len(members):
+            raise ConfigValidationError(f"{field}.{cluster}.minimum_active_assets cannot exceed cluster size.")
+        if "require_all_assets" in spec and not isinstance(spec["require_all_assets"], bool):
+            raise ConfigValidationError(f"{field}.{cluster}.require_all_assets must be boolean.")
+
+
+def validate_panel_features_block(panel_features: Any, *, symbols: set[str]) -> None:
+    steps = _validate_panel_step_list(panel_features, field="panel_features", supported={"global_session_relay"})
+    for step in steps:
+        params = dict(step.get("params", {}) or {})
+        if "clusters" in params:
+            _validate_cluster_definitions(params["clusters"], symbols=symbols, field="panel_features[].params.clusters")
+        if params.get("universe_mode", "fixed") not in {"fixed", "dynamic"}:
+            raise ConfigValidationError("panel_features[].params.universe_mode must be 'fixed' or 'dynamic'.")
+        for key in ("interval_minutes", "entry_window_bars"):
+            if key in params:
+                _positive_int(params[key], field=f"panel_features[].params.{key}")
+        for key in ("cluster_context_max_age_bars", "relay_context_max_age_bars", "macro_context_max_age_bars"):
+            if key in params and _finite_number(params[key], field=f"panel_features[].params.{key}") <= 0.0:
+                raise ConfigValidationError(f"panel_features[].params.{key} must be > 0.")
+        sessions = params.get("sessions", {}) or {}
+        if not isinstance(sessions, dict):
+            raise ConfigValidationError("panel_features[].params.sessions must be a mapping.")
+        for asset, session in sessions.items():
+            if asset not in symbols:
+                raise ConfigValidationError("panel_features[].params.sessions assets must exist in data.symbols.")
+            if not isinstance(session, dict):
+                raise ConfigValidationError("panel_features[].params.sessions values must be mappings.")
+            timezone = session.get("timezone")
+            if not isinstance(timezone, str) or not timezone.strip():
+                raise ConfigValidationError("panel_features[].params.sessions.*.timezone must be a non-empty string.")
+            _validate_session_time(session.get("open"), field="panel_features[].params.sessions.*.open")
+            _validate_session_time(session.get("close"), field="panel_features[].params.sessions.*.close", allow_24=True)
+
+
+def validate_panel_signals_block(panel_signals: Any, *, symbols: set[str]) -> None:
+    steps = _validate_panel_step_list(panel_signals, field="panel_signals", supported={"global_session_relay_laggard"})
+    for step in steps:
+        params = dict(step.get("params", {}) or {})
+        if "clusters" in params:
+            _validate_cluster_definitions(params["clusters"], symbols=symbols, field="panel_signals[].params.clusters")
+        for key in ("impulse_col", "atr_col", "volatility_col", "signal_col"):
+            if key in params and (not isinstance(params[key], str) or not params[key].strip()):
+                raise ConfigValidationError(f"panel_signals[].params.{key} must be a non-empty string.")
+        context_only = params.get("context_only_assets", ["ETHUSD", "EURUSD"])
+        if not isinstance(context_only, (list, tuple)) or any(not isinstance(asset, str) or not asset.strip() for asset in context_only):
+            raise ConfigValidationError("panel_signals[].params.context_only_assets must be a list[str].")
+        unknown = sorted(set(context_only) - symbols)
+        if unknown:
+            raise ConfigValidationError(f"context-only assets must exist in data.symbols: {unknown}")
+        if "clusters" in params:
+            cluster_members = {
+                str(asset)
+                for spec in dict(params["clusters"] or {}).values()
+                if isinstance(spec, dict)
+                for asset in list(spec.get("assets", []) or [])
+            }
+            overlap = sorted(cluster_members & set(context_only))
+            if overlap:
+                raise ConfigValidationError(f"context-only assets cannot be configured as tradable cluster members: {overlap}")
+        veto = params.get("macro_veto", {}) or {}
+        if not isinstance(veto, dict) or ("enabled" in veto and not isinstance(veto["enabled"], bool)):
+            raise ConfigValidationError("panel_signals[].params.macro_veto.enabled must be boolean.")
+        if bool(veto.get("enabled", False)):
+            missing = sorted({"ETHUSD", "XAUUSD", "BRENT"} - symbols)
+            if missing:
+                raise ConfigValidationError(f"macro veto requires assets in data.symbols: {missing}")
+        enabled_modules = params.get("enabled_modules", {}) or {}
+        if not isinstance(enabled_modules, dict) or any(not isinstance(value, bool) for value in enabled_modules.values()):
+            raise ConfigValidationError("panel_signals[].params.enabled_modules must map names to booleans.")
+
+
 def validate_resolved_config(cfg: dict[str, Any]) -> dict[str, Any]:
     """
     Validate all top-level blocks and normalize the runtime sub-config.
     """
     validate_data_block(cfg["data"])
     validate_features_block(cfg["features"])
+    symbols = {str(symbol) for symbol in list(cfg["data"].get("symbols", []) or [])}
+    validate_panel_features_block(cfg.get("panel_features", []), symbols=symbols)
     validate_model_stages_block(cfg.get("model_stages"))
     validate_model_block(cfg["model"])
     if cfg.get("target") not in (None, {}):
@@ -4328,6 +4514,7 @@ def validate_resolved_config(cfg: dict[str, Any]) -> dict[str, Any]:
             raise ConfigValidationError("Specify either top-level target or model.target, not both.")
         validate_standalone_target_block(cfg["target"])
     validate_signals_block(cfg["signals"])
+    validate_panel_signals_block(cfg.get("panel_signals", []), symbols=symbols)
     validate_risk_block(cfg["risk"])
     validate_backtest_block(cfg["backtest"])
     validate_portfolio_block(cfg["portfolio"])
@@ -4372,8 +4559,8 @@ def validate_resolved_config(cfg: dict[str, Any]) -> dict[str, Any]:
     if str(cfg["backtest"].get("engine", "vectorized")) == "portfolio_barrier":
         if not bool(cfg["portfolio"].get("enabled", False)):
             raise ConfigValidationError("backtest.engine='portfolio_barrier' requires portfolio.enabled=true.")
-        if str(cfg["data"].get("alignment", "inner")) != "inner":
-            raise ConfigValidationError("backtest.engine='portfolio_barrier' requires data.alignment='inner'.")
+        if str(cfg["data"].get("alignment", "inner")) not in {"inner", "outer"}:
+            raise ConfigValidationError("backtest.engine='portfolio_barrier' requires data.alignment='inner' or 'outer'.")
         if str(cfg["portfolio"].get("construction", "signal_weights")) != "signal_weights":
             raise ConfigValidationError(
                 "backtest.engine='portfolio_barrier' requires portfolio.construction='signal_weights'."
@@ -4401,6 +4588,8 @@ __all__ = [
     "validate_model_stages_block",
     "validate_standalone_target_block",
     "validate_monitoring_block",
+    "validate_panel_features_block",
+    "validate_panel_signals_block",
     "validate_portfolio_block",
     "validate_resolved_config",
     "validate_risk_block",
