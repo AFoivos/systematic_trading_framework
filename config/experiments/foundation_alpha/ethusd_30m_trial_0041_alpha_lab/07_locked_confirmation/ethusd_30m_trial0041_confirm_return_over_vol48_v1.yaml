@@ -1,3 +1,6 @@
+# ETHUSD Trial 0041 locked confirmation; generated deterministically.
+# Only folds 10-16 are scored. Folds 0-9 build expanding history only.
+# Frozen parent: immutable_trial0041_artifact;ethusd_30m_trial0041_norm_return_over_vol48_v1
 data:
   source: dukascopy_csv
   interval: 30m
@@ -23,10 +26,10 @@ data:
     mode: cached_only
     dataset_id: ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid
     save_raw: false
-    save_processed: true
-    load_path: /workspace/data/raw/dukascopy_30m_clean/spx500_30m.csv
-    raw_dir: /workspace/data/raw
-    processed_dir: /workspace/data/processed
+    save_processed: false
+    load_path: data/raw/dukascopy_30m_clean/ethusd_30m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed
     load_paths: null
 features:
 - step: returns
@@ -72,6 +75,12 @@ features:
     annualization_factor: null
   outputs: {}
   enabled: true
+  normalizations:
+    volatility_scaled_return:
+      params:
+        return_col: close_ret
+        volatility_col: vol_rolling_48
+        output_col: close_ret_over_vol_48
 - step: trend
   params:
     price_col: close
@@ -356,10 +365,36 @@ model:
     scaler: none
   calibration: {}
   feature_cols:
-  - ema_trend_24_96
+  - close_ret
+  - lag_close_ret_1
+  - lag_close_ret_2
+  - lag_close_ret_4
+  - lag_close_ret_8
+  - lag_close_ret_16
+  - lag_close_ret_24
+  - lag_close_ret_48
+  - ret_1
+  - ret_4
+  - ret_8
+  - ret_16
+  - ret_24
+  - ret_48
+  - rolling_return_24
+  - rolling_return_48
+  - vol_rolling_24
+  - vol_rolling_48
+  - vol_rolling_96
+  - vol_rolling_192
+  - atr_48
+  - atr_over_price_48
+  - atr_pct
+  - atr_pct_rank_192
   - ema_trend_48_192
-  - close_over_ema_96
-  - close_over_ema_192
+  - close_over_bb_upper_192
+  - close_over_bb_mid_192
+  - bollinger_percent_b
+  - bollinger_bandwidth
+  - bollinger_bandwidth_rank_192
   - ema_alignment_score
   - distance_from_ema24_atr
   - distance_from_ema96_atr
@@ -369,9 +404,14 @@ model:
   - decycler_slope_over_atr
   - frama_slope_over_atr
   - supersmoother_slope_over_atr
-  - mama_minus_close_over_atr
-  - fama_minus_close_over_atr
-  - roofing_filter_slope_over_atr
+  - roofing_filter_over_atr
+  - dominant_cycle_phase_normalized
+  - body_ratio
+  - upper_wick_ratio
+  - lower_wick_ratio
+  - close_location
+  - range_to_atr
+  - close_ret_over_vol_48
   target:
     kind: future_return_regression
     price_col: close
@@ -391,7 +431,7 @@ model:
     test_size: 4380
     step_size: 4380
     expanding: true
-    max_folds: 10
+    max_folds: 17
     purge_bars: 24
     embargo_bars: 24
   runtime: {}
@@ -408,11 +448,23 @@ signals:
   kind: forecast_threshold
   params:
     forecast_col: pred_ret
-    signal_col: signal_direction_disabled
-    upper: 999.0
-    lower: -999.0
+    signal_col: signal_structured_tail
+    upper: 0.7
+    lower: -0.85
     mode: long_short
-    activation_filters: []
+    activation_filters:
+    - col: atr_pct_rank_192
+      op: ge
+      value: 0.25
+    - col: atr_pct_rank_192
+      op: le
+      value: 0.85
+    - col: range_to_atr
+      op: ge
+      value: 0.8999999999999999
+    - col: bollinger_bandwidth_rank_192
+      op: ge
+      value: 0.4
   outputs: {}
 runtime:
   seed: 7
@@ -437,7 +489,7 @@ risk:
 backtest:
   engine: vectorized
   returns_col: close_ret
-  signal_col: signal_direction_disabled
+  signal_col: signal_structured_tail
   periods_per_year: 17520
   returns_type: simple
   missing_return_policy: raise_if_exposed
@@ -500,7 +552,7 @@ diagnostics:
     symmetric_thresholds: []
     asymmetric_thresholds: []
   regime_performance:
-    enabled: false
+    enabled: true
   model:
     enabled: false
     shap:
@@ -512,12 +564,53 @@ diagnostics:
       random_state: 42
   forecast:
     quantiles: 10
-    autocorrelation_lags: [1, 2, 4, 8, 16]
-    volatility_col: atr_pct_rank_192
+    autocorrelation_lags:
+    - 1
+    - 2
+    - 4
+    - 8
+    - 16
+    volatility_col: atr_pct_rank_100
   robustness:
     enabled: false
+    cost_multipliers:
+    - 1.0
+    - 2.0
+    - 3.0
+    - 5.0
+    entry_delay_bars:
+    - 1
+    - 2
+    walk_forward_frequency: YE
+    gap_loss_per_exposure: 0.0
+    max_gap_multiple: 3.0
+    strict_no_remap: false
+    combined_cost_multipliers: []
+    gross_cap_values: []
+    cost_filter_max_cost_r_values: []
   trade_path:
-    enabled: false
+    enabled: true
+    include_executed_trades: true
+    include_target_trades: true
+    include_probability_quality: true
+    include_counterfactuals: true
+    write_trade_paths: true
+    write_probability_quality: true
+    thresholds_r:
+    - 0.5
+    - 1.0
+    - 1.5
+    - 2.0
+    bars_held_buckets:
+    - 1
+    - 2
+    - 4
+    - 8
+    - 16
+    plots:
+      enabled: true
+      max_trades: 500
+      max_path_points: 200000
 execution:
   enabled: false
   mode: paper
@@ -533,8 +626,8 @@ execution:
   current_prices: {}
 logging:
   enabled: true
-  run_name: ethusd_30m_trial0041_direction_trend_only_lgbm_v1
-  output_dir: /workspace/logs/experiments
+  run_name: ethusd_30m_trial0041_confirm_return_over_vol48_v1
+  output_dir: logs/experiments/foundation_alpha/trial0041_locked_confirmation
   stage_tails:
     enabled: false
     stdout: false
@@ -548,19 +641,40 @@ logging:
   save_predictions: true
   save_processed: true
 strategy:
-  name: ethusd_30m_trial0041_direction_trend_only_lgbm_v1
+  name: ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid
   timeframe: 30m
   assets:
   - ETHUSD
-  description: >
-    Controlled LightGBM direction-only benchmark using normalized EMA and
-    Ehlers trend features. Target and temporal validation remain identical
-    to trial 0041. Trading performance is intentionally disabled and is not
-    part of the experiment objective.
+  description: 'ETHUSD 30m v3.4-derived hybrid Ehlers trend replacement experiment.
+    Target, signal gates, risk, and backtest logic stay unchanged. The model keeps
+    the strongest long-horizon EMA trend context while replacing redundant EMA ratio
+    features with normalized Ehlers trend/cycle features.
+
+    '
 validation:
   method: purged_walk_forward
   purge_bars: 24
   embargo_bars: 24
 evaluation:
   strict_oos_only: true
-
+research_metadata:
+  lab: ethusd_30m_trial_0041_alpha_lab
+  family: locked_confirmation
+  phase: locked
+  selection_era: folds_0_to_9
+  evaluation_era: folds_10_to_16_locked
+  thresholds_frozen: true
+  model_params_frozen: true
+  feature_selection_frozen: true
+  no_holdout_tuning: true
+  parent_experiment: immutable_trial0041_artifact;ethusd_30m_trial0041_norm_return_over_vol48_v1
+  hypothesis: Confirm the preselected close return over trailing 48-bar volatility
+    feature.
+  baseline_source: config/experiments/foundation_alpha/BEST/ethusd/optuna_BEST_ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid.yaml
+  baseline_artifact: logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260712_190851_716023_013d079c
+  confirmation_runtime_changes:
+  - max_folds=17 only constructs the locked expanding history.
+  - Storage/logging paths are local Docker normalization.
+  - Threshold-grid diagnostics are disabled; no threshold search is executed.
+  leakage_note: Folds 10–16 are evaluated only after the complete seven-config confirmation
+    set has been frozen and hashed.

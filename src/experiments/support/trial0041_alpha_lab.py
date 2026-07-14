@@ -2371,6 +2371,11 @@ def write_final_alpha_report() -> Path:
     screening_success = leaderboard.loc[leaderboard.get("run_status", pd.Series(dtype=str)).eq("success")] if not leaderboard.empty else pd.DataFrame()
     rejected = leaderboard.loc[~leaderboard.get("screening_status", pd.Series(dtype=str)).eq("screening_winner")] if not leaderboard.empty else pd.DataFrame()
     top10 = screening_success.head(10) if not screening_success.empty else pd.DataFrame()
+    final_verdict = (
+        "stress-validated configurations exist"
+        if validated
+        else "no configuration is cleared for paper trading under this lab's stated execution/FTMO gates"
+    )
 
     report: list[str] = [
         "# Final Alpha Research Report — ETHUSD Trial 0041 Lab",
@@ -2382,7 +2387,7 @@ def write_final_alpha_report() -> Path:
         f"- First-stage YAMLs: `{sum(counts[directory] for directory in ('01_target_lab', '02_feature_ablation', '03_feature_additions', '04_normalization_lab', '05_signal_lab', '06_model_lab'))}`.",
         f"- Frozen combined finalists: `{counts['07_combined_finalists']}`; stress-validated YAMLs: `{counts['08_stress_validated']}`.",
         f"- Screening runs recorded: `{len(leaderboard)}`; locked finalist runs recorded: `{len(locked)}`.",
-        f"- Final verdict: `{'stress-validated configurations exist' if validated else 'no configuration is cleared for paper trading under this lab\'s stated execution/FTMO gates'}`.",
+        f"- Final verdict: `{final_verdict}`.",
         "",
         "## Data and provenance",
         "",
