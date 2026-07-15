@@ -8,7 +8,6 @@ from typing import Any
 import pandas as pd
 
 from src.experiments.schemas import StorageContext
-from src.src_data.storage import asset_frames_to_long_frame
 
 
 def slugify(value: str) -> str:
@@ -123,15 +122,36 @@ def data_stats_payload(data: pd.DataFrame | dict[str, pd.DataFrame]) -> dict[str
             "end": str(data.index.max()) if not data.empty else None,
         }
 
-    long_frame = asset_frames_to_long_frame(data)
+    if not data:
+        raise ValueError("data cannot be empty.")
+
+    rows_by_asset: dict[str, int] = {}
+    columns: set[object] = set()
+    starts: list[pd.Timestamp] = []
+    ends: list[pd.Timestamp] = []
+    for asset, frame in sorted(data.items()):
+        if not isinstance(frame, pd.DataFrame):
+            raise TypeError(f"data[{asset!r}] must be a pandas DataFrame.")
+        if not isinstance(frame.index, pd.DatetimeIndex):
+            raise TypeError(f"data[{asset!r}] must have a DatetimeIndex.")
+
+        rows_by_asset[str(asset)] = int(len(frame))
+        columns.update(frame.columns)
+        if not frame.empty:
+            starts.append(frame.index.min())
+            ends.append(frame.index.max())
+
     return {
         "asset_count": int(len(data)),
-        "rows": int(len(long_frame)),
-        "columns": int(len(long_frame.columns)),
+        "rows": int(sum(rows_by_asset.values())),
+        # The materialized long-frame representation adds these two columns to the
+        # union of per-asset columns. Compute the equivalent shape without copying,
+        # concatenating, and sorting every final feature frame during artifact writes.
+        "columns": int(len(columns) + 2),
         "assets": sorted(data),
-        "rows_by_asset": {asset: int(len(df)) for asset, df in sorted(data.items())},
-        "start": str(long_frame["timestamp"].min()) if not long_frame.empty else None,
-        "end": str(long_frame["timestamp"].max()) if not long_frame.empty else None,
+        "rows_by_asset": rows_by_asset,
+        "start": str(min(starts)) if starts else None,
+        "end": str(max(ends)) if ends else None,
     }
 
 

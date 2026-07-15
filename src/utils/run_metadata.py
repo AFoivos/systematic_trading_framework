@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import platform
 import subprocess
 import sys
@@ -218,12 +219,31 @@ def collect_git_metadata() -> dict[str, Any]:
     higher-level orchestration.
     """
     commit = _safe_git(["rev-parse", "HEAD"])
-    branch = _safe_git(["rev-parse", "--abbrev-ref", "HEAD"])
+    branch = _safe_git(["branch", "--show-current"])
     status = _safe_git(["status", "--porcelain"])
+    if commit is not None or branch is not None:
+        return {
+            "commit": commit,
+            "branch": branch,
+            "is_dirty": bool(status) if status is not None else False,
+            "source": "git_cli",
+        }
+    env_commit = os.getenv("GIT_COMMIT")
+    env_branch = os.getenv("GIT_BRANCH")
+    env_dirty = os.getenv("GIT_DIRTY")
+    if env_commit is not None or env_branch is not None or env_dirty is not None:
+        dirty = None if env_dirty is None else env_dirty.strip().lower() in {"1", "true", "yes", "y"}
+        return {
+            "commit": env_commit,
+            "branch": env_branch,
+            "is_dirty": dirty,
+            "source": "environment",
+        }
     return {
-        "commit": commit,
-        "branch": branch,
-        "is_dirty": bool(status) if status is not None else None,
+        "commit": None,
+        "branch": None,
+        "is_dirty": None,
+        "source": "unavailable",
     }
 
 

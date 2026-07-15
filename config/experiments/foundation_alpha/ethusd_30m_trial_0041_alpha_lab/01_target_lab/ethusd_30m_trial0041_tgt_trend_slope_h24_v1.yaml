@@ -555,9 +555,9 @@ diagnostics:
   regime_performance:
     enabled: true
   model:
-    enabled: true
+    enabled: false
     shap:
-      enabled: true
+      enabled: false
       max_rows: 200
       top_n_features: 12
       per_prediction_top_k: 5
@@ -571,9 +571,9 @@ diagnostics:
     - 4
     - 8
     - 16
-    volatility_col: atr_pct_rank_100
+    volatility_col: atr_pct_rank_192
   robustness:
-    enabled: true
+    enabled: false
     cost_multipliers:
     - 1.0
     - 2.0

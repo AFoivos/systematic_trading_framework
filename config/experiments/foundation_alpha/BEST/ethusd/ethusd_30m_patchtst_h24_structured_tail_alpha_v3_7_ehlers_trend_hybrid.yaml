@@ -1,10 +1,12 @@
-# ETHUSD Trial 0041 Alpha Research Lab.
-# Family: feature_addition; phase: screening.
-# Baseline: config/experiments/foundation_alpha/BEST/ethusd/optuna_BEST_ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid.yaml
-# Parent: baseline_local_replay
-# Hypothesis: Distance from trailing VWAP may distinguish participation-supported moves from mean reversion.
-# Expected mechanism: Adds a causal 48-bar volume-weighted price distance.
-# Causality: target/diagnostic columns are excluded from model features; only prior/current-bar features are used.
+strategy:
+  name: ethusd_30m_patchtst_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid
+  timeframe: 30m
+  assets:
+  - ETHUSD
+  description: ETHUSD 30m structured-tail Ehlers hybrid strategy with the original LightGBM regressor
+    replaced by a multivariate PatchTST forecaster. The complete original feature set, ATR-normalized
+    h24 target, purged walk-forward split, signal thresholds, activation gates, risk settings, and backtest
+    assumptions are preserved for direct model comparison.
 data:
   source: dukascopy_csv
   interval: 30m
@@ -12,9 +14,6 @@ data:
   end: null
   alignment: inner
   symbol: ETHUSD
-  symbols: null
-  api_key: null
-  api_key_env: null
   pit:
     timestamp_alignment:
       source_timezone: UTC
@@ -28,20 +27,17 @@ data:
       inactive_policy: raise
   storage:
     mode: cached_only
-    dataset_id: ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid
+    dataset_id: ethusd_30m_patchtst_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid
     save_raw: false
-    save_processed: false
+    save_processed: true
     load_path: data/raw/dukascopy_30m_clean/ethusd_30m.csv
     raw_dir: data/raw
     processed_dir: data/processed
-    load_paths: null
 features:
 - step: returns
   params:
     log: false
     col_name: close_ret
-  outputs: {}
-  enabled: true
   transforms:
     lag:
       enabled: true
@@ -77,8 +73,6 @@ features:
     - 192
     ewma_spans: []
     annualization_factor: null
-  outputs: {}
-  enabled: true
 - step: trend
   params:
     price_col: close
@@ -90,8 +84,6 @@ features:
     - 192
     ema_col_template: ema_{span}
     add_ratios: false
-  outputs: {}
-  enabled: true
   transforms:
     ratio:
       enabled: true
@@ -123,8 +115,6 @@ features:
     method: wilder
     add_over_price: false
     atr_col: atr_48
-  outputs: {}
-  enabled: true
   transforms:
     ratio:
       enabled: true
@@ -140,60 +130,44 @@ features:
     phase_col: hilbert_phase
     instantaneous_frequency_col: hilbert_instantaneous_frequency
     add_derived: false
-  outputs: {}
-  enabled: true
 - step: dominant_cycle_period
   params:
     price_col: close
     output_col: dominant_cycle_period
-  outputs: {}
-  enabled: true
 - step: dominant_cycle_phase
   params:
     price_col: close
     output_col: dominant_cycle_phase
     unit: degrees
-  outputs: {}
-  enabled: true
 - step: mama
   params:
     price_col: close
     fast_limit: 0.5
     slow_limit: 0.05
     output_col: mama
-  outputs: {}
-  enabled: true
 - step: fama
   params:
     price_col: close
     fast_limit: 0.5
     slow_limit: 0.05
     output_col: fama
-  outputs: {}
-  enabled: true
 - step: decycler
   params:
     price_col: close
     period: 60
     output_col: decycler
-  outputs: {}
-  enabled: true
 - step: decycler_oscillator
   params:
     price_col: close
     fast_period: 30
     slow_period: 60
     output_col: decycler_oscillator_30_60
-  outputs: {}
-  enabled: true
 - step: instantaneous_trendline
   params:
     price_col: close
     alpha: 0.07
     output_col: instantaneous_trendline
     add_trigger: false
-  outputs: {}
-  enabled: true
 - step: frama
   params:
     price_col: close
@@ -204,23 +178,17 @@ features:
     slow_period: 300
     output_col: frama
     add_diagnostics: false
-  outputs: {}
-  enabled: true
 - step: supersmoother
   params:
     price_col: close
     period: 10
     output_col: supersmoother
-  outputs: {}
-  enabled: true
 - step: roofing_filter
   params:
     price_col: close
     high_pass_period: 48
     low_pass_period: 10
     output_col: roofing_filter
-  outputs: {}
-  enabled: true
 - step: ehlers_ml_long_candidate
   params:
     amplitude_col: hilbert_amplitude
@@ -243,8 +211,6 @@ features:
     slope_bars: 1
     candidate_col: ehlers_ml_candidate
     side_col: ehlers_ml_side
-  outputs: {}
-  enabled: true
 - step: macd
   params:
     price_col: close
@@ -255,7 +221,6 @@ features:
     macd_12_26: macd
     macd_signal_9: macd_signal
     macd_hist_12_26_9: macd_hist
-  enabled: true
 - step: rsi
   params:
     price_col: close
@@ -264,7 +229,6 @@ features:
     method: wilder
   outputs:
     close_rsi_14: rsi_14
-  enabled: true
 - step: stochastic_rsi
   params:
     price_col: close
@@ -278,7 +242,6 @@ features:
   outputs:
     stoch_rsi_k: stoch_rsi_k
     stoch_rsi_d: stoch_rsi_d
-  enabled: true
 - step: bollinger
   params:
     price_col: close
@@ -290,7 +253,6 @@ features:
     bb_lower_192_2.0: bollinger_lower_192
     bb_width_192_2.0: bollinger_bandwidth
     bb_percent_b_192_2.0: bollinger_percent_b
-  enabled: true
   transforms:
     ratio:
       enabled: true
@@ -338,48 +300,13 @@ features:
     rolling_return_windows:
     - 24
     - 48
-  outputs: {}
-  enabled: true
-- step: vwap
-  params:
-    high_col: high
-    low_col: low
-    close_col: close
-    volume_col: volume
-    windows:
-    - 48
-  transforms:
-    ratio:
-      enabled: true
-      items:
-      - numerator_col: close
-        denominator_col: vwap_48
-        output_col: close_over_vwap_48
-        subtract: 1.0
-  outputs: {}
-  enabled: true
 model:
-  kind: lightgbm_regressor
-  params:
-    n_estimators: 800
-    learning_rate: 0.0549537895493607
-    max_depth: 6
-    num_leaves: 15
-    min_child_samples: 200
-    subsample: 0.9
-    colsample_bytree: 0.75
-    reg_alpha: 0.019934229992965794
-    reg_lambda: 1.8786413727433209
-    random_state: 7
-    n_jobs: 1
-    verbosity: -1
+  kind: patchtst_forecaster
   outputs:
     pred_ret_col: pred_ret
     pred_prob_col: pred_prob
     pred_is_oos_col: pred_is_oos
-  preprocessing:
-    scaler: none
-  calibration: {}
+  use_features: true
   feature_cols:
   - close_ret
   - lag_close_ret_1
@@ -427,7 +354,6 @@ model:
   - lower_wick_ratio
   - close_location
   - range_to_atr
-  - close_over_vwap_48
   target:
     kind: future_return_regression
     price_col: close
@@ -436,6 +362,7 @@ model:
     horizon_bars: 24
     normalize_by_volatility: true
     volatility_col: atr_48
+    volatility_floor: 1.0e-12
     clip:
     - -4.0
     - 4.0
@@ -450,16 +377,23 @@ model:
     max_folds: 10
     purge_bars: 24
     embargo_bars: 24
-  runtime: {}
-  env: {}
-  use_features: true
-  pred_prob_col: pred_prob
-  pred_raw_prob_col: null
-  pred_ret_col: pred_ret
-  pred_is_oos_col: pred_is_oos
-  returns_input_col: null
-  signal_col: null
-  action_col: null
+  params:
+    lookback: 128
+    patch_len: 16
+    patch_stride: 8
+    hidden_dim: 64
+    num_heads: 4
+    num_layers: 2
+    dropout: 0.2
+    epochs: 24
+    batch_size: 256
+    learning_rate: 0.0005
+    weight_decay: 0.0005
+    quantiles:
+    - 0.1
+    - 0.5
+    - 0.9
+    scale_target: true
 signals:
   kind: forecast_threshold
   params:
@@ -477,11 +411,10 @@ signals:
       value: 0.85
     - col: range_to_atr
       op: ge
-      value: 0.8999999999999999
+      value: 0.9
     - col: bollinger_bandwidth_rank_192
       op: ge
       value: 0.4
-  outputs: {}
 runtime:
   seed: 7
   repro_mode: strict
@@ -512,33 +445,17 @@ backtest:
   min_holding_bars: 24
   subset: test
   stop_mode: fixed_return
-  vol_col: null
   open_col: open
   high_col: high
   low_col: low
   close_col: close
-  take_profit_r: null
-  stop_loss_r: null
-  volatility_col: null
-  entry_price_mode: null
-  profit_barrier_r: null
-  stop_barrier_r: null
-  vertical_barrier_bars: null
-  tie_break: null
-  event_time_remap_policy: null
-  max_cost_r: null
-  risk_per_trade: null
-  max_holding_bars: null
-  asset_params: {}
-  dynamic_exits: {}
-  partial_exits: {}
-  allow_short: true
+  allow_short: false
 portfolio:
   enabled: false
   construction: signal_weights
   gross_target: 1.0
   long_short: true
-  expected_return_col: null
+  expected_return_col: pred_ret
   covariance_window: 60
   covariance_rebalance_step: 1
   risk_aversion: 5.0
@@ -575,14 +492,9 @@ diagnostics:
   regime_performance:
     enabled: true
   model:
-    enabled: false
+    enabled: true
     shap:
       enabled: false
-      max_rows: 200
-      top_n_features: 12
-      per_prediction_top_k: 5
-      per_prediction_row_limit: 3
-      random_state: 42
   forecast:
     quantiles: 10
     autocorrelation_lags:
@@ -591,7 +503,8 @@ diagnostics:
     - 4
     - 8
     - 16
-    volatility_col: atr_pct_rank_192
+    - 24
+    volatility_col: atr_over_price_48
   robustness:
     enabled: false
     cost_multipliers:
@@ -606,9 +519,6 @@ diagnostics:
     gap_loss_per_exposure: 0.0
     max_gap_multiple: 3.0
     strict_no_remap: false
-    combined_cost_multipliers: []
-    gross_cap_values: []
-    cost_filter_max_cost_r_values: []
   trade_path:
     enabled: true
     include_executed_trades: true
@@ -647,48 +557,31 @@ execution:
   current_prices: {}
 logging:
   enabled: true
-  run_name: ethusd_30m_trial0041_featadd_vwap_distance_v1
-  output_dir: logs/experiments/foundation_alpha/trial0041_alpha_lab
-  stage_tails:
-    enabled: false
-    stdout: false
-    report: false
-    limit: 10
-    max_columns: 16
-    max_assets: 3
-  execution_source_audit:
-    enabled: false
+  run_name: ethusd_30m_patchtst_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid
+  output_dir: logs/experiments
   save_model: false
+  install_model: false
   save_predictions: true
   save_processed: true
-strategy:
-  name: ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid
-  timeframe: 30m
-  assets:
-  - ETHUSD
-  description: 'ETHUSD 30m v3.4-derived hybrid Ehlers trend replacement experiment.
-    Target, signal gates, risk, and backtest logic stay unchanged. The model keeps
-    the strongest long-horizon EMA trend context while replacing redundant EMA ratio
-    features with normalized Ehlers trend/cycle features.
-
-    '
+  stage_tails:
+    enabled: false
+  execution_source_audit:
+    enabled: false
 validation:
   method: purged_walk_forward
   purge_bars: 24
   embargo_bars: 24
 evaluation:
   strict_oos_only: true
-research_metadata:
-  lab: ethusd_30m_trial_0041_alpha_lab
-  baseline_source: config/experiments/foundation_alpha/BEST/ethusd/optuna_BEST_ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid.yaml
-  baseline_artifact: logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260712_190851_716023_013d079c
-  family: feature_addition
-  experiment_id: ethusd_30m_trial0041_featadd_vwap_distance_v1
-  parent_experiment: baseline_local_replay
-  hypothesis: Distance from trailing VWAP may distinguish participation-supported
-    moves from mean reversion.
-  expected_effect: Adds a causal 48-bar volume-weighted price distance.
-  phase: screening
-  selection_era: folds_0_to_9
-  leakage_note: Feature values are causal at t; targets are future-only labels and
-    are excluded from model.feature_cols. Screening rankings never read folds 10-16.
+metrics:
+  primary:
+  - sharpe
+  - profit_factor
+  - max_drawdown
+  - trade_count
+  regression:
+  - mae
+  - rmse
+  - r2
+  - correlation
+  - directional_accuracy

@@ -417,10 +417,12 @@ class BacktestConfig:
     vertical_barrier_bars: int | None = None
     tie_break: str | None = None
     event_time_remap_policy: str | None = None
+    annualization_mode: str | None = None
     max_cost_r: float | None = None
     risk_per_trade: float | None = None
     max_holding_bars: int | None = None
     asset_params: dict[str, Any] = field(default_factory=dict)
+    dynamic_exit: dict[str, Any] = field(default_factory=dict)
     dynamic_exits: dict[str, Any] = field(default_factory=dict)
     partial_exits: dict[str, Any] = field(default_factory=dict)
     allow_short: bool = False
@@ -452,10 +454,12 @@ class BacktestConfig:
             "vertical_barrier_bars",
             "tie_break",
             "event_time_remap_policy",
+            "annualization_mode",
             "max_cost_r",
             "risk_per_trade",
             "max_holding_bars",
             "asset_params",
+            "dynamic_exit",
             "dynamic_exits",
             "partial_exits",
             "allow_short",
@@ -504,12 +508,16 @@ class BacktestConfig:
                 if data.get("event_time_remap_policy") is not None
                 else None
             ),
+            annualization_mode=(
+                str(data["annualization_mode"]) if data.get("annualization_mode") is not None else None
+            ),
             max_cost_r=float(data["max_cost_r"]) if data.get("max_cost_r") is not None else None,
             risk_per_trade=(
                 float(data["risk_per_trade"]) if data.get("risk_per_trade") is not None else None
             ),
             max_holding_bars=int(max_holding_bars) if max_holding_bars is not None else None,
             asset_params=dict(data.get("asset_params", {}) or {}),
+            dynamic_exit=dict(data.get("dynamic_exit", {}) or {}),
             dynamic_exits=dict(data.get("dynamic_exits", {}) or {}),
             partial_exits=dict(data.get("partial_exits", {}) or {}),
             allow_short=bool(data.get("allow_short", False)),
@@ -541,10 +549,12 @@ class BacktestConfig:
             "vertical_barrier_bars": self.vertical_barrier_bars,
             "tie_break": self.tie_break,
             "event_time_remap_policy": self.event_time_remap_policy,
+            "annualization_mode": self.annualization_mode,
             "max_cost_r": self.max_cost_r,
             "risk_per_trade": self.risk_per_trade,
             "max_holding_bars": self.max_holding_bars,
             "asset_params": dict(self.asset_params),
+            "dynamic_exit": dict(self.dynamic_exit),
             "dynamic_exits": dict(self.dynamic_exits),
             "partial_exits": dict(self.partial_exits),
             "allow_short": self.allow_short,

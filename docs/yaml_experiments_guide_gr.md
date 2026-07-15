@@ -940,6 +940,62 @@ outputs είναι:
 - Single-asset RL: `ppo_agent`, `dqn_agent`.
 - Portfolio RL: `ppo_portfolio_agent`, `dqn_portfolio_agent`.
 
+### Chronos-2 με historical covariates
+
+Το `chronos_bolt_forecaster` και τα TimesFM foundation wrappers χρησιμοποιούν
+μόνο το univariate `params.source_col`. Το `chronos_2_forecaster` μπορεί να
+χρησιμοποιήσει το ήδη canonical `model.feature_cols` ή `model.feature_selectors`
+ως numerical past covariates. Δεν υπάρχει δεύτερο `past_covariate_cols` field.
+
+Με `use_features: true`, το framework αφαιρεί το `source_col`, target/label
+outputs και prediction outputs από τις covariates. Το `source_col` επιτρέπεται
+να υπάρχει στη feature list για compatibility, αλλά δεν περνάει δεύτερη φορά.
+Target ή label outputs μέσα στα explicit `feature_cols` απορρίπτονται από το
+validation. Με `use_features: false` ή `feature_cols: []`, το Chronos-2 μένει
+στο backward-compatible univariate mode.
+
+Για κάθε OOS origin το context είναι μόνο `[t-lookback+1, ..., t]`. Οι
+covariates έχουν ακριβώς τα ίδια timestamps με το target, δεν γίνεται forward
+fill, και μια εσωτερική NaN κόβει το context στο μεγαλύτερο contiguous finite
+suffix. Κάθε origin έχει δικό του Chronos `item_id` με `cross_learning=false`:
+διαφορετικά test timestamps δεν σχηματίζουν multivariate group. Future-known
+covariates δεν υποστηρίζονται ακόμη.
+
+```yaml
+model:
+  kind: chronos_2_forecaster
+  use_features: true
+  feature_cols: [close_ret, lag_close_ret_1, atr_over_price_48, ema_trend_48_192]
+  outputs: {pred_ret_col: pred_ret, pred_prob_col: pred_prob, pred_is_oos_col: pred_is_oos}
+  target:
+    kind: future_return_regression
+    price_col: close
+    returns_col: close_ret
+    returns_type: simple
+    horizon_bars: 24
+    normalize_by_volatility: true
+    volatility_col: atr_48
+    clip: [-4.0, 4.0]
+    fwd_col: target_future_return_h24_atr
+    label_col: target_future_return_h24_atr
+  split: {method: purged, train_size: 35040, test_size: 4380, step_size: 4380, purge_bars: 24, embargo_bars: 24}
+  params:
+    model_id: amazon/chronos-2
+    source_col: close_ret
+    source_kind: returns
+    source_returns_type: simple
+    lookback: 384
+    min_context: 96
+    prediction_length: 24
+    quantiles: [0.1, 0.5, 0.9]
+    batch_size: 64
+    freq: 30min
+```
+
+Το Chronos-2 παραμένει zero-shot: δεν κάνει fit ή scaler training στα folds.
+Για source returns, το `pred_ret` συνθέτει τα forecasted step returns στο target
+horizon και εφαρμόζει έπειτα το configured volatility normalization/clip.
+
 ### Παράδειγμα classifier model
 
 ```yaml

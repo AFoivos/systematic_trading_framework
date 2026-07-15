@@ -343,10 +343,10 @@ features:
 model:
   kind: logistic_regression_clf
   params:
-    random_state: 7
     C: 0.1
     max_iter: 2000
     solver: lbfgs
+    random_state: 7
   outputs:
     pred_prob_col: pred_prob
     pred_is_oos_col: pred_is_oos
@@ -506,7 +506,7 @@ backtest:
   asset_params: {}
   dynamic_exits: {}
   partial_exits: {}
-  allow_short: false
+  allow_short: true
 portfolio:
   enabled: false
   construction: signal_weights
@@ -565,7 +565,7 @@ diagnostics:
     - 4
     - 8
     - 16
-    volatility_col: atr_pct_rank_100
+    volatility_col: atr_pct_rank_192
   robustness:
     enabled: false
     cost_multipliers:

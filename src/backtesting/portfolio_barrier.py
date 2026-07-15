@@ -418,7 +418,11 @@ def _resolve_dynamic_exit_for_trade(
     module_cfg = dict(dict(base.get("module_exit_columns", {}) or {}).get(str(module or ""), {}) or {})
     long_col = module_cfg.get("long_exit_col", base.get("long_exit_col"))
     short_col = module_cfg.get("short_exit_col", base.get("short_exit_col"))
-    reason_col = module_cfg.get("reason_col", base.get("reason_col"))
+    reason_col = (
+        module_cfg.get("long_reason_col", module_cfg.get("reason_col", base.get("long_reason_col", base.get("reason_col"))))
+        if side > 0.0
+        else module_cfg.get("short_reason_col", module_cfg.get("reason_col", base.get("short_reason_col", base.get("reason_col"))))
+    )
     return {
         "enabled": True,
         "exit_col": str(long_col if side > 0.0 else short_col),
@@ -436,8 +440,19 @@ def _validate_dynamic_exit_config(cfg: Mapping[str, Any] | None) -> dict[str, An
         return {"enabled": False}
     if str(out.get("execution", "next_open")) != "next_open":
         raise ValueError("portfolio_barrier dynamic_exit.execution currently supports only 'next_open'.")
-    for key in ("long_exit_col", "short_exit_col", "reason_col"):
+    for key in ("long_exit_col", "short_exit_col"):
         if not isinstance(out.get(key), str) or not str(out[key]).strip():
+            raise ValueError(f"portfolio_barrier dynamic_exit.{key} must be a non-empty string.")
+    legacy_reason = out.get("reason_col")
+    side_reasons = (out.get("long_reason_col"), out.get("short_reason_col"))
+    if not (
+        isinstance(legacy_reason, str) and legacy_reason.strip()
+    ) and not all(isinstance(value, str) and value.strip() for value in side_reasons):
+        raise ValueError(
+            "portfolio_barrier dynamic_exit requires reason_col or both long_reason_col and short_reason_col."
+        )
+    for key in ("reason_col", "long_reason_col", "short_reason_col"):
+        if key in out and (not isinstance(out[key], str) or not str(out[key]).strip()):
             raise ValueError(f"portfolio_barrier dynamic_exit.{key} must be a non-empty string.")
     module_exit_columns = out.get("module_exit_columns", {}) or {}
     if not isinstance(module_exit_columns, Mapping):
@@ -445,7 +460,7 @@ def _validate_dynamic_exit_config(cfg: Mapping[str, Any] | None) -> dict[str, An
     for module, module_cfg in module_exit_columns.items():
         if not isinstance(module, str) or not module.strip() or not isinstance(module_cfg, Mapping):
             raise ValueError("portfolio_barrier dynamic_exit.module_exit_columns must map names to mappings.")
-        for key in ("long_exit_col", "short_exit_col", "reason_col"):
+        for key in ("long_exit_col", "short_exit_col", "reason_col", "long_reason_col", "short_reason_col"):
             if key in module_cfg and (not isinstance(module_cfg[key], str) or not str(module_cfg[key]).strip()):
                 raise ValueError(f"portfolio_barrier dynamic_exit.module_exit_columns.{module}.{key} must be a string.")
     return out
@@ -544,6 +559,8 @@ def run_portfolio_barrier_backtest(
     cost_per_turnover: float = 0.0,
     slippage_per_turnover: float = 0.0,
     periods_per_year: int = 252,
+    annualization_mode: str = "fixed_periods",
+    allow_short: bool = True,
     asset_params: Mapping[str, Mapping[str, Any]] | None = None,
     asset_to_group: Mapping[str, str] | None = None,
     portfolio_guard: Mapping[str, Any] | None = None,
@@ -567,11 +584,16 @@ def run_portfolio_barrier_backtest(
     close_col = str(close_col)
     volatility_col = str(volatility_col)
     entry_price_mode = str(entry_price_mode)
+    annualization_mode = str(annualization_mode)
     tie_break = str(tie_break)
     subset = str(subset)
     event_time_remap_policy = str(event_time_remap_policy)
     if entry_price_mode not in _ALLOWED_ENTRY_PRICE_MODES:
         raise ValueError("portfolio_barrier entry_price_mode must be one of: current_close, next_open.")
+    if annualization_mode not in {"fixed_periods", "calendar_daily"}:
+        raise ValueError("portfolio_barrier annualization_mode must be 'fixed_periods' or 'calendar_daily'.")
+    if not isinstance(allow_short, bool):
+        raise ValueError("portfolio_barrier allow_short must be boolean.")
     if tie_break not in _ALLOWED_TIE_BREAKS:
         raise ValueError("portfolio_barrier tie_break must be one of: closest_to_open, profit, stop.")
     if subset not in {"full", "test"}:
@@ -673,6 +695,7 @@ def run_portfolio_barrier_backtest(
     skipped_weekend = 0
     skipped_spread_filter = 0
     skipped_invalid_spread = 0
+    skipped_short_disabled = 0
     risk_sized_trade_count = 0
     correlation_guard_rejections = 0
     correlation_guard_checked = 0
@@ -765,6 +788,9 @@ def run_portfolio_barrier_backtest(
             if timestamp not in frame.index:
                 continue
             side = float(np.sign(signal_value))
+            if side < 0.0 and not allow_short:
+                skipped_short_disabled += 1
+                continue
             correlation_result = _evaluate_correlation_guard(
                 frames,
                 asset=asset,
@@ -1011,6 +1037,12 @@ def run_portfolio_barrier_backtest(
                 "entry_correlation_guard_passed": bool(correlation_result["passed"]),
                 "entry_correlation_rejected_against": correlation_result["rejected_against"],
                 "entry_correlation_insufficient_history": bool(correlation_result["insufficient_history"]),
+                "entry_cluster": frame.iloc[signal_idx].get("entry_cluster", pd.NA),
+                "entry_context_age_bars": frame.iloc[signal_idx].get("entry_context_age_bars", np.nan),
+                "entry_macro_context_age_bars": frame.iloc[signal_idx].get("entry_macro_context_age_bars", np.nan),
+                "entry_laggard_gap": frame.iloc[signal_idx].get("entry_laggard_gap", np.nan),
+                "signal_strength": frame.iloc[signal_idx].get("signal_strength", np.nan),
+                "entry_relay_score": frame.iloc[signal_idx].get("entry_relay_score", np.nan),
             }
             trades.append(trade)
 
@@ -1021,6 +1053,7 @@ def run_portfolio_barrier_backtest(
     summary = compute_backtest_metrics(
         net_returns=net_returns,
         periods_per_year=int(periods_per_year),
+        annualization_mode=annualization_mode,
         turnover=turnover,
         costs=costs,
         gross_returns=gross_returns,
@@ -1028,6 +1061,7 @@ def run_portfolio_barrier_backtest(
     mark_to_market_summary = compute_backtest_metrics(
         net_returns=mark_to_market_returns,
         periods_per_year=int(periods_per_year),
+        annualization_mode=annualization_mode,
     )
 
     trades_df = pd.DataFrame(trades)
@@ -1114,6 +1148,7 @@ def run_portfolio_barrier_backtest(
             "equity_source": guard_equity_source,
             "skipped_spread_filter": int(skipped_spread_filter),
             "skipped_invalid_spread": int(skipped_invalid_spread),
+            "skipped_short_disabled": int(skipped_short_disabled),
             "correlation_guard_enabled": bool(correlation_guard_cfg.get("enabled", False)),
             "correlation_guard_checked": int(correlation_guard_checked),
             "correlation_guard_rejections": int(correlation_guard_rejections),
@@ -1128,6 +1163,9 @@ def run_portfolio_barrier_backtest(
     meta = {
         "engine": "portfolio_barrier",
         "entry_price_mode": entry_price_mode,
+        "annualization_mode": annualization_mode,
+        "allow_short": allow_short,
+        "cost_per_turnover_applied": cost_per_turnover,
         "profit_barrier_r": float(profit_barrier_r),
         "stop_barrier_r": float(stop_barrier_r),
         "vertical_barrier_bars": None if vertical_barrier_bars is None else int(vertical_barrier_bars),
@@ -1152,6 +1190,7 @@ def run_portfolio_barrier_backtest(
         "skipped_weekend": int(skipped_weekend),
         "skipped_spread_filter": int(skipped_spread_filter),
         "skipped_invalid_spread": int(skipped_invalid_spread),
+        "skipped_short_disabled": int(skipped_short_disabled),
         "daily_loss_trigger_count": int(daily_loss_trigger_count),
         "risk_sized_trade_count": int(risk_sized_trade_count),
         "remapped_entry_timestamps": int(remapped_entry_timestamps),

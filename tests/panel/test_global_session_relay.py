@@ -115,6 +115,60 @@ def test_relay_priority_overrides_intra_cluster_and_context_assets_stay_flat() -
     assert (result["ETHUSD"]["signal_global_session_relay"] == 0.0).all()
 
 
+def test_missing_module_flag_is_disabled_and_candidate_is_structural() -> None:
+    index = pd.date_range("2024-01-02 14:30", periods=2, freq="30min")
+    usa = _frame(index, 0.2)
+    usa["usa_cluster_eligible"] = True
+    usa["usa_cluster_impulse_median"] = 1.0
+    usa["usa_cluster_breadth_signed"] = 1.0
+    usa["usa_cluster_leader_impulse"] = 1.5
+    usa["usa_cluster_laggard_asset"] = "SPX500"
+    usa["usa_cluster_laggard_impulse"] = 0.2
+    usa["usa_cluster_member_count"] = 3.0
+    usa["usa_cluster_positive_count"] = 3.0
+    usa["usa_cluster_negative_count"] = 0.0
+    disabled = global_session_relay_laggard_signal(
+        {"SPX500": usa}, enabled_modules={"intra_usa": False}
+    )["SPX500"]
+    assert not disabled["entry_evaluated"].any()
+    assert not disabled["entry_candidate"].any()
+    assert (disabled["signal_global_session_relay"] == 0.0).all()
+
+    usa.loc[index[0], "atr_20"] = np.nan
+    candidate = global_session_relay_laggard_signal(
+        {"SPX500": usa}, enabled_modules={"intra_usa": True}
+    )["SPX500"].iloc[0]
+    assert bool(candidate["entry_evaluated"])
+    assert bool(candidate["entry_candidate"])
+    assert not bool(candidate["entry_eligible"])
+    assert candidate["entry_rejection_reason"] == "missing_atr"
+
+
+def test_fixed_requires_all_configured_fresh_members_while_dynamic_uses_minimum() -> None:
+    index = pd.date_range("2024-01-02", periods=8, freq="30min")
+    frames = _panel(index)
+    frames["US100"] = _frame(index[3:], 1.0)
+    clusters = {"usa": {"assets": ["SPX500", "US30", "US100"], "minimum_active_assets": 2}}
+    fixed = global_session_relay_features(frames, clusters=clusters, universe_mode="fixed")
+    dynamic = global_session_relay_features(frames, clusters=clusters, universe_mode="dynamic")
+    assert not bool(fixed["SPX500"].loc[index[1], "usa_cluster_eligible"])
+    assert bool(dynamic["SPX500"].loc[index[1], "usa_cluster_eligible"])
+    assert fixed["SPX500"].loc[index[3], "usa_cluster_configured_member_count"] == 3.0
+    assert fixed["SPX500"].loc[index[3], "usa_cluster_active_member_count"] == 3.0
+
+
+def test_dynamic_exit_reason_is_side_specific_with_convergence_priority() -> None:
+    index = pd.date_range("2024-01-02", periods=3, freq="30min")
+    frames = _panel(index)
+    for asset in ("SPX500", "US30", "US100"):
+        frames[asset] = _frame(index, 0.1)
+    out = global_session_relay_features(frames)
+    row = out["SPX500"].iloc[0]
+    assert bool(row["relay_dynamic_exit_long"])
+    assert row["relay_dynamic_exit_reason_long"] == "convergence"
+    assert row["relay_dynamic_exit_reason_intra_cluster_long"] == "convergence"
+
+
 def test_panel_artifact_writer_emits_required_csvs(tmp_path: Path) -> None:
     index = pd.date_range("2024-01-02", periods=2, freq="30min")
     frame = _frame(index)

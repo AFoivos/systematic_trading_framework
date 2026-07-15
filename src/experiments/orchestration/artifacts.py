@@ -1503,7 +1503,7 @@ def _write_trade_diagnostic_artifacts(
     if event_frames:
         events_path = report_assets_dir / "trade_events.csv"
         pd.concat(event_frames, ignore_index=True).to_csv(events_path, index=False)
-        artifact_paths["trade_events"] = str(events_path.relative_to(run_dir))
+        artifact_paths["diagnostic_trade_events"] = str(events_path.relative_to(run_dir))
     if target_event_frames:
         target_events_path = report_assets_dir / "target_events.csv"
         pd.concat(target_event_frames, ignore_index=True).to_csv(target_events_path, index=False)
@@ -1685,6 +1685,8 @@ def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
         "costs": "costs.csv",
         "turnover": "turnover.csv",
     }
+    if (run_dir / "trade_events.csv").exists():
+        artifact_paths["trade_events"] = "trade_events.csv"
     if (run_dir / "positions.csv").exists():
         artifact_paths["positions"] = "positions.csv"
     if (run_dir / "monitoring_report.json").exists():
@@ -1692,7 +1694,9 @@ def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
     if (run_dir / "portfolio_weights.csv").exists():
         artifact_paths["portfolio_weights"] = "portfolio_weights.csv"
     if (report_assets_dir / "trade_events.csv").exists():
-        artifact_paths["trade_events"] = str((report_assets_dir / "trade_events.csv").relative_to(run_dir))
+        artifact_paths["diagnostic_trade_events"] = str(
+            (report_assets_dir / "trade_events.csv").relative_to(run_dir)
+        )
     if (report_assets_dir / "target_events.csv").exists():
         artifact_paths["target_events"] = str((report_assets_dir / "target_events.csv").relative_to(run_dir))
     if (report_assets_dir / "trades.csv").exists():
@@ -1736,6 +1740,10 @@ def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
         report_artifacts[label] = str((run_dir / rel_path).resolve())
     if "trade_events" in artifact_paths:
         report_artifacts["trade_events"] = str((run_dir / artifact_paths["trade_events"]).resolve())
+    if "diagnostic_trade_events" in artifact_paths:
+        report_artifacts["diagnostic_trade_events"] = str(
+            (run_dir / artifact_paths["diagnostic_trade_events"]).resolve()
+        )
     if "target_events" in artifact_paths:
         report_artifacts["target_events"] = str((run_dir / artifact_paths["target_events"]).resolve())
     if "trades" in artifact_paths:
@@ -2146,13 +2154,16 @@ def _write_panel_artifacts(
                 "signal": pd.to_numeric(frame["signal_global_session_relay"], errors="coerce").fillna(0.0),
                 "module": frame.get("signal_module", pd.Series("none", index=frame.index)).astype("object"),
                 "cluster": frame.get("entry_cluster", pd.Series(pd.NA, index=frame.index)).astype("object"),
+                "evaluated": frame.get("entry_evaluated", pd.Series(False, index=frame.index)).fillna(False).astype(bool),
                 "candidate": frame.get("entry_candidate", pd.Series(False, index=frame.index)).fillna(False).astype(bool),
                 "accepted": frame.get("entry_eligible", pd.Series(False, index=frame.index)).fillna(False).astype(bool),
                 "reason": frame.get("entry_rejection_reason", pd.Series(pd.NA, index=frame.index)).astype("object"),
                 "signal_strength": pd.to_numeric(frame.get("signal_strength"), errors="coerce"),
                 "cluster_impulse": pd.to_numeric(frame.get("entry_cluster_impulse"), errors="coerce"),
                 "relay_score": pd.to_numeric(frame.get("entry_relay_score"), errors="coerce"),
-                "context_age_bars": pd.to_numeric(frame.filter(like="context_age_bars").max(axis=1), errors="coerce"),
+                "context_age_bars": pd.to_numeric(
+                    frame.get("entry_context_age_bars", pd.Series(np.nan, index=frame.index)), errors="coerce"
+                ),
             }))
     asset_eligibility = pd.concat(eligibility_rows, ignore_index=True) if eligibility_rows else pd.DataFrame(columns=["timestamp", "asset"])
     path = panel_dir / "panel_asset_eligibility.csv"
@@ -2171,7 +2182,7 @@ def _write_panel_artifacts(
     freshness.to_csv(path, index=False)
     artifacts["panel_context_freshness"] = str(path.relative_to(run_dir))
     diagnostics_columns = [
-        "module", "asset", "side", "cluster", "calendar_year", "candidate_count", "accepted_count", "rejected_count",
+        "module", "asset", "side", "cluster", "calendar_year", "evaluated_count", "candidate_count", "accepted_count", "rejected_count",
         "long_count", "short_count", "mean_signal_strength", "mean_cluster_impulse", "mean_relay_score", "mean_context_age_bars",
     ]
     rejection_columns = ["asset", "reason", "rejected_count"]
@@ -2181,7 +2192,7 @@ def _write_panel_artifacts(
         signals["side"] = np.where(signals["signal"] > 0.0, "long", np.where(signals["signal"] < 0.0, "short", "none"))
         signals["module"] = signals["module"].where(signals["module"].ne("none"), "rejected_or_none")
         diagnostics = signals.groupby(["module", "asset", "side", "cluster", "calendar_year"], dropna=False).agg(
-            candidate_count=("candidate", "sum"), accepted_count=("accepted", "sum"),
+            evaluated_count=("evaluated", "sum"), candidate_count=("candidate", "sum"), accepted_count=("accepted", "sum"),
             rejected_count=("reason", lambda value: int(value.notna().sum())),
             long_count=("signal", lambda value: int((value > 0.0).sum())),
             short_count=("signal", lambda value: int((value < 0.0).sum())),
@@ -2225,6 +2236,26 @@ def _write_panel_artifacts(
         events.to_csv(path, index=False)
         artifacts["correlation_guard_events"] = str(path.relative_to(run_dir))
     return artifacts
+
+
+def _normalized_performance_trade_events(performance: BacktestResult | PortfolioPerformance) -> pd.DataFrame:
+    """Normalize core fields while retaining every engine-specific trade column."""
+    raw = getattr(performance, "trades", None)
+    events = raw.copy() if isinstance(raw, pd.DataFrame) else pd.DataFrame()
+    core_columns = [
+        "asset", "signal_time", "entry_time", "exit_time", "side", "signal_module",
+        "entry_cluster", "entry_price", "exit_price", "take_profit_price", "stop_loss_price",
+        "exit_reason", "bars_held", "gross_return", "net_return", "realized_r", "cost",
+        "entry_context_age_bars", "entry_macro_context_age_bars", "entry_laggard_gap",
+        "signal_strength", "entry_relay_score",
+    ]
+    aliases = {"signal_time": "signal_timestamp", "entry_time": "entry_timestamp", "exit_time": "exit_timestamp"}
+    for column in core_columns:
+        if column not in events.columns and aliases.get(column) in events.columns:
+            events[column] = events[aliases[column]]
+        if column not in events.columns:
+            events[column] = pd.NA
+    return events.reindex(columns=[*core_columns, *[column for column in events.columns if column not in core_columns]])
 
 
 def save_artifacts(
@@ -2329,6 +2360,9 @@ def save_artifacts(
     turnover_path = run_dir / "turnover.csv"
     performance.turnover.to_csv(turnover_path, header=True)
 
+    trade_events_path = run_dir / "trade_events.csv"
+    _normalized_performance_trade_events(performance).to_csv(trade_events_path, index=False)
+
     mtm_returns_path = None
     mtm_equity_path = None
     mark_to_market_returns = getattr(performance, "mark_to_market_returns", None)
@@ -2370,6 +2404,7 @@ def save_artifacts(
         "gross_returns": str(gross_returns_path),
         "costs": str(costs_path),
         "turnover": str(turnover_path),
+        "trade_events": str(trade_events_path),
     }
     if stage_tails_path is not None:
         artifacts["stage_tails"] = str(stage_tails_path)

@@ -1,17 +1,10 @@
-# ETHUSD Trial 0041 Alpha Research Lab.
-# Family: feature_addition; phase: screening.
-# Baseline: config/experiments/foundation_alpha/BEST/ethusd/optuna_BEST_ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid.yaml
-# Parent: baseline_local_replay
-# Hypothesis: Distance from trailing VWAP may distinguish participation-supported moves from mean reversion.
-# Expected mechanism: Adds a causal 48-bar volume-weighted price distance.
-# Causality: target/diagnostic columns are excluded from model features; only prior/current-bar features are used.
 data:
   source: dukascopy_csv
-  interval: 30m
+  interval: 1m
   start: null
   end: null
   alignment: inner
-  symbol: ETHUSD
+  symbol: BTCUSD
   symbols: null
   api_key: null
   api_key_env: null
@@ -28,10 +21,10 @@ data:
       inactive_policy: raise
   storage:
     mode: cached_only
-    dataset_id: ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid
+    dataset_id: btcusd_1m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid
     save_raw: false
-    save_processed: false
-    load_path: data/raw/dukascopy_30m_clean/ethusd_30m.csv
+    save_processed: true
+    load_path: data/raw/dukascopy_30m_clean/btcusd_1m.csv
     raw_dir: data/raw
     processed_dir: data/processed
     load_paths: null
@@ -340,24 +333,6 @@ features:
     - 48
   outputs: {}
   enabled: true
-- step: vwap
-  params:
-    high_col: high
-    low_col: low
-    close_col: close
-    volume_col: volume
-    windows:
-    - 48
-  transforms:
-    ratio:
-      enabled: true
-      items:
-      - numerator_col: close
-        denominator_col: vwap_48
-        output_col: close_over_vwap_48
-        subtract: 1.0
-  outputs: {}
-  enabled: true
 model:
   kind: lightgbm_regressor
   params:
@@ -377,8 +352,7 @@ model:
     pred_ret_col: pred_ret
     pred_prob_col: pred_prob
     pred_is_oos_col: pred_is_oos
-  preprocessing:
-    scaler: none
+  preprocessing: {}
   calibration: {}
   feature_cols:
   - close_ret
@@ -427,7 +401,6 @@ model:
   - lower_wick_ratio
   - close_location
   - range_to_atr
-  - close_over_vwap_48
   target:
     kind: future_return_regression
     price_col: close
@@ -532,7 +505,7 @@ backtest:
   asset_params: {}
   dynamic_exits: {}
   partial_exits: {}
-  allow_short: true
+  allow_short: false
 portfolio:
   enabled: false
   construction: signal_weights
@@ -591,7 +564,7 @@ diagnostics:
     - 4
     - 8
     - 16
-    volatility_col: atr_pct_rank_192
+    volatility_col: atr_pct_rank_100
   robustness:
     enabled: false
     cost_multipliers:
@@ -647,8 +620,8 @@ execution:
   current_prices: {}
 logging:
   enabled: true
-  run_name: ethusd_30m_trial0041_featadd_vwap_distance_v1
-  output_dir: logs/experiments/foundation_alpha/trial0041_alpha_lab
+  run_name: btcusd_1m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_0058
+  output_dir: logs/experiments
   stage_tails:
     enabled: false
     stdout: false
@@ -661,12 +634,14 @@ logging:
   save_model: false
   save_predictions: true
   save_processed: true
+  model_name: btcusd_1m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid
+  install_model: false
 strategy:
-  name: ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid
-  timeframe: 30m
+  name: btcusd_1m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid
+  timeframe: 1m
   assets:
-  - ETHUSD
-  description: 'ETHUSD 30m v3.4-derived hybrid Ehlers trend replacement experiment.
+  - BTCUSD
+  description: 'BTCUSD 1m v3.4-derived hybrid Ehlers trend replacement experiment.
     Target, signal gates, risk, and backtest logic stay unchanged. The model keeps
     the strongest long-horizon EMA trend context while replacing redundant EMA ratio
     features with normalized Ehlers trend/cycle features.
@@ -678,17 +653,3 @@ validation:
   embargo_bars: 24
 evaluation:
   strict_oos_only: true
-research_metadata:
-  lab: ethusd_30m_trial_0041_alpha_lab
-  baseline_source: config/experiments/foundation_alpha/BEST/ethusd/optuna_BEST_ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid.yaml
-  baseline_artifact: logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260712_190851_716023_013d079c
-  family: feature_addition
-  experiment_id: ethusd_30m_trial0041_featadd_vwap_distance_v1
-  parent_experiment: baseline_local_replay
-  hypothesis: Distance from trailing VWAP may distinguish participation-supported
-    moves from mean reversion.
-  expected_effect: Adds a causal 48-bar volume-weighted price distance.
-  phase: screening
-  selection_era: folds_0_to_9
-  leakage_note: Feature values are causal at t; targets are future-only labels and
-    are excluded from model.feature_cols. Screening rankings never read folds 10-16.

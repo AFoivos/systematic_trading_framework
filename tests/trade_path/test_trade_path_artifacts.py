@@ -101,6 +101,7 @@ def test_trade_path_diagnostics_artifacts_and_report_are_written(tmp_path) -> No
     assert "could_have_been_profitable" in trade_path_summary
     assert "path_construction" in trade_path_summary
     assert "trade_path_summary" in manifest["files"]
+    assert "trade_events" in manifest["files"]
     assert "## Trade Path Diagnostics" in report
     assert (run_dir / "report_assets" / "trades_enriched.csv").exists()
     assert (
@@ -111,6 +112,9 @@ def test_trade_path_diagnostics_artifacts_and_report_are_written(tmp_path) -> No
     assert (run_dir / "report_assets" / "counterfactual_exit_summary.csv").exists()
     assert not list((run_dir / "report_assets").glob("trade_diagnostics_*.html"))
     assert "trades_enriched" in artifacts
+    events = pd.read_csv(run_dir / "trade_events.csv")
+    assert len(events) == 1
+    assert {"asset", "signal_time", "entry_time", "exit_time", "exit_reason"}.issubset(events.columns)
 
 
 def test_target_only_trade_path_diagnostics_without_executed_trades(tmp_path) -> None:

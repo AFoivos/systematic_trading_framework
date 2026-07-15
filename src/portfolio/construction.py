@@ -71,14 +71,14 @@ class PortfolioPerformance:
     gross_returns: pd.Series
     costs: pd.Series
     turnover: pd.Series
-    summary: dict[str, float]
+    summary: dict[str, Any]
     applied_weights: pd.DataFrame | None = None
     risk_guard_summary: dict[str, Any] = field(default_factory=dict)
     risk_guard_timeline: pd.DataFrame | None = None
     trades: pd.DataFrame | None = None
     mark_to_market_returns: pd.Series | None = None
     mark_to_market_equity_curve: pd.Series | None = None
-    mark_to_market_summary: dict[str, float] | None = None
+    mark_to_market_summary: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

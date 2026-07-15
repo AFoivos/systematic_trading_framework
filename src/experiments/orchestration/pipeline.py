@@ -137,6 +137,7 @@ def run_experiment_pipeline(
         )
         raw_long_frame = asset_frames_to_long_frame(raw_asset_frames)
         data_fingerprint = compute_dataframe_fingerprint(raw_long_frame)
+        del raw_long_frame
 
         feature_asset_frames = apply_steps_to_assets(
             raw_asset_frames,
@@ -170,6 +171,8 @@ def run_experiment_pipeline(
         )
         if processed_snapshot is not None:
             storage_meta["saved_processed_snapshot"] = processed_snapshot
+        del raw_asset_frames
+        del feature_asset_frames
 
         base_model_cfg = {
             "runtime": cfg.get("runtime", {}),
@@ -203,6 +206,7 @@ def run_experiment_pipeline(
             previous_asset_frames=panel_feature_asset_frames,
             stage_tail_cfg=stage_tail_cfg,
         )
+        del panel_feature_asset_frames
 
         asset_frames = apply_signals_to_assets(
             model_asset_frames,
@@ -228,6 +232,8 @@ def run_experiment_pipeline(
                 stage_tail_cfg=stage_tail_cfg,
             )
         asset_frames = panel_signal_asset_frames
+        del model_asset_frames
+        del panel_signal_asset_frames
 
         target_cfg = dict(cfg.get("target", {}) or {})
         target_model_cfg = dict(model_cfg)

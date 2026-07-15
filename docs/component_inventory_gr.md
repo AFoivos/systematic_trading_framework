@@ -175,6 +175,14 @@ Single-asset model kinds:
 - `ppo_agent`
 - `dqn_agent`
 
+Foundation model notes:
+
+- `chronos_bolt_forecaster`: zero-shot univariate causal `source_col` context.
+- `chronos_2_forecaster`: zero-shot univariate context or historical-covariate-aware
+  context from `model.feature_cols` / `feature_selectors`. Covariates are
+  past-only, aligned to the source context, and grouped independently per OOS
+  forecast origin; future covariates are not part of this adapter.
+
 Portfolio model kinds:
 
 - `ppo_portfolio_agent`

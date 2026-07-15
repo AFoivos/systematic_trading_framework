@@ -13,6 +13,7 @@ import pytest
 import src.experiments.runner as runner_mod
 from src.backtesting.engine import BacktestResult, run_backtest
 from src.experiments.orchestration import artifacts as artifacts_module
+from src.experiments.orchestration.common import data_stats_payload
 from src.experiments.orchestration.stage_trace import build_stage_tail_snapshot, format_stage_tail_snapshot
 from src.experiments.support.execution_source_audit import build_execution_source_audit
 from src.features.technical.momentum import add_momentum_features
@@ -25,7 +26,7 @@ from src.signals.rsi_signal import compute_rsi_signal
 from src.src_data.loaders import load_ohlcv, load_ohlcv_panel
 from src.src_data.providers.alphavantage import AlphaVantageFXProvider, _build_retry_session
 from src.src_data.providers.twelvedata import TwelveDataProvider
-from src.src_data.storage import save_dataset_snapshot
+from src.src_data.storage import asset_frames_to_long_frame, save_dataset_snapshot
 from src.utils.config import ConfigError, load_experiment_config, load_experiment_config_typed
 from src.utils.config_defaults import resolve_logging_block
 from src.utils.paths import enforce_safe_absolute_path
@@ -65,6 +66,32 @@ def test_runner_sensitive_redaction_is_recursive() -> None:
     assert redacted["data"]["nested"]["token"] == "***REDACTED***"
     assert redacted["secrets"][0]["password"] == "***REDACTED***"
     assert redacted["safe"]["value"] == 7
+
+
+def test_data_stats_payload_for_asset_frames_matches_materialized_long_frame_metadata() -> None:
+    asset_frames = {
+        "BBB": pd.DataFrame(
+            {"close": [20.0, 21.0], "signal": [0.0, 1.0]},
+            index=pd.DatetimeIndex(["2024-01-03", "2024-01-01"]),
+        ),
+        "AAA": pd.DataFrame(
+            {"open": [10.0], "close": [11.0]},
+            index=pd.DatetimeIndex(["2024-01-02"]),
+        ),
+    }
+
+    materialized = asset_frames_to_long_frame(asset_frames)
+    expected = {
+        "asset_count": 2,
+        "rows": len(materialized),
+        "columns": len(materialized.columns),
+        "assets": ["AAA", "BBB"],
+        "rows_by_asset": {"AAA": 1, "BBB": 2},
+        "start": str(materialized["timestamp"].min()),
+        "end": str(materialized["timestamp"].max()),
+    }
+
+    assert data_stats_payload(asset_frames) == expected
 
 
 def test_optional_model_modules_import_without_xgboost_lightgbm_or_tsfresh() -> None:
@@ -1626,7 +1653,8 @@ def test_save_artifacts_writes_experiment_report(tmp_path) -> None:
     assert not (run_dir / "report.html").exists()
     assert artifacts["equity_curve"].endswith("equity_curve.csv")
     assert Path(artifacts["equity_curve_chart"]).parts[-2:] == ("report_assets", "equity_curve.png")
-    assert Path(artifacts["trade_events"]).parts[-2:] == ("report_assets", "trade_events.csv")
+    assert Path(artifacts["trade_events"]).parts[-1:] == ("trade_events.csv",)
+    assert Path(artifacts["trade_events"]).parent == run_dir
     assert artifacts["feature_importance"].endswith("feature_importance.csv")
     assert artifacts["label_distribution"].endswith("label_distribution.csv")
     assert artifacts["prediction_diagnostics"].endswith("prediction_diagnostics.json")

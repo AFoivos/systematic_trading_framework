@@ -498,7 +498,7 @@ backtest:
   asset_params: {}
   dynamic_exits: {}
   partial_exits: {}
-  allow_short: false
+  allow_short: true
 portfolio:
   enabled: false
   construction: signal_weights
@@ -557,7 +557,7 @@ diagnostics:
     - 4
     - 8
     - 16
-    volatility_col: atr_pct_rank_100
+    volatility_col: atr_pct_rank_192
   robustness:
     enabled: false
     cost_multipliers:

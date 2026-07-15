@@ -162,6 +162,23 @@ def _compound_returns(returns: pd.Series) -> float:
     return float((1.0 + values).prod() - 1.0)
 
 
+def calendar_daily_returns(returns: pd.Series) -> tuple[pd.Series, float]:
+    """Compound intraday returns to a complete UTC daily grid without inventing prices."""
+    rets = returns.dropna().astype(float).sort_index()
+    if rets.empty:
+        return pd.Series(dtype=float), 0.0
+    if not isinstance(rets.index, pd.DatetimeIndex):
+        raise ValueError("calendar_daily annualization requires a DatetimeIndex.")
+    index = rets.index.tz_localize("UTC") if rets.index.tz is None else rets.index.tz_convert("UTC")
+    utc_returns = pd.Series(rets.to_numpy(dtype=float), index=index)
+    daily = utc_returns.groupby(utc_returns.index.normalize()).apply(_compound_returns).astype(float)
+    grid = pd.date_range(daily.index.min(), daily.index.max(), freq="1D", tz="UTC")
+    daily = daily.reindex(grid, fill_value=0.0).astype(float)
+    daily.name = "daily_return"
+    elapsed_days = max((index.max() - index.min()).total_seconds() / 86_400.0, 1.0)
+    return daily, float(elapsed_days)
+
+
 def _count_breach_episodes(flags: pd.Series) -> int:
     active = flags.fillna(False).astype(bool)
     if active.empty:
@@ -319,12 +336,15 @@ def compute_backtest_metrics(
     turnover: pd.Series | None = None,
     costs: pd.Series | None = None,
     gross_returns: pd.Series | None = None,
-) -> dict[str, float]:
+    annualization_mode: str = "fixed_periods",
+) -> dict[str, float | str]:
     """
     Compute backtest metrics for the evaluation layer. The helper keeps the calculation isolated
     so the calling pipeline can reuse the same logic consistently across experiments.
     """
     rets = net_returns.dropna().astype(float)
+    if annualization_mode not in {"fixed_periods", "calendar_daily"}:
+        raise ValueError("annualization_mode must be 'fixed_periods' or 'calendar_daily'.")
     if rets.empty:
         base = {
             "cumulative_return": 0.0,
@@ -345,21 +365,47 @@ def compute_backtest_metrics(
                 costs=costs,
             )
         )
+        base["annualization_mode"] = annualization_mode
         return base
-
-    equity = equity_curve_from_returns(rets)
-
-    metrics: dict[str, float] = {
-        "cumulative_return": float(equity.iloc[-1] - 1.0),
-        "annualized_return": annualized_return(rets, periods_per_year=periods_per_year),
-        "annualized_vol": annualized_volatility(rets, periods_per_year=periods_per_year),
-        "sharpe": sharpe_ratio(rets, periods_per_year=periods_per_year),
-        "sortino": sortino_ratio(rets, periods_per_year=periods_per_year),
-        "calmar": calmar_ratio(rets, periods_per_year=periods_per_year),
-        "max_drawdown": max_drawdown(equity),
-        "profit_factor": profit_factor(rets),
-        "hit_rate": hit_rate(rets),
-    }
+    if annualization_mode == "calendar_daily":
+        metric_returns, elapsed_days = calendar_daily_returns(rets)
+        daily_equity = equity_curve_from_returns(metric_returns)
+        cumulative = float(daily_equity.iloc[-1] - 1.0)
+        annualized = float((1.0 + cumulative) ** (365.25 / elapsed_days) - 1.0) if cumulative > -1.0 else float("nan")
+        annualized_vol = annualized_volatility(metric_returns, periods_per_year=365.25)
+        downside = downside_volatility(metric_returns, periods_per_year=365.25)
+        # Daily compounding is solely for annualized statistics. Drawdown must preserve
+        # every realized portfolio return, including an intraday drawdown recovered before
+        # the UTC day closes.
+        maximum_drawdown = max_drawdown(equity_curve_from_returns(rets))
+        metrics: dict[str, float | str] = {
+            "cumulative_return": cumulative,
+            "annualized_return": annualized,
+            "annualized_vol": annualized_vol,
+            "sharpe": float(annualized / annualized_vol) if annualized_vol > 0.0 else 0.0,
+            "sortino": float(annualized / downside) if downside > 0.0 else 0.0,
+            "calmar": float(annualized / abs(maximum_drawdown)) if maximum_drawdown < 0.0 else 0.0,
+            "max_drawdown": maximum_drawdown,
+            "profit_factor": profit_factor(metric_returns),
+            "hit_rate": hit_rate(metric_returns),
+            "annualization_mode": annualization_mode,
+            "annualization_elapsed_days": elapsed_days,
+            "annualization_daily_observations": float(len(metric_returns)),
+        }
+    else:
+        equity = equity_curve_from_returns(rets)
+        metrics = {
+            "cumulative_return": float(equity.iloc[-1] - 1.0),
+            "annualized_return": annualized_return(rets, periods_per_year=periods_per_year),
+            "annualized_vol": annualized_volatility(rets, periods_per_year=periods_per_year),
+            "sharpe": sharpe_ratio(rets, periods_per_year=periods_per_year),
+            "sortino": sortino_ratio(rets, periods_per_year=periods_per_year),
+            "calmar": calmar_ratio(rets, periods_per_year=periods_per_year),
+            "max_drawdown": max_drawdown(equity),
+            "profit_factor": profit_factor(rets),
+            "hit_rate": hit_rate(rets),
+            "annualization_mode": annualization_mode,
+        }
     metrics.update(turnover_stats(turnover))
     metrics.update(
         cost_attribution(
@@ -398,6 +444,7 @@ __all__ = [
     "hit_rate",
     "turnover_stats",
     "cost_attribution",
+    "calendar_daily_returns",
     "compute_backtest_metrics",
     "merge_metric_overrides",
     "compute_ftmo_style_metrics",

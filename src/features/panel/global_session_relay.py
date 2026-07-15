@@ -135,6 +135,11 @@ def _cluster_columns(prefix: str) -> list[str]:
         f"{prefix}_cluster_eligible",
         f"{prefix}_cluster_context_age_bars",
         f"{prefix}_cluster_direction",
+        f"{prefix}_cluster_configured_member_count",
+        f"{prefix}_cluster_active_member_count",
+        f"{prefix}_cluster_active_members",
+        f"{prefix}_cluster_universe_mode",
+        f"{prefix}_cluster_fixed_overlap_eligible",
     ]
 
 
@@ -193,8 +198,18 @@ def _add_cluster_features(
         missing = [asset for asset in members if asset not in frames]
         raise KeyError(f"Cluster '{cluster}' refers to unavailable assets: {missing}")
     minimum = int(spec.get("minimum_active_assets", len(members)))
-    require_all = bool(spec.get("require_all_assets", False))
     prefix = str(cluster)
+    configured_member_count = len(members)
+    valid_member_indexes = {
+        member: frames[member].index[pd.to_numeric(frames[member][impulse_col], errors="coerce").notna()]
+        for member in members
+    }
+    if all(len(index) > 0 for index in valid_member_indexes.values()):
+        overlap_start = max(index.min() for index in valid_member_indexes.values())
+        overlap_end = min(index.max() for index in valid_member_indexes.values())
+    else:
+        overlap_start = None
+        overlap_end = None
     for target_asset in members:
         target = frames[target_asset]
         contexts: dict[str, pd.DataFrame] = {}
@@ -208,19 +223,30 @@ def _add_cluster_features(
         values = pd.DataFrame({asset: ctx[impulse_col] for asset, ctx in contexts.items()}, index=target.index)
         ages = pd.DataFrame({asset: ctx["context_age_bars"] for asset, ctx in contexts.items()}, index=target.index)
         counts = values.notna().sum(axis=1)
-        eligible = counts >= minimum
-        if require_all:
-            eligible &= counts == len(members)
-        # Fixed mode deliberately uses only this module's own eligibility period.  It never
-        # reaches into optional macro assets or another cluster's history.
-        if universe_mode == "fixed" and bool(eligible.any()):
-            first, last = eligible[eligible].index[[0, -1]]
-            eligible &= (eligible.index >= first) & (eligible.index <= last)
+        active_members = values.apply(
+            lambda row: ",".join(asset for asset in members if pd.notna(row[asset])), axis=1
+        )
+        fixed_overlap = pd.Series(False, index=target.index, dtype=bool)
+        if overlap_start is not None and overlap_end is not None:
+            fixed_overlap = pd.Series(
+                (target.index >= overlap_start) & (target.index <= overlap_end),
+                index=target.index,
+                dtype=bool,
+            )
+        # Fixed mode is deliberately strict: every configured member must be available,
+        # fresh, and inside the common native-history overlap. Dynamic mode permits a
+        # fresh subset meeting the configured minimum.
+        eligible = (
+            (fixed_overlap & counts.eq(configured_member_count))
+            if universe_mode == "fixed"
+            else counts.ge(minimum)
+        )
         rows: list[dict[str, object]] = []
         for timestamp in target.index:
             row_values = {asset: float(values.at[timestamp, asset]) for asset in members if pd.notna(values.at[timestamp, asset])}
             row = _choose_cluster_members(row_values, eligible=bool(eligible.at[timestamp]))
             row["member_count"] = int(counts.at[timestamp])
+            row["active_members"] = active_members.at[timestamp]
             row["eligible"] = bool(eligible.at[timestamp])
             valid_ages = ages.loc[timestamp, values.loc[timestamp].notna()]
             row["context_age"] = float(valid_ages.max()) if not valid_ages.empty else np.nan
@@ -240,6 +266,11 @@ def _add_cluster_features(
         target[f"{prefix}_cluster_eligible"] = metrics["eligible"].astype(bool)
         target[f"{prefix}_cluster_context_age_bars"] = metrics["context_age"].astype(float)
         target[f"{prefix}_cluster_direction"] = metrics["direction"].astype("object")
+        target[f"{prefix}_cluster_configured_member_count"] = float(configured_member_count)
+        target[f"{prefix}_cluster_active_member_count"] = metrics["member_count"].astype(float)
+        target[f"{prefix}_cluster_active_members"] = metrics["active_members"].astype("object")
+        target[f"{prefix}_cluster_universe_mode"] = str(universe_mode)
+        target[f"{prefix}_cluster_fixed_overlap_eligible"] = fixed_overlap.astype(bool)
 
 
 def _add_relay(
@@ -254,6 +285,16 @@ def _add_relay(
     universe_mode: str,
 ) -> None:
     sources = [asset for asset in source_assets if asset in frames]
+    valid_source_indexes = {
+        asset: frames[asset].index[pd.to_numeric(frames[asset]["normalized_session_return"], errors="coerce").notna()]
+        for asset in sources
+    }
+    if sources and all(len(index) > 0 for index in valid_source_indexes.values()):
+        overlap_start = max(index.min() for index in valid_source_indexes.values())
+        overlap_end = min(index.max() for index in valid_source_indexes.values())
+    else:
+        overlap_start = None
+        overlap_end = None
     for target_asset in target_assets:
         if target_asset not in frames:
             continue
@@ -271,10 +312,16 @@ def _add_relay(
         )
         ages = pd.DataFrame({asset: context["context_age_bars"] for asset, context in contexts.items()}, index=target.index)
         counts = values.notna().sum(axis=1)
-        eligible = counts >= int(minimum_sources)
-        if universe_mode == "fixed" and bool(eligible.any()):
-            first, last = eligible[eligible].index[[0, -1]]
-            eligible &= (eligible.index >= first) & (eligible.index <= last)
+        fixed_overlap = pd.Series(False, index=target.index, dtype=bool)
+        if overlap_start is not None and overlap_end is not None:
+            fixed_overlap = pd.Series(
+                (target.index >= overlap_start) & (target.index <= overlap_end), index=target.index, dtype=bool
+            )
+        eligible = (
+            fixed_overlap & counts.eq(len(sources))
+            if universe_mode == "fixed"
+            else counts.ge(int(minimum_sources))
+        )
         target[f"{prefix}_relay_score"] = values.median(axis=1, skipna=True).where(eligible).astype(float)
         target[f"{prefix}_source_count"] = counts.astype(float)
         target[f"{prefix}_context_age_bars"] = ages.max(axis=1, skipna=True).where(counts > 0).astype(float)
@@ -321,6 +368,14 @@ def _add_dynamic_exit_columns(
         for cluster, spec in clusters.items()
         for asset in list(spec.get("assets", []) or [])
     }
+    def _side_reason(convergence: pd.Series, failure: pd.Series, stale: pd.Series) -> pd.Series:
+        """Return the causal exit reason using the documented priority order."""
+        reason = pd.Series(pd.NA, index=convergence.index, dtype="object")
+        reason.loc[stale] = "stale_context"
+        reason.loc[failure] = "cluster_failure"
+        reason.loc[convergence] = "convergence"
+        return reason
+
     for asset, frame in frames.items():
         cluster = asset_cluster.get(asset)
         if cluster is None:
@@ -332,6 +387,12 @@ def _add_dynamic_exit_columns(
             for suffix in ("long", "short"):
                 for base in ("relay_convergence_exit", "relay_cluster_failure_exit", "relay_stale_context_exit", "relay_dynamic_exit"):
                     frame[f"{base}_{suffix}"] = False
+                frame[f"relay_dynamic_exit_reason_{suffix}"] = pd.Series(pd.NA, index=frame.index, dtype="object")
+                for module in ("intra_cluster", "asia_to_europe", "europe_to_usa"):
+                    frame[f"relay_dynamic_exit_{module}_{suffix}"] = False
+                    frame[f"relay_dynamic_exit_reason_{module}_{suffix}"] = pd.Series(
+                        pd.NA, index=frame.index, dtype="object"
+                    )
             continue
         median = pd.to_numeric(frame[f"{cluster}_cluster_impulse_median"], errors="coerce")
         impulse = pd.to_numeric(frame[impulse_col], errors="coerce")
@@ -356,24 +417,25 @@ def _add_dynamic_exit_columns(
         frame["relay_dynamic_exit_long"] = (convergence | failure_long | relay_stale).astype(bool)
         frame["relay_dynamic_exit_short"] = (convergence | failure_short | relay_stale).astype(bool)
         frame["relay_dynamic_exit"] = (frame["relay_dynamic_exit_long"] | frame["relay_dynamic_exit_short"]).astype(bool)
-        reason = pd.Series(pd.NA, index=frame.index, dtype="object")
-        reason.loc[relay_stale] = "stale_context"
-        reason.loc[failure_long | failure_short] = "cluster_failure"
-        reason.loc[convergence] = "convergence"
-        frame["relay_dynamic_exit_reason"] = reason
+        generic_long_reason = _side_reason(convergence, failure_long, relay_stale)
+        generic_short_reason = _side_reason(convergence, failure_short, relay_stale)
+        frame["relay_dynamic_exit_reason_long"] = generic_long_reason
+        frame["relay_dynamic_exit_reason_short"] = generic_short_reason
+        # Legacy single-reason consumers retain a deterministic, but deliberately
+        # side-agnostic, representation. New configs must select the side-specific one.
+        frame["relay_dynamic_exit_reason"] = generic_long_reason.combine_first(generic_short_reason)
         # Module-aware columns stop a stale relay feed from closing an intra-cluster trade.
         for module, stale in (
             ("intra_cluster", cluster_stale),
             ("asia_to_europe", relay_stale if cluster == "europe" else pd.Series(False, index=frame.index)),
             ("europe_to_usa", relay_stale if cluster == "usa" else pd.Series(False, index=frame.index)),
         ):
+            module_reasons: dict[str, pd.Series] = {}
             for side, failure in (("long", failure_long), ("short", failure_short)):
                 frame[f"relay_dynamic_exit_{module}_{side}"] = (convergence | failure | stale).astype(bool)
-            module_reason = pd.Series(pd.NA, index=frame.index, dtype="object")
-            module_reason.loc[stale] = "stale_context"
-            module_reason.loc[failure_long | failure_short] = "cluster_failure"
-            module_reason.loc[convergence] = "convergence"
-            frame[f"relay_dynamic_exit_reason_{module}"] = module_reason
+                module_reasons[side] = _side_reason(convergence, failure, stale)
+                frame[f"relay_dynamic_exit_reason_{module}_{side}"] = module_reasons[side]
+            frame[f"relay_dynamic_exit_reason_{module}"] = module_reasons["long"].combine_first(module_reasons["short"])
 
 
 def global_session_relay_features(

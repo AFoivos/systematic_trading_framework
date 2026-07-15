@@ -53,7 +53,7 @@ backtest έχει leakage.
 | Tabular classifiers | `logistic_regression_clf`, `elastic_net_clf`, `lightgbm_clf`, `xgboost_clf` | Πιθανότητα binary label ή meta-label από tabular features. |
 | Sequence / event classifier | `event_transformer_encoder` | Πιθανότητα και embeddings από rolling event sequences. |
 | Return forecasters / regressors | `lightgbm_regressor`, `sarimax_forecaster`, `lstm_forecaster`, `patchtst_forecaster`, `tft_forecaster` | Μελλοντική απόδοση ή continuous target. |
-| Foundation zero-shot forecasters | `chronos_bolt_forecaster`, `chronos_2_forecaster`, `timesfm_2p5_200m_forecaster`, `timesfm_1p0_200m_forecaster` | Inference-only forecast από causal price/returns context. |
+| Foundation zero-shot forecasters | `chronos_bolt_forecaster`, `chronos_2_forecaster`, `timesfm_2p5_200m_forecaster`, `timesfm_1p0_200m_forecaster` | Inference-only forecast από causal price/returns context. Μόνο το Chronos-2 δέχεται επίσης historical covariates. |
 | Volatility / risk forecaster | `garch_forecaster` | Κυρίως forecast volatility/risk από return dynamics. |
 | Feature discovery | `tsfresh_extrema_feature_discovery` | PIT-safe tsfresh features και relevance για future extrema labels. |
 | Single-asset RL | `ppo_agent`, `dqn_agent` | Policy για actions σε ένα asset. |
@@ -557,6 +557,67 @@ compression -> expansion που δεν χωράει σε ένα μόνο row.
   `pred_q50`, `pred_q90` όταν το backend επιστρέφει quantiles, και `pred_vol`
   από το low/high spread.
 
+`chronos_bolt_forecaster` και τα TimesFM wrappers χρησιμοποιούν μόνο το
+univariate `source_col` context. Το `chronos_2_forecaster` μπορεί επιπλέον να
+χρησιμοποιήσει `model.feature_cols` ως numerical historical/past-only
+covariates όταν `use_features: true`. Το `source_col` επιτρέπεται να εμφανιστεί
+στη λίστα για συμβατότητα, αλλά αφαιρείται πριν από το Chronos input ώστε να μη
+περάσει δύο φορές. Δεν υποστηρίζονται future-known covariates σε αυτό το
+adapter.
+
+Για κάθε OOS origin, ο wrapper περνάει στο Chronos-2 μόνο το trailing context
+μέχρι και το `t`, διατηρεί το μεγαλύτερο contiguous finite suffix και απαιτεί
+`min_context` rows. Κάθε origin έχει ανεξάρτητο `item_id` και
+`cross_learning=false`, άρα ούτε future technical indicators ούτε άλλο test
+origin συμμετέχουν στο ίδιο forecasting task. Το pretrained model παραμένει
+zero-shot: δεν γίνεται fold-level fit ή scaling.
+
+Παράδειγμα Chronos-2 με historical covariates:
+
+```yaml
+model:
+  kind: chronos_2_forecaster
+  use_features: true
+  feature_cols:
+    - close_ret                 # source duplicate: excluded from covariates
+    - lag_close_ret_1
+    - atr_over_price_48
+    - ema_trend_48_192
+  outputs:
+    pred_ret_col: pred_ret
+    pred_prob_col: pred_prob
+    pred_is_oos_col: pred_is_oos
+  target:
+    kind: future_return_regression
+    price_col: close
+    returns_col: close_ret
+    returns_type: simple
+    horizon_bars: 24
+    normalize_by_volatility: true
+    volatility_col: atr_48
+    clip: [-4.0, 4.0]
+    fwd_col: target_future_return_h24_atr
+    label_col: target_future_return_h24_atr
+  split:
+    method: purged
+    train_size: 35040
+    test_size: 4380
+    step_size: 4380
+    purge_bars: 24
+    embargo_bars: 24
+  params:
+    model_id: amazon/chronos-2
+    source_col: close_ret
+    source_kind: returns
+    source_returns_type: simple
+    lookback: 384
+    min_context: 96
+    prediction_length: 24
+    quantiles: [0.1, 0.5, 0.9]
+    batch_size: 64
+    freq: 30min
+```
+
 Παράδειγμα:
 
 ```yaml
@@ -985,6 +1046,9 @@ policy. Για αυτό τα outputs είναι `signal_rl` και, στα singl
   checkpoint και παράγουν zero-shot forecast από ιστορικό context.
 - Τα wrappers χρησιμοποιούν causal `source_col` history, όχι generated target
   columns, ώστε να μην διαρρεύσει future label.
+- Το Chronos-Bolt παραμένει univariate. Το Chronos-2 μπορεί να δει μόνο
+  `feature_cols` που είναι historical covariates διαθέσιμες στο timestamp του
+  forecast, ποτέ future technical/candle/volatility values.
 
 Τι σημαίνουν οι τιμές:
 

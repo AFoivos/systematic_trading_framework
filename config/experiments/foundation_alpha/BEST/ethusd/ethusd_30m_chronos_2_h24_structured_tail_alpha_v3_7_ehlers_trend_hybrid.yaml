@@ -1,10 +1,3 @@
-# ETHUSD Trial 0041 Alpha Research Lab.
-# Family: feature_addition; phase: screening.
-# Baseline: config/experiments/foundation_alpha/BEST/ethusd/optuna_BEST_ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid.yaml
-# Parent: baseline_local_replay
-# Hypothesis: Distance from trailing VWAP may distinguish participation-supported moves from mean reversion.
-# Expected mechanism: Adds a causal 48-bar volume-weighted price distance.
-# Causality: target/diagnostic columns are excluded from model features; only prior/current-bar features are used.
 data:
   source: dukascopy_csv
   interval: 30m
@@ -30,7 +23,7 @@ data:
     mode: cached_only
     dataset_id: ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid
     save_raw: false
-    save_processed: false
+    save_processed: true
     load_path: data/raw/dukascopy_30m_clean/ethusd_30m.csv
     raw_dir: data/raw
     processed_dir: data/processed
@@ -340,45 +333,25 @@ features:
     - 48
   outputs: {}
   enabled: true
-- step: vwap
-  params:
-    high_col: high
-    low_col: low
-    close_col: close
-    volume_col: volume
-    windows:
-    - 48
-  transforms:
-    ratio:
-      enabled: true
-      items:
-      - numerator_col: close
-        denominator_col: vwap_48
-        output_col: close_over_vwap_48
-        subtract: 1.0
-  outputs: {}
-  enabled: true
 model:
-  kind: lightgbm_regressor
+  kind: chronos_2_forecaster
+  use_features: true
   params:
-    n_estimators: 800
-    learning_rate: 0.0549537895493607
-    max_depth: 6
-    num_leaves: 15
-    min_child_samples: 200
-    subsample: 0.9
-    colsample_bytree: 0.75
-    reg_alpha: 0.019934229992965794
-    reg_lambda: 1.8786413727433209
-    random_state: 7
-    n_jobs: 1
-    verbosity: -1
+    model_id: amazon/chronos-2
+    source_col: close_ret
+    source_kind: returns
+    source_returns_type: simple
+    lookback: 384
+    min_context: 96
+    prediction_length: 24
+    quantiles: [0.1, 0.5, 0.9]
+    batch_size: 64
+    freq: 30min
   outputs:
     pred_ret_col: pred_ret
     pred_prob_col: pred_prob
     pred_is_oos_col: pred_is_oos
-  preprocessing:
-    scaler: none
+  preprocessing: {}
   calibration: {}
   feature_cols:
   - close_ret
@@ -427,7 +400,6 @@ model:
   - lower_wick_ratio
   - close_location
   - range_to_atr
-  - close_over_vwap_48
   target:
     kind: future_return_regression
     price_col: close
@@ -436,9 +408,8 @@ model:
     horizon_bars: 24
     normalize_by_volatility: true
     volatility_col: atr_48
-    clip:
-    - -4.0
-    - 4.0
+    volatility_floor: 1.0e-12
+    clip: [-4.0, 4.0]
     fwd_col: target_future_return_h24_atr
     label_col: target_future_return_h24_atr
   split:
@@ -452,7 +423,6 @@ model:
     embargo_bars: 24
   runtime: {}
   env: {}
-  use_features: true
   pred_prob_col: pred_prob
   pred_raw_prob_col: null
   pred_ret_col: pred_ret
@@ -532,7 +502,7 @@ backtest:
   asset_params: {}
   dynamic_exits: {}
   partial_exits: {}
-  allow_short: true
+  allow_short: false
 portfolio:
   enabled: false
   construction: signal_weights
@@ -591,7 +561,7 @@ diagnostics:
     - 4
     - 8
     - 16
-    volatility_col: atr_pct_rank_192
+    volatility_col: atr_pct_rank_100
   robustness:
     enabled: false
     cost_multipliers:
@@ -647,8 +617,8 @@ execution:
   current_prices: {}
 logging:
   enabled: true
-  run_name: ethusd_30m_trial0041_featadd_vwap_distance_v1
-  output_dir: logs/experiments/foundation_alpha/trial0041_alpha_lab
+  run_name: ethusd_30m_chronos_2_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid
+  output_dir: logs/experiments
   stage_tails:
     enabled: false
     stdout: false
@@ -661,15 +631,18 @@ logging:
   save_model: false
   save_predictions: true
   save_processed: true
+  model_name: ethusd_30m_chronos_2_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid
+  model_install_dir: logs/models
+  install_model: false
 strategy:
-  name: ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid
+  name: ethusd_30m_chronos_2_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid
   timeframe: 30m
   assets:
   - ETHUSD
-  description: 'ETHUSD 30m v3.4-derived hybrid Ehlers trend replacement experiment.
-    Target, signal gates, risk, and backtest logic stay unchanged. The model keeps
-    the strongest long-horizon EMA trend context while replacing redundant EMA ratio
-    features with normalized Ehlers trend/cycle features.
+  description: 'ETHUSD 30m Chronos-2 zero-shot historical-covariate experiment.
+    It preserves the locked LightGBM target, purged split, signal gates, risk and
+    backtest contract while forecasting close_ret from a causal target-plus-covariate
+    context.
 
     '
 validation:
@@ -678,17 +651,3 @@ validation:
   embargo_bars: 24
 evaluation:
   strict_oos_only: true
-research_metadata:
-  lab: ethusd_30m_trial_0041_alpha_lab
-  baseline_source: config/experiments/foundation_alpha/BEST/ethusd/optuna_BEST_ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid.yaml
-  baseline_artifact: logs/experiments/ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_trial_0041_20260712_190851_716023_013d079c
-  family: feature_addition
-  experiment_id: ethusd_30m_trial0041_featadd_vwap_distance_v1
-  parent_experiment: baseline_local_replay
-  hypothesis: Distance from trailing VWAP may distinguish participation-supported
-    moves from mean reversion.
-  expected_effect: Adds a causal 48-bar volume-weighted price distance.
-  phase: screening
-  selection_era: folds_0_to_9
-  leakage_note: Feature values are causal at t; targets are future-only labels and
-    are excluded from model.feature_cols. Screening rankings never read folds 10-16.

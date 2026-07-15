@@ -54,6 +54,15 @@ def _foundation_model_cfg(model_cfg: dict[str, Any]) -> dict[str, Any]:
     cfg.setdefault("use_features", False)
     params = dict(cfg.get("params", {}) or {})
     params["_target_cfg"] = dict(cfg.get("target", {}) or {})
+    params["_use_features"] = bool(cfg["use_features"])
+    cfg["params"] = params
+    return cfg
+
+
+def _chronos2_model_cfg(model_cfg: dict[str, Any]) -> dict[str, Any]:
+    cfg = _foundation_model_cfg(model_cfg)
+    params = dict(cfg["params"])
+    params["_chronos2_covariate_aware"] = True
     cfg["params"] = params
     return cfg
 
@@ -200,14 +209,33 @@ def prepare_forecaster_inputs(
         raise ValueError(f"Unsupported split.method: {split_method}")
 
     target_output_cols = set(str(col) for col in list(target_meta.get("output_cols", []) or []))
+    if bool(model_params.get("_chronos2_covariate_aware", False)):
+        model_params["_target_output_cols"] = sorted(target_output_cols | {str(label_col), str(fwd_col)})
+        model_params["_prediction_output_cols"] = [
+            pred_ret_col,
+            pred_prob_col,
+            str(model_cfg.get("pred_is_oos_col") or "pred_is_oos"),
+        ]
+    feature_exclusions = {label_col, fwd_col, pred_ret_col, pred_prob_col, *target_output_cols}
+    if bool(model_params.get("_chronos2_covariate_aware", False)):
+        feature_exclusions.add(str(model_cfg.get("pred_is_oos_col") or "pred_is_oos"))
     feature_cols = infer_feature_columns(
         out,
         explicit_cols=model_cfg.get("feature_cols"),
         feature_selectors=model_cfg.get("feature_selectors"),
-        exclude={label_col, fwd_col, pred_ret_col, pred_prob_col, *target_output_cols},
+        exclude=feature_exclusions,
     )
     feature_cols = [col for col in feature_cols if col not in target_output_cols]
     use_exogenous_features = bool(model_cfg.get("use_features", True))
+    if bool(model_params.get("_chronos2_covariate_aware", False)) and use_exogenous_features:
+        source_col = str(
+            model_params.get("source_col")
+            or model_params.get("context_col")
+            or target_cfg.get("price_col", "close")
+        )
+        excluded_source_duplicates = [col for col in feature_cols if col == source_col]
+        model_params["_excluded_duplicate_source_cols"] = excluded_source_duplicates
+        feature_cols = [col for col in feature_cols if col != source_col]
     active_feature_cols = feature_cols if use_exogenous_features else []
     if required_features and not active_feature_cols:
         raise ValueError("No feature columns resolved for model training.")
@@ -744,6 +772,42 @@ def train_forward_forecaster(
             "total_trimmed_train_rows": int(total_trimmed_rows),
         },
     }
+    if model_kind == "chronos_2_forecaster" and fold_meta:
+        first_fold = fold_meta[0]
+        context_minima = [
+            int(fold["minimum_context_rows"])
+            for fold in fold_meta
+            if int(fold.get("minimum_context_rows", 0) or 0) > 0
+        ]
+        meta.update(
+            {
+                "model_family": first_fold["model_family"],
+                "model_id": first_fold["model_id"],
+                "zero_shot": True,
+                "source_col": first_fold["source_col"],
+                "source_kind": first_fold["source_kind"],
+                "lookback": first_fold["lookback"],
+                "min_context": first_fold["min_context"],
+                "prediction_length": first_fold["prediction_length"],
+                "target_horizon": first_fold["target_horizon"],
+                "quantiles": first_fold["quantiles"],
+                "use_features": first_fold["use_features"],
+                "covariate_count": first_fold["covariate_count"],
+                "covariate_cols": list(first_fold["covariate_cols"]),
+                "excluded_duplicate_source_cols": list(first_fold["excluded_duplicate_source_cols"]),
+                "foundation_train_rows": int(
+                    sum(int(fold.get("foundation_train_rows", 0) or 0) for fold in fold_meta)
+                ),
+                "foundation_test_samples": int(
+                    sum(int(fold.get("foundation_test_samples", 0) or 0) for fold in fold_meta)
+                ),
+                "test_rows_without_prediction": int(total_test_rows_without_prediction),
+                "minimum_context_rows": int(min(context_minima)) if context_minima else 0,
+                "maximum_context_rows": int(
+                    max(int(fold.get("maximum_context_rows", 0) or 0) for fold in fold_meta)
+                ),
+            }
+        )
     return out, model, meta
 
 
@@ -1163,7 +1227,7 @@ def train_chronos_2_forecaster(
     """
     return train_forward_forecaster(
         df,
-        _foundation_model_cfg(model_cfg),
+        _chronos2_model_cfg(model_cfg),
         model_kind="chronos_2_forecaster",
         fold_predictor=make_chronos2_fold_predictor(),
         returns_col=returns_col,

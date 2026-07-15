@@ -135,6 +135,7 @@ tests/
 !tests/
 tests/*
 !tests/test_architecture_registries.py
+!tests/test_chronos2_covariates.py
 !tests/features/
 !tests/features/*.py
 !tests/signals/
@@ -160,3 +161,5 @@ tests/*
 # Runtime reports and paper/live artifacts are generated outputs.
 reports/
 !reports/.gitkeep
+
+data/raw/dukascopy_30m_clean/btcusd_1m.csv

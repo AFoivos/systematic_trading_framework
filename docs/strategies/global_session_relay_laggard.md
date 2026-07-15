@@ -172,7 +172,7 @@ Long relay candidate απαιτεί score τουλάχιστον `+0.80`, Europe
 2. `asia_to_europe_relay`
 3. `intra_cluster`
 
-Το τελικό `signal_global_session_relay` είναι μόνο `+1.0`, `-1.0` ή `0.0`. Επιπλέον στήλες περιγράφουν `signal_module`, `signal_strength`, `entry_eligible`, `entry_rejection_reason`, cluster direction, laggard gap, relay score και macro score. Οι reasons είναι deterministic, ώστε να μπορούν να ομαδοποιηθούν σε artifacts.
+Το τελικό `signal_global_session_relay` είναι μόνο `+1.0`, `-1.0` ή `0.0`. Τα diagnostics διαχωρίζουν αυστηρά `entry_evaluated` (το ενεργό module εξετάστηκε), `entry_candidate` (πέρασε τα structural κριτήρια) και `entry_eligible` (πέρασε και τα operational/macro vetoes). Το `entry_context_age_bars` είναι η age του συγκεκριμένου module που παρήγαγε το accepted signal· η macro age αποθηκεύεται χωριστά ως `entry_macro_context_age_bars`.
 
 ## Προαιρετικό macro veto της v5
 
@@ -194,7 +194,7 @@ Long relay candidate απαιτεί score τουλάχιστον `+0.80`, Europe
 
 Για long, cluster failure εμφανίζεται όταν το cluster median είναι μη θετικό ή το απόλυτο median είναι μικρότερο από `0.30`. Για short, ισχύει το συμμετρικό μη αρνητικό condition. Relay trades κλείνουν όταν το απαιτούμενο relay context γίνει stale. Intra-cluster trades κλείνουν όταν το target cluster γίνει ineligible.
 
-Υπάρχουν γενικές side-aware στήλες (`relay_dynamic_exit_long`, `relay_dynamic_exit_short`) και module-aware στήλες. Οι δεύτερες εμποδίζουν ένα stale Europe→USA feed να κλείσει κατά λάθος μια intra-cluster θέση USA.
+Υπάρχουν γενικές side-aware στήλες (`relay_dynamic_exit_long`, `relay_dynamic_exit_short`) και side-aware reasons (`relay_dynamic_exit_reason_long`, `relay_dynamic_exit_reason_short`). Κάθε module εκθέτει αντίστοιχα `relay_dynamic_exit_reason_<module>_long|short`. Η προτεραιότητα reason είναι `convergence`, έπειτα `cluster_failure`, έπειτα `stale_context`; failure της αντίθετης πλευράς δεν κλείνει τη θέση. Το legacy `reason_col` παραμένει συμβατό, αλλά τα corrected configs χρησιμοποιούν τα side-specific reason columns.
 
 Η σειρά γεγονότων στο `portfolio_barrier` είναι:
 
@@ -226,7 +226,7 @@ Long relay candidate απαιτεί score τουλάχιστον `+0.80`, Europe
 
 ## Fixed και dynamic universe modes
 
-Στο `fixed` mode κάθε module προσδιορίζει τη δική του native eligible περίοδο από τα assets που χρειάζεται. Για παράδειγμα το USA module εξαρτάται από τα τρία USA assets, όχι από το πότε ξεκίνησε το `ETHUSD`. Το ίδιο ισχύει για energy, metals και Europe.
+Στο `fixed` mode κάθε cluster απαιτεί όλα τα configured members, σε common native-history overlap, με fresh context σε κάθε timestamp. Δεν εξαρτάται από άσχετα macro assets όπως το `ETHUSD`. Στο `dynamic` mode αρκεί fresh subset που περνά το configured `minimum_active_assets`. Τα diagnostics περιλαμβάνουν configured/active member count, active member names, mode και fixed-overlap eligibility.
 
 Στο `dynamic` mode κάθε module ενεργοποιείται αμέσως μόλις ικανοποιήσει το δικό του contract. Η `global_session_relay_laggard_v5_dynamic_universe.yaml` είναι robustness variant της v5 και όχι υποχρεωτικά ο επόμενος επιλεγμένος παραγωγικός κανόνας.
 
@@ -234,7 +234,7 @@ Long relay candidate απαιτεί score τουλάχιστον `+0.80`, Europe
 
 Τα YAML αρχεία βρίσκονται στο `config/experiments/global_session_relay/`:
 
-| Config | Διαφορά από το προηγούμενο |
+| Corrected config | Διαφορά από το προηγούμενο |
 |---|---|
 | v1 | Μόνο intra Europe/USA/energy/metals |
 | v2 | Προσθέτει Europe→USA relay |
@@ -242,6 +242,8 @@ Long relay candidate απαιτεί score τουλάχιστον `+0.80`, Europe
 | v4 | Προσθέτει correlation guard |
 | v5 | Προσθέτει equity-only macro veto |
 | v5 dynamic | Ίδιοι v5 κανόνες με `universe_mode: dynamic` |
+
+Τα legacy YAML χωρίς suffix `*_corrected.yaml` διατηρούνται μόνο ως ιστορικά reproducibility records: δεν αλλάζουν ούτε επανερμηνεύονται. Τα corrected configs δηλώνουν ρητά και τα επτά module flags (το `intra_asia: false`), `allow_short: true`, `max_cost_r: null` και `annualization_mode: calendar_daily`. Η execution διατηρεί το backward-compatible midpoint OHLC behavior.
 
 Το repository δεν υποστηρίζει YAML inheritance/`extends`. Για αυτό κάθε config είναι αυτοτελές και το λογικό parent αναφέρεται στο `research_metadata.parent_experiment`.
 
@@ -256,6 +258,9 @@ Panel runs μπορούν να παράγουν:
 - `panel_signal_diagnostics.csv`,
 - `panel_rejection_reasons.csv`,
 - `correlation_guard_events.csv`, όταν υπάρχουν rejection events.
+- `trade_events.csv` στο root του run, ένα normalized row ανά executed performance trade, με διατηρημένα engine-specific columns.
+
+Με `calendar_daily`, intraday returns compounded ανά UTC day σε πλήρες daily grid, ενώ CAGR/volatility χρησιμοποιούν actual elapsed days και 365.25 ημέρες αντίστοιχα.
 
 Το audit coverage δεν είναι backtest. Ελέγχει αρχή/τέλος ιστορίας, duplicates, gap statistics, spread statistics, pairwise overlap, cluster/module coverage και session coverage. Τα outputs είναι CSV και ένα compact `coverage_summary.json`.
 
@@ -269,10 +274,10 @@ python -m pytest tests/panel/test_global_session_relay.py tests/backtesting/test
 python scripts/audit_dukascopy_30m_panel_coverage.py --input-dir data/raw/dukascopy_30m_clean --output-dir reports/global_session_relay_coverage
 
 # Εκτέλεση του πρώτου research experiment
-python -m src.experiments.runner config/experiments/global_session_relay/global_session_relay_laggard_v1_intra_cluster.yaml
+python -m src.experiments.runner config/experiments/global_session_relay/global_session_relay_laggard_v1_intra_cluster_corrected.yaml
 ```
 
-Η τιμή `periods_per_year: 3276` αντιστοιχεί προσεγγιστικά σε `252 × 13` regular-session 30λεπτα bars. Επειδή το σύμπαν περιέχει αγορές με διαφορετικά ωράρια και coverage, η annualization είναι προσέγγιση και πρέπει να επανεξεταστεί μετά το coverage audit.
+Η legacy τιμή `periods_per_year: 3276` αντιστοιχεί προσεγγιστικά σε `252 × 13` regular-session 30λεπτα bars. Τα corrected configs κρατούν το πεδίο για compatibility, αλλά η reported annualization τους είναι `calendar_daily`.
 
 ## Περιορισμοί
 

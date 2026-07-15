@@ -246,8 +246,11 @@ def default_backtest_block(
     backtest.setdefault("returns_type", "simple")
     backtest.setdefault("missing_return_policy", "raise_if_exposed")
     backtest.setdefault("min_holding_bars", 0)
-    backtest.setdefault("allow_short", False)
     if str(backtest.get("engine", "vectorized")) == "portfolio_barrier":
+        # portfolio_barrier historically accepted negative signals even though the generic
+        # backtest default was false. Keep legacy YAML behaviour explicit at resolution time;
+        # new research configs must set this field themselves.
+        backtest.setdefault("allow_short", True)
         backtest.setdefault("open_col", "open")
         backtest.setdefault("high_col", "high")
         backtest.setdefault("low_col", "low")
@@ -260,6 +263,9 @@ def default_backtest_block(
         backtest.setdefault("tie_break", "closest_to_open")
         backtest.setdefault("event_time_remap_policy", "next_aligned")
         backtest.setdefault("max_cost_r", None)
+        backtest.setdefault("annualization_mode", "fixed_periods")
+    else:
+        backtest.setdefault("allow_short", False)
     return backtest
 
 

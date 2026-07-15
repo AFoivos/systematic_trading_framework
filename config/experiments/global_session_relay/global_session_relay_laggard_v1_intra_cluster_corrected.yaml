@@ -1,4 +1,4 @@
-strategy: {name: global_session_relay_laggard_v2_europe_to_usa, timeframe: 30m}
+strategy: {name: global_session_relay_laggard_v1_intra_cluster_corrected, timeframe: 30m}
 data:
   source: dukascopy_csv
   interval: 30m
@@ -14,40 +14,28 @@ features:
 panel_features: [{step: global_session_relay, params: {interval_minutes: 30, entry_window_bars: 4, cluster_context_max_age_bars: 8, relay_context_max_age_bars: 8, macro_context_max_age_bars: 4, universe_mode: fixed}}]
 model: {kind: none}
 signals: {kind: none}
-panel_signals: [{step: global_session_relay_laggard, params: {signal_col: signal_global_session_relay, atr_col: atr_20, volatility_col: vol_rolling_96, context_only_assets: [ETHUSD, EURUSD], enabled_modules: {intra_europe: true, intra_usa: true, intra_energy: true, intra_metals: true, asia_to_europe_relay: false, europe_to_usa_relay: true}, macro_veto: {enabled: false}}}]
+panel_signals: [{step: global_session_relay_laggard, params: {signal_col: signal_global_session_relay, atr_col: atr_20, volatility_col: vol_rolling_96, context_only_assets: [ETHUSD, EURUSD], enabled_modules: {intra_asia: true, intra_europe: true, intra_usa: true, intra_energy: true, intra_metals: false, asia_to_europe_relay: false, europe_to_usa_relay: false}, macro_veto: {enabled: false}}}]
 risk: {target_vol: null, dd_guard: {enabled: false}, portfolio_guard: {enabled: true, max_open_trades: 3, group_max_open_trades: {asia: 1, europe: 1, usa: 1, energy: 1, metals: 1}}}
-backtest:
+backtest: &corrected_backtest
   engine: portfolio_barrier
   signal_col: signal_global_session_relay
   returns_col: close_ret
   returns_type: simple
   subset: full
   periods_per_year: 3276
+  annualization_mode: calendar_daily
   entry_price_mode: next_open
+  allow_short: true
   volatility_col: atr_20
   profit_barrier_r: 1.75
   stop_barrier_r: 1.25
   vertical_barrier_bars: 8
   tie_break: stop
   min_holding_bars: 0
-  dynamic_exit: {enabled: true, long_exit_col: relay_dynamic_exit_long, short_exit_col: relay_dynamic_exit_short, reason_col: relay_dynamic_exit_reason, execution: next_open, module_col: signal_module, module_exit_columns: {intra_cluster: {long_exit_col: relay_dynamic_exit_intra_cluster_long, short_exit_col: relay_dynamic_exit_intra_cluster_short, reason_col: relay_dynamic_exit_reason_intra_cluster}, asia_to_europe_relay: {long_exit_col: relay_dynamic_exit_asia_to_europe_long, short_exit_col: relay_dynamic_exit_asia_to_europe_short, reason_col: relay_dynamic_exit_reason_asia_to_europe}, europe_to_usa_relay: {long_exit_col: relay_dynamic_exit_europe_to_usa_long, short_exit_col: relay_dynamic_exit_europe_to_usa_short, reason_col: relay_dynamic_exit_reason_europe_to_usa}}}
+  max_cost_r: null
+  dynamic_exit: {enabled: true, long_exit_col: relay_dynamic_exit_long, short_exit_col: relay_dynamic_exit_short, long_reason_col: relay_dynamic_exit_reason_long, short_reason_col: relay_dynamic_exit_reason_short, execution: next_open, module_col: signal_module, module_exit_columns: {intra_cluster: {long_exit_col: relay_dynamic_exit_intra_cluster_long, short_exit_col: relay_dynamic_exit_intra_cluster_short, long_reason_col: relay_dynamic_exit_reason_intra_cluster_long, short_reason_col: relay_dynamic_exit_reason_intra_cluster_short}, asia_to_europe_relay: {long_exit_col: relay_dynamic_exit_asia_to_europe_long, short_exit_col: relay_dynamic_exit_asia_to_europe_short, long_reason_col: relay_dynamic_exit_reason_asia_to_europe_long, short_reason_col: relay_dynamic_exit_reason_asia_to_europe_short}, europe_to_usa_relay: {long_exit_col: relay_dynamic_exit_europe_to_usa_long, short_exit_col: relay_dynamic_exit_europe_to_usa_short, long_reason_col: relay_dynamic_exit_reason_europe_to_usa_long, short_reason_col: relay_dynamic_exit_reason_europe_to_usa_short}}}
   correlation_guard: {enabled: false}
   asset_params: {AUS200: {risk_per_trade: 0.0025}, BRENT: {risk_per_trade: 0.0025}, EU50: {risk_per_trade: 0.0025}, FRA40: {risk_per_trade: 0.0025}, GER40: {risk_per_trade: 0.0025}, NIKKEI225: {risk_per_trade: 0.0025}, SPX500: {risk_per_trade: 0.0025}, UK100: {risk_per_trade: 0.0025}, US30: {risk_per_trade: 0.0025}, US100: {risk_per_trade: 0.0025}, USOIL: {risk_per_trade: 0.0025}, XAGUSD: {risk_per_trade: 0.0025}, XAUUSD: {risk_per_trade: 0.0025}}
-portfolio:
-  enabled: true
-  construction: signal_weights
-  gross_target: 0.75
-  long_short: true
-  asset_groups: {AUS200: asia, NIKKEI225: asia, EU50: europe, GER40: europe, FRA40: europe, UK100: europe, SPX500: usa, US30: usa, US100: usa, BRENT: energy, USOIL: energy, XAUUSD: metals, XAGUSD: metals, EURUSD: macro, ETHUSD: macro}
-  constraints: {min_weight: -0.25, max_weight: 0.25, max_gross_leverage: 0.75, target_net_exposure: 0.0, enforce_target_net_exposure: false, turnover_limit: null, group_max_exposure: {asia: 0.25, europe: 0.25, usa: 0.25, energy: 0.25, metals: 0.25, macro: 0.000001}}
-logging: {enabled: true, run_name: global_session_relay_laggard_v2_europe_to_usa, output_dir: logs/experiments}
-research_metadata:
-  family: global_session_relay_laggard
-  strategy_type: deterministic_multi_asset
-  timeframe: 30m
-  universe_mode: fixed
-  parent_experiment: global_session_relay_laggard_v1_intra_cluster
-  hypothesis: Add only Europe-to-USA session relay entries to the frozen v1 rules.
-  selection_note: Parameters are frozen before examining experiment results.
-  leakage_note: All panel inputs are causal, timestamped, age-limited context; execution uses the next real asset open.
-  unequal_history_note: Module eligibility uses only each module's required native asset histories.
+portfolio: {enabled: true, construction: signal_weights, gross_target: 0.75, long_short: true, asset_groups: {AUS200: asia, NIKKEI225: asia, EU50: europe, GER40: europe, FRA40: europe, UK100: europe, SPX500: usa, US30: usa, US100: usa, BRENT: energy, USOIL: energy, XAUUSD: metals, XAGUSD: metals, EURUSD: macro, ETHUSD: macro}, constraints: {min_weight: -0.25, max_weight: 0.25, max_gross_leverage: 0.75, target_net_exposure: 0.0, enforce_target_net_exposure: false, turnover_limit: null, group_max_exposure: {asia: 0.25, europe: 0.25, usa: 0.25, energy: 0.25, metals: 0.25, macro: 0.000001}}}
+logging: {enabled: true, run_name: global_session_relay_laggard_v1_intra_cluster_corrected, output_dir: logs/experiments}
+research_metadata: {family: global_session_relay_laggard, strategy_type: deterministic_multi_asset, timeframe: 30m, universe_mode: fixed, corrected_from: global_session_relay_laggard_v1_intra_cluster, legacy_semantics_note: "Legacy YAML is retained unchanged; this corrected config has explicit activation, midpoint execution, and calendar-daily annualization."}

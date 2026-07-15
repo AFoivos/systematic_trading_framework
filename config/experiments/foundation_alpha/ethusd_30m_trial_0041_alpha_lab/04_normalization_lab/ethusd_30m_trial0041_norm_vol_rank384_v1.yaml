@@ -580,9 +580,9 @@ diagnostics:
     - 4
     - 8
     - 16
-    volatility_col: atr_pct_rank_100
+    volatility_col: atr_pct_rank_192
   robustness:
-    enabled: true
+    enabled: false
     cost_multipliers:
     - 1.0
     - 2.0

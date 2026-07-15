@@ -20,7 +20,6 @@ def _bar_frame(index: pd.DatetimeIndex, signal: pd.Series) -> pd.DataFrame:
         index=index,
     )
 
-
 def test_dynamic_exit_executes_at_next_real_open_before_intrabar_stop() -> None:
     index = pd.date_range("2024-01-02", periods=5, freq="30min")
     frame = _bar_frame(index, pd.Series([1.0, 0.0, 0.0, 0.0, 0.0], index=index))
@@ -57,3 +56,36 @@ def test_same_side_correlation_guard_rejects_using_t_minus_one_intersection() ->
     assert len(performance.trades) == 1
     assert meta["correlation_guard"]["rejections"] == 1
     assert meta["correlation_guard_events"][0]["entry_correlation_rejected_against"] == "A"
+
+
+def test_allow_short_blocks_only_negative_signals() -> None:
+    index = pd.date_range("2024-01-02", periods=5, freq="30min")
+    signal = pd.Series([-1.0, 0.0, 0.0, 0.0, 0.0], index=index)
+    blocked, _, _, blocked_meta = run_portfolio_barrier_backtest(
+        {"A": _bar_frame(index, signal)}, signal_col="signal", volatility_col="atr_20",
+        vertical_barrier_bars=3, allow_short=False,
+    )
+    allowed, _, _, _ = run_portfolio_barrier_backtest(
+        {"A": _bar_frame(index, signal)}, signal_col="signal", volatility_col="atr_20",
+        vertical_barrier_bars=3, allow_short=True,
+    )
+    assert blocked.trades.empty
+    assert blocked_meta["skipped_short_disabled"] == 1
+    assert len(allowed.trades) == 1
+
+
+def test_dynamic_exit_uses_actual_side_specific_reason() -> None:
+    index = pd.date_range("2024-01-02", periods=5, freq="30min")
+    signal = pd.Series([-1.0, 0.0, 0.0, 0.0, 0.0], index=index)
+    frame = _bar_frame(index, signal)
+    frame["signal_module"] = "intra_cluster"
+    frame["exit_long"] = [False, True, False, False, False]
+    frame["exit_short"] = [False, True, False, False, False]
+    frame["reason_long"] = [pd.NA, "stale_context", pd.NA, pd.NA, pd.NA]
+    frame["reason_short"] = [pd.NA, "cluster_failure", pd.NA, pd.NA, pd.NA]
+    performance, _, _, _ = run_portfolio_barrier_backtest(
+        {"A": frame}, signal_col="signal", volatility_col="atr_20", vertical_barrier_bars=3,
+        profit_barrier_r=10.0, stop_barrier_r=10.0,
+        dynamic_exit={"enabled": True, "long_exit_col": "exit_long", "short_exit_col": "exit_short", "long_reason_col": "reason_long", "short_reason_col": "reason_short"},
+    )
+    assert performance.trades.iloc[0]["exit_reason"] == "cluster_failure"

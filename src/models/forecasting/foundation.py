@@ -323,6 +323,204 @@ def _build_context_batch(
     )
 
 
+def _resolve_chronos2_covariate_cols(
+    feature_cols: list[str],
+    *,
+    spec: FoundationForecastSpec,
+    target_col: str,
+    model_params: dict[str, Any],
+) -> tuple[list[str], list[str]]:
+    """Resolve Chronos-2 past-only covariates without duplicating the target series."""
+    if not bool(model_params.get("_use_features", False)):
+        return [], []
+
+    excluded = {
+        spec.source_col,
+        target_col,
+        *(str(value) for value in model_params.get("_target_output_cols", []) or []),
+        *(str(value) for value in model_params.get("_prediction_output_cols", []) or []),
+    }
+    source_duplicates = [str(col) for col in feature_cols if str(col) == spec.source_col]
+    covariate_cols = [str(col) for col in feature_cols if str(col) not in excluded]
+    if not covariate_cols:
+        raise ValueError(
+            "chronos_2_forecaster with use_features=true requires at least one resolved "
+            "past covariate after excluding source and target/prediction output columns."
+        )
+    return covariate_cols, source_duplicates
+
+
+def _chronos2_context_timestamps(
+    full_df: pd.DataFrame,
+    *,
+    start: int,
+    end: int,
+    freq: str,
+) -> pd.DatetimeIndex:
+    index = full_df.index[start : end + 1]
+    if isinstance(index, pd.DatetimeIndex):
+        return pd.DatetimeIndex(index)
+    return pd.date_range("2000-01-01", periods=len(index), freq=freq)
+
+
+def _build_chronos2_context_frame(
+    full_df: pd.DataFrame,
+    *,
+    row_idx: int,
+    spec: FoundationForecastSpec,
+    covariate_cols: list[str],
+    freq: str,
+) -> tuple[pd.DataFrame | None, dict[str, Any]]:
+    """Build one causal target-plus-covariate context using a finite trailing suffix."""
+    start = max(0, int(row_idx) - spec.lookback + 1)
+    end = int(row_idx)
+    value_columns = [spec.source_col, *covariate_cols]
+    numeric_context = pd.DataFrame(
+        {
+            column: pd.to_numeric(full_df.iloc[start : end + 1][column], errors="coerce")
+            for column in value_columns
+        }
+    )
+    finite_rows = np.isfinite(numeric_context.to_numpy(dtype=float)).all(axis=1)
+    last_invalid = np.flatnonzero(~finite_rows)
+    suffix_start = int(last_invalid[-1] + 1) if len(last_invalid) else 0
+    context = numeric_context.iloc[suffix_start:].copy()
+    context_start = start + suffix_start
+    metadata: dict[str, Any] = {
+        "origin_position": end,
+        "context_start": context_start,
+        "context_end": end,
+        "context_rows": int(len(context)),
+        "dropped_reason": None,
+    }
+    if len(context) < spec.min_context:
+        metadata["dropped_reason"] = "insufficient_contiguous_finite_context"
+        return None, metadata
+    if spec.source_kind == "price" and abs(float(context[spec.source_col].iloc[-1])) <= 1e-12:
+        metadata["dropped_reason"] = "non_positive_or_zero_terminal_price"
+        return None, metadata
+
+    context.insert(
+        0,
+        "timestamp",
+        _chronos2_context_timestamps(full_df, start=context_start, end=end, freq=freq),
+    )
+    return context, metadata
+
+
+def _build_chronos2_prediction_batch(
+    full_df: pd.DataFrame,
+    test_idx: np.ndarray,
+    spec: FoundationForecastSpec,
+    covariate_cols: list[str],
+    *,
+    freq: str,
+) -> tuple[pd.DataFrame, np.ndarray, np.ndarray, pd.Index, list[str], dict[str, Any]]:
+    """Create independent Chronos-2 items, one for each causal forecast origin."""
+    context_frames: list[pd.DataFrame] = []
+    row_positions: list[int] = []
+    last_values: list[float] = []
+    out_index: list[Any] = []
+    item_ids: list[str] = []
+    context_lengths: list[int] = []
+    dropped_reasons: dict[str, int] = {}
+
+    for raw_idx in np.asarray(test_idx, dtype=int):
+        context, context_meta = _build_chronos2_context_frame(
+            full_df,
+            row_idx=int(raw_idx),
+            spec=spec,
+            covariate_cols=covariate_cols,
+            freq=freq,
+        )
+        if context is None:
+            reason = str(context_meta["dropped_reason"])
+            dropped_reasons[reason] = dropped_reasons.get(reason, 0) + 1
+            continue
+
+        item_id = f"chronos2_origin_{int(raw_idx)}"
+        batch_frame = context.rename(columns={spec.source_col: "target"})
+        batch_frame.insert(0, "item_id", item_id)
+        context_frames.append(batch_frame[["item_id", "timestamp", "target", *covariate_cols]])
+        row_positions.append(int(raw_idx))
+        last_values.append(float(context[spec.source_col].iloc[-1]))
+        out_index.append(full_df.index[int(raw_idx)])
+        item_ids.append(item_id)
+        context_lengths.append(int(context_meta["context_rows"]))
+
+    columns = ["item_id", "timestamp", "target", *covariate_cols]
+    context_df = (
+        pd.concat(context_frames, ignore_index=True)
+        if context_frames
+        else pd.DataFrame(columns=columns)
+    )
+    batch_meta = {
+        "foundation_test_samples": int(len(item_ids)),
+        "test_rows_without_prediction": int(len(test_idx) - len(item_ids)),
+        "minimum_context_rows": int(min(context_lengths)) if context_lengths else 0,
+        "maximum_context_rows": int(max(context_lengths)) if context_lengths else 0,
+        "dropped_context_reasons": dropped_reasons,
+        "sample_item_ids": item_ids,
+    }
+    return (
+        context_df,
+        np.asarray(row_positions, dtype=int),
+        np.asarray(last_values, dtype=float),
+        pd.Index(out_index),
+        item_ids,
+        batch_meta,
+    )
+
+
+def _parse_chronos2_forecast_frame(
+    forecast_df: pd.DataFrame,
+    *,
+    item_ids: list[str],
+    spec: FoundationForecastSpec,
+) -> tuple[np.ndarray, dict[float, np.ndarray]]:
+    required_cols = {"item_id", "predictions", *(str(q) for q in spec.quantiles)}
+    missing_cols = sorted(required_cols - set(forecast_df.columns))
+    if missing_cols:
+        raise KeyError(f"Chronos-2 predict_df output is missing columns: {missing_cols}")
+
+    forecasts = forecast_df.copy()
+    forecasts["item_id"] = forecasts["item_id"].astype(str)
+    point_rows: list[np.ndarray] = []
+    quantile_rows: dict[float, list[np.ndarray]] = {q: [] for q in spec.quantiles}
+    for item_id in item_ids:
+        item = forecasts.loc[forecasts["item_id"] == item_id]
+        if "timestamp" in item.columns:
+            item = item.sort_values("timestamp", kind="stable")
+        if len(item) < spec.prediction_length:
+            raise ValueError(
+                "Chronos-2 predict_df returned too few rows for "
+                f"{item_id}: {len(item)} < {spec.prediction_length}."
+            )
+        item = item.iloc[: spec.prediction_length]
+        point_rows.append(pd.to_numeric(item["predictions"], errors="coerce").to_numpy(dtype=float))
+        for quantile in spec.quantiles:
+            quantile_rows[quantile].append(
+                pd.to_numeric(item[str(quantile)], errors="coerce").to_numpy(dtype=float)
+            )
+
+    point_forecast = _matrix(
+        np.vstack(point_rows),
+        expected_rows=len(item_ids),
+        horizon=spec.prediction_length,
+        name="chronos2_predictions",
+    )
+    quantile_forecasts = {
+        quantile: _matrix(
+            np.vstack(values),
+            expected_rows=len(item_ids),
+            horizon=spec.prediction_length,
+            name=f"chronos2_quantile_{quantile}",
+        )
+        for quantile, values in quantile_rows.items()
+    }
+    return point_forecast, quantile_forecasts
+
+
 def _chronos_common_meta(
     *,
     spec: FoundationForecastSpec,
@@ -506,32 +704,64 @@ def make_chronos2_fold_predictor(
         model_params: dict[str, Any],
         runtime_meta: dict[str, Any],
     ) -> tuple[pd.Series, dict[str, pd.Series], object, dict[str, Any]]:
-        del feature_cols, target_col, runtime_meta
+        del runtime_meta
         spec = _resolve_spec(
             full_df,
             model_params,
             model_family="chronos_2",
             default_model_id=default_model_id,
         )
-        contexts, row_positions, last_values, index = _build_context_batch(full_df, test_idx, spec)
+        covariate_cols, source_duplicates = _resolve_chronos2_covariate_cols(
+            feature_cols,
+            spec=spec,
+            target_col=target_col,
+            model_params=model_params,
+        )
+        source_duplicates = list(
+            dict.fromkeys(
+                [
+                    *model_params.get("_excluded_duplicate_source_cols", []),
+                    *source_duplicates,
+                ]
+            )
+        )
+        freq = str(model_params.get("freq", "D"))
+        context_df, row_positions, last_values, index, item_ids, batch_meta = _build_chronos2_prediction_batch(
+            full_df,
+            test_idx,
+            spec,
+            covariate_cols,
+            freq=freq,
+        )
         pipeline = _load_pipeline(model_params)
-        if not contexts:
+        fold_meta = _chronos_common_meta(
+            spec=spec,
+            train_idx=train_idx,
+            contexts=[np.empty(0)] * len(item_ids),
+            model_params=model_params,
+        )
+        fold_meta.update(
+            {
+                "use_features": bool(model_params.get("_use_features", False)),
+                "covariate_count": int(len(covariate_cols)),
+                "covariate_cols": list(covariate_cols),
+                "excluded_duplicate_source_cols": source_duplicates,
+                "selected_feature_count": int(len(covariate_cols)),
+                "model_feature_count": int(len(covariate_cols)),
+                "actual_model_feature_count": int(len(covariate_cols)),
+                "reported_feature_count": int(len(covariate_cols)),
+                "final_feature_names": list(covariate_cols),
+                **batch_meta,
+            }
+        )
+        if not item_ids:
             return (
                 pd.Series(dtype="float32", index=index),
                 {},
                 pipeline,
-                _chronos_common_meta(spec=spec, train_idx=train_idx, contexts=contexts, model_params=model_params),
+                fold_meta,
             )
 
-        rows: list[dict[str, Any]] = []
-        freq = str(model_params.get("freq", "D"))
-        for item_id, context in enumerate(contexts):
-            timestamps = pd.date_range("2000-01-01", periods=len(context), freq=freq)
-            rows.extend(
-                {"item_id": str(item_id), "timestamp": ts, "target": float(value)}
-                for ts, value in zip(timestamps, context)
-            )
-        context_df = pd.DataFrame(rows)
         forecast_df = pipeline.predict_df(
             context_df,
             id_column="item_id",
@@ -540,33 +770,15 @@ def make_chronos2_fold_predictor(
             prediction_length=spec.prediction_length,
             quantile_levels=list(spec.quantiles),
             batch_size=int(model_params.get("batch_size", 256)),
+            cross_learning=False,
             validate_inputs=bool(model_params.get("validate_inputs", False)),
             freq=freq,
         )
-        forecast_df["item_id"] = forecast_df["item_id"].astype(str)
-        point_rows: list[np.ndarray] = []
-        quantile_rows: dict[float, list[np.ndarray]] = {q: [] for q in spec.quantiles}
-        for item_id in range(len(contexts)):
-            item = forecast_df.loc[forecast_df["item_id"] == str(item_id)].head(spec.prediction_length)
-            point_rows.append(pd.to_numeric(item["predictions"], errors="coerce").to_numpy(dtype=float))
-            for q in spec.quantiles:
-                quantile_rows[q].append(pd.to_numeric(item[str(q)], errors="coerce").to_numpy(dtype=float))
-
-        point_forecast = _matrix(
-            np.vstack(point_rows),
-            expected_rows=len(contexts),
-            horizon=spec.prediction_length,
-            name="chronos2_predictions",
+        point_forecast, quantile_forecasts = _parse_chronos2_forecast_frame(
+            forecast_df,
+            item_ids=item_ids,
+            spec=spec,
         )
-        quantile_forecasts = {
-            q: _matrix(
-                np.vstack(values),
-                expected_rows=len(contexts),
-                horizon=spec.prediction_length,
-                name=f"chronos2_quantile_{q}",
-            )
-            for q, values in quantile_rows.items()
-        }
         pred_ret, extra_cols = _assemble_prediction_output(
             index=index,
             row_positions=row_positions,
@@ -580,7 +792,7 @@ def make_chronos2_fold_predictor(
             pred_ret,
             extra_cols,
             pipeline,
-            _chronos_common_meta(spec=spec, train_idx=train_idx, contexts=contexts, model_params=model_params),
+            fold_meta,
         )
 
     return _predictor

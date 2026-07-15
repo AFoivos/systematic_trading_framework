@@ -14,6 +14,7 @@ from src.utils.config_kinds import (
     TARGET_KINDS,
 )
 from src.utils.repro import RuntimeConfigError, validate_runtime_config
+from src.signals.panel.global_session_relay_laggard import GLOBAL_SESSION_RELAY_ENABLED_MODULES
 
 _RL_SINGLE_ASSET_DQN_KINDS = {"dqn_agent"}
 _RL_PORTFOLIO_DQN_KINDS = {"dqn_portfolio_agent"}
@@ -233,6 +234,83 @@ def _validate_foundation_forecaster_params(kind: str, params: dict[str, Any]) ->
         ):
             if key in params and not isinstance(params[key], bool):
                 raise ConfigValidationError(f"model.params.{key} must be boolean.")
+
+
+def _chronos2_target_output_columns(target: dict[str, Any]) -> set[str]:
+    columns = {
+        str(value)
+        for key, value in target.items()
+        if key in _TARGET_OUTPUT_KEYS and isinstance(value, str) and value.strip()
+    }
+    outputs = target.get("outputs", {}) or {}
+    if isinstance(outputs, dict):
+        columns.update(
+            str(value)
+            for key, value in outputs.items()
+            if key in _TARGET_OUTPUT_KEYS and isinstance(value, str) and value.strip()
+        )
+    return columns
+
+
+def _chronos2_prediction_output_columns(model: dict[str, Any]) -> set[str]:
+    output_keys = {"pred_ret_col", "pred_prob_col", "pred_raw_prob_col", "pred_is_oos_col"}
+    outputs = model.get("outputs", {}) or {}
+    columns = {
+        str(value)
+        for key, value in dict(outputs).items()
+        if key in output_keys and isinstance(value, str) and value.strip()
+    }
+    columns.update(
+        str(model[key])
+        for key in output_keys
+        if isinstance(model.get(key), str) and str(model[key]).strip()
+    )
+    columns.update({"pred_ret", "pred_prob", "pred_is_oos"})
+    return columns
+
+
+def _validate_chronos2_covariate_contract(model: dict[str, Any], target: dict[str, Any]) -> None:
+    """Validate the explicit part of Chronos-2's past-covariate contract."""
+    use_features = model.get("use_features", False)
+    if not isinstance(use_features, bool):
+        raise ConfigValidationError("model.use_features must be boolean for chronos_2_forecaster.")
+
+    feature_cols = model.get("feature_cols")
+    if feature_cols is not None:
+        duplicates = sorted({column for column in feature_cols if feature_cols.count(column) > 1})
+        if duplicates:
+            raise ConfigValidationError(
+                "chronos_2_forecaster model.feature_cols must not contain duplicates: "
+                f"{duplicates}."
+            )
+
+    params = dict(model.get("params", {}) or {})
+    source_col = str(
+        params.get("source_col")
+        or params.get("context_col")
+        or target.get("price_col", "close")
+    )
+    target_outputs = _chronos2_target_output_columns(target)
+    explicit_features = [str(column) for column in list(feature_cols or [])]
+    invalid_target_features = sorted(set(explicit_features) & target_outputs)
+    if invalid_target_features:
+        raise ConfigValidationError(
+            "chronos_2_forecaster model.feature_cols cannot contain target or label output columns: "
+            f"{invalid_target_features}."
+        )
+
+    if not use_features:
+        return
+
+    prediction_outputs = _chronos2_prediction_output_columns(model)
+    excluded = {source_col, *target_outputs, *prediction_outputs}
+    if feature_cols is not None and not model.get("feature_selectors"):
+        usable_covariates = [column for column in explicit_features if column not in excluded]
+        if not usable_covariates:
+            raise ConfigValidationError(
+                "chronos_2_forecaster with model.use_features=true requires at least one "
+                "usable covariate after excluding source and target/prediction outputs."
+            )
 
 
 def _validate_tsfresh_extrema_discovery_params(params: dict[str, Any]) -> None:
@@ -2354,11 +2432,12 @@ def validate_model_block(model: dict[str, Any]) -> None:
         if feature_cols is not None:
             if (
                 not isinstance(feature_cols, list)
-                or not feature_cols
+                or (not feature_cols and model["kind"] != "chronos_2_forecaster")
                 or any(not isinstance(col, str) or not col.strip() for col in feature_cols)
             ):
                 raise ConfigValidationError(
-                    "model.feature_cols must be a non-empty list[str] when provided."
+                    "model.feature_cols must be a non-empty list[str] when provided, except that "
+                    "chronos_2_forecaster permits [] for univariate mode."
                 )
         _validate_feature_selectors(model.get("feature_selectors"), field="model.feature_selectors")
 
@@ -2749,6 +2828,8 @@ def validate_model_block(model: dict[str, Any]) -> None:
                     raise ConfigValidationError("model.params.embedding_prefix must be a non-empty string.")
         if model["kind"] in _FOUNDATION_FORECASTER_MODEL_KINDS:
             _validate_foundation_forecaster_params(model["kind"], dict(model.get("params", {}) or {}))
+        if model["kind"] == "chronos_2_forecaster":
+            _validate_chronos2_covariate_contract(model, target)
 
         params = model.get("params", {}) or {}
         if not isinstance(params, dict):
@@ -3728,6 +3809,8 @@ def validate_backtest_block(backtest: dict[str, Any]) -> None:
         if atr_trailing_enabled and not backtest.get("vol_col"):
             raise ConfigValidationError("backtest.dynamic_exits.atr_trailing requires backtest.vol_col.")
     if engine == "portfolio_barrier":
+        if "allow_short" in backtest and not isinstance(backtest.get("allow_short"), bool):
+            raise ConfigValidationError("backtest.allow_short must be boolean.")
         for key in ("open_col", "high_col", "low_col", "close_col", "volatility_col"):
             if key in backtest and not isinstance(backtest[key], str):
                 raise ConfigValidationError(f"backtest.{key} must be a string.")
@@ -3736,6 +3819,11 @@ def validate_backtest_block(backtest: dict[str, Any]) -> None:
         entry_price_mode = str(backtest.get("entry_price_mode", "next_open"))
         if entry_price_mode not in {"current_close", "next_open"}:
             raise ConfigValidationError("backtest.entry_price_mode must be 'current_close' or 'next_open'.")
+        annualization_mode = str(backtest.get("annualization_mode", "fixed_periods"))
+        if annualization_mode not in {"fixed_periods", "calendar_daily"}:
+            raise ConfigValidationError(
+                "backtest.annualization_mode must be 'fixed_periods' or 'calendar_daily'."
+            )
         tie_break = str(backtest.get("tie_break", "closest_to_open"))
         if tie_break not in {"closest_to_open", "profit", "stop"}:
             raise ConfigValidationError("backtest.tie_break must be 'closest_to_open', 'profit', or 'stop'.")
@@ -3799,7 +3887,7 @@ def _validate_portfolio_barrier_dynamic_exit(dynamic_exit: Any) -> None:
         return
     if dynamic_exit.get("execution", "next_open") != "next_open":
         raise ConfigValidationError("backtest.dynamic_exit.execution currently supports only 'next_open'.")
-    for key in ("long_exit_col", "short_exit_col", "reason_col"):
+    for key in ("long_exit_col", "short_exit_col"):
         value = dynamic_exit.get(key)
         if not isinstance(value, str) or not value.strip():
             raise ConfigValidationError(f"backtest.dynamic_exit.{key} must be a non-empty string.")
@@ -3809,7 +3897,22 @@ def _validate_portfolio_barrier_dynamic_exit(dynamic_exit: Any) -> None:
     for module, values in modules.items():
         if not isinstance(module, str) or not module.strip() or not isinstance(values, dict):
             raise ConfigValidationError("backtest.dynamic_exit.module_exit_columns must map non-empty names to mappings.")
-        for key in ("long_exit_col", "short_exit_col", "reason_col"):
+    legacy_reason = dynamic_exit.get("reason_col")
+    side_reasons = (dynamic_exit.get("long_reason_col"), dynamic_exit.get("short_reason_col"))
+    if not (
+        isinstance(legacy_reason, str)
+        and legacy_reason.strip()
+    ) and not all(isinstance(value, str) and value.strip() for value in side_reasons):
+        raise ConfigValidationError(
+            "backtest.dynamic_exit requires reason_col or both long_reason_col and short_reason_col."
+        )
+    for key in ("reason_col", "long_reason_col", "short_reason_col"):
+        if key in dynamic_exit and (
+            not isinstance(dynamic_exit[key], str) or not dynamic_exit[key].strip()
+        ):
+            raise ConfigValidationError(f"backtest.dynamic_exit.{key} must be a non-empty string.")
+    for module, values in modules.items():
+        for key in ("long_exit_col", "short_exit_col", "reason_col", "long_reason_col", "short_reason_col"):
             if key in values and (not isinstance(values[key], str) or not values[key].strip()):
                 raise ConfigValidationError(
                     f"backtest.dynamic_exit.module_exit_columns.{module}.{key} must be a non-empty string."
@@ -4494,6 +4597,11 @@ def validate_panel_signals_block(panel_signals: Any, *, symbols: set[str]) -> No
         enabled_modules = params.get("enabled_modules", {}) or {}
         if not isinstance(enabled_modules, dict) or any(not isinstance(value, bool) for value in enabled_modules.values()):
             raise ConfigValidationError("panel_signals[].params.enabled_modules must map names to booleans.")
+        unknown_modules = sorted(set(enabled_modules) - GLOBAL_SESSION_RELAY_ENABLED_MODULES)
+        if unknown_modules:
+            raise ConfigValidationError(
+                f"panel_signals[].params.enabled_modules has unsupported modules: {unknown_modules}."
+            )
 
 
 def validate_resolved_config(cfg: dict[str, Any]) -> dict[str, Any]:
@@ -4518,6 +4626,20 @@ def validate_resolved_config(cfg: dict[str, Any]) -> dict[str, Any]:
     validate_risk_block(cfg["risk"])
     validate_backtest_block(cfg["backtest"])
     validate_portfolio_block(cfg["portfolio"])
+    if (
+        str(cfg["backtest"].get("engine", "vectorized")) == "portfolio_barrier"
+        and bool(cfg["portfolio"].get("long_short", True))
+        and not bool(cfg["backtest"].get("allow_short", False))
+        and any(
+            str(step.get("step", "")) == "global_session_relay_laggard"
+            for step in list(cfg.get("panel_signals", []) or [])
+            if isinstance(step, dict)
+        )
+    ):
+        raise ConfigValidationError(
+            "portfolio.long_short=true is incompatible with backtest.allow_short=false for "
+            "global_session_relay_laggard, which can emit negative signals."
+        )
     validate_monitoring_block(cfg["monitoring"])
     validate_diagnostics_block(cfg.get("diagnostics", {}))
     validate_execution_block(cfg["execution"])

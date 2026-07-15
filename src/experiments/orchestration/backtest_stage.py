@@ -343,6 +343,8 @@ def run_portfolio_backtest(
             cost_per_turnover=float(risk_cfg.get("cost_per_turnover", 0.0)),
             slippage_per_turnover=float(risk_cfg.get("slippage_per_turnover", 0.0)),
             periods_per_year=int(backtest_cfg.get("periods_per_year", 252)),
+            annualization_mode=str(backtest_cfg.get("annualization_mode", "fixed_periods")),
+            allow_short=bool(backtest_cfg.get("allow_short", True)),
             asset_params=dict(backtest_cfg.get("asset_params", {}) or {}),
             asset_to_group=asset_groups or None,
             portfolio_guard=dict(risk_cfg.get("portfolio_guard", {}) or {}),
