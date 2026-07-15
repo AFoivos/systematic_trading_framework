@@ -60,6 +60,7 @@ export default function App() {
     layouts,
     selection,
     featureCatalog,
+    predictionCatalog,
     signalCatalog,
     targetCatalog,
     featureBuilders,
@@ -69,6 +70,7 @@ export default function App() {
     signalSteps,
     targetSteps,
     selectedFeatureIds,
+    selectedPredictionIds,
     selectedSignalIds,
     selectedTargetIds,
     seriesConfigs,
@@ -150,13 +152,14 @@ export default function App() {
         limit: dataLimit
       }),
       api.featureCatalog(dataParams),
+      api.predictionCatalog(dataParams),
       api.signalCatalog(dataParams),
       api.targetCatalog(dataParams)
     ])
-      .then(([candleData, features, signals, targets]) => {
+      .then(([candleData, features, predictions, signals, targets]) => {
         if (!cancelled) {
           state.setMarketData({ candles: candleData });
-          state.setCatalogs({ featureCatalog: features, signalCatalog: signals, targetCatalog: targets });
+          state.setCatalogs({ featureCatalog: features, predictionCatalog: predictions, signalCatalog: signals, targetCatalog: targets });
           state.setErrorMessage(null);
         }
       })
@@ -183,6 +186,9 @@ export default function App() {
     const requests: Array<Promise<Record<string, NamedSeries["points"]>>> = [];
     if (selectedFeatureIds.length > 0) {
       requests.push(api.featureSeries({ ...dataParams, features: selectedFeatureIds.join(","), limit: dataLimit }).then((payload) => mergeSeries("feature", payload.series)));
+    }
+    if (selectedPredictionIds.length > 0) {
+      requests.push(api.predictionSeries({ ...dataParams, predictions: selectedPredictionIds.join(","), limit: dataLimit }).then((payload) => mergeSeries("prediction", payload.series)));
     }
     if (selectedSignalIds.length > 0) {
       requests.push(api.signalSeries({ ...dataParams, signals: selectedSignalIds.join(","), limit: dataLimit }).then((payload) => mergeSeries("signal", payload.series)));
@@ -215,7 +221,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [dataLimit, dataParams, selectedFeatureIds.join("|"), selectedSignalIds.join("|"), selectedTargetIds.join("|")]);
+  }, [dataLimit, dataParams, selectedFeatureIds.join("|"), selectedPredictionIds.join("|"), selectedSignalIds.join("|"), selectedTargetIds.join("|")]);
 
   useEffect(() => {
     if (!selection.runId) {
@@ -328,6 +334,7 @@ export default function App() {
           layouts={layouts}
           selection={selection}
           featureCatalog={featureCatalog}
+          predictionCatalog={predictionCatalog}
           signalCatalog={signalCatalog}
           targetCatalog={targetCatalog}
           featureBuilders={featureBuilders}
@@ -337,6 +344,7 @@ export default function App() {
           signalSteps={signalSteps}
           targetSteps={targetSteps}
           selectedFeatureIds={selectedFeatureIds}
+          selectedPredictionIds={selectedPredictionIds}
           selectedSignalIds={selectedSignalIds}
           selectedTargetIds={selectedTargetIds}
           onSelectionChange={state.setSelection}

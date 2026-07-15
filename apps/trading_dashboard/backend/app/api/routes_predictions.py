@@ -1,0 +1,64 @@
+from __future__ import annotations
+
+from fastapi import APIRouter, Query
+
+from app.api._errors import raise_http_error
+from app.schemas.market import NamedSeries, SeriesResponse
+from app.services.data_loader import DataLoader, parse_csv_list
+
+
+router = APIRouter()
+
+
+@router.get("/predictions/catalog")
+def get_prediction_catalog(
+    asset: str | None = None,
+    timeframe: str | None = None,
+    source: str | None = None,
+    dataset_id: str | None = None,
+):
+    try:
+        return DataLoader().catalog(
+            source_type="prediction",
+            asset=asset,
+            timeframe=timeframe,
+            source=source,
+            dataset_id=dataset_id,
+        )
+    except Exception as exc:
+        raise_http_error(exc)
+        return []
+
+
+@router.get("/predictions/series", response_model=SeriesResponse)
+def get_prediction_series(
+    predictions: str,
+    asset: str | None = None,
+    timeframe: str | None = None,
+    source: str | None = None,
+    dataset_id: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
+    limit: int | None = Query(default=None, ge=1),
+) -> SeriesResponse:
+    try:
+        columns = parse_csv_list(predictions)
+        series = DataLoader().load_series(
+            asset=asset,
+            columns=columns,
+            timeframe=timeframe,
+            source=source,
+            dataset_id=dataset_id,
+            start=start,
+            end=end,
+            limit=limit,
+        )
+        return SeriesResponse(
+            series=[
+                NamedSeries(series_id=name, source_type="prediction", points=points)
+                for name, points in series.items()
+            ]
+        )
+    except Exception as exc:
+        raise_http_error(exc)
+        return SeriesResponse(series=[])

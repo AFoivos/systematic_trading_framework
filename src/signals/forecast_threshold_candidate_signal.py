@@ -22,6 +22,7 @@ def forecast_threshold_candidate_signal(
     side_col: str = "primary_candidate_side",
     strength_col: str = "primary_candidate_strength",
     threshold_distance_col: str = "primary_candidate_threshold_distance",
+    inclusive: bool = False,
 ) -> pd.DataFrame:
     """
     Emit the thresholded forecast signal plus OOS-only primary candidate columns.
@@ -73,6 +74,7 @@ def forecast_threshold_candidate_signal(
         signal_col=output_col,
         mode=mode,
         activation_filters=activation_filters,
+        inclusive=inclusive,
     )
     return compute_forecast_threshold_candidates(
         out,
@@ -86,6 +88,7 @@ def forecast_threshold_candidate_signal(
         side_col=side_col,
         strength_col=strength_col,
         threshold_distance_col=threshold_distance_col,
+        inclusive=inclusive,
     )
 
 

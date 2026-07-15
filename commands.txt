@@ -61,8 +61,7 @@ python -m src.experiments.runner docs/examples/minimal_experiment.yaml
 
 ```bash
 docker compose run --rm app python -m src.experiments.runner config/experiments/global_session_relay/global_session_relay_laggard_v1_intra_cluster.yaml
-docker compose run --rm app python -m src.experiments.runner config/lab/09_temporal_robustness_chronos_bolt_spx500_h24.yaml
-
+docker compose run --rm app python -m src.experiments.runner config/experiments/foundation_alpha/trend_vwap_expected_r_us100_m30/00_us100_m30_trend_vwap_expected_r_yaml0.yaml
 Το οπτικό feature/signal/target lab:
 
 ```bash
@@ -148,6 +147,7 @@ Docker:
 ```bash
 docker compose up -d --build trading-dashboard
 docker compose logs -f trading-dashboard
+docker compose up -d --build --force-recreate trading-dashboard
 ```
 
 URLs:

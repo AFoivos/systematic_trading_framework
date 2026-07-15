@@ -14,6 +14,7 @@ from src.utils.trade_path import (
     simulate_short_trade_path,
 )
 from src.evaluation.metrics import compute_backtest_metrics
+from src.risk.controls import event_risk_guard_multiplier
 
 
 def _require_columns(df: pd.DataFrame, columns: list[str]) -> None:
@@ -148,6 +149,11 @@ def run_manual_barrier_backtest(
     stop_mode: str = "fixed_return",
     vol_col: str | None = None,
     forecast_col: str | None = None,
+    max_entry_gap_atr: float | None = None,
+    entry_gap_atr_col: str | None = None,
+    stop_cooldown_bars: int = 0,
+    max_correlated_risk: float | None = None,
+    portfolio_guard: dict[str, Any] | None = None,
 ) -> BacktestResult:
     """
     Event-based backtest for manual rule signals.
@@ -181,6 +187,14 @@ def run_manual_barrier_backtest(
         raise ValueError("max_leverage must be positive.")
     if float(cost_per_unit_turnover) < 0.0 or float(slippage_per_unit_turnover) < 0.0:
         raise ValueError("cost_per_unit_turnover and slippage_per_unit_turnover must be >= 0.")
+    if max_entry_gap_atr is not None and float(max_entry_gap_atr) <= 0.0:
+        raise ValueError("max_entry_gap_atr must be > 0 when provided.")
+    if max_entry_gap_atr is not None and not str(entry_gap_atr_col or "").strip():
+        raise ValueError("entry_gap_atr_col is required when max_entry_gap_atr is set.")
+    if isinstance(stop_cooldown_bars, bool) or int(stop_cooldown_bars) < 0:
+        raise ValueError("stop_cooldown_bars must be a non-negative integer.")
+    if max_correlated_risk is not None and float(max_correlated_risk) <= 0.0:
+        raise ValueError("max_correlated_risk must be > 0 when provided.")
     dynamic_cfg = normalize_dynamic_exit_config(dynamic_exits)
     partial_cfg = normalize_partial_exit_config(partial_exits)
     partial_enabled = bool(partial_cfg.get("enabled", False))
@@ -195,6 +209,8 @@ def run_manual_barrier_backtest(
         required_cols.append(str(vol_col))
     if needs_forecast:
         required_cols.append(str(forecast_col))
+    if max_entry_gap_atr is not None:
+        required_cols.append(str(entry_gap_atr_col))
     _require_columns(df, required_cols)
 
     frame = df.copy()
@@ -228,9 +244,17 @@ def run_manual_barrier_backtest(
     turnover_events = pd.Series(0.0, index=index, name="turnover", dtype=float)
     mark_to_market_returns = pd.Series(0.0, index=index, name="mark_to_market_returns", dtype=float)
     trades: list[dict[str, Any]] = []
+    rejection_counts = {
+        "gap_filter": 0,
+        "cooldown": 0,
+        "daily_soft_stop": 0,
+        "daily_hard_stop": 0,
+        "weekly_stop": 0,
+    }
 
     i = 0
     n = len(frame)
+    cooldown_until_idx = -1
     while i < n - 1:
         raw_signal = float(signal.iloc[i])
         if raw_signal == 0.0:
@@ -239,9 +263,36 @@ def run_manual_barrier_backtest(
         if raw_signal < 0.0 and not allow_short:
             i += 1
             continue
+        if i <= cooldown_until_idx:
+            rejection_counts["cooldown"] += 1
+            i += 1
+            continue
 
         entry_idx = i + 1
         entry_open = _finite_price(frame.iloc[entry_idx][open_col], field=f"{open_col}[entry]")
+        if max_entry_gap_atr is not None:
+            signal_atr = _finite_positive(
+                frame.iloc[i][str(entry_gap_atr_col)],
+                field=f"{entry_gap_atr_col}[signal]",
+            )
+            entry_gap_atr = (entry_open - float(closes[i])) / signal_atr
+            if entry_gap_atr > float(max_entry_gap_atr):
+                rejection_counts["gap_filter"] += 1
+                i += 1
+                continue
+        guard_multiplier, guard_reason = event_risk_guard_multiplier(
+            net_returns,
+            at_position=i,
+            config=portfolio_guard,
+        )
+        if guard_reason is not None:
+            rejection_counts[guard_reason] += 1
+        if guard_multiplier <= 0.0:
+            i += 1
+            continue
+        effective_risk_per_trade = float(risk_per_trade) * float(guard_multiplier)
+        if max_correlated_risk is not None:
+            effective_risk_per_trade = min(effective_risk_per_trade, float(max_correlated_risk))
         raw_size = min(abs(raw_signal), float(max_leverage))
         if stop_mode == "volatility_stop":
             assert volatility is not None
@@ -251,12 +302,12 @@ def run_manual_barrier_backtest(
             )
             stop_distance_pct = max(signal_volatility * float(stop_loss_r), 1e-8)
             target_distance_pct = max(signal_volatility * float(take_profit_r), 1e-8)
-            risk_sized_cap = float(risk_per_trade) / stop_distance_pct
+            risk_sized_cap = effective_risk_per_trade / stop_distance_pct
             size = min(raw_size, risk_sized_cap, float(max_leverage))
         else:
             size = raw_size
-            stop_distance_pct = max(float(risk_per_trade) * float(stop_loss_r), 1e-8)
-            target_distance_pct = max(float(risk_per_trade) * float(take_profit_r), 1e-8)
+            stop_distance_pct = max(effective_risk_per_trade * float(stop_loss_r), 1e-8)
+            target_distance_pct = max(effective_risk_per_trade * float(take_profit_r), 1e-8)
         max_exit_idx = (
             n - 1
             if max_holding_bars is None
@@ -275,7 +326,7 @@ def run_manual_barrier_backtest(
                 side=-1 if is_short else 1,
                 take_profit_r=float(take_profit_r),
                 stop_loss_r=float(stop_loss_r),
-                risk_per_trade=float(risk_per_trade),
+                risk_per_trade=effective_risk_per_trade,
                 max_holding_bars=max_holding_bars,
                 cost_per_unit_turnover=float(cost_per_unit_turnover),
                 slippage_per_unit_turnover=float(slippage_per_unit_turnover),
@@ -560,6 +611,8 @@ def run_manual_barrier_backtest(
             "profit_lock_activated": bool(path["profit_lock_activated"]),
             "effective_stop_price": float(path["effective_stop_price"]),
             "stop_mode": stop_mode,
+            "effective_risk_per_trade": effective_risk_per_trade,
+            "risk_guard_reason": guard_reason,
         }
         if partial_events:
             partial_fraction_total = float(sum(float(event["fraction"]) for event in partial_events))
@@ -584,6 +637,8 @@ def run_manual_barrier_backtest(
                 }
             )
         trades.append(trade_record)
+        if exit_reason in {"stop_loss", "same_bar_stop", "stop"}:
+            cooldown_until_idx = exit_idx + int(stop_cooldown_bars)
         i = exit_idx + 1
 
     turnover = turnover_events if partial_enabled else (positions - positions.shift(1).fillna(0.0)).abs()
@@ -597,6 +652,7 @@ def run_manual_barrier_backtest(
         costs=costs,
         gross_returns=gross_returns,
     )
+    summary.update({f"rejected_{key}": int(value) for key, value in rejection_counts.items()})
     mark_to_market_equity = (1.0 + mark_to_market_returns).cumprod()
     mark_to_market_equity.name = "mark_to_market_equity"
     mark_to_market_summary = compute_backtest_metrics(

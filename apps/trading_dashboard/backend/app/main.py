@@ -14,6 +14,7 @@ from app.api import (
     routes_experiments,
     routes_features,
     routes_layouts,
+    routes_predictions,
     routes_signals,
     routes_targets,
     routes_transforms,
@@ -82,6 +83,7 @@ def create_app() -> FastAPI:
     app.include_router(routes_assets.router, prefix="/api", tags=["assets"])
     app.include_router(routes_data.router, prefix="/api", tags=["data"])
     app.include_router(routes_features.router, prefix="/api", tags=["features"])
+    app.include_router(routes_predictions.router, prefix="/api", tags=["predictions"])
     app.include_router(routes_signals.router, prefix="/api", tags=["signals"])
     app.include_router(routes_targets.router, prefix="/api", tags=["targets"])
     app.include_router(routes_transforms.router, prefix="/api", tags=["transforms"])

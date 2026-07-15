@@ -162,15 +162,6 @@ def run_experiment_pipeline(
                 previous_asset_frames=feature_asset_frames,
                 stage_tail_cfg=stage_tail_cfg,
             )
-        processed_snapshot = save_processed_snapshot_fn(
-            panel_feature_asset_frames,
-            data_cfg=data_cfg,
-            config_hash_sha256=config_hash_sha256,
-            feature_steps=list(cfg.get("features", []) or []),
-            logging_cfg=dict(cfg.get("logging", {}) or {}),
-        )
-        if processed_snapshot is not None:
-            storage_meta["saved_processed_snapshot"] = processed_snapshot
         del raw_asset_frames
         del feature_asset_frames
 
@@ -274,6 +265,19 @@ def run_experiment_pipeline(
                 previous_asset_frames=previous_asset_frames,
                 stage_tail_cfg=stage_tail_cfg,
             )
+
+        # Persist the final research frame, not the intermediate feature-only frame.
+        # The dashboard uses this snapshot to visualize model predictions, signals,
+        # and target columns alongside the base OHLCV/features.
+        processed_snapshot = save_processed_snapshot_fn(
+            asset_frames,
+            data_cfg=data_cfg,
+            config_hash_sha256=config_hash_sha256,
+            feature_steps=list(cfg.get("features", []) or []),
+            logging_cfg=dict(cfg.get("logging", {}) or {}),
+        )
+        if processed_snapshot is not None:
+            storage_meta["saved_processed_snapshot"] = processed_snapshot
 
         portfolio_enabled = bool(cfg.get("portfolio", {}).get("enabled", False))
         if len(asset_frames) > 1 and not portfolio_enabled:

@@ -170,6 +170,7 @@ def save_processed_snapshot_if_enabled(
             "base_dataset_id": dataset_id,
             "config_hash_sha256": config_hash_sha256,
             "feature_steps": list(feature_steps),
+            "materialized_stages": ["features", "model", "signals", "targets"],
             "trial_token": trial_token,
             "run_name": str(dict(logging_cfg or {}).get("run_name") or "").strip() or None,
         },

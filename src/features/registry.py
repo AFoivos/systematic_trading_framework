@@ -64,6 +64,7 @@ from .technical.trend import add_trend_features
 from .technical.vwap import add_vwap_features
 from .trend_regime import add_trend_regime
 from .trend_slope_volatility import add_trend_slope_volatility
+from .trend_vwap_pullback_candidate import trend_vwap_pullback_candidate_feature
 from .volatility import add_volatility_features
 from .volatility_of_volatility import add_volatility_of_volatility
 from .volatility_regime import add_volatility_regime
@@ -103,6 +104,7 @@ _FEATURE_COMPONENTS: tuple[tuple[str, FeatureFn], ...] = (
     ("swing_extrema_context", swing_extrema_context),
     ("indicator_pullback", add_indicator_pullback_features),
     ("ehlers_ml_long_candidate", ehlers_ml_long_candidate_feature),
+    ("trend_vwap_pullback_candidate", trend_vwap_pullback_candidate_feature),
     ("mama", add_mama),
     ("fama", add_fama),
     ("dominant_cycle_period", add_dominant_cycle_period),

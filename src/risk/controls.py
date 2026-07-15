@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from typing import Any
+
+import numpy as np
 import pandas as pd
 
 
@@ -68,3 +71,88 @@ def drawdown_cooloff_multiplier(
             mult.iat[i] = 1.0
 
     return mult
+
+
+def event_risk_guard_multiplier(
+    realized_returns: pd.Series,
+    *,
+    at_position: int,
+    config: dict[str, Any] | None,
+) -> tuple[float, str | None]:
+    """Resolve a causal entry-risk multiplier from realized daily/weekly PnL.
+
+    Only returns booked strictly before ``at_position`` are observed.  This
+    makes the helper suitable for event backtests in which a signal at bar
+    ``t`` is executed at ``t+1``.  Thresholds may be supplied as positive loss
+    magnitudes or negative returns.  The hard daily and weekly guards flatten;
+    the soft daily guard applies the configured risk multiplier.
+    """
+    cfg = dict(config or {})
+    if not bool(cfg.get("enabled", False)):
+        return 1.0, None
+    if not isinstance(realized_returns, pd.Series):
+        raise TypeError("realized_returns must be a pandas Series.")
+    if not isinstance(realized_returns.index, pd.DatetimeIndex):
+        raise TypeError("event risk guards require a DatetimeIndex.")
+    if isinstance(at_position, bool) or not isinstance(at_position, int):
+        raise TypeError("at_position must be an integer.")
+    if not 0 <= at_position < len(realized_returns):
+        raise IndexError("at_position is outside realized_returns.")
+
+    timezone = str(cfg.get("timezone", "UTC") or "UTC")
+    index = realized_returns.index
+    if index.tz is None:
+        localized = index.tz_localize("UTC").tz_convert(timezone)
+    else:
+        localized = index.tz_convert(timezone)
+    current = localized[at_position]
+    prefix = pd.to_numeric(realized_returns.iloc[:at_position], errors="coerce").fillna(0.0)
+    prefix_index = localized[:at_position]
+
+    def loss_threshold(name: str) -> float | None:
+        value = cfg.get(name)
+        if value is None:
+            return None
+        numeric = float(value)
+        if not np.isfinite(numeric) or numeric == 0.0:
+            raise ValueError(f"portfolio_guard.{name} must be finite and non-zero.")
+        return -abs(numeric)
+
+    def compounded(mask: np.ndarray) -> float:
+        values = prefix.to_numpy(dtype=float)[mask]
+        return float(np.prod(1.0 + values) - 1.0) if values.size else 0.0
+
+    current_day = current.date()
+    day_mask = np.asarray([timestamp.date() == current_day for timestamp in prefix_index], dtype=bool)
+    current_week = current.tz_localize(None).to_period(str(cfg.get("weekly_anchor", "W-FRI") or "W-FRI"))
+    week_mask = np.asarray(
+        [
+            timestamp.tz_localize(None).to_period(str(cfg.get("weekly_anchor", "W-FRI") or "W-FRI"))
+            == current_week
+            for timestamp in prefix_index
+        ],
+        dtype=bool,
+    )
+    daily_return = compounded(day_mask)
+    weekly_return = compounded(week_mask)
+
+    weekly_stop = loss_threshold("weekly_drawdown")
+    if weekly_stop is not None and weekly_return <= weekly_stop:
+        return 0.0, "weekly_stop"
+    daily_hard_stop = loss_threshold("daily_hard_stop")
+    if daily_hard_stop is not None and daily_return <= daily_hard_stop:
+        return 0.0, "daily_hard_stop"
+    daily_soft_stop = loss_threshold("daily_soft_stop")
+    if daily_soft_stop is not None and daily_return <= daily_soft_stop:
+        multiplier = float(cfg.get("daily_soft_stop_risk_multiplier", 0.5))
+        if not np.isfinite(multiplier) or not 0.0 <= multiplier <= 1.0:
+            raise ValueError("portfolio_guard.daily_soft_stop_risk_multiplier must be in [0, 1].")
+        return multiplier, "daily_soft_stop"
+    return 1.0, None
+
+
+__all__ = [
+    "compute_drawdown",
+    "drawdown_cooloff_multiplier",
+    "event_risk_guard_multiplier",
+]

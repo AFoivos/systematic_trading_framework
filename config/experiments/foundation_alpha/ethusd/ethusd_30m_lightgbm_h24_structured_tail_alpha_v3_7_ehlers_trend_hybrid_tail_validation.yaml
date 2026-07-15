@@ -31,7 +31,7 @@ data:
     dataset_id: ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_tail_validation
     save_raw: false
     save_processed: true
-    load_path: data/raw/dukascopy_30m_clean/usoil_30m.csv
+    load_path: data/raw/dukascopy_30m_clean/ethusd_30m.csv
     raw_dir: data/raw
     processed_dir: data/processed
 features:
@@ -271,7 +271,7 @@ model:
     test_size: 4380
     step_size: 4380
     expanding: true
-    max_folds: 1
+    max_folds: 12
     purge_bars: 24
     embargo_bars: 24
   feature_cols:
@@ -390,15 +390,38 @@ risk:
   drawdown_sizing: {}
   vol_col: null
 backtest:
-  engine: vectorized
+  engine: manual_barrier
   returns_col: close_ret
   signal_col: signal_structured_tail
   periods_per_year: 17520
   returns_type: simple
   missing_return_policy: raise_if_exposed
-  min_holding_bars: 12
-  subset: test
-  vol_col: null
+  subset: full
+  open_col: open
+  high_col: high
+  low_col: low
+  close_col: close
+  take_profit_r: 0.5
+  stop_loss_r: 0.4
+  risk_per_trade: 0.01
+  stop_mode: fixed_return
+  max_holding_bars: 24
+  tie_break: stop_first
+  dynamic_exit: {}
+  dynamic_exits: {}
+  partial_exits: {}
+  allow_short: false
+  asset_params: {}
+#   engine: vectorized
+#   returns_col: close_ret
+#   signal_col: signal_structured_tail
+#   periods_per_year: 17520
+#   returns_type: simple
+#   missing_return_policy: raise_if_exposed
+#   min_holding_bars: 12
+#   subset: test
+#   vol_col: null
+
 portfolio:
   enabled: false
   construction: signal_weights

@@ -84,6 +84,7 @@ def compute_forecast_threshold_signal(
     signal_col: str = "forecast_threshold_signal",
     mode: str = "long_short_hold",
     activation_filters: list[dict[str, object]] | None = None,
+    inclusive: bool = False,
 ) -> pd.DataFrame:
     """
     Convert return forecasts into thresholded directional exposure.
@@ -100,8 +101,10 @@ def compute_forecast_threshold_signal(
     if lower is None:
         lower = -abs(float(upper))
 
-    long_mask = series > float(upper)
-    short_mask = series < float(lower)
+    if not isinstance(inclusive, bool):
+        raise TypeError("inclusive must be boolean.")
+    long_mask = series.ge(float(upper)) if inclusive else series.gt(float(upper))
+    short_mask = series.le(float(lower)) if inclusive else series.lt(float(lower))
     if mode == "long_short_hold":
         hold = pd.Series(np.nan, index=out.index, dtype=float)
         hold.loc[long_mask] = 1.0
@@ -135,6 +138,7 @@ def compute_forecast_threshold_candidates(
     side_col: str = "primary_candidate_side",
     strength_col: str = "primary_candidate_strength",
     threshold_distance_col: str = "primary_candidate_threshold_distance",
+    inclusive: bool = False,
 ) -> pd.DataFrame:
     """
     Build causal OOS-only forecast candidates and side metadata.
@@ -149,6 +153,8 @@ def compute_forecast_threshold_candidates(
         raise KeyError(f"pred_is_oos_col '{pred_is_oos_col}' not found in DataFrame")
     if mode not in {"long_only", "short_only", "long_short"}:
         raise ValueError("candidate mode must be one of: long_only, short_only, long_short.")
+    if not isinstance(inclusive, bool):
+        raise TypeError("inclusive must be boolean.")
     output_cols = [candidate_col, side_col, strength_col, threshold_distance_col]
     if any(not isinstance(col, str) or not col.strip() for col in output_cols):
         raise ValueError("candidate output column names must be non-empty strings.")
@@ -169,8 +175,10 @@ def compute_forecast_threshold_candidates(
     )
     valid = oos_mask & activation_mask & forecast.notna()
 
-    long_mask = valid & forecast.gt(upper_value) if mode in {"long_only", "long_short"} else pd.Series(False, index=out.index)
-    short_mask = valid & forecast.lt(lower_value) if mode in {"short_only", "long_short"} else pd.Series(False, index=out.index)
+    long_threshold = forecast.ge(upper_value) if inclusive else forecast.gt(upper_value)
+    short_threshold = forecast.le(lower_value) if inclusive else forecast.lt(lower_value)
+    long_mask = valid & long_threshold if mode in {"long_only", "long_short"} else pd.Series(False, index=out.index)
+    short_mask = valid & short_threshold if mode in {"short_only", "long_short"} else pd.Series(False, index=out.index)
     side = pd.Series(0.0, index=out.index, dtype=float)
     side.loc[long_mask] = 1.0
     side.loc[short_mask] = -1.0

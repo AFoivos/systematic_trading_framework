@@ -3607,6 +3607,12 @@ def validate_risk_block(risk: dict[str, Any]) -> None:
     max_lev = _finite_number(risk.get("max_leverage", 3.0), field="risk.max_leverage")
     if max_lev <= 0:
         raise ConfigValidationError("risk.max_leverage must be > 0.")
+    correlated_risk = risk.get("max_correlated_us_index_risk")
+    if correlated_risk is not None and _finite_number(
+        correlated_risk,
+        field="risk.max_correlated_us_index_risk",
+    ) <= 0.0:
+        raise ConfigValidationError("risk.max_correlated_us_index_risk must be > 0 when provided.")
     dd = risk.get("dd_guard", {})
     if not isinstance(dd, dict):
         raise ConfigValidationError("risk.dd_guard must be a mapping.")
@@ -3665,6 +3671,9 @@ def validate_risk_block(risk: dict[str, Any]) -> None:
     weekly_anchor = portfolio_guard.get("weekly_anchor", "W-FRI")
     if not isinstance(weekly_anchor, str) or not weekly_anchor.strip():
         raise ConfigValidationError("risk.portfolio_guard.weekly_anchor must be a non-empty string.")
+    timezone = portfolio_guard.get("timezone", "UTC")
+    if not isinstance(timezone, str) or not timezone.strip():
+        raise ConfigValidationError("risk.portfolio_guard.timezone must be a non-empty string.")
     if "max_open_trades" in portfolio_guard and portfolio_guard.get("max_open_trades") is not None:
         _positive_int(portfolio_guard["max_open_trades"], field="risk.portfolio_guard.max_open_trades")
     group_max_open = portfolio_guard.get("group_max_open_trades", {})
@@ -3803,6 +3812,20 @@ def validate_backtest_block(backtest: dict[str, Any]) -> None:
         _validate_dynamic_exits_block(dynamic_exits)
         partial_exits = backtest.get("partial_exits", {}) or {}
         _validate_partial_exits_block(partial_exits)
+        max_entry_gap_atr = backtest.get("max_entry_gap_atr")
+        if max_entry_gap_atr is not None:
+            if _finite_number(max_entry_gap_atr, field="backtest.max_entry_gap_atr") <= 0.0:
+                raise ConfigValidationError("backtest.max_entry_gap_atr must be > 0.")
+            if not isinstance(backtest.get("entry_gap_atr_col"), str) or not str(
+                backtest.get("entry_gap_atr_col", "")
+            ).strip():
+                raise ConfigValidationError(
+                    "backtest.entry_gap_atr_col must be a non-empty string when max_entry_gap_atr is set."
+                )
+        _non_negative_int(
+            backtest.get("stop_cooldown_bars", 0),
+            field="backtest.stop_cooldown_bars",
+        )
         atr_trailing_enabled = bool(dict(dynamic_exits).get("enabled", False)) and bool(
             dict(dict(dynamic_exits).get("atr_trailing", {}) or {}).get("enabled", False)
         )

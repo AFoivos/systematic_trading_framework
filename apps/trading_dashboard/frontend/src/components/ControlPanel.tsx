@@ -17,6 +17,7 @@ interface ControlPanelProps {
   layouts: LayoutSummary[];
   selection: DashboardSelection;
   featureCatalog: FeatureCatalog;
+  predictionCatalog: CatalogItem[];
   signalCatalog: CatalogItem[];
   targetCatalog: CatalogItem[];
   featureBuilders: BuilderDefinition[];
@@ -26,10 +27,11 @@ interface ControlPanelProps {
   signalSteps: TransformStepConfig[];
   targetSteps: TransformStepConfig[];
   selectedFeatureIds: string[];
+  selectedPredictionIds: string[];
   selectedSignalIds: string[];
   selectedTargetIds: string[];
   onSelectionChange: (selection: Partial<DashboardSelection>) => void;
-  onSelectedSeriesChange: (sourceType: "feature" | "signal" | "target", ids: string[]) => void;
+  onSelectedSeriesChange: (sourceType: "feature" | "prediction" | "signal" | "target", ids: string[]) => void;
   onTransformStepsChange: (sourceType: BuilderSourceType, steps: TransformStepConfig[]) => void;
   onRunTransform: () => void;
   onSaveLayout: (name: string) => void;
@@ -92,6 +94,7 @@ export function ControlPanel({
   layouts,
   selection,
   featureCatalog,
+  predictionCatalog,
   signalCatalog,
   targetCatalog,
   featureBuilders,
@@ -101,6 +104,7 @@ export function ControlPanel({
   signalSteps,
   targetSteps,
   selectedFeatureIds,
+  selectedPredictionIds,
   selectedSignalIds,
   selectedTargetIds,
   onSelectionChange,
@@ -140,6 +144,12 @@ export function ControlPanel({
         catalog={featureCatalog}
         selected={selectedFeatureIds}
         onChange={(ids) => onSelectedSeriesChange("feature", ids)}
+      />
+      <FeatureSelector
+        title="Model Predictions"
+        catalog={predictionCatalog}
+        selected={selectedPredictionIds}
+        onChange={(ids) => onSelectedSeriesChange("prediction", ids)}
       />
       <SignalSelector
         signals={signalCatalog}

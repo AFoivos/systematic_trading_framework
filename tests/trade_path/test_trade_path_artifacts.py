@@ -253,13 +253,24 @@ def test_pipeline_result_primary_summary_includes_trade_path_diagnostics(tmp_pat
     monkeypatch.setattr(
         pipeline_mod,
         "apply_model_pipeline_to_assets",
-        lambda frames, model_cfg, model_stages, returns_col: (frames, None, {}),
+        lambda frames, model_cfg, model_stages, returns_col: (
+            {asset: data.assign(pred_ret=0.25) for asset, data in frames.items()},
+            None,
+            {},
+        ),
     )
-    monkeypatch.setattr(pipeline_mod, "apply_signals_to_assets", lambda frames, signals_cfg: frames)
+    monkeypatch.setattr(
+        pipeline_mod,
+        "apply_signals_to_assets",
+        lambda frames, signals_cfg: {asset: data.assign(signal_entry=1.0) for asset, data in frames.items()},
+    )
     monkeypatch.setattr(
         pipeline_mod,
         "apply_post_signal_target_to_assets",
-        lambda frames, model_cfg, backtest_cfg: (frames, {}),
+        lambda frames, model_cfg, backtest_cfg: (
+            {asset: data.assign(target_future_return=0.01) for asset, data in frames.items()},
+            {"target": {"kind": "forward_return"}},
+        ),
     )
     monkeypatch.setattr(pipeline_mod, "run_single_asset_backtest", lambda asset, data, cfg, model_meta: performance)
     monkeypatch.setattr(
@@ -276,10 +287,16 @@ def test_pipeline_result_primary_summary_includes_trade_path_diagnostics(tmp_pat
     monkeypatch.setattr(pipeline_mod, "compute_monitoring_report", lambda *args, **kwargs: {})
     monkeypatch.setattr(pipeline_mod, "build_execution_output", lambda *args, **kwargs: ({}, None))
 
+    saved_processed_frames = []
+
+    def _save_processed_snapshot(asset_frames, **kwargs):
+        saved_processed_frames.append({asset: data.copy() for asset, data in asset_frames.items()})
+        return {"data_path": "processed/dataset.csv"}
+
     result = pipeline_mod.run_experiment_pipeline(
         config_path,
         load_asset_frames_fn=lambda data_cfg: ({"AAA": frame.copy()}, {}),
-        save_processed_snapshot_fn=lambda *args, **kwargs: None,
+        save_processed_snapshot_fn=_save_processed_snapshot,
     )
 
     primary = result.evaluation["primary_summary"]
@@ -287,3 +304,5 @@ def test_pipeline_result_primary_summary_includes_trade_path_diagnostics(tmp_pat
     assert primary["loser_was_positive_rate"] == 1.0
     assert primary["avg_giveback_r"] == 2.1
     assert "trade_path" in result.evaluation["trade_diagnostics"]
+    assert len(saved_processed_frames) == 1
+    assert {"pred_ret", "signal_entry", "target_future_return"}.issubset(saved_processed_frames[0]["AAA"].columns)

@@ -21,6 +21,7 @@ interface DashboardState {
   experiments: ExperimentSummary[];
   layouts: LayoutSummary[];
   featureCatalog: FeatureCatalog;
+  predictionCatalog: CatalogItem[];
   signalCatalog: CatalogItem[];
   targetCatalog: CatalogItem[];
   featureBuilders: BuilderDefinition[];
@@ -31,6 +32,7 @@ interface DashboardState {
   targetSteps: TransformStepConfig[];
   selection: DashboardSelection;
   selectedFeatureIds: string[];
+  selectedPredictionIds: string[];
   selectedSignalIds: string[];
   selectedTargetIds: string[];
   seriesConfigs: VisualizationConfig[];
@@ -52,6 +54,7 @@ interface DashboardState {
   setTimeframes: (timeframes: string[]) => void;
   setCatalogs: (catalogs: {
     featureCatalog: FeatureCatalog;
+    predictionCatalog: CatalogItem[];
     signalCatalog: CatalogItem[];
     targetCatalog: CatalogItem[];
   }) => void;
@@ -61,7 +64,7 @@ interface DashboardState {
     targetBuilders: BuilderDefinition[];
   }) => void;
   setSelection: (selection: Partial<DashboardSelection>) => void;
-  setSelectedSeries: (sourceType: "feature" | "signal" | "target", ids: string[]) => void;
+  setSelectedSeries: (sourceType: "feature" | "prediction" | "signal" | "target", ids: string[]) => void;
   setTransformSteps: (sourceType: BuilderSourceType, steps: TransformStepConfig[]) => void;
   addManualLevel: (kind: ManualLevelKind, price: number) => void;
   removeSeriesConfig: (key: string) => void;
@@ -91,9 +94,12 @@ const emptySelection: DashboardSelection = {
   runId: ""
 };
 
-function selectedIdsForSource(state: DashboardState, sourceType: "feature" | "signal" | "target"): string[] {
+function selectedIdsForSource(state: DashboardState, sourceType: "feature" | "prediction" | "signal" | "target"): string[] {
   if (sourceType === "feature") {
     return state.selectedFeatureIds;
+  }
+  if (sourceType === "prediction") {
+    return state.selectedPredictionIds;
   }
   if (sourceType === "signal") {
     return state.selectedSignalIds;
@@ -103,7 +109,7 @@ function selectedIdsForSource(state: DashboardState, sourceType: "feature" | "si
 
 function ensureSeriesConfigs(
   configs: VisualizationConfig[],
-  sourceType: "feature" | "signal" | "target",
+  sourceType: "feature" | "prediction" | "signal" | "target",
   ids: string[]
 ): VisualizationConfig[] {
   const selectedKeys = new Set(ids.map((id) => seriesKey(sourceType, id)));
@@ -168,6 +174,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   experiments: [],
   layouts: [],
   featureCatalog: {},
+  predictionCatalog: [],
   signalCatalog: [],
   targetCatalog: [],
   featureBuilders: [],
@@ -178,6 +185,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   targetSteps: [],
   selection: emptySelection,
   selectedFeatureIds: [],
+  selectedPredictionIds: [],
   selectedSignalIds: [],
   selectedTargetIds: [],
   seriesConfigs: [],
@@ -207,8 +215,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     }));
   },
   setTimeframes: (timeframes) => set({ timeframes }),
-  setCatalogs: ({ featureCatalog, signalCatalog, targetCatalog }) =>
-    set({ featureCatalog, signalCatalog, targetCatalog }),
+  setCatalogs: ({ featureCatalog, predictionCatalog, signalCatalog, targetCatalog }) =>
+    set({ featureCatalog, predictionCatalog, signalCatalog, targetCatalog }),
   setBuilderDefinitions: ({ featureBuilders, signalBuilders, targetBuilders }) =>
     set({ featureBuilders, signalBuilders, targetBuilders }),
   setSelection: (selection) =>
@@ -220,6 +228,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       const nextConfigs = ensureSeriesConfigs(state.seriesConfigs, sourceType, ids);
       return {
         selectedFeatureIds: sourceType === "feature" ? ids : state.selectedFeatureIds,
+        selectedPredictionIds: sourceType === "prediction" ? ids : state.selectedPredictionIds,
         selectedSignalIds: sourceType === "signal" ? ids : state.selectedSignalIds,
         selectedTargetIds: sourceType === "target" ? ids : state.selectedTargetIds,
         seriesConfigs: nextConfigs,
@@ -301,6 +310,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       targetSteps: layout.transformations?.targets ?? state.targetSteps,
       transformRun: null,
       selectedFeatureIds: layout.series.filter((config) => config.source_type === "feature").map((config) => config.series_id),
+      selectedPredictionIds: layout.series.filter((config) => config.source_type === "prediction").map((config) => config.series_id),
       selectedSignalIds: layout.series.filter((config) => config.source_type === "signal").map((config) => config.series_id),
       selectedTargetIds: layout.series.filter((config) => config.source_type === "target").map((config) => config.series_id),
       activeSeriesKey: layout.series[0] ? seriesKey(layout.series[0].source_type, layout.series[0].series_id) : null
@@ -322,6 +332,6 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   }
 }));
 
-export function useSelectedIds(sourceType: "feature" | "signal" | "target"): string[] {
+export function useSelectedIds(sourceType: "feature" | "prediction" | "signal" | "target"): string[] {
   return useDashboardStore((state) => selectedIdsForSource(state, sourceType));
 }

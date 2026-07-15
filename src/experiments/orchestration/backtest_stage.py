@@ -221,6 +221,11 @@ def run_single_asset_backtest(
             allow_short=bool(backtest_cfg.get("allow_short", False)),
             stop_mode=str(backtest_cfg.get("stop_mode", "fixed_return")),
             vol_col=backtest_cfg.get("vol_col"),
+            max_entry_gap_atr=backtest_cfg.get("max_entry_gap_atr"),
+            entry_gap_atr_col=backtest_cfg.get("entry_gap_atr_col"),
+            stop_cooldown_bars=int(backtest_cfg.get("stop_cooldown_bars", 0) or 0),
+            max_correlated_risk=risk_cfg.get("max_correlated_us_index_risk"),
+            portfolio_guard=dict(risk_cfg.get("portfolio_guard", {}) or {}),
         )
         if result.trades is not None and not result.trades.empty and "asset" not in result.trades.columns:
             result.trades = result.trades.copy()

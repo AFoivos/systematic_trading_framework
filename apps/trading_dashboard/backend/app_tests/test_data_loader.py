@@ -126,12 +126,14 @@ def test_catalogs_are_inferred_from_processed_snapshot_columns(tmp_path: Path) -
     features = loader.catalog(source_type="feature", asset="XAUUSD", dataset_id=dataset_id)
     signals = loader.catalog(source_type="signal", asset="XAUUSD", dataset_id=dataset_id)
     targets = loader.catalog(source_type="target", asset="XAUUSD", dataset_id=dataset_id)
+    predictions = loader.catalog(source_type="prediction", asset="XAUUSD", dataset_id=dataset_id)
 
     assert [item["name"] for item in features["oscillators"]] == ["rsi_14"]
     assert [item["name"] for item in features["volatility"]] == ["atr_14"]
     assert [item["name"] for item in features["regime"]] == ["regime_state"]
     assert [item["name"] for item in signals] == ["manual_signal"]
     assert [item["name"] for item in targets] == ["r_target_trade_r"]
+    assert [item["name"] for item in predictions] == ["pred_prob"]
 
 
 def test_feature_catalog_classifies_vwap_as_indicator(tmp_path: Path) -> None:
