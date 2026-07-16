@@ -48,7 +48,7 @@ class OrderResult:
 
     @property
     def accepted(self) -> bool:
-        return self.status in {"dry_run", "submitted", "filled"}
+        return self.status in {"dry_run", "submitted", "partial", "filled"}
 
 
 class MT5OrderManager:
@@ -210,8 +210,26 @@ class MT5OrderManager:
         response = self.connector.order_send(request)
         response_dict = _object_to_dict(response)
         slippage = _slippage_estimate(requested_price=price, response=response)
-        status = "filled" if self.connector.is_successful_order(response) else "rejected"
-        reason = None if status == "filled" else "mt5_order_send_rejected"
+        status = _connector_order_status(self.connector, response)
+        reason = {
+            "filled": None,
+            "partial": "mt5_order_partially_filled",
+            "submitted": "mt5_order_submitted_not_filled",
+            "rejected": "mt5_order_send_rejected",
+        }[status]
+        requested_volume = float(sizing.volume)
+        response_volume = _optional_float(_attr(response, "volume"))
+        if status == "filled":
+            filled_volume = response_volume if response_volume is not None else requested_volume
+        elif status == "partial":
+            filled_volume = response_volume
+        else:
+            filled_volume = 0.0
+        residual_volume = (
+            max(0.0, requested_volume - filled_volume)
+            if filled_volume is not None
+            else None
+        )
         return OrderResult(
             status,
             reason,
@@ -234,6 +252,9 @@ class MT5OrderManager:
                 "stop_distance": stop_distance,
                 "volatility_distance": volatility,
                 "volatility_col": trade_params.volatility_col,
+                "requested_volume": requested_volume,
+                "filled_volume": filled_volume,
+                "residual_volume": residual_volume,
             },
         )
 
@@ -320,6 +341,15 @@ def _slippage_estimate(*, requested_price: float, response: Any) -> float | None
     if fill_price is None:
         return None
     return fill_price - float(requested_price)
+
+
+def _connector_order_status(connector: Any, response: Any) -> str:
+    status_fn = getattr(connector, "order_status", None)
+    if callable(status_fn):
+        status = str(status_fn(response))
+        if status in {"filled", "partial", "submitted", "rejected"}:
+            return status
+    return "filled" if connector.is_successful_order(response) else "rejected"
 
 
 def _optional_int(value: Any) -> int | None:

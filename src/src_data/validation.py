@@ -36,24 +36,37 @@ def validate_ohlcv(
         if col not in df.columns:
             break
     else:
-        o = df["open"].to_numpy(dtype=float)
-        h = df["high"].to_numpy(dtype=float)
-        l = df["low"].to_numpy(dtype=float)
-        c = df["close"].to_numpy(dtype=float)
+        try:
+            o = df["open"].to_numpy(dtype=float)
+            h = df["high"].to_numpy(dtype=float)
+            l = df["low"].to_numpy(dtype=float)
+            c = df["close"].to_numpy(dtype=float)
+        except (TypeError, ValueError):
+            problems.append("Open/high/low/close must be numeric.")
+        else:
+            prices = np.column_stack((o, h, l, c))
+            if not np.isfinite(prices).all():
+                problems.append("Found non-finite values in open/high/low/close.")
+            if np.any(prices <= 0.0):
+                problems.append("Found non-positive values in open/high/low/close.")
 
-        if np.isnan(o).any() or np.isnan(h).any() or np.isnan(l).any() or np.isnan(c).any():
-            problems.append("Found NaNs in open/high/low/close.")
+            finite_rows = np.isfinite(prices).all(axis=1)
+            if np.any(finite_rows & (l > h)):
+                problems.append("Found rows with low > high.")
+            if np.any(finite_rows & ((o < l) | (o > h))):
+                problems.append("Found rows with open outside [low, high].")
+            if np.any(finite_rows & ((c < l) | (c > h))):
+                problems.append("Found rows with close outside [low, high].")
 
-        if np.any(l > h):
-            problems.append("Found rows with low > high.")
-        if np.any(o < l) or np.any(o > h):
-            problems.append("Found rows with open outside [low, high].")
-        if np.any(c < l) or np.any(c > h):
-            problems.append("Found rows with close outside [low, high].")
-
-    if "volume" in df.columns and not allow_missing_volume:
-        if df["volume"].isna().any():
-            problems.append("Found NaNs in volume while allow_missing_volume=False.")
+    if "volume" in df.columns:
+        volume = pd.to_numeric(df["volume"], errors="coerce")
+        if not allow_missing_volume and volume.isna().any():
+            problems.append("Found missing or non-numeric volume while allow_missing_volume=False.")
+        finite_volume = volume.dropna().to_numpy(dtype=float)
+        if not np.isfinite(finite_volume).all():
+            problems.append("Found non-finite volume.")
+        if np.any(finite_volume < 0.0):
+            problems.append("Found negative volume.")
 
     if problems:
         msg = "OHLCV validation failed:\n- " + "\n- ".join(problems)

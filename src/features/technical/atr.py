@@ -5,6 +5,7 @@ from typing import Sequence
 import pandas as pd
 
 from .true_range import compute_true_range
+from .wilder import wilder_smooth
 
 
 def add_atr_features(
@@ -172,7 +173,7 @@ def compute_atr(
     """
     tr = compute_true_range(high, low, close)
     if method == "wilder":
-        atr = tr.ewm(alpha=1 / window, adjust=False).mean()
+        atr = wilder_smooth(tr, window=window)
     elif method == "simple":
         atr = tr.rolling(window=window, min_periods=window).mean()
     else:

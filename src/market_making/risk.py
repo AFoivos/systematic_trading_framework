@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import math
 
 from .quote_generator import QuoteDecision
 from src.market_data.order_book import LocalOrderBook
@@ -49,10 +50,19 @@ class RiskEngine:
     """Central risk gate; all order placement must pass through this object."""
 
     def __init__(self, limits: RiskLimits) -> None:
-        if limits.max_inventory <= 0:
-            raise ValueError("max_inventory must be > 0.")
+        for name, value in (
+            ("max_inventory", limits.max_inventory),
+            ("max_position_value", limits.max_position_value),
+            ("max_daily_loss", limits.max_daily_loss),
+            ("max_order_size", limits.max_order_size),
+            ("max_allowed_spread_bps", limits.max_allowed_spread_bps),
+        ):
+            if not math.isfinite(float(value)) or float(value) <= 0.0:
+                raise ValueError(f"{name} must be finite and > 0.")
         if limits.max_open_orders < 0:
             raise ValueError("max_open_orders must be >= 0.")
+        if limits.stale_order_book_ms < 0:
+            raise ValueError("stale_order_book_ms must be >= 0.")
         self.limits = limits
         self.kill_switch_enabled = False
         self.kill_events: list[str] = []
@@ -69,6 +79,12 @@ class RiskEngine:
             return RiskDecision(False, reason="kill switch active", cancel_all=True, kill_switch=True)
         if not quote.should_quote:
             return RiskDecision(False, reason=quote.reason)
+        if quote.symbol != book.symbol:
+            return RiskDecision(False, reason="quote symbol does not match order book", cancel_all=False)
+        if not self._state_is_finite(state):
+            return self.trigger_kill_switch("invalid non-finite risk state")
+        if not self._quote_is_valid(quote):
+            return RiskDecision(False, reason="invalid quote values", cancel_all=False)
         if self.limits.kill_on_websocket_disconnect and not state.websocket_connected:
             return self.trigger_kill_switch("websocket disconnected")
         if self.limits.kill_on_stale_order_book and self._is_stale(book, state.now):
@@ -103,8 +119,45 @@ class RiskEngine:
     def _is_stale(self, book: LocalOrderBook, now: datetime) -> bool:
         if book.timestamp is None:
             return True
-        age_ms = (now - book.timestamp).total_seconds() * 1000.0
-        return age_ms > self.limits.stale_order_book_ms
+        try:
+            age_ms = (now - book.timestamp).total_seconds() * 1000.0
+        except (TypeError, ValueError):
+            return True
+        return not math.isfinite(age_ms) or age_ms < 0.0 or age_ms > self.limits.stale_order_book_ms
+
+    @staticmethod
+    def _state_is_finite(state: RiskState) -> bool:
+        return (
+            all(
+                math.isfinite(float(value))
+                for value in (state.inventory, state.realized_pnl, state.unrealized_pnl)
+            )
+            and isinstance(state.open_orders, int)
+            and not isinstance(state.open_orders, bool)
+            and state.open_orders >= 0
+        )
+
+    @staticmethod
+    def _quote_is_valid(quote: QuoteDecision) -> bool:
+        if not math.isfinite(float(quote.fair_price)) or quote.fair_price <= 0.0:
+            return False
+        if not math.isfinite(float(quote.spread_bps)) or quote.spread_bps < 0.0:
+            return False
+        for price, size in (
+            (quote.bid_price, quote.bid_size),
+            (quote.ask_price, quote.ask_size),
+        ):
+            if not math.isfinite(float(size)) or size < 0.0:
+                return False
+            if price is None:
+                if size != 0.0:
+                    return False
+            elif not math.isfinite(float(price)) or price <= 0.0 or size <= 0.0:
+                return False
+        if quote.bid_price is not None and quote.ask_price is not None:
+            if quote.bid_price >= quote.ask_price:
+                return False
+        return quote.bid_price is not None or quote.ask_price is not None
 
     @staticmethod
     def _worst_case_inventory(*, quote: QuoteDecision, inventory: float) -> float:

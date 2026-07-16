@@ -100,8 +100,11 @@ def _session_state(
     session_id.loc[inside] = [f"{asset}:{value.isoformat()}" for value in session_date.loc[inside]]
     valid_open = pd.to_numeric(out["open"], errors="coerce").where(inside)
     valid_close = pd.to_numeric(out["close"], errors="coerce").where(inside)
-    first_open = valid_open.groupby(session_id, dropna=True).transform("first")
     bars_since = valid_open.groupby(session_id, dropna=True).cumcount().astype(float)
+    # `GroupBy.first` skips nulls and would backfill a later open into the session's first
+    # row. Only the literal chronological row-zero open may define the session.
+    first_row_open = valid_open.where(bars_since.eq(0.0))
+    first_open = first_row_open.groupby(session_id, dropna=True).transform("max")
     session_return = valid_close / first_open - 1.0
     out["is_in_primary_session"] = inside.astype(bool)
     out["session_id"] = session_id
@@ -200,16 +203,6 @@ def _add_cluster_features(
     minimum = int(spec.get("minimum_active_assets", len(members)))
     prefix = str(cluster)
     configured_member_count = len(members)
-    valid_member_indexes = {
-        member: frames[member].index[pd.to_numeric(frames[member][impulse_col], errors="coerce").notna()]
-        for member in members
-    }
-    if all(len(index) > 0 for index in valid_member_indexes.values()):
-        overlap_start = max(index.min() for index in valid_member_indexes.values())
-        overlap_end = min(index.max() for index in valid_member_indexes.values())
-    else:
-        overlap_start = None
-        overlap_end = None
     for target_asset in members:
         target = frames[target_asset]
         contexts: dict[str, pd.DataFrame] = {}
@@ -226,18 +219,12 @@ def _add_cluster_features(
         active_members = values.apply(
             lambda row: ",".join(asset for asset in members if pd.notna(row[asset])), axis=1
         )
-        fixed_overlap = pd.Series(False, index=target.index, dtype=bool)
-        if overlap_start is not None and overlap_end is not None:
-            fixed_overlap = pd.Series(
-                (target.index >= overlap_start) & (target.index <= overlap_end),
-                index=target.index,
-                dtype=bool,
-            )
         # Fixed mode is deliberately strict: every configured member must be available,
-        # fresh, and inside the common native-history overlap. Dynamic mode permits a
-        # fresh subset meeting the configured minimum.
+        # and fresh at the timestamp. Never use a member's full-sample last-valid timestamp
+        # to gate earlier rows: future disappearance or resumption must not rewrite history.
+        fixed_available = counts.eq(configured_member_count)
         eligible = (
-            (fixed_overlap & counts.eq(configured_member_count))
+            fixed_available
             if universe_mode == "fixed"
             else counts.ge(minimum)
         )
@@ -270,7 +257,7 @@ def _add_cluster_features(
         target[f"{prefix}_cluster_active_member_count"] = metrics["member_count"].astype(float)
         target[f"{prefix}_cluster_active_members"] = metrics["active_members"].astype("object")
         target[f"{prefix}_cluster_universe_mode"] = str(universe_mode)
-        target[f"{prefix}_cluster_fixed_overlap_eligible"] = fixed_overlap.astype(bool)
+        target[f"{prefix}_cluster_fixed_overlap_eligible"] = fixed_available.astype(bool)
 
 
 def _add_relay(
@@ -284,17 +271,8 @@ def _add_relay(
     interval_minutes: int,
     universe_mode: str,
 ) -> None:
-    sources = [asset for asset in source_assets if asset in frames]
-    valid_source_indexes = {
-        asset: frames[asset].index[pd.to_numeric(frames[asset]["normalized_session_return"], errors="coerce").notna()]
-        for asset in sources
-    }
-    if sources and all(len(index) > 0 for index in valid_source_indexes.values()):
-        overlap_start = max(index.min() for index in valid_source_indexes.values())
-        overlap_end = min(index.max() for index in valid_source_indexes.values())
-    else:
-        overlap_start = None
-        overlap_end = None
+    configured_sources = list(dict.fromkeys(str(asset) for asset in source_assets))
+    sources = [asset for asset in configured_sources if asset in frames]
     for target_asset in target_assets:
         if target_asset not in frames:
             continue
@@ -312,13 +290,13 @@ def _add_relay(
         )
         ages = pd.DataFrame({asset: context["context_age_bars"] for asset, context in contexts.items()}, index=target.index)
         counts = values.notna().sum(axis=1)
-        fixed_overlap = pd.Series(False, index=target.index, dtype=bool)
-        if overlap_start is not None and overlap_end is not None:
-            fixed_overlap = pd.Series(
-                (target.index >= overlap_start) & (target.index <= overlap_end), index=target.index, dtype=bool
-            )
+        # Fixed mode is defined by the configured relay universe, not by the
+        # subset that happened to be present in this panel. A missing configured
+        # source must therefore keep the relay ineligible instead of shrinking
+        # the all-sources requirement.
+        fixed_available = counts.eq(len(configured_sources))
         eligible = (
-            fixed_overlap & counts.eq(len(sources))
+            fixed_available
             if universe_mode == "fixed"
             else counts.ge(int(minimum_sources))
         )

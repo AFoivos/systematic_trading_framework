@@ -26,18 +26,18 @@ from src.utils.config_defaults import default_diagnostics_block
 
 
 def test_dukascopy_30m_tft_feature_config_loads() -> None:
-    cfg = load_experiment_config("config/experiments/dukascopy_30m_xauusd_tft_feature_forecast_v1.yaml")
+    cfg = load_experiment_config("config/lab/local_forecasters/06_ger40_tft_regime_h16.yaml")
 
     assert cfg["data"]["source"] == "dukascopy_csv"
     assert cfg["data"]["interval"] == "30m"
     assert cfg["model"]["kind"] == "tft_forecaster"
-    assert cfg["model"]["target"]["returns_type"] == "log"
-    assert cfg["model"]["feature_selectors"]["strict"]["min_count"] >= 32
+    assert cfg["model"]["target"]["returns_type"] == "simple"
+    assert cfg["model"]["feature_selectors"]["strict"]["min_count"] >= 16
     assert cfg["backtest"]["periods_per_year"] == 12096
 
 
 def test_dense_return_forecasting_v2_config_loads_and_validates() -> None:
-    cfg = load_experiment_config("config/experiments/dense_return_forecasting_v2.yaml")
+    cfg = load_experiment_config("config/experiments/others/dense_return_forecasting_v2.yaml")
 
     assert cfg["strategy"]["name"] == "dense_return_forecasting_v2"
     assert cfg["model"]["kind"] == "lightgbm_regressor"
@@ -48,17 +48,16 @@ def test_dense_return_forecasting_v2_config_loads_and_validates() -> None:
     validate_resolved_config(cfg)
 
 
-def test_dense_return_forecasting_v2_optuna_spec_loads() -> None:
-    spec = load_optuna_spec_yaml("config/optuna/dense_return_forecasting_v2_optuna.yaml")
+def test_moved_lab_optuna_spec_loads_with_canonical_base_path() -> None:
+    spec = load_optuna_spec_yaml("config/optuna/lab/02_forward_return_timesfm_h24_optuna.yaml")
     dimensions_by_name = {dimension.name: dimension for dimension in spec["search_space"]}
 
-    assert spec["base_config"] == "config/experiments/dense_return_forecasting_v2.yaml"
-    assert {"ema_fast", "horizon_bars", "top_k", "entry_threshold", "min_holding_bars"}.issubset(dimensions_by_name)
+    assert spec["base_config"] == "config/lab/02_forward_return_timesfm_h24.yaml"
+    assert spec["archived"] is False
+    assert {"horizon_bars"}.issubset(dimensions_by_name)
     horizon = dimensions_by_name["horizon_bars"]
-    assert horizon.low == 8
-    assert horizon.high == 16
-    assert horizon.step == 4
-    assert spec["objective"].constraints
+    assert horizon.low == 12
+    assert horizon.high == 32
 
 
 @pytest.mark.parametrize(
@@ -929,6 +928,32 @@ def test_validate_risk_block_accepts_portfolio_guard() -> None:
     )
 
 
+@pytest.mark.parametrize("weekly_profit_lock", [0.015, 0.02])
+def test_validate_risk_block_accepts_profit_lock_at_or_above_weekly_target(
+    weekly_profit_lock: float,
+) -> None:
+    validate_risk_block(
+        {
+            "portfolio_guard": {
+                "weekly_return_target": 0.015,
+                "weekly_profit_lock": weekly_profit_lock,
+            }
+        }
+    )
+
+
+def test_validate_risk_block_rejects_profit_lock_below_weekly_target() -> None:
+    with pytest.raises(ConfigValidationError, match="weekly_profit_lock must be >="):
+        validate_risk_block(
+            {
+                "portfolio_guard": {
+                    "weekly_return_target": 0.015,
+                    "weekly_profit_lock": 0.01,
+                }
+            }
+        )
+
+
 def test_validate_model_block_rejects_log_forward_return_without_returns_col() -> None:
     model = {
         "kind": "tft_forecaster",
@@ -1625,7 +1650,7 @@ def test_validate_backtest_block_accepts_portfolio_barrier_engine() -> None:
 
 
 def test_validate_resolved_config_requires_portfolio_for_portfolio_barrier() -> None:
-    cfg = load_experiment_config("config/experiments/indicator_model_adaptive_pullback_barrier.yaml")
+    cfg = load_experiment_config("config/experiments/others/indicator_model_adaptive_pullback_barrier.yaml")
     cfg["portfolio"] = dict(cfg["portfolio"])
     cfg["portfolio"]["enabled"] = False
 
@@ -1634,7 +1659,7 @@ def test_validate_resolved_config_requires_portfolio_for_portfolio_barrier() -> 
 
 
 def test_validate_resolved_config_rejects_portfolio_barrier_target_backtest_mismatch() -> None:
-    cfg = deepcopy(load_experiment_config("config/experiments/indicator_model_adaptive_pullback_barrier.yaml"))
+    cfg = deepcopy(load_experiment_config("config/experiments/others/indicator_model_adaptive_pullback_barrier.yaml"))
     cfg["backtest"]["profit_barrier_r"] = float(cfg["model"]["target"]["profit_barrier_r"]) + 0.1
 
     with pytest.raises(ConfigValidationError, match="portfolio_barrier parity mismatch"):
@@ -1642,23 +1667,22 @@ def test_validate_resolved_config_rejects_portfolio_barrier_target_backtest_mism
 
 
 def test_validate_resolved_config_rejects_portfolio_barrier_signal_ev_mismatch() -> None:
-    cfg = deepcopy(load_experiment_config("config/experiments/indicator_model_adaptive_pullback_barrier.yaml"))
+    cfg = deepcopy(load_experiment_config("config/experiments/others/indicator_model_adaptive_pullback_barrier.yaml"))
     cfg["signals"]["params"]["stop_barrier_r"] = float(cfg["model"]["target"]["stop_barrier_r"]) + 0.1
 
     with pytest.raises(ConfigValidationError, match="signals.params.stop_barrier_r"):
         validate_resolved_config(cfg)
 
 
-def test_validate_resolved_config_requires_inner_alignment_for_portfolio_barrier() -> None:
-    cfg = deepcopy(load_experiment_config("config/experiments/indicator_model_adaptive_pullback_barrier.yaml"))
+def test_validate_resolved_config_accepts_explicit_outer_alignment_for_portfolio_barrier() -> None:
+    cfg = deepcopy(load_experiment_config("config/experiments/others/indicator_model_adaptive_pullback_barrier.yaml"))
     cfg["data"]["alignment"] = "outer"
 
-    with pytest.raises(ConfigValidationError, match="data.alignment='inner'"):
-        validate_resolved_config(cfg)
+    validate_resolved_config(cfg)
 
 
 def test_validate_resolved_config_accepts_ftmo_sizing_for_portfolio_barrier() -> None:
-    cfg = deepcopy(load_experiment_config("config/experiments/indicator_model_adaptive_pullback_barrier.yaml"))
+    cfg = deepcopy(load_experiment_config("config/experiments/others/indicator_model_adaptive_pullback_barrier.yaml"))
     cfg["risk"]["sizing"] = {
         "kind": "ftmo_risk_per_trade",
         "output_col": "signal_ftmo_sized",

@@ -8,6 +8,7 @@ import os
 import time
 from typing import Any, Mapping, Protocol
 from urllib import error, parse, request
+from uuid import uuid4
 
 import pandas as pd
 
@@ -306,11 +307,11 @@ class OandaExecution(BrokerBase):
     def modify_order(self, order_id: str, **kwargs: Any) -> OrderResult:
         order = {key: value for key, value in kwargs.items() if value is not None}
         payload = self._request("PUT", f"/v3/accounts/{self.config.account_id}/orders/{order_id}", json_body={"order": order})
-        return _order_result(payload)
+        return _confirmed_order_result(payload, operation="modify_order")
 
     def cancel_order(self, order_id: str) -> OrderResult:
         payload = self._request("PUT", f"/v3/accounts/{self.config.account_id}/orders/{order_id}/cancel")
-        return _order_result(payload)
+        return _confirmed_order_result(payload, operation="cancel_order")
 
     def close_position(self, symbol: str, **kwargs: Any) -> OrderResult:
         broker_symbol = self._to_broker_symbol(symbol)
@@ -323,7 +324,7 @@ class OandaExecution(BrokerBase):
             body["shortUnits"] = str(units)
         self.logger.info("Position closed for %s side=%s units=%s", broker_symbol, side, units)
         payload = self._request("PUT", f"/v3/accounts/{self.config.account_id}/positions/{broker_symbol}/close", json_body=body)
-        return _order_result(payload)
+        return _confirmed_order_result(payload, operation="close_position")
 
     def close_all_positions(self) -> list[OrderResult]:
         results: list[OrderResult] = []
@@ -336,9 +337,7 @@ class OandaExecution(BrokerBase):
 
     def _submit_order(self, order: dict[str, Any]) -> OrderResult:
         payload = self._request("POST", f"/v3/accounts/{self.config.account_id}/orders", json_body={"order": order})
-        result = _order_result(payload)
-        if not result.accepted:
-            raise OrderRejected(f"OANDA order rejected: {payload}")
+        result = _confirmed_order_result(payload, operation="submit_order")
         self.logger.info("Order accepted")
         return result
 
@@ -357,6 +356,9 @@ class OandaExecution(BrokerBase):
             "instrument": broker_symbol,
             "units": _format_units(signed_units),
             "positionFill": str(kwargs.get("position_fill", "DEFAULT")),
+            "clientExtensions": {
+                "id": _client_order_id(kwargs.get("client_order_id")),
+            },
         }
         if order_type == "MARKET":
             order["timeInForce"] = str(kwargs.get("time_in_force", "FOK"))
@@ -371,13 +373,15 @@ class OandaExecution(BrokerBase):
         json_body: Mapping[str, Any] | None = None,
         params: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
-        retries = max(1, self.config.max_retry)
+        normalized_method = str(method).upper()
+        retry_safe = normalized_method in {"GET", "HEAD", "OPTIONS"}
+        retries = max(1, self.config.max_retry) if retry_safe else 1
         last_exc: Exception | None = None
         for attempt in range(1, retries + 1):
             self._rate_limit()
             try:
                 response = self.transport.request(
-                    method,
+                    normalized_method,
                     self._url(path),
                     headers=self._headers(),
                     json_body=json_body,
@@ -390,18 +394,30 @@ class OandaExecution(BrokerBase):
                 if status == 429:
                     raise RateLimitExceeded(f"OANDA rate limit exceeded: {response}")
                 if status is not None and status >= 400:
-                    if "order" in path:
-                        raise OrderRejected(f"OANDA order rejected: {response}")
+                    if not retry_safe and status < 500:
+                        raise OrderRejected(f"OANDA mutation rejected: {response}")
                     raise ConnectionLost(f"OANDA request failed status={status}: {response}")
                 return response
             except RateLimitExceeded as exc:
                 last_exc = exc
-                if attempt >= retries:
+                if not retry_safe or attempt >= retries:
                     raise
                 self.logger.warning("Retrying connection after rate limit attempt=%s", attempt)
                 self._sleep(min(2.0 ** attempt, 30.0))
             except ConnectionLost as exc:
                 last_exc = exc
+                if not retry_safe:
+                    self._connected = False
+                    client_id = _mutation_client_id(json_body)
+                    reconciliation = (
+                        f" Reconcile clientExtensions.id={client_id!r} before any retry."
+                        if client_id
+                        else " Reconcile broker transactions before any retry."
+                    )
+                    raise ConnectionLost(
+                        f"OANDA {normalized_method} mutation outcome is unknown."
+                        f"{reconciliation}"
+                    ) from exc
                 if not self.config.reconnect or attempt >= retries:
                     raise
                 self._connected = False
@@ -511,16 +527,120 @@ def _attach_dependent_orders(order: dict[str, Any], kwargs: Mapping[str, Any]) -
 
 def _order_result(payload: Mapping[str, Any]) -> OrderResult:
     raw = dict(payload)
-    create = raw.get("orderCreateTransaction") or raw.get("orderFillTransaction") or raw.get("orderCancelTransaction") or {}
-    fill = raw.get("orderFillTransaction") or {}
-    reject = raw.get("orderRejectTransaction") or raw.get("orderCancelRejectTransaction")
+    reject_transactions = [
+        value
+        for key, value in raw.items()
+        if str(key).endswith("RejectTransaction") and isinstance(value, Mapping)
+    ]
+    create_transactions = _transactions_with_suffix(raw, "CreateTransaction")
+    fill_transactions = _transactions_with_suffix(raw, "FillTransaction")
+    cancel_transactions = _transactions_with_suffix(raw, "CancelTransaction")
+    confirmed_transactions = [
+        transaction
+        for transaction in (
+            *create_transactions,
+            *fill_transactions,
+            *cancel_transactions,
+        )
+        if transaction.get("id") not in (None, "")
+    ]
+    rejected = bool(reject_transactions)
+    accepted = not rejected and bool(confirmed_transactions)
+    order_id = _first_transaction_value(create_transactions, "id")
+    if order_id is None:
+        order_id = _first_transaction_value(fill_transactions, "orderID")
+    if order_id is None:
+        order_id = _first_transaction_value(cancel_transactions, "orderID", "id")
+    trade_id = _trade_id_from_fills(fill_transactions)
+    if rejected:
+        status = "rejected"
+    elif fill_transactions and accepted:
+        status = "filled"
+    elif create_transactions and accepted:
+        status = "accepted"
+    elif cancel_transactions and accepted:
+        status = "cancelled"
+    else:
+        status = "unknown"
     return OrderResult(
-        accepted=reject is None,
-        order_id=str(create.get("id")) if create.get("id") is not None else None,
-        trade_id=str(fill.get("id")) if fill.get("id") is not None else None,
-        status="rejected" if reject is not None else "accepted",
+        accepted=accepted,
+        order_id=order_id,
+        trade_id=trade_id,
+        status=status,
         raw=raw,
     )
+
+
+def _confirmed_order_result(payload: Mapping[str, Any], *, operation: str) -> OrderResult:
+    result = _order_result(payload)
+    if result.accepted:
+        return result
+    if result.status == "rejected":
+        raise OrderRejected(f"OANDA {operation} rejected: {dict(payload)}")
+    raise ConnectionLost(
+        f"OANDA {operation} returned no confirmed transaction; broker state is unknown."
+    )
+
+
+def _transactions_with_suffix(
+    payload: Mapping[str, Any],
+    suffix: str,
+) -> list[Mapping[str, Any]]:
+    return [
+        value
+        for key, value in payload.items()
+        if str(key).endswith(suffix)
+        and not str(key).endswith(f"Reject{suffix}")
+        and isinstance(value, Mapping)
+    ]
+
+
+def _first_transaction_value(
+    transactions: list[Mapping[str, Any]],
+    *keys: str,
+) -> str | None:
+    for transaction in transactions:
+        for key in keys:
+            value = transaction.get(key)
+            if value not in (None, ""):
+                return str(value)
+    return None
+
+
+def _trade_id_from_fills(fill_transactions: list[Mapping[str, Any]]) -> str | None:
+    for fill in fill_transactions:
+        for field in ("tradeOpened", "tradeReduced"):
+            trade = fill.get(field)
+            if isinstance(trade, Mapping) and trade.get("tradeID") not in (None, ""):
+                return str(trade["tradeID"])
+        closed = fill.get("tradesClosed")
+        if isinstance(closed, list):
+            for trade in closed:
+                if isinstance(trade, Mapping) and trade.get("tradeID") not in (None, ""):
+                    return str(trade["tradeID"])
+    return None
+
+
+def _client_order_id(value: Any) -> str:
+    client_id = str(value or f"stf-{uuid4().hex}").strip()
+    if not client_id:
+        raise ValueError("client_order_id must be non-empty.")
+    if len(client_id) > 128 or any(char.isspace() for char in client_id):
+        raise ValueError("client_order_id must be at most 128 characters and contain no whitespace.")
+    return client_id
+
+
+def _mutation_client_id(json_body: Mapping[str, Any] | None) -> str | None:
+    if not isinstance(json_body, Mapping):
+        return None
+    order = json_body.get("order")
+    if not isinstance(order, Mapping):
+        return None
+    extensions = order.get("clientExtensions")
+    if not isinstance(extensions, Mapping):
+        return None
+    value = extensions.get("id")
+    return str(value) if value not in (None, "") else None
 
 
 def _decode_json(payload: str) -> dict[str, Any]:

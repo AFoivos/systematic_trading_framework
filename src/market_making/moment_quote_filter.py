@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Mapping
 
 
@@ -43,9 +44,26 @@ class MomentQuoteFilter:
     """Fee-aware quote-side filter for MOMENT predicted markout or good-fill probability."""
 
     def __init__(self, config: MomentQuoteFilterConfig) -> None:
+        for name, value in (
+            ("maker_fee_bps", config.maker_fee_bps),
+            ("expected_spread_capture_bps", config.expected_spread_capture_bps),
+            ("safety_buffer_bps", config.safety_buffer_bps),
+            ("max_uncertainty", config.max_uncertainty),
+            ("min_expected_edge_bps", config.min_expected_edge_bps),
+        ):
+            if not math.isfinite(float(value)):
+                raise ValueError(f"{name} must be finite.")
+        if config.safety_buffer_bps < 0.0:
+            raise ValueError("safety_buffer_bps must be >= 0.")
+        if config.max_uncertainty < 0.0:
+            raise ValueError("max_uncertainty must be >= 0.")
+        if config.min_expected_edge_bps < 0.0:
+            raise ValueError("min_expected_edge_bps must be >= 0.")
         self.config = config
 
     def decide(self, prediction: Mapping[str, object], *, candidate_side: str = "both") -> MomentQuoteFilterDecision:
+        if candidate_side not in {"none", "buy", "sell", "both"}:
+            raise ValueError("candidate_side must be one of: none, buy, sell, both")
         buy_score = _optional_float(prediction.get("moment_buy_score", prediction.get("predicted_buy_markout_bps")))
         sell_score = _optional_float(prediction.get("moment_sell_score", prediction.get("predicted_sell_markout_bps")))
         uncertainty = _optional_float(prediction.get("moment_uncertainty", prediction.get("uncertainty")))
@@ -98,9 +116,10 @@ def _optional_float(value: object) -> float | None:
     if value is None or value == "":
         return None
     try:
-        return float(value)
+        parsed = float(value)
     except (TypeError, ValueError):
         return None
+    return parsed if math.isfinite(parsed) else None
 
 
 __all__ = ["MomentQuoteFilter", "MomentQuoteFilterConfig", "MomentQuoteFilterDecision"]

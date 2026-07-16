@@ -115,6 +115,32 @@ def test_non_book_and_ack_messages_are_ignored() -> None:
     assert apply_kraken_book_message({"channel": "book", "type": "subscribed"}, book) == []
 
 
+def test_payload_for_another_symbol_is_rejected_without_corrupting_book() -> None:
+    book = LocalOrderBook("BTC/USD")
+    book.apply_snapshot(bids=[(100.0, 1.0)], asks=[(101.0, 1.0)], sequence=1)
+
+    with pytest.raises(ValueError, match="does not match"):
+        apply_kraken_book_message(
+            {
+                "channel": "book",
+                "type": "update",
+                "data": [
+                    {
+                        "symbol": "ETH/USD",
+                        "bids": [{"price": 200.0, "qty": 1.0}],
+                        "timestamp": "2026-07-01T12:00:01Z",
+                        "sequence": 2,
+                    }
+                ],
+            },
+            book,
+        )
+
+    assert book.best_bid == 100.0
+    assert book.best_ask == 101.0
+    assert book.sequence == 1
+
+
 def test_csv_fields_cover_required_order_book_metrics(tmp_path) -> None:
     book = LocalOrderBook("BTC/USD")
     book.apply_snapshot(bids=[(100.0, 1.0)], asks=[(101.0, 1.0)])

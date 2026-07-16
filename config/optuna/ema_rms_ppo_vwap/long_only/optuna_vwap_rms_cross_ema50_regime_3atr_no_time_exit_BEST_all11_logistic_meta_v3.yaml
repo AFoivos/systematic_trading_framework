@@ -48,17 +48,17 @@ pruning:
   interval_steps: 1
 
 search_space:
-  - {name: xauusd_ppo_hist_min, path: features.24.params_by_asset.XAUUSD.ppo_hist_min, kind: float, low: 0.0, high: 0.0025, step: 0.00005}
-  - {name: xagusd_ppo_hist_min, path: features.24.params_by_asset.XAGUSD.ppo_hist_min, kind: float, low: 0.0, high: 0.0025, step: 0.00005}
-  - {name: spx500_ppo_hist_min, path: features.24.params_by_asset.SPX500.ppo_hist_min, kind: float, low: 0.0, high: 0.0025, step: 0.00005}
-  - {name: us100_ppo_hist_min, path: features.24.params_by_asset.US100.ppo_hist_min, kind: float, low: 0.0, high: 0.0025, step: 0.00005}
-  - {name: ger40_ppo_hist_min, path: features.24.params_by_asset.GER40.ppo_hist_min, kind: float, low: 0.0, high: 0.0025, step: 0.00005}
-  - {name: us30_ppo_hist_min, path: features.24.params_by_asset.US30.ppo_hist_min, kind: float, low: 0.0, high: 0.0025, step: 0.00005}
-  - {name: brent_ppo_hist_min, path: features.24.params_by_asset.BRENT.ppo_hist_min, kind: float, low: 0.0, high: 0.0025, step: 0.00005}
-  - {name: ethusd_ppo_hist_min, path: features.24.params_by_asset.ETHUSD.ppo_hist_min, kind: float, low: 0.0, high: 0.0040, step: 0.00005}
-  - {name: eurusd_ppo_hist_min, path: features.24.params_by_asset.EURUSD.ppo_hist_min, kind: float, low: 0.0, high: 0.0025, step: 0.00005}
-  - {name: nikkei225_ppo_hist_min, path: features.24.params_by_asset.NIKKEI225.ppo_hist_min, kind: float, low: 0.0, high: 0.0025, step: 0.00005}
-  - {name: usoil_ppo_hist_min, path: features.24.params_by_asset.USOIL.ppo_hist_min, kind: float, low: 0.0, high: 0.0030, step: 0.00005}
+  - {name: xauusd_ppo_hist_min, path: features.22.params_by_asset.XAUUSD.ppo_hist_min, kind: float, low: 0.0, high: 0.0025, step: 0.00005}
+  - {name: xagusd_ppo_hist_min, path: features.22.params_by_asset.XAGUSD.ppo_hist_min, kind: float, low: 0.0, high: 0.0025, step: 0.00005}
+  - {name: spx500_ppo_hist_min, path: features.22.params_by_asset.SPX500.ppo_hist_min, kind: float, low: 0.0, high: 0.0025, step: 0.00005}
+  - {name: us100_ppo_hist_min, path: features.22.params_by_asset.US100.ppo_hist_min, kind: float, low: 0.0, high: 0.0025, step: 0.00005}
+  - {name: ger40_ppo_hist_min, path: features.22.params_by_asset.GER40.ppo_hist_min, kind: float, low: 0.0, high: 0.0025, step: 0.00005}
+  - {name: us30_ppo_hist_min, path: features.22.params_by_asset.US30.ppo_hist_min, kind: float, low: 0.0, high: 0.0025, step: 0.00005}
+  - {name: brent_ppo_hist_min, path: features.22.params_by_asset.BRENT.ppo_hist_min, kind: float, low: 0.0, high: 0.0025, step: 0.00005}
+  - {name: ethusd_ppo_hist_min, path: features.22.params_by_asset.ETHUSD.ppo_hist_min, kind: float, low: 0.0, high: 0.0040, step: 0.00005}
+  - {name: eurusd_ppo_hist_min, path: features.22.params_by_asset.EURUSD.ppo_hist_min, kind: float, low: 0.0, high: 0.0025, step: 0.00005}
+  - {name: nikkei225_ppo_hist_min, path: features.22.params_by_asset.NIKKEI225.ppo_hist_min, kind: float, low: 0.0, high: 0.0025, step: 0.00005}
+  - {name: usoil_ppo_hist_min, path: features.22.params_by_asset.USOIL.ppo_hist_min, kind: float, low: 0.0, high: 0.0030, step: 0.00005}
 
   - {name: xauusd_profit_barrier_r, path: backtest.asset_params.XAUUSD.profit_barrier_r, kind: float, low: 1.5, high: 5.0, step: 0.25}
   - {name: xauusd_stop_barrier_r, path: backtest.asset_params.XAUUSD.stop_barrier_r, kind: float, low: 0.75, high: 3.5, step: 0.25}

@@ -141,21 +141,11 @@ class MT5Connector:
         self.login(login=login, password=password, server=server)
 
     def credentials_from_mapping(self, config: dict[str, Any]) -> tuple[int, str, str]:
-        values = {
-            "login": config.get("login"),
-            "password": config.get("password"),
-            "server": config.get("server"),
-        }
-        missing = [field for field, value in values.items() if value in (None, "")]
-        if missing:
-            raise MT5CredentialsError(
-                "Missing MT5 credential config fields: " + ", ".join(missing)
-            )
-        try:
-            login = int(str(values["login"]))
-        except ValueError as exc:
-            raise MT5CredentialsError("mt5.login must be an integer login id.") from exc
-        return login, str(values["password"]), str(values["server"])
+        del config
+        raise MT5CredentialsError(
+            "Plaintext MT5 credential mappings are disabled. "
+            "Use login_from_env with an external secret store."
+        )
 
     def login(self, *, login: int, password: str, server: str) -> None:
         ok = self.mt5.login(login=int(login), password=password, server=server)
@@ -235,7 +225,10 @@ class MT5Connector:
     def positions_get(self, *, symbol: str | None = None) -> list[Any]:
         raw = self.mt5.positions_get(symbol=symbol) if symbol else self.mt5.positions_get()
         if raw is None:
-            return []
+            raise MT5ConnectorError(
+                f"MT5 positions_get failed"
+                f"{f' for {symbol}' if symbol else ''}: {self.last_error()}"
+            )
         return list(raw)
 
     def fetch_candles(
@@ -321,14 +314,17 @@ class MT5Connector:
         return self.mt5.order_send(request)
 
     def is_successful_order(self, result: Any) -> bool:
+        return self.order_status(result) in {"filled", "submitted", "partial"}
+
+    def order_status(self, result: Any) -> str:
         retcode = _attr(result, "retcode")
-        success_codes = {
-            getattr(self.mt5, "TRADE_RETCODE_DONE", None),
-            getattr(self.mt5, "TRADE_RETCODE_PLACED", None),
-            getattr(self.mt5, "TRADE_RETCODE_DONE_PARTIAL", None),
+        status_by_code = {
+            getattr(self.mt5, "TRADE_RETCODE_DONE", None): "filled",
+            getattr(self.mt5, "TRADE_RETCODE_PLACED", None): "submitted",
+            getattr(self.mt5, "TRADE_RETCODE_DONE_PARTIAL", None): "partial",
         }
-        success_codes.discard(None)
-        return retcode in success_codes
+        status_by_code.pop(None, None)
+        return status_by_code.get(retcode, "rejected")
 
 
 __all__ = [

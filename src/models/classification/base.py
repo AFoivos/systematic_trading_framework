@@ -41,6 +41,89 @@ from src.targets.registry import build_target
 from src.models.types import EstimatorFactory
 
 
+class FittedClassifierPipeline:
+    """Serializable deployment wrapper for preprocessing, estimator, and calibration."""
+
+    def __init__(
+        self,
+        *,
+        estimator: object,
+        scaler: StandardScaler | RobustScaler | None,
+        calibrator: LogisticRegression | None,
+        estimator_family: str,
+    ) -> None:
+        self.estimator = estimator
+        self.scaler = scaler
+        self.calibrator = calibrator
+        self.estimator_family = str(estimator_family)
+        self.classes_ = np.asarray(getattr(estimator, "classes_", [0, 1]))
+
+    def _transform(self, features: pd.DataFrame | np.ndarray) -> pd.DataFrame | np.ndarray:
+        if isinstance(features, pd.DataFrame):
+            raw: pd.DataFrame | np.ndarray = features.astype(float)
+        else:
+            raw = np.asarray(features, dtype=float)
+        if self.scaler is not None:
+            values = (
+                raw.to_numpy(dtype=float, copy=False)
+                if isinstance(raw, pd.DataFrame)
+                else np.asarray(raw, dtype=float)
+            )
+            raw = self.scaler.transform(values)
+        if self.estimator_family == "xgboost":
+            raw = (
+                raw.to_numpy(dtype=np.float32, copy=False)
+                if isinstance(raw, pd.DataFrame)
+                else np.asarray(raw, dtype=np.float32)
+            )
+        return raw
+
+    def predict_proba(self, features: pd.DataFrame | np.ndarray) -> np.ndarray:
+        raw_probability = np.asarray(
+            self.estimator.predict_proba(self._transform(features)),
+            dtype=float,
+        )
+        if self.calibrator is None:
+            return raw_probability
+        if raw_probability.ndim != 2 or raw_probability.shape[1] != 2:
+            raise ValueError("Sigmoid calibration requires a binary classifier.")
+        positive = _apply_sigmoid_calibrator(self.calibrator, raw_probability[:, 1])
+        return np.column_stack([1.0 - positive, positive])
+
+    def predict(self, features: pd.DataFrame | np.ndarray) -> np.ndarray:
+        probability = self.predict_proba(features)
+        if probability.ndim == 2 and probability.shape[1] == 2:
+            return (probability[:, 1] >= 0.5).astype(int)
+        return self.classes_[np.argmax(probability, axis=1)]
+
+
+def _fit_deployment_preprocessor(
+    features: pd.DataFrame,
+    *,
+    preprocessing_cfg: dict[str, Any] | None,
+) -> tuple[pd.DataFrame | np.ndarray, StandardScaler | RobustScaler | None, dict[str, Any]]:
+    cfg = dict(preprocessing_cfg or {})
+    scaler_kind = str(cfg.get("scaler", "none") or "none").strip().lower()
+    if scaler_kind in {"", "none"}:
+        return features, None, {"scaler": "none", "train_only": True}
+    if scaler_kind == "standard":
+        scaler: StandardScaler | RobustScaler = StandardScaler()
+    elif scaler_kind == "robust":
+        scaler = RobustScaler()
+    else:
+        raise ValueError(f"Unsupported model.preprocessing.scaler: {scaler_kind}")
+    transformed = scaler.fit_transform(features.to_numpy(dtype=float, copy=False))
+    return (
+        transformed,
+        scaler,
+        {
+            "scaler": scaler_kind,
+            "train_only": True,
+            "feature_count": int(features.shape[1]),
+        },
+    )
+
+
 def _apply_fold_feature_preprocessing(
     X_train: pd.DataFrame,
     X_test: pd.DataFrame,
@@ -483,6 +566,101 @@ def train_forward_classifier(
             fold_meta[-1]["overlay"] = overlay_fold_meta
         report_optuna_fold(model_kind, int(split.fold), dict(fold_meta[-1]))
 
+    final_refit_meta: dict[str, Any] = {"enabled": False}
+    if bool(model_cfg.get("final_refit", True)):
+        cutoff_source = out[fwd_col] if target_meta.get("quantiles") is not None else out[label_col]
+        labeled_positions = np.flatnonzero(cutoff_source.notna().to_numpy(dtype=bool))
+        if len(labeled_positions) == 0:
+            raise ValueError("Final classifier refit has no fully observed label rows.")
+        final_cutoff = int(labeled_positions[-1])
+        final_train_df = out.iloc[: final_cutoff + 1].copy()
+        final_quantile_low: float | None = None
+        final_quantile_high: float | None = None
+        if target_meta.get("quantiles") is not None:
+            q_low, q_high = target_meta["quantiles"]
+            final_fwd = final_train_df[fwd_col].dropna().astype(float)
+            final_quantile_low = float(final_fwd.quantile(float(q_low)))
+            final_quantile_high = float(final_fwd.quantile(float(q_high)))
+            final_train_df[label_col] = assign_quantile_labels(
+                final_train_df[fwd_col],
+                low_value=final_quantile_low,
+                high_value=final_quantile_high,
+            )
+
+        final_complete = final_train_df[feature_cols].notna().all(axis=1)
+        final_labeled = final_train_df[label_col].notna()
+        final_train_fit = final_train_df.loc[final_complete & final_labeled]
+        if final_train_fit.empty:
+            raise ValueError("Final classifier refit has no complete labeled rows.")
+        final_estimator_fit, final_calibration_fit, final_calibration_meta = (
+            _split_fit_and_calibration_rows(
+                final_train_fit,
+                full_index=out.index,
+                target_horizon=target_horizon,
+                calibration_cfg=calibration_cfg,
+            )
+        )
+        final_labels = final_estimator_fit[label_col].astype(int)
+        if int(final_labels.nunique()) < 2:
+            raise ValueError("Final classifier refit has a single target class.")
+        final_train_input, final_scaler, final_preprocessing_meta = (
+            _fit_deployment_preprocessor(
+                final_estimator_fit[feature_cols],
+                preprocessing_cfg=preprocessing_cfg,
+            )
+        )
+        final_label_input: pd.Series | np.ndarray = final_labels
+        if estimator_family == "xgboost":
+            final_train_input = np.asarray(final_train_input, dtype=np.float32)
+            final_label_input = final_labels.to_numpy(dtype=np.int32, copy=False)
+        final_estimator = estimator_factory(model_params)
+        final_estimator.fit(final_train_input, final_label_input)
+
+        final_calibrator: LogisticRegression | None = None
+        if bool(final_calibration_meta.get("enabled", False)):
+            calibration_labels = final_calibration_fit[label_col].astype(int)
+            if int(calibration_labels.nunique()) < 2:
+                raise ValueError("Final classifier calibration window has a single target class.")
+            calibration_values: pd.DataFrame | np.ndarray = final_calibration_fit[feature_cols]
+            if final_scaler is not None:
+                calibration_values = final_scaler.transform(
+                    final_calibration_fit[feature_cols].to_numpy(dtype=float, copy=False)
+                )
+            if estimator_family == "xgboost":
+                calibration_values = (
+                    calibration_values.to_numpy(dtype=np.float32, copy=False)
+                    if isinstance(calibration_values, pd.DataFrame)
+                    else np.asarray(calibration_values, dtype=np.float32)
+                )
+            calibration_raw = final_estimator.predict_proba(calibration_values)[:, 1]
+            final_calibrator = _fit_sigmoid_calibrator(
+                calibration_raw,
+                calibration_labels,
+            )
+
+        model = FittedClassifierPipeline(
+            estimator=final_estimator,
+            scaler=final_scaler,
+            calibrator=final_calibrator,
+            estimator_family=estimator_family,
+        )
+        preprocessing_meta = dict(final_preprocessing_meta)
+        final_refit_meta = {
+            "enabled": True,
+            "train_start_position": 0,
+            "train_end_position": int(final_cutoff),
+            "train_end_timestamp": out.index[final_cutoff],
+            "train_rows_raw": int(final_cutoff + 1),
+            "complete_labeled_rows": int(len(final_train_fit)),
+            "estimator_fit_rows": int(len(final_estimator_fit)),
+            "calibration_rows": int(len(final_calibration_fit)),
+            "target_horizon": int(target_horizon),
+            "quantile_low_value": final_quantile_low,
+            "quantile_high_value": final_quantile_high,
+            "preprocessing": dict(final_preprocessing_meta),
+            "calibration": dict(final_calibration_meta),
+        }
+
     if model is None:
         raise ValueError("Model training failed: no valid folds were trained.")
 
@@ -517,6 +695,7 @@ def train_forward_classifier(
 
     meta = {
         "model_kind": model_kind,
+        "task_type": "classification",
         "runtime": runtime_meta,
         "feature_cols": feature_cols,
         "feature_selection": describe_feature_set(
@@ -563,6 +742,7 @@ def train_forward_classifier(
             "target_horizon": target_horizon,
             "total_trimmed_train_rows": int(total_trimmed_rows),
         },
+        "final_refit": final_refit_meta,
     }
     return out, model, meta
 

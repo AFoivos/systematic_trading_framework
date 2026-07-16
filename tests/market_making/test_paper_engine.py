@@ -8,6 +8,7 @@ from src.market_data.order_book import LocalOrderBook
 from src.market_data.trades import Trade
 from src.market_making.paper_engine import PaperMarketMakingEngine
 from src.market_making.quote_generator import QuoteDecision
+from src.market_making.metrics import max_drawdown
 from src.market_making.risk import RiskEngine, RiskLimits
 
 
@@ -55,10 +56,13 @@ def test_virtual_buy_fill_updates_inventory_cash_and_fees() -> None:
 
     assert len(fills) == 1
     assert fills[0].side == "buy"
+    assert engine.orders[0].status == "filled"
+    assert engine.orders[1].status == "open"
     assert engine.account.inventory == 1.0
     assert engine.account.average_entry_price == pytest.approx(99.0)
     assert engine.account.fees == pytest.approx(0.099)
     assert engine.account.realized_pnl == pytest.approx(-0.099)
+    assert engine.account.cash == pytest.approx(-99.099)
 
 
 def test_virtual_sell_fill_updates_inventory_and_pnl() -> None:
@@ -144,3 +148,9 @@ def test_cancel_replace_risk_uses_candidate_orders_not_existing_open_orders() ->
     assert len(engine.open_orders) == 2
     assert set(engine.open_orders).isdisjoint(first_order_ids)
     assert engine.number_of_cancels == 2
+    assert [order.status for order in engine.orders[:2]] == ["cancelled", "cancelled"]
+    assert [order.status for order in engine.orders[2:]] == ["open", "open"]
+
+
+def test_max_drawdown_includes_initial_zero_pnl_anchor() -> None:
+    assert max_drawdown([-2.0, -1.0, 1.0]) == pytest.approx(2.0)

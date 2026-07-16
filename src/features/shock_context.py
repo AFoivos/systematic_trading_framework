@@ -97,6 +97,31 @@ def _compute_horizon_return(
     return compounded - 1.0
 
 
+def _hour_horizon_to_bars(index: pd.Index, *, horizon_hours: int) -> int:
+    if not isinstance(index, pd.DatetimeIndex):
+        raise TypeError("shock_context hour horizons require a DatetimeIndex.")
+    if len(index) < 2:
+        raise ValueError("shock_context requires at least two timestamps to infer bar cadence.")
+    if not index.is_monotonic_increasing or index.has_duplicates:
+        raise ValueError("shock_context requires a sorted, unique DatetimeIndex.")
+
+    differences = np.diff(index.asi8)
+    unique_differences = np.unique(differences)
+    if len(unique_differences) != 1 or int(unique_differences[0]) <= 0:
+        raise ValueError(
+            "shock_context hour horizons require a regular cadence without missing bars."
+        )
+    duration_ns = int(pd.Timedelta(hours=int(horizon_hours)).value)
+    cadence_ns = int(unique_differences[0])
+    bars, remainder = divmod(duration_ns, cadence_ns)
+    if remainder != 0 or bars <= 0:
+        raise ValueError(
+            f"shock_context horizon {horizon_hours}h is not an integer multiple "
+            f"of the inferred bar cadence {pd.Timedelta(cadence_ns)}."
+        )
+    return int(bars)
+
+
 def _rolling_zscore(series: pd.Series, *, window: int) -> pd.Series:
     roll_mean = series.rolling(int(window), min_periods=int(window)).mean()
     roll_std = series.rolling(int(window), min_periods=int(window)).std(ddof=0)
@@ -267,22 +292,34 @@ def add_shock_context_features(
 
     short_suffix = f"{int(short_horizon)}h"
     medium_suffix = f"{int(medium_horizon)}h"
+    short_horizon_bars = _hour_horizon_to_bars(
+        out.index,
+        horizon_hours=int(short_horizon),
+    )
+    medium_horizon_bars = _hour_horizon_to_bars(
+        out.index,
+        horizon_hours=int(medium_horizon),
+    )
 
     shock_ret_short = _compute_horizon_return(
         returns,
-        horizon=int(short_horizon),
+        horizon=short_horizon_bars,
         use_log_returns=bool(use_log_returns),
     ).astype(float)
     shock_ret_medium = _compute_horizon_return(
         returns,
-        horizon=int(medium_horizon),
+        horizon=medium_horizon_bars,
         use_log_returns=bool(use_log_returns),
     ).astype(float)
     shock_ret_z_short = _rolling_zscore(shock_ret_short, window=int(vol_window)).astype(float)
     shock_ret_z_medium = _rolling_zscore(shock_ret_medium, window=int(vol_window)).astype(float)
 
-    shock_atr_multiple_short = ((prices - prices.shift(int(short_horizon))) / atr_safe).astype(float)
-    shock_atr_multiple_medium = ((prices - prices.shift(int(medium_horizon))) / atr_safe).astype(float)
+    shock_atr_multiple_short = (
+        (prices - prices.shift(short_horizon_bars)) / atr_safe
+    ).astype(float)
+    shock_atr_multiple_medium = (
+        (prices - prices.shift(medium_horizon_bars)) / atr_safe
+    ).astype(float)
     shock_distance_ema = ((prices - ema_series.astype(float)) / atr_safe).astype(float)
 
     use_short = shock_ret_z_short.abs().fillna(-np.inf) >= shock_ret_z_medium.abs().fillna(-np.inf)

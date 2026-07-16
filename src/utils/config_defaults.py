@@ -261,7 +261,7 @@ def default_backtest_block(
         backtest.setdefault("stop_barrier_r", 1.0)
         backtest.setdefault("vertical_barrier_bars", 4)
         backtest.setdefault("tie_break", "closest_to_open")
-        backtest.setdefault("event_time_remap_policy", "next_aligned")
+        backtest.setdefault("event_time_remap_policy", "skip")
         backtest.setdefault("max_cost_r", None)
         backtest.setdefault("annualization_mode", "fixed_periods")
     else:

@@ -14,7 +14,7 @@ features:
 panel_features: [{step: global_session_relay, params: {interval_minutes: 30, entry_window_bars: 4, cluster_context_max_age_bars: 8, relay_context_max_age_bars: 8, macro_context_max_age_bars: 4, universe_mode: fixed}}]
 model: {kind: none}
 signals: {kind: none}
-panel_signals: [{step: global_session_relay_laggard, params: {signal_col: signal_global_session_relay, atr_col: atr_20, volatility_col: vol_rolling_96, context_only_assets: [ETHUSD, EURUSD], enabled_modules: {intra_asia: true, intra_europe: true, intra_usa: true, intra_energy: true, intra_metals: false, asia_to_europe_relay: false, europe_to_usa_relay: false}, macro_veto: {enabled: false}}}]
+panel_signals: [{step: global_session_relay_laggard, params: {signal_col: signal_global_session_relay, atr_col: atr_20, volatility_col: vol_rolling_96, context_only_assets: [ETHUSD, EURUSD], enabled_modules: {intra_asia: false, intra_europe: true, intra_usa: true, intra_energy: true, intra_metals: true, asia_to_europe_relay: false, europe_to_usa_relay: false}, macro_veto: {enabled: false}}}]
 risk: {target_vol: null, dd_guard: {enabled: false}, portfolio_guard: {enabled: true, max_open_trades: 3, group_max_open_trades: {asia: 1, europe: 1, usa: 1, energy: 1, metals: 1}}}
 backtest: &corrected_backtest
   engine: portfolio_barrier

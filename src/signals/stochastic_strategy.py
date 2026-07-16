@@ -15,14 +15,14 @@ def stochastic_strategy(
     mode: str = "long_short_hold",
 ) -> pd.Series:
     """
-    Apply the registered ``stochastic_strategy`` signal transformation.
+    Apply the registered ``stochastic`` signal transformation.
     
     This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
     
     YAML declaration::
     
         signals:
-          kind: stochastic_strategy
+          kind: stochastic
           params:
             k_col: <required>
             buy_level: 20.0

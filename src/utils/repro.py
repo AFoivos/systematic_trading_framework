@@ -10,6 +10,15 @@ from typing import Any, Mapping
 import numpy as np
 
 _ALLOWED_REPRO_MODES = {"strict", "relaxed"}
+_RUNTIME_CONFIG_KEYS = {
+    "deterministic",
+    "extensions",
+    "metadata",
+    "repro_mode",
+    "seed",
+    "seed_torch",
+    "threads",
+}
 _THREAD_ENV_VARS = (
     "OMP_NUM_THREADS",
     "OPENBLAS_NUM_THREADS",
@@ -44,7 +53,17 @@ def validate_runtime_config(runtime_cfg: Mapping[str, Any] | None) -> dict[str, 
     when assumptions of the infrastructure layer are violated, which keeps failures
     deterministic and easier to diagnose.
     """
-    runtime = normalize_runtime_config(runtime_cfg)
+    supplied = dict(runtime_cfg or {})
+    unknown = sorted(set(supplied) - _RUNTIME_CONFIG_KEYS)
+    if unknown:
+        allowed = ", ".join(sorted(_RUNTIME_CONFIG_KEYS))
+        raise RuntimeConfigError(
+            f"runtime has unsupported keys: {unknown}. Supported keys: {allowed}."
+        )
+    for namespace in ("extensions", "metadata"):
+        if namespace in supplied and not isinstance(supplied[namespace], Mapping):
+            raise RuntimeConfigError(f"runtime.{namespace} must be a mapping.")
+    runtime = normalize_runtime_config(supplied)
 
     seed = runtime.get("seed")
     if not isinstance(seed, int) or seed < 0:

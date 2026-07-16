@@ -13,6 +13,7 @@ from src.portfolio import (
     apply_constraints,
     build_constrained_weights_from_exposures_over_time,
     build_optimized_weights_over_time,
+    build_ranked_weights_from_scores_over_time,
     build_rolling_covariance_by_date,
     build_weights_from_signals_over_time,
     compute_portfolio_performance,
@@ -186,6 +187,149 @@ def test_portfolio_barrier_max_cost_r_skips_expensive_trades() -> None:
     assert weights.abs().sum().sum() == pytest.approx(0.0)
     assert diagnostics["open_trade_count"].sum() == pytest.approx(0.0)
     assert skipped_meta["skipped_cost_filter"] == 1
+
+
+def test_portfolio_barrier_gap_through_stop_executes_at_open() -> None:
+    frame = _portfolio_barrier_frame(periods=4)
+    frame.loc[frame.index[2], ["open", "high", "low", "close"]] = [90.0, 91.0, 89.0, 90.0]
+
+    performance, _, _, _ = run_portfolio_barrier_backtest(
+        {"AAA": frame},
+        signal_col="signal",
+        volatility_col="atr_14",
+        profit_barrier_r=1.0,
+        stop_barrier_r=1.0,
+        vertical_barrier_bars=2,
+    )
+
+    trade = performance.trades.iloc[0]
+    assert trade["exit_reason"] == "stop_loss"
+    assert trade["gap_exit"]
+    assert trade["raw_exit_price"] == pytest.approx(90.0)
+    assert trade["exit_price"] == pytest.approx(90.0)
+
+
+def test_portfolio_barrier_test_subset_requires_complete_oos_flags() -> None:
+    frame = _portfolio_barrier_frame()
+
+    with pytest.raises(ValueError, match="subset='test'.*pred_is_oos"):
+        run_portfolio_barrier_backtest(
+            {"AAA": frame},
+            signal_col="signal",
+            volatility_col="atr_14",
+            subset="test",
+        )
+
+    flagged = frame.assign(pred_is_oos=True)
+    partial = frame.copy()
+    with pytest.raises(ValueError, match="missing for"):
+        run_portfolio_barrier_backtest(
+            {"AAA": flagged, "BBB": partial},
+            signal_col="signal",
+            volatility_col="atr_14",
+            subset="test",
+        )
+
+
+def test_portfolio_barrier_rejects_unsupported_target_net_constraint() -> None:
+    with pytest.raises(ValueError, match="target_net_exposure"):
+        run_portfolio_barrier_backtest(
+            {"AAA": _portfolio_barrier_frame()},
+            constraints=PortfolioConstraints(
+                target_net_exposure=0.0,
+                enforce_target_net_exposure=True,
+            ),
+        )
+
+
+def test_portfolio_barrier_enforces_turnover_limit_at_entry_and_exit() -> None:
+    frame = _portfolio_barrier_frame(periods=4)
+    frame.loc[frame.index[2], "high"] = 101.5
+
+    performance, weights, _, meta = run_portfolio_barrier_backtest(
+        {"AAA": frame},
+        constraints=PortfolioConstraints(
+            min_weight=0.0,
+            max_weight=1.0,
+            enforce_target_net_exposure=False,
+            turnover_limit=0.4,
+        ),
+        vertical_barrier_bars=2,
+    )
+
+    assert performance.trades.iloc[0]["position_weight"] == pytest.approx(0.4)
+    assert weights["AAA"].max() == pytest.approx(0.4)
+    assert performance.turnover.max() == pytest.approx(0.4)
+    assert meta["turnover_sized_trade_count"] == 1
+
+
+def test_portfolio_barrier_next_aligned_policy_fails_instead_of_reusing_native_prices() -> None:
+    aaa = _portfolio_barrier_frame()
+    aaa.loc[aaa.index[1], "high"] = 101.5
+    bbb = _portfolio_barrier_frame()
+    bbb["signal"] = 0.0
+    bbb = bbb.drop(index=bbb.index[1])
+
+    with pytest.raises(ValueError, match="cannot safely reuse native execution prices"):
+        run_portfolio_barrier_backtest(
+            {"AAA": aaa, "BBB": bbb},
+            alignment="inner",
+            event_time_remap_policy="next_aligned",
+        )
+
+
+def test_portfolio_barrier_kill_switch_flattens_concurrent_trade() -> None:
+    aaa = _portfolio_barrier_frame(periods=5)
+    bbb = _portfolio_barrier_frame(periods=5)
+    aaa["signal"] = [0.5, 0.0, 0.0, 0.0, 0.0]
+    bbb["signal"] = [0.5, 0.0, 0.0, 0.0, 0.0]
+    aaa.loc[aaa.index[2], "low"] = 98.0
+
+    performance, weights, _, meta = run_portfolio_barrier_backtest(
+        {"AAA": aaa, "BBB": bbb},
+        profit_barrier_r=10.0,
+        stop_barrier_r=1.0,
+        vertical_barrier_bars=4,
+        asset_params={"AAA": {"vertical_barrier_bars": 2}},
+        portfolio_guard={
+            "enabled": True,
+            "kill_switch_max_drawdown": 0.004,
+            "equity_source": "realized",
+        },
+    )
+
+    bbb_trade = performance.trades.set_index("asset").loc["BBB"]
+    assert bbb_trade["exit_reason"] == "kill_switch"
+    assert bbb_trade["exit_time"] == bbb.index[2]
+    assert weights.loc[bbb.index[2] :, "BBB"].eq(0.0).all()
+    assert performance.risk_guard_summary["permanent_flattened"]
+    assert meta["flattened_trade_count"] == 1
+
+
+def test_portfolio_barrier_bankruptcy_is_terminal() -> None:
+    frame = _portfolio_barrier_frame(periods=5)
+    frame["signal"] = [3.0, 0.0, 3.0, 0.0, 0.0]
+    frame.loc[frame.index[2], ["open", "high", "low", "close"]] = [50.0, 51.0, 49.0, 50.0]
+
+    performance, weights, _, meta = run_portfolio_barrier_backtest(
+        {"AAA": frame},
+        profit_barrier_r=10.0,
+        stop_barrier_r=1.0,
+        vertical_barrier_bars=2,
+        constraints=PortfolioConstraints(
+            min_weight=0.0,
+            max_weight=3.0,
+            max_gross_leverage=3.0,
+            enforce_target_net_exposure=False,
+        ),
+        gross_target=3.0,
+    )
+
+    assert performance.summary["bankrupt"]
+    assert performance.equity_curve.loc[frame.index[2] :].eq(0.0).all()
+    assert weights.loc[frame.index[2] :].eq(0.0).all().all()
+    assert len(performance.trades) == 1
+    assert meta["bankrupt"]
 
 
 def test_apply_constraints_respects_bounds_group_gross_and_turnover() -> None:
@@ -379,6 +523,34 @@ def test_compute_portfolio_performance_respects_min_holding_bars_via_held_weight
     assert held.iloc[0].tolist() == [1.0, -1.0]
     assert held.iloc[1].tolist() == [1.0, -1.0]
     assert perf.turnover.tolist() == [2.0, 0.0, 4.0, 0.0]
+
+
+def test_ranked_hysteresis_holds_for_exact_minimum_number_of_bars() -> None:
+    idx = pd.date_range("2024-01-01", periods=3, freq="D")
+    scores = pd.DataFrame({"A": [1.0, 0.0, 0.0]}, index=idx)
+
+    weights, _ = build_ranked_weights_from_scores_over_time(
+        scores,
+        selection={
+            "top_k": 1,
+            "min_expected_net_return": 0.0,
+            "weighting": "equal",
+        },
+        hysteresis={
+            "enabled": True,
+            "entry_threshold": 0.5,
+            "exit_threshold": 0.5,
+            "min_holding_bars": 2,
+        },
+        constraints=PortfolioConstraints(
+            min_weight=0.0,
+            max_weight=1.0,
+            max_gross_leverage=1.0,
+            enforce_target_net_exposure=False,
+        ),
+    )
+
+    assert weights["A"].tolist() == pytest.approx([1.0, 1.0, 0.0])
 
 
 def test_optimize_mean_variance_respects_core_constraints() -> None:
@@ -582,6 +754,41 @@ def test_compute_portfolio_performance_raises_on_missing_exposed_return() -> Non
         compute_portfolio_performance(weights, returns)
 
 
+def test_compute_portfolio_performance_rejects_missing_held_asset_column() -> None:
+    idx = pd.date_range("2024-01-01", periods=3, freq="D")
+    weights = pd.DataFrame(
+        {"A": [0.0, 0.0, 0.0], "B": [1.0, 1.0, 0.0]},
+        index=idx,
+    )
+    returns = pd.DataFrame({"A": [0.0, 0.0, 0.0]}, index=idx)
+
+    with pytest.raises(ValueError, match="positions were open.*B"):
+        compute_portfolio_performance(weights, returns)
+
+
+def test_compute_portfolio_performance_rejects_missing_held_timestamp() -> None:
+    idx = pd.date_range("2024-01-01", periods=3, freq="D")
+    weights = pd.DataFrame({"A": [1.0, 1.0, 0.0]}, index=idx)
+    returns = pd.DataFrame({"A": [0.0, 0.0]}, index=idx[[0, 2]])
+
+    with pytest.raises(ValueError, match="positions were open"):
+        compute_portfolio_performance(weights, returns)
+
+
+def test_compute_portfolio_performance_allows_missing_unexposed_asset() -> None:
+    idx = pd.date_range("2024-01-01", periods=3, freq="D")
+    weights = pd.DataFrame(
+        {"A": [1.0, 1.0, 0.0], "B": [0.0, 0.0, 0.0]},
+        index=idx,
+    )
+    returns = pd.DataFrame({"A": [0.0, 0.01, 0.0]}, index=idx)
+
+    performance = compute_portfolio_performance(weights, returns)
+
+    assert list(performance.applied_weights.columns) == ["A", "B"]
+    assert performance.gross_returns.iloc[1] == pytest.approx(0.01)
+
+
 def test_compute_portfolio_performance_charges_initial_turnover() -> None:
     """
     Verify that portfolio performance charges initial turnover behaves as expected under a
@@ -624,11 +831,44 @@ def test_compute_portfolio_performance_portfolio_guard_flattens_future_weights_a
     )
 
     assert perf.applied_weights is not None
-    assert perf.applied_weights.iloc[2:4, 0].eq(0.0).all()
+    assert perf.applied_weights.iloc[1:3, 0].eq(0.0).all()
+    assert perf.net_returns.iloc[2] == pytest.approx(0.0)
     assert perf.risk_guard_summary["daily_loss_trigger_count"] == 1
     assert perf.risk_guard_summary["flattened_bar_count"] == 2
     assert perf.risk_guard_timeline is not None
     assert bool(perf.risk_guard_timeline["risk_guard_triggered"].iloc[1]) is True
+
+
+def test_compute_portfolio_performance_bankruptcy_is_terminal() -> None:
+    idx = pd.date_range("2024-01-01", periods=4, freq="D")
+    weights = pd.DataFrame({"A": [3.0, 3.0, 3.0, 3.0]}, index=idx)
+    returns = pd.DataFrame({"A": [0.0, -0.5, -0.5, 1.0]}, index=idx)
+
+    perf = compute_portfolio_performance(weights, returns)
+
+    assert perf.net_returns.tolist() == [0.0, -1.0, 0.0, 0.0]
+    assert perf.equity_curve.tolist() == [1.0, 0.0, 0.0, 0.0]
+    assert perf.applied_weights is not None
+    assert perf.applied_weights.iloc[1:].eq(0.0).all().all()
+    assert perf.summary["bankrupt"] is True
+
+
+def test_compute_portfolio_performance_terminal_liquidation_is_explicit() -> None:
+    idx = pd.date_range("2024-01-01", periods=3, freq="D")
+    weights = pd.DataFrame({"A": [1.0, 1.0, 1.0]}, index=idx)
+    returns = pd.DataFrame({"A": [0.0, 0.0, 0.0]}, index=idx)
+
+    perf = compute_portfolio_performance(
+        weights,
+        returns,
+        cost_per_turnover=0.01,
+        liquidate_at_end=True,
+    )
+
+    assert perf.applied_weights is not None
+    assert perf.applied_weights.iloc[-1, 0] == pytest.approx(0.0)
+    assert perf.costs.iloc[-1] == pytest.approx(0.01)
+    assert perf.summary["terminal_open_exposure"] == pytest.approx(0.0)
 
 
 def test_compute_portfolio_performance_supports_soft_stop_hard_stop_and_weekly_lock() -> None:
@@ -661,6 +901,39 @@ def test_compute_portfolio_performance_supports_soft_stop_hard_stop_and_weekly_l
     assert hard_perf.applied_weights is not None
     assert hard_perf.applied_weights.iloc[2:, 0].eq(0.0).all()
     assert hard_perf.risk_guard_summary["hard_stop_trigger_count"] == 1
+
+    target_perf = compute_portfolio_performance(
+        weights,
+        pd.DataFrame({"A": [0.0, 0.02, 0.0, 0.0, 0.0, 0.0]}, index=idx),
+        portfolio_guard={
+            "enabled": True,
+            "weekly_return_target": 0.015,
+            "after_target_mode": "reduce_risk",
+            "after_target_risk_multiplier": 0.25,
+            "weekly_anchor": "W-FRI",
+        },
+    )
+    assert target_perf.applied_weights is not None
+    assert target_perf.applied_weights.iloc[2:, 0].eq(0.25).all()
+    assert target_perf.risk_guard_summary["weekly_target_trigger_count"] == 1
+
+    staged_lock_perf = compute_portfolio_performance(
+        weights,
+        pd.DataFrame({"A": [0.0, 0.012, 0.02, 0.0, 0.0, 0.0]}, index=idx),
+        portfolio_guard={
+            "enabled": True,
+            "weekly_return_target": 0.01,
+            "weekly_profit_lock": 0.015,
+            "after_target_mode": "reduce_risk",
+            "after_target_risk_multiplier": 0.25,
+            "weekly_anchor": "W-FRI",
+        },
+    )
+    assert staged_lock_perf.applied_weights is not None
+    assert staged_lock_perf.applied_weights.iloc[1, 0] == pytest.approx(0.25)
+    assert staged_lock_perf.applied_weights.iloc[2:, 0].eq(0.0).all()
+    assert staged_lock_perf.risk_guard_summary["weekly_target_trigger_count"] == 1
+    assert staged_lock_perf.risk_guard_summary["weekly_lock_trigger_count"] == 1
 
     lock_perf = compute_portfolio_performance(
         weights,

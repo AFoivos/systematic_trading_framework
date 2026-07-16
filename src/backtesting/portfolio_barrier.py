@@ -5,7 +5,12 @@ from typing import Any, Mapping
 import numpy as np
 import pandas as pd
 
-from src.evaluation.metrics import compute_backtest_metrics
+from src.evaluation.metrics import (
+    compute_backtest_metrics,
+    equity_curve_from_returns,
+    hit_rate,
+    profit_factor,
+)
 from src.portfolio import PortfolioConstraints, PortfolioPerformance
 from src.portfolio.construction import compute_weight_transition_accounting
 from src.targets.directional_triple_barrier import resolve_directional_barrier_double_touch
@@ -97,17 +102,39 @@ def _global_oos_mask(
     index: pd.Index,
     pred_is_oos_col: str,
     alignment: str,
-) -> pd.Series | None:
+) -> pd.Series:
     oos_by_asset: dict[str, pd.Series] = {}
+    missing_assets: list[str] = []
     for asset, frame in sorted(frames.items()):
-        if pred_is_oos_col in frame.columns:
-            oos_by_asset[asset] = frame[pred_is_oos_col].astype(float)
-    if not oos_by_asset:
-        return None
+        if pred_is_oos_col not in frame.columns:
+            missing_assets.append(asset)
+            continue
+        raw = frame[pred_is_oos_col]
+        invalid = raw.isna()
+        if bool(invalid.any()):
+            first_invalid = raw.index[invalid][0]
+            raise ValueError(
+                "portfolio_barrier subset='test' requires a non-missing "
+                f"'{pred_is_oos_col}' flag for every row; asset '{asset}' is missing it "
+                f"at {first_invalid!r}."
+            )
+        oos_by_asset[asset] = raw.astype(bool)
+    if missing_assets:
+        raise ValueError(
+            "portfolio_barrier subset='test' requires "
+            f"'{pred_is_oos_col}' for every asset; missing for {missing_assets}."
+        )
     oos_df = pd.concat(oos_by_asset, axis=1, join=alignment).sort_index()
     if isinstance(oos_df.columns, pd.MultiIndex):
         oos_df.columns = oos_df.columns.get_level_values(0)
-    return oos_df.reindex(index).fillna(0.0).astype(bool).all(axis=1)
+    aligned = oos_df.reindex(index)
+    if bool(aligned.isna().any().any()):
+        missing_rows = aligned.index[aligned.isna().any(axis=1)]
+        raise ValueError(
+            "portfolio_barrier subset='test' cannot prove OOS membership on the aligned "
+            f"calendar; first incomplete timestamp is {missing_rows[0]!r}."
+        )
+    return aligned.astype(bool).all(axis=1)
 
 
 def _trade_weight(
@@ -214,6 +241,7 @@ def _simulate_barrier_event(
     # the following *real* asset open.  No intrabar event is evaluated on that extra bar.
     scan_end = min(len(frame), barrier_last_idx + 2) if vertical_barrier_bars is not None else len(frame)
     scheduled_dynamic = False
+    gap_exit = False
     for step_idx in range(signal_idx + 1, scan_end):
         if scheduled_dynamic:
             chosen_type = "dynamic"
@@ -222,6 +250,9 @@ def _simulate_barrier_event(
             if not np.isfinite(exit_price) or exit_price <= 0.0:
                 return None
             break
+        bar_open = float(opens[step_idx])
+        if not np.isfinite(bar_open) or bar_open <= 0.0:
+            return None
         if side > 0.0:
             bar_mfe = (float(highs[step_idx]) - entry_price) / risk_distance
             bar_mae = (float(lows[step_idx]) - entry_price) / risk_distance
@@ -234,6 +265,28 @@ def _simulate_barrier_event(
         if np.isfinite(bar_mae) and bar_mae < path_mae:
             path_mae = float(bar_mae)
             time_to_mae = int(step_idx - signal_idx)
+        if side > 0.0:
+            gap_type = (
+                "stop"
+                if bar_open <= stop_level
+                else "profit"
+                if bar_open >= profit_level
+                else None
+            )
+        else:
+            gap_type = (
+                "stop"
+                if bar_open >= stop_level
+                else "profit"
+                if bar_open <= profit_level
+                else None
+            )
+        if gap_type is not None:
+            chosen_type = gap_type
+            chosen_idx = step_idx
+            exit_price = bar_open
+            gap_exit = True
+            break
         if side > 0.0:
             hit_profit = bool(highs[step_idx] >= profit_level)
             hit_stop = bool(lows[step_idx] <= stop_level)
@@ -311,11 +364,12 @@ def _simulate_barrier_event(
         "dynamic_exit_signal_time": frame.index[dynamic_signal_idx] if dynamic_signal_idx is not None else pd.NaT,
         "dynamic_exit_execution_time": frame.index[chosen_idx] if chosen_type == "dynamic" else pd.NaT,
         "dynamic_exit_reason": dynamic_reason if chosen_type == "dynamic" else pd.NA,
+        "exit_at_open": bool(gap_exit or chosen_type == "dynamic"),
+        "gap_exit": bool(gap_exit),
     }
 
 
-def _apply_mark_to_market_trade_path(
-    mark_to_market_returns: pd.Series,
+def _mark_to_market_trade_path(
     *,
     frame: pd.DataFrame,
     aligned_index: pd.Index,
@@ -327,10 +381,11 @@ def _apply_mark_to_market_trade_path(
     weight: float,
     side: float,
     total_cost: float,
-) -> None:
+) -> pd.Series:
+    contribution = pd.Series(0.0, index=aligned_index, dtype=float)
     active_index = aligned_index[(aligned_index >= entry_time) & (aligned_index <= exit_time)]
     if len(active_index) == 0:
-        return
+        return contribution
     # Missing native bars remain missing.  This routine must not manufacture a mark or an
     # execution price by forward-filling an OHLC series onto another asset's timestamp.
     closes = pd.to_numeric(frame[close_col], errors="coerce").reindex(active_index)
@@ -344,8 +399,18 @@ def _apply_mark_to_market_trade_path(
         else:
             gross_return = abs(float(weight)) * (1.0 - mark_price / previous_price)
         cost = float(total_cost) if ts == exit_time else 0.0
-        mark_to_market_returns.loc[ts] += gross_return - cost
+        contribution.loc[ts] += gross_return - cost
         previous_price = mark_price
+    return contribution
+
+
+def _apply_mark_to_market_trade_path(
+    mark_to_market_returns: pd.Series,
+    **kwargs: Any,
+) -> pd.Series:
+    contribution = _mark_to_market_trade_path(**kwargs)
+    mark_to_market_returns.loc[contribution.index] += contribution
+    return contribution
 
 
 def _realized_trade_pnl(
@@ -405,6 +470,51 @@ def _estimated_roundtrip_cost_filter_stats(
         "risk_fraction": float(risk_fraction),
         "estimated_cost": float(estimated_total_cost),
         "estimated_cost_r": float(estimated_total_cost / max(risk_capital, 1e-12)),
+    }
+
+
+def _spread_adjusted_execution_prices(
+    frame: pd.DataFrame,
+    *,
+    event: Mapping[str, Any],
+    side: float,
+    entry_price_mode: str,
+    bid_col: str,
+    ask_col: str,
+    point_size: float,
+) -> dict[str, float]:
+    entry_row = frame.iloc[int(event["entry_idx"])]
+    exit_row = frame.iloc[int(event["exit_idx"])]
+
+    def _quotes(row: pd.Series, *, label: str) -> tuple[float, float, float]:
+        bid = float(pd.to_numeric(pd.Series([row[bid_col]]), errors="coerce").iloc[0])
+        ask = float(pd.to_numeric(pd.Series([row[ask_col]]), errors="coerce").iloc[0])
+        if not np.isfinite(bid) or not np.isfinite(ask) or bid <= 0.0 or ask < bid:
+            raise ValueError(f"invalid {label} bid/ask quote")
+        return bid, ask, float(ask - bid)
+
+    entry_bid, entry_ask, entry_spread = _quotes(entry_row, label="entry")
+    exit_bid, exit_ask, exit_spread = _quotes(exit_row, label="exit")
+    raw_entry = float(event["entry_price"])
+    raw_exit = float(event["exit_price"])
+
+    if entry_price_mode == "next_open":
+        entry_price = entry_ask if side > 0.0 else entry_bid
+    else:
+        entry_price = raw_entry + 0.5 * entry_spread if side > 0.0 else raw_entry - 0.5 * entry_spread
+
+    if bool(event.get("exit_at_open", False)):
+        exit_price = exit_bid if side > 0.0 else exit_ask
+    else:
+        exit_price = raw_exit - 0.5 * exit_spread if side > 0.0 else raw_exit + 0.5 * exit_spread
+    if not np.isfinite(entry_price) or not np.isfinite(exit_price) or entry_price <= 0.0 or exit_price <= 0.0:
+        raise ValueError("spread-adjusted execution price is invalid")
+
+    return {
+        "entry_price": float(entry_price),
+        "exit_price": float(exit_price),
+        "entry_spread_points": float(entry_spread / point_size),
+        "exit_spread_points": float(exit_spread / point_size),
     }
 
 
@@ -564,10 +674,11 @@ def run_portfolio_barrier_backtest(
     asset_params: Mapping[str, Mapping[str, Any]] | None = None,
     asset_to_group: Mapping[str, str] | None = None,
     portfolio_guard: Mapping[str, Any] | None = None,
-    event_time_remap_policy: str = "next_aligned",
+    event_time_remap_policy: str = "skip",
     max_cost_r: float | None = None,
     dynamic_exit: Mapping[str, Any] | None = None,
     correlation_guard: Mapping[str, Any] | None = None,
+    liquidate_at_end: bool = False,
 ) -> tuple[PortfolioPerformance, pd.DataFrame, pd.DataFrame, dict[str, Any]]:
     """
     Event-based multi-asset portfolio backtest using directional triple-barrier exits.
@@ -600,6 +711,8 @@ def run_portfolio_barrier_backtest(
         raise ValueError("portfolio_barrier subset must be 'full' or 'test'.")
     if event_time_remap_policy not in _ALLOWED_EVENT_TIME_REMAP_POLICIES:
         raise ValueError("portfolio_barrier event_time_remap_policy must be 'next_aligned' or 'skip'.")
+    if not isinstance(liquidate_at_end, bool):
+        raise ValueError("portfolio_barrier liquidate_at_end must be boolean.")
 
     profit_barrier_r = _positive_float(profit_barrier_r, field="profit_barrier_r")
     stop_barrier_r = _positive_float(stop_barrier_r, field="stop_barrier_r")
@@ -660,7 +773,12 @@ def run_portfolio_barrier_backtest(
     if signals.empty:
         raise ValueError("portfolio_barrier aligned signal frame is empty.")
 
-    constraints = constraints or PortfolioConstraints()
+    constraints = constraints or PortfolioConstraints(enforce_target_net_exposure=False)
+    if constraints.enforce_target_net_exposure:
+        raise ValueError(
+            "portfolio_barrier cannot enforce target_net_exposure with its event-by-event "
+            "allocator; set enforce_target_net_exposure=false or use a joint portfolio engine."
+        )
     gross_target = _positive_float(gross_target, field="gross_target")
     oos_mask = (
         _global_oos_mask(frames, index=signals.index, pred_is_oos_col=pred_is_oos_col, alignment=alignment)
@@ -696,6 +814,8 @@ def run_portfolio_barrier_backtest(
     skipped_spread_filter = 0
     skipped_invalid_spread = 0
     skipped_short_disabled = 0
+    skipped_turnover_limit = 0
+    turnover_sized_trade_count = 0
     risk_sized_trade_count = 0
     correlation_guard_rejections = 0
     correlation_guard_checked = 0
@@ -709,6 +829,129 @@ def run_portfolio_barrier_backtest(
     guard_permanent_flat = False
     guard_trigger_count = 0
     daily_loss_trigger_count = 0
+    flattened_trade_count = 0
+    cancelled_pending_trade_count = 0
+    portfolio_bankrupt = False
+    bankruptcy_time: Any | None = None
+    mark_to_market_equity_state = 1.0
+
+    def _flatten_active_positions(trigger_timestamp: Any, *, reason: str) -> None:
+        nonlocal flattened_trade_count, cancelled_pending_trade_count
+        for active_asset, active in list(active_by_asset.items()):
+            original_exit_time = active["exit_time"]
+            if original_exit_time <= trigger_timestamp:
+                continue
+            trade = trades[int(active["trade_index"])]
+            original_pnl = dict(active["pnl"])
+            original_path = active["mtm_contribution"]
+
+            gross_returns.loc[original_exit_time] -= float(original_pnl["gross_return"])
+            net_returns.loc[original_exit_time] -= float(original_pnl["net_return"])
+            costs.loc[original_exit_time] -= float(original_pnl["cost"])
+            turnover.loc[active["entry_time"]] -= abs(float(active["weight"]))
+            turnover.loc[original_exit_time] -= abs(float(active["weight"]))
+            mark_to_market_returns.loc[original_path.index] -= original_path
+            weights.loc[
+                (weights.index >= active["entry_time"]) & (weights.index <= original_exit_time),
+                active_asset,
+            ] = 0.0
+
+            if trigger_timestamp < active["entry_time"]:
+                trade["cancelled"] = True
+                trade["exit_reason"] = f"{reason}_cancelled"
+                trade["hit_type"] = "cancelled"
+                trade["gross_return"] = 0.0
+                trade["net_return"] = 0.0
+                trade["cost"] = 0.0
+                trade["fixed_cost"] = 0.0
+                trade["slippage"] = 0.0
+                trade["realized_r"] = np.nan
+                trade["trade_r"] = np.nan
+                cancelled_pending_trade_count += 1
+                active_by_asset.pop(active_asset, None)
+                continue
+
+            frame = frames[active_asset]
+            if trigger_timestamp in frame.index:
+                flatten_time = trigger_timestamp
+                flatten_price = float(frame.loc[flatten_time, close_col])
+                exit_at_open = False
+            else:
+                native_candidates = frame.index[
+                    (frame.index > trigger_timestamp) & frame.index.isin(weights.index)
+                ]
+                if len(native_candidates) == 0:
+                    raise RuntimeError(
+                        "portfolio_barrier could not execute a risk flatten for "
+                        f"'{active_asset}' after {trigger_timestamp!r}."
+                    )
+                flatten_time = native_candidates[0]
+                flatten_price = float(frame.loc[flatten_time, open_col])
+                exit_at_open = True
+            if not np.isfinite(flatten_price) or flatten_price <= 0.0:
+                raise RuntimeError(
+                    f"portfolio_barrier risk flatten for '{active_asset}' has no valid price."
+                )
+
+            replacement_pnl = _realized_trade_pnl(
+                side=float(active["side"]),
+                weight=float(active["weight"]),
+                entry_price=float(active["entry_price"]),
+                exit_price=flatten_price,
+                risk_distance=float(active["risk_distance"]),
+                cost_per_turnover=cost_per_turnover,
+                slippage_per_turnover=slippage_per_turnover,
+            )
+            gross_returns.loc[flatten_time] += float(replacement_pnl["gross_return"])
+            net_returns.loc[flatten_time] += float(replacement_pnl["net_return"])
+            costs.loc[flatten_time] += float(replacement_pnl["cost"])
+            turnover.loc[active["entry_time"]] += abs(float(active["weight"]))
+            turnover.loc[flatten_time] += abs(float(active["weight"]))
+            replacement_path = _apply_mark_to_market_trade_path(
+                mark_to_market_returns,
+                frame=frame,
+                aligned_index=weights.index,
+                close_col=close_col,
+                entry_time=active["entry_time"],
+                exit_time=flatten_time,
+                entry_price=float(active["entry_price"]),
+                exit_price=flatten_price,
+                weight=float(active["weight"]),
+                side=float(active["side"]),
+                total_cost=float(replacement_pnl["cost"]),
+            )
+            weights.loc[
+                (weights.index >= active["entry_time"]) & (weights.index < flatten_time),
+                active_asset,
+            ] = float(active["weight"])
+
+            trade["planned_exit_time"] = trade["exit_time"]
+            trade["planned_exit_price"] = trade["exit_price"]
+            trade["exit_time"] = flatten_time
+            trade["exit_timestamp"] = flatten_time
+            trade["exit_price"] = flatten_price
+            trade["exit_time_remapped"] = False
+            trade["exit_reason"] = reason
+            trade["hit_type"] = reason
+            trade["gross_return"] = float(replacement_pnl["gross_return"])
+            trade["net_return"] = float(replacement_pnl["net_return"])
+            trade["cost"] = float(replacement_pnl["cost"])
+            trade["fixed_cost"] = float(replacement_pnl["fixed_cost"])
+            trade["slippage"] = float(replacement_pnl["slippage"])
+            trade["realized_r"] = float(replacement_pnl["realized_r"])
+            trade["trade_r"] = float(replacement_pnl["realized_r"])
+            trade["exit_at_open"] = bool(exit_at_open)
+            trade["cancelled"] = False
+            if active["entry_time"] in frame.index and flatten_time in frame.index:
+                trade["bars_held"] = int(
+                    frame.index.get_loc(flatten_time) - frame.index.get_loc(active["entry_time"])
+                )
+                trade["hit_step"] = trade["bars_held"]
+            active["exit_time"] = flatten_time
+            active["pnl"] = dict(replacement_pnl)
+            active["mtm_contribution"] = replacement_path
+            flattened_trade_count += 1
+            active_by_asset.pop(active_asset, None)
 
     for timestamp, signal_row in signals.iterrows():
         timestamp_date = pd.Timestamp(timestamp).date()
@@ -717,12 +960,26 @@ def run_portfolio_barrier_backtest(
             guard_daily_start_equity = guard_equity
             guard_daily_blocked_date = None
         if timestamp in net_returns.index:
+            if not portfolio_bankrupt:
+                current_mtm_return = float(mark_to_market_returns.loc[timestamp])
+                next_mark_to_market_equity = mark_to_market_equity_state * (
+                    1.0 + current_mtm_return
+                )
+                if not np.isfinite(next_mark_to_market_equity) or next_mark_to_market_equity <= 0.0:
+                    portfolio_bankrupt = True
+                    bankruptcy_time = timestamp
+                    mark_to_market_equity_state = 0.0
+                    guard_permanent_flat = True
+                    _flatten_active_positions(timestamp, reason="bankruptcy")
+                    weights.loc[weights.index >= timestamp, :] = 0.0
+                else:
+                    mark_to_market_equity_state = float(next_mark_to_market_equity)
             guard_return = (
                 float(mark_to_market_returns.loc[timestamp])
                 if guard_equity_source == "mark_to_market"
                 else float(net_returns.loc[timestamp])
             )
-            guard_equity *= 1.0 + guard_return
+            guard_equity = max(guard_equity * (1.0 + guard_return), 0.0)
             guard_peak_equity = max(guard_peak_equity, guard_equity)
             guard_drawdown = float(guard_equity / guard_peak_equity - 1.0) if guard_peak_equity > 0.0 else 0.0
             if (
@@ -733,6 +990,7 @@ def run_portfolio_barrier_backtest(
             ):
                 guard_permanent_flat = True
                 guard_trigger_count += 1
+                _flatten_active_positions(timestamp, reason="kill_switch")
             daily_loss = (
                 float((guard_daily_start_equity - guard_equity) / guard_daily_start_equity)
                 if guard_daily_start_equity > 0.0
@@ -874,7 +1132,10 @@ def run_portfolio_barrier_backtest(
                 continue
             asset_max_spread_raw = params.get("max_spread_points")
             spread_points: float | None = None
+            exit_spread_points: float | None = None
             asset_max_spread: float | None = None
+            execution_entry_price = float(event["entry_price"])
+            execution_exit_price = float(event["exit_price"])
             if asset_max_spread_raw is not None:
                 asset_max_spread = _positive_float(
                     asset_max_spread_raw,
@@ -886,16 +1147,26 @@ def run_portfolio_barrier_backtest(
                 )
                 bid_col = str(params.get("spread_bid_col", "bid_open"))
                 ask_col = str(params.get("spread_ask_col", "ask_open"))
-                entry_row = frame.iloc[int(event["entry_idx"])]
-                bid = float(pd.to_numeric(pd.Series([entry_row[bid_col]]), errors="coerce").iloc[0])
-                ask = float(pd.to_numeric(pd.Series([entry_row[ask_col]]), errors="coerce").iloc[0])
-                if not np.isfinite(bid) or not np.isfinite(ask) or ask < bid:
+                try:
+                    spread_execution = _spread_adjusted_execution_prices(
+                        frame,
+                        event=event,
+                        side=side,
+                        entry_price_mode=entry_price_mode,
+                        bid_col=bid_col,
+                        ask_col=ask_col,
+                        point_size=point_size,
+                    )
+                except (KeyError, TypeError, ValueError):
                     skipped_invalid_spread += 1
                     continue
-                spread_points = float((ask - bid) / point_size)
+                spread_points = float(spread_execution["entry_spread_points"])
+                exit_spread_points = float(spread_execution["exit_spread_points"])
                 if spread_points > asset_max_spread:
                     skipped_spread_filter += 1
                     continue
+                execution_entry_price = float(spread_execution["entry_price"])
+                execution_exit_price = float(spread_execution["exit_price"])
             raw_entry_time = event["entry_time"]
             raw_exit_time = event["exit_time"]
             entry_time, entry_remapped = _remap_to_next_aligned_timestamp(weights.index, raw_entry_time)
@@ -908,12 +1179,18 @@ def run_portfolio_barrier_backtest(
                 skipped_remapped_entry_timestamps += int(entry_remapped)
                 skipped_remapped_exit_timestamps += int(exit_remapped)
                 continue
+            if entry_remapped or exit_remapped:
+                raise ValueError(
+                    "portfolio_barrier event_time_remap_policy='next_aligned' cannot safely "
+                    "reuse native execution prices at remapped timestamps; use 'skip' or "
+                    "align the asset calendars before backtesting."
+                )
             remapped_entry_timestamps += int(entry_remapped)
             remapped_exit_timestamps += int(exit_remapped)
 
             risk_per_trade = params.get("risk_per_trade")
             if risk_per_trade is not None:
-                risk_fraction = max(float(event["risk_distance"]) / float(event["entry_price"]), 1e-12)
+                risk_fraction = max(float(event["risk_distance"]) / execution_entry_price, 1e-12)
                 risk_sized_cap = float(risk_per_trade) / risk_fraction
                 sized_abs_weight = min(abs(float(weight)), risk_sized_cap)
                 if sized_abs_weight <= 1e-12:
@@ -922,6 +1199,25 @@ def run_portfolio_barrier_backtest(
                 if sized_abs_weight < abs(float(weight)) - 1e-12:
                     risk_sized_trade_count += 1
                 weight = float(np.sign(weight)) * sized_abs_weight
+            if constraints.turnover_limit is not None:
+                turnover_limit = float(constraints.turnover_limit)
+                if entry_time == exit_time:
+                    remaining_turnover = max(
+                        turnover_limit - float(turnover.loc[entry_time]),
+                        0.0,
+                    ) / 2.0
+                else:
+                    remaining_turnover = min(
+                        max(turnover_limit - float(turnover.loc[entry_time]), 0.0),
+                        max(turnover_limit - float(turnover.loc[exit_time]), 0.0),
+                    )
+                turnover_sized_weight = min(abs(float(weight)), remaining_turnover)
+                if turnover_sized_weight <= 1e-12:
+                    skipped_turnover_limit += 1
+                    continue
+                if turnover_sized_weight < abs(float(weight)) - 1e-12:
+                    turnover_sized_trade_count += 1
+                weight = float(np.sign(weight)) * turnover_sized_weight
 
             asset_max_cost_r_raw = params.get("max_cost_r", max_cost_r)
             asset_max_cost_r = (
@@ -931,7 +1227,7 @@ def run_portfolio_barrier_backtest(
             )
             cost_filter_stats = _estimated_roundtrip_cost_filter_stats(
                 weight=weight,
-                entry_price=float(event["entry_price"]),
+                entry_price=execution_entry_price,
                 risk_distance=float(event["risk_distance"]),
                 cost_per_turnover=cost_per_turnover,
                 slippage_per_turnover=slippage_per_turnover,
@@ -943,8 +1239,8 @@ def run_portfolio_barrier_backtest(
             pnl = _realized_trade_pnl(
                 side=side,
                 weight=weight,
-                entry_price=float(event["entry_price"]),
-                exit_price=float(event["exit_price"]),
+                entry_price=execution_entry_price,
+                exit_price=execution_exit_price,
                 risk_distance=float(event["risk_distance"]),
                 cost_per_turnover=cost_per_turnover,
                 slippage_per_turnover=slippage_per_turnover,
@@ -954,15 +1250,15 @@ def run_portfolio_barrier_backtest(
             costs.loc[exit_time] += pnl["cost"]
             turnover.loc[entry_time] += abs(weight)
             turnover.loc[exit_time] += abs(weight)
-            _apply_mark_to_market_trade_path(
+            mtm_contribution = _apply_mark_to_market_trade_path(
                 mark_to_market_returns,
                 frame=frame,
                 aligned_index=weights.index,
                 close_col=close_col,
                 entry_time=entry_time,
                 exit_time=exit_time,
-                entry_price=float(event["entry_price"]),
-                exit_price=float(event["exit_price"]),
+                entry_price=execution_entry_price,
+                exit_price=execution_exit_price,
                 weight=weight,
                 side=side,
                 total_cost=float(pnl["cost"]),
@@ -972,9 +1268,17 @@ def run_portfolio_barrier_backtest(
             if len(active_index) > 0:
                 weights.loc[active_index, asset] = weight
 
-            active_by_asset[asset] = {"exit_time": exit_time, "weight": weight, "side": side}
             current_gross += abs(weight)
             side_name = "long" if side > 0.0 else "short"
+            raw_price_pnl = _realized_trade_pnl(
+                side=side,
+                weight=weight,
+                entry_price=float(event["entry_price"]),
+                exit_price=float(event["exit_price"]),
+                risk_distance=float(event["risk_distance"]),
+                cost_per_turnover=cost_per_turnover,
+                slippage_per_turnover=slippage_per_turnover,
+            )
             trade = {
                 "asset": asset,
                 "signal_time": event["signal_time"],
@@ -990,14 +1294,16 @@ def run_portfolio_barrier_backtest(
                 "raw_exit_time": raw_exit_time,
                 "raw_exit_timestamp": raw_exit_time,
                 "exit_time_remapped": bool(exit_remapped),
+                "planned_exit_time": raw_exit_time,
                 "side": side_name,
                 "signal": float(signal_value),
                 "signal_module": signal_module or pd.NA,
                 "position_weight": float(weight),
-                "entry_price": float(event["entry_price"]),
-                "exit_price": float(event["exit_price"]),
+                "entry_price": execution_entry_price,
+                "exit_price": execution_exit_price,
                 "raw_entry_price": float(event["entry_price"]),
                 "raw_exit_price": float(event["exit_price"]),
+                "planned_exit_price": execution_exit_price,
                 "atr_at_entry": float(event["atr"]),
                 "atr_at_signal": float(event["atr"]),
                 "volatility_col": asset_volatility_col,
@@ -1025,7 +1331,10 @@ def run_portfolio_barrier_backtest(
                 "estimated_cost_r": cost_filter_stats["estimated_cost_r"],
                 "max_cost_r": asset_max_cost_r,
                 "spread_points": spread_points,
+                "entry_spread_points": spread_points,
+                "exit_spread_points": exit_spread_points,
                 "max_spread_points": asset_max_spread,
+                "observed_spread_cost": float(raw_price_pnl["gross_return"] - pnl["gross_return"]),
                 "cost": pnl["cost"],
                 "fixed_cost": pnl["fixed_cost"],
                 "slippage": pnl["slippage"],
@@ -1043,12 +1352,35 @@ def run_portfolio_barrier_backtest(
                 "entry_laggard_gap": frame.iloc[signal_idx].get("entry_laggard_gap", np.nan),
                 "signal_strength": frame.iloc[signal_idx].get("signal_strength", np.nan),
                 "entry_relay_score": frame.iloc[signal_idx].get("entry_relay_score", np.nan),
+                "gap_exit": bool(event.get("gap_exit", False)),
+                "exit_at_open": bool(event.get("exit_at_open", False)),
+                "cancelled": False,
             }
             trades.append(trade)
+            active_by_asset[asset] = {
+                "asset": asset,
+                "trade_index": len(trades) - 1,
+                "entry_time": entry_time,
+                "exit_time": exit_time,
+                "weight": weight,
+                "side": side,
+                "entry_price": execution_entry_price,
+                "risk_distance": float(event["risk_distance"]),
+                "pnl": dict(pnl),
+                "mtm_contribution": mtm_contribution,
+            }
 
-    equity_curve = (1.0 + net_returns).cumprod()
+    for series in (gross_returns, net_returns, costs, turnover, mark_to_market_returns):
+        series.loc[series.abs() < 1e-15] = 0.0
+    terminal_gross_exposure_before_liquidation = (
+        float(weights.iloc[-1].abs().sum()) if not weights.empty else 0.0
+    )
+    if liquidate_at_end and not weights.empty:
+        weights.iloc[-1] = 0.0
+
+    equity_curve = equity_curve_from_returns(net_returns)
     equity_curve.name = "equity"
-    mark_to_market_equity = (1.0 + mark_to_market_returns).cumprod()
+    mark_to_market_equity = equity_curve_from_returns(mark_to_market_returns)
     mark_to_market_equity.name = "mark_to_market_equity"
     summary = compute_backtest_metrics(
         net_returns=net_returns,
@@ -1065,6 +1397,8 @@ def run_portfolio_barrier_backtest(
     )
 
     trades_df = pd.DataFrame(trades)
+    if not trades_df.empty and "cancelled" in trades_df.columns:
+        trades_df = trades_df.loc[~trades_df["cancelled"].fillna(False).astype(bool)].copy()
     if trades_df.empty:
         trades_df = pd.DataFrame(
             columns=[
@@ -1105,10 +1439,41 @@ def run_portfolio_barrier_backtest(
         )
     else:
         trade_r = pd.to_numeric(trades_df["realized_r"], errors="coerce").dropna().astype(float)
+        trade_net_returns = (
+            pd.to_numeric(trades_df["net_return"], errors="coerce").dropna().astype(float)
+        )
+        trade_profit_factor = profit_factor(trade_net_returns)
+        trade_hit_rate = hit_rate(trade_net_returns)
         summary["trade_count"] = float(len(trades_df))
         summary["average_r"] = float(trade_r.mean()) if not trade_r.empty else np.nan
         summary["median_r"] = float(trade_r.median()) if not trade_r.empty else np.nan
-        summary["win_rate"] = float((trade_r > 0.0).mean()) if not trade_r.empty else np.nan
+        summary["win_rate"] = trade_hit_rate
+        summary["profit_factor"] = trade_profit_factor
+        summary["hit_rate"] = trade_hit_rate
+        summary["metric_scope"] = "trade_ledger"
+        mark_to_market_summary["profit_factor"] = trade_profit_factor
+        mark_to_market_summary["hit_rate"] = trade_hit_rate
+        mark_to_market_summary["metric_scope"] = "trade_ledger"
+    if trades_df.empty:
+        summary["metric_scope"] = "trade_ledger"
+        mark_to_market_summary["metric_scope"] = "trade_ledger"
+    summary.update(
+        {
+            "bankrupt": bool(portfolio_bankrupt),
+            "bankruptcy_time": bankruptcy_time,
+            "liquidate_at_end": bool(liquidate_at_end),
+            "terminal_gross_exposure_before_liquidation": terminal_gross_exposure_before_liquidation,
+            "terminal_gross_exposure": (
+                float(weights.iloc[-1].abs().sum()) if not weights.empty else 0.0
+            ),
+        }
+    )
+    mark_to_market_summary.update(
+        {
+            "bankrupt": bool(portfolio_bankrupt),
+            "bankruptcy_time": bankruptcy_time,
+        }
+    )
     summary.update(compute_weight_transition_accounting(weights, barrier_trade_count=len(trades_df)))
 
     diagnostics = pd.DataFrame(
@@ -1134,6 +1499,10 @@ def run_portfolio_barrier_backtest(
             "kill_switch_max_drawdown": kill_switch_drawdown,
             "kill_switch_trigger_count": int(guard_trigger_count),
             "permanent_flattened": bool(guard_permanent_flat),
+            "flattened_trade_count": int(flattened_trade_count),
+            "cancelled_pending_trade_count": int(cancelled_pending_trade_count),
+            "bankrupt": bool(portfolio_bankrupt),
+            "bankruptcy_time": bankruptcy_time,
             "skipped_guard": int(skipped_guard),
             "max_open_trades": max_open_trades,
             "skipped_max_open_trades": int(skipped_max_open_trades),
@@ -1149,6 +1518,8 @@ def run_portfolio_barrier_backtest(
             "skipped_spread_filter": int(skipped_spread_filter),
             "skipped_invalid_spread": int(skipped_invalid_spread),
             "skipped_short_disabled": int(skipped_short_disabled),
+            "skipped_turnover_limit": int(skipped_turnover_limit),
+            "turnover_sized_trade_count": int(turnover_sized_trade_count),
             "correlation_guard_enabled": bool(correlation_guard_cfg.get("enabled", False)),
             "correlation_guard_checked": int(correlation_guard_checked),
             "correlation_guard_rejections": int(correlation_guard_rejections),
@@ -1172,6 +1543,13 @@ def run_portfolio_barrier_backtest(
         "volatility_col": volatility_col,
         "tie_break": tie_break,
         "event_time_remap_policy": event_time_remap_policy,
+        "liquidate_at_end": bool(liquidate_at_end),
+        "terminal_gross_exposure_before_liquidation": terminal_gross_exposure_before_liquidation,
+        "terminal_gross_exposure": (
+            float(weights.iloc[-1].abs().sum()) if not weights.empty else 0.0
+        ),
+        "bankrupt": bool(portfolio_bankrupt),
+        "bankruptcy_time": bankruptcy_time,
         "max_cost_r": max_cost_r,
         "asset_params": dict(asset_params_by_asset),
         "asset_groups": dict(asset_groups),
@@ -1191,6 +1569,10 @@ def run_portfolio_barrier_backtest(
         "skipped_spread_filter": int(skipped_spread_filter),
         "skipped_invalid_spread": int(skipped_invalid_spread),
         "skipped_short_disabled": int(skipped_short_disabled),
+        "skipped_turnover_limit": int(skipped_turnover_limit),
+        "turnover_sized_trade_count": int(turnover_sized_trade_count),
+        "flattened_trade_count": int(flattened_trade_count),
+        "cancelled_pending_trade_count": int(cancelled_pending_trade_count),
         "daily_loss_trigger_count": int(daily_loss_trigger_count),
         "risk_sized_trade_count": int(risk_sized_trade_count),
         "remapped_entry_timestamps": int(remapped_entry_timestamps),

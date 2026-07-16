@@ -26,6 +26,7 @@ from src.experiments.optuna_search import (
     normalize_pruning_spec,
     optimize_experiment,
     prepare_trial_config,
+    run_optuna_spec,
     sample_trial_parameters,
     score_experiment_result,
     validate_search_space_feature_contract,
@@ -62,6 +63,44 @@ class _FakeTrial:
 
     def set_user_attr(self, key: str, value: object) -> None:
         self.user_attrs[key] = value
+
+
+def _materialize_current_spec(
+    spec_path: str | Path,
+) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
+    spec = load_optuna_spec_yaml(spec_path)
+    assert spec["archived"] is False
+    base_cfg = load_experiment_config(spec["base_config"])
+    search_space = spec["search_space"]
+    validate_search_space_feature_contract(base_cfg, search_space)
+    trial_params: dict[str, object] = {}
+    for dimension in search_space:
+        if dimension.kind == "categorical":
+            trial_params[dimension.name] = list(dimension.choices or [])[0]
+        elif dimension.kind == "int":
+            trial_params[dimension.name] = int(dimension.low)
+        elif dimension.kind == "float":
+            trial_params[dimension.name] = float(dimension.low)
+        else:
+            trial_params[dimension.name] = False
+    trial_cfg = prepare_trial_config(
+        base_cfg,
+        trial_params=trial_params,
+        search_space=search_space,
+        logging_enabled=False,
+    )
+    validate_resolved_config(trial_cfg)
+    return spec, base_cfg, trial_cfg
+
+
+def _assert_archived_spec_fails_closed(spec_path: str | Path) -> dict[str, object]:
+    spec = load_optuna_spec_yaml(spec_path)
+    assert spec["archived"] is True
+    assert spec["archive_reason"]
+    assert not Path(str(spec["base_config"])).is_file()
+    with pytest.raises(ValueError, match="archived and cannot be run"):
+        run_optuna_spec(spec_path, no_report=True)
+    return spec
 
 
 def test_run_dir_timestamps_use_athens_timezone() -> None:
@@ -616,7 +655,7 @@ def test_foundation_alpha_ethusd_signal_gates_optuna_yaml_matches_base_config_co
         ("bollinger_bandwidth_rank_192", "ge"),
     ]
     assert payload["base_config"] == (
-        "config/experiments/foundation_alpha/BEST/"
+        "config/experiments/foundation_alpha/BEST/ethusd/"
         "BEST_ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid.yaml"
     )
     assert payload["study"]["study_name"] == "optuna_ethusd_30m_v3_7_ehlers_trend_hybrid_signal_gates_lgbm_v1"
@@ -728,46 +767,32 @@ def test_foundation_alpha_ethusd_signal_gates_smoke_optuna_yaml_matches_main_con
     assert trial_cfg["logging"]["enabled"] is False
 
 
-def test_dense_return_forecasting_v2_optuna_penalizes_rank_cost_and_turnover() -> None:
-    optuna_cfg_path = Path("config/optuna/dense_return_forecasting_v2_optuna.yaml")
-    payload = yaml.safe_load(optuna_cfg_path.read_text(encoding="utf-8"))
-
-    search_space = load_search_space_yaml(optuna_cfg_path)
-    objective = normalize_objective_spec(payload["objective"])
-    base_cfg = load_experiment_config(payload["base_config"])
-    validate_search_space_feature_contract(base_cfg, search_space)
-
-    constraints_by_path = {constraint.metric_path: constraint for constraint in objective.constraints}
-    assert constraints_by_path["evaluation.primary_summary.rank_ic"].threshold == pytest.approx(0.02)
-    assert constraints_by_path["evaluation.primary_summary.quantile_monotonicity"].threshold == pytest.approx(0.25)
-    assert constraints_by_path["evaluation.primary_summary.cost_to_gross_pnl"].threshold == pytest.approx(1.0)
-    assert constraints_by_path["evaluation.primary_summary.gross_pnl"].penalty == pytest.approx(4.0)
-
-    dims_by_name = {dimension.name: dimension for dimension in search_space}
-    assert dims_by_name["horizon_bars"].low == pytest.approx(8)
-    assert dims_by_name["horizon_bars"].high == pytest.approx(16)
-    assert dims_by_name["horizon_bars"].step == pytest.approx(4)
-    assert dims_by_name["rebalance_every_n_bars"].path == "portfolio.selection.rebalance_every_n_bars"
-    assert dims_by_name["rebalance_every_n_bars"].low == pytest.approx(4)
-    assert dims_by_name["rebalance_every_n_bars"].high == pytest.approx(12)
-    assert dims_by_name["rebalance_every_n_bars"].step == pytest.approx(4)
-
-    trial_params = {}
-    for dimension in search_space:
-        if dimension.kind == "categorical":
-            trial_params[dimension.name] = list(dimension.choices or [])[0]
-        elif dimension.kind == "int":
-            trial_params[dimension.name] = int(dimension.low)
-        elif dimension.kind == "float":
-            trial_params[dimension.name] = float(dimension.low)
-    trial_cfg = prepare_trial_config(
-        base_cfg,
-        trial_params=trial_params,
-        search_space=search_space,
-        logging_enabled=False,
+def test_lightgbm_meta_optuna_penalizes_cost_and_gross_pnl_and_materializes() -> None:
+    optuna_cfg_path = Path(
+        "config/optuna/ema_rms_ppo_vwap/long_only/"
+        "optuna_vwap_rms_cross_ema50_regime_3atr_no_time_exit_"
+        "BEST_all11_lightgbm_meta_v3.yaml"
     )
-    validate_resolved_config(trial_cfg)
-    assert trial_cfg["portfolio"]["selection"]["rebalance_every_n_bars"] == 4
+    spec, base_cfg, trial_cfg = _materialize_current_spec(optuna_cfg_path)
+    objective = spec["objective"]
+    search_space = spec["search_space"]
+    constraints_by_path = {constraint.metric_path: constraint for constraint in objective.constraints}
+    assert constraints_by_path["evaluation.primary_summary.cost_to_gross_pnl"].threshold == pytest.approx(0.65)
+    assert constraints_by_path["evaluation.primary_summary.gross_pnl"].penalty == pytest.approx(20.0)
+    dims_by_name = {dimension.name: dimension for dimension in search_space}
+    assert dims_by_name["target_horizon_bars"].choices == [8, 12, 16, 24, 32, 48]
+    assert dims_by_name["target_horizon_bars"].paths == [
+        "model.split.purge_bars",
+        "model.split.embargo_bars",
+    ]
+    assert base_cfg["model"]["kind"] == "lightgbm_clf"
+    assert {"return_momentum", "vol_normalized_momentum", "volume_features", "lags"}.issubset(
+        {feature["step"] for feature in base_cfg["features"]}
+    )
+    assert trial_cfg["model"]["target"]["horizon"] == 8
+    assert trial_cfg["model"]["split"]["purge_bars"] == 8
+    assert trial_cfg["model"]["split"]["embargo_bars"] == 8
+    assert trial_cfg["logging"]["enabled"] is False
 
 
 def test_build_study_objective_returns_failure_score_when_runner_fails(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -941,426 +966,137 @@ search_space:
     assert search_space[0].path == "signals.params.upper"
 
 
-def test_us100_ehlers_tp_long_optuna_spec_materializes_trial_config() -> None:
-    optuna_cfg_path = Path("config/optuna/us100_30m_ehlers_tp_long_signal_backtest_v1_optuna.yaml")
-    spec = load_optuna_spec_yaml(optuna_cfg_path)
-    search_space = spec["search_space"]
-    base_cfg = load_experiment_config(spec["base_config"])
-
-    validate_search_space_feature_contract(base_cfg, search_space)
-    trial_params = sample_trial_parameters(_FakeTrial(), search_space)
-    trial_cfg = prepare_trial_config(
-        base_cfg,
-        trial_params=trial_params,
-        search_space=search_space,
-        logging_enabled=False,
+def test_retired_us100_ehlers_optuna_spec_is_explicitly_archived() -> None:
+    spec = _assert_archived_spec_fails_closed(
+        "config/optuna/ehlers_trend_pullback_continuation_long/"
+        "optuna_us100_30m_ehlers_trend_pullback_continuation_long_v1.yaml"
     )
-
     assert spec["study"]["sampler"] == "tpe"
-    assert spec["study"]["seed"] == 42
-    assert spec["study"]["n_trials"] == 500
-    assert str(spec["study"]["storage"]).startswith("sqlite:///logs/optuna/")
-    assert trial_cfg["model"]["kind"] == "none"
-    assert trial_cfg["signals"]["kind"] == "ehlers_trend_pullback_continuation_long"
-    assert trial_cfg["backtest"]["dynamic_exits"]["enabled"] is False
-    assert trial_cfg["signals"]["params"]["entry_delay_bars"] in {0, 1, 2}
-    validate_resolved_config(trial_cfg)
+    assert spec["study"]["seed"] == 7
+    assert spec["study"]["n_trials"] == 100
+    assert spec["study"]["storage"] is None
 
 
-def test_repo_shock_meta_optuna_yaml_matches_base_config_contract() -> None:
-    optuna_cfg_path = Path("config/optuna/optuna_shock_meta_xgboost.yaml")
-    payload = yaml.safe_load(optuna_cfg_path.read_text(encoding="utf-8"))
-
-    search_space = load_search_space_yaml(optuna_cfg_path)
-    objective = normalize_objective_spec(payload["objective"])
-    pruning = normalize_pruning_spec(payload["pruning"])
-    base_cfg = load_experiment_config(payload["base_config"])
-    validate_search_space_feature_contract(base_cfg, search_space)
-
-    trial_params = {}
-    for dimension in search_space:
-        if dimension.kind == "categorical":
-            trial_params[dimension.name] = list(dimension.choices or [])[0]
-        elif dimension.kind == "int":
-            trial_params[dimension.name] = int(dimension.low)
-        elif dimension.kind == "float":
-            trial_params[dimension.name] = float(dimension.low)
-        else:
-            trial_params[dimension.name] = False
-
-    trial_cfg = prepare_trial_config(
-        base_cfg,
-        trial_params=trial_params,
-        search_space=search_space,
-        logging_enabled=False,
+def test_repo_xgboost_meta_optuna_yaml_matches_current_base_config_contract() -> None:
+    optuna_cfg_path = Path(
+        "config/optuna/ema_rms_ppo_vwap/long_only/"
+        "optuna_vwap_rms_cross_ema50_regime_3atr_no_time_exit_"
+        "BEST_all11_xgboost_meta_v3.yaml"
     )
+    spec, base_cfg, trial_cfg = _materialize_current_spec(optuna_cfg_path)
+    objective = spec["objective"]
+    pruning = spec["pruning"]
 
-    validate_resolved_config(trial_cfg)
-    assert payload["base_config"] == "config/experiments/btcusd_1h_shock_meta_xgboost_long_only.yaml"
+    constraints_by_path = {constraint.metric_path: constraint for constraint in objective.constraints}
+    assert spec["base_config"].endswith("BEST_all11_xgboost_meta_v3.yaml")
     assert objective.metric_path == "evaluation.primary_summary.sharpe"
     assert pruning.metric_path == "classification_metrics.roc_auc"
-    constraints_by_path = {constraint.metric_path: constraint for constraint in objective.constraints}
-    assert constraints_by_path["derived.turnover_event_count"].threshold == pytest.approx(75.0)
-    assert constraints_by_path["derived.turnover_event_count"].penalty == pytest.approx(1.0e12)
-    assert constraints_by_path["evaluation.primary_summary.total_turnover"].threshold == pytest.approx(30.0)
-    assert constraints_by_path["evaluation.primary_summary.total_turnover"].penalty == pytest.approx(1.0e12)
-    assert trial_cfg["model"]["feature_selectors"]["strict"]["min_count"] == 21
-    assert trial_cfg["model"]["target"]["max_holding"] == 12
-    assert trial_cfg["signals"]["params"]["upper_exit"] == 0.50
-    assert trial_cfg["signals"]["params"]["mode"] == "long_only"
-    assert trial_cfg["backtest"]["min_holding_bars"] == 1
-    assert trial_cfg["risk"]["dd_guard"]["cooloff_bars"] == 24
-    assert trial_cfg["logging"]["enabled"] is False
-    assert trial_cfg["logging"]["stage_tails"]["stdout"] is False
-
-
-def test_ftmo_optuna_v2_yaml_matches_base_config_contract() -> None:
-    optuna_cfg_path = Path("config/optuna/optuna_ftmo_fx_intraday_regime_xgboost_v2.yaml")
-    payload = yaml.safe_load(optuna_cfg_path.read_text(encoding="utf-8"))
-
-    search_space = load_search_space_yaml(optuna_cfg_path)
-    objective = normalize_objective_spec(payload["objective"])
-    pruning = normalize_pruning_spec(payload["pruning"])
-    base_cfg = load_experiment_config(payload["base_config"])
-
-    trial_params = {}
-    for dimension in search_space:
-        if dimension.kind == "categorical":
-            trial_params[dimension.name] = list(dimension.choices or [])[0]
-        elif dimension.kind == "int":
-            trial_params[dimension.name] = int(dimension.low)
-        elif dimension.kind == "float":
-            trial_params[dimension.name] = float(dimension.low)
-        else:
-            trial_params[dimension.name] = False
-
-    trial_cfg = prepare_trial_config(
-        base_cfg,
-        trial_params=trial_params,
-        search_space=search_space,
-        logging_enabled=False,
+    assert pruning.stage_filter == ("xgboost_clf",)
+    assert constraints_by_path["evaluation.primary_summary.cost_to_gross_pnl"].threshold == pytest.approx(
+        0.65
     )
+    assert base_cfg["model"]["kind"] == "xgboost_clf"
+    assert base_cfg["signals"]["kind"] == "manual_long_model_filter"
+    assert {"return_momentum", "vol_normalized_momentum", "volume_features", "lags"}.issubset(
+        {feature["step"] for feature in base_cfg["features"]}
+    )
+    assert trial_cfg["features"][22]["params_by_asset"]["XAUUSD"]["ppo_hist_min"] == pytest.approx(0.0)
+    assert trial_cfg["logging"]["enabled"] is False
 
-    validate_resolved_config(trial_cfg)
-    constraints_by_path = {constraint.metric_path: constraint for constraint in objective.constraints}
-    risk_leverage = {dimension.name: dimension for dimension in search_space}["risk_max_leverage"]
-    signal_clip = {dimension.name: dimension for dimension in search_space}["signal_clip"]
-    assert payload["base_config"] == "config/experiments/ftmo_fx_intraday_regime_xgboost_v1.yaml"
-    assert payload["study"]["study_name"] == "optuna_ftmo_fx_intraday_regime_xgboost_v2"
-    assert payload["report"]["run_name"] == "optuna_ftmo_fx_intraday_regime_xgboost_v2"
+def test_lab_directional_return_optuna_yaml_matches_current_base_contract() -> None:
+    optuna_cfg_path = Path("config/optuna/lab/01_directional_return_chronos_bolt_h6_optuna.yaml")
+    spec, base_cfg, trial_cfg = _materialize_current_spec(optuna_cfg_path)
+    objective = spec["objective"]
+    pruning = spec["pruning"]
+    dimensions = {dimension.name: dimension for dimension in spec["search_space"]}
+
+    assert spec["base_config"] == "config/lab/01_directional_return_chronos_bolt_h6.yaml"
+    assert objective.metric_path == "regression_metrics.directional_accuracy"
+    assert pruning.stage_filter == ("chronos_bolt_forecaster",)
+    assert base_cfg["model"]["kind"] == "chronos_bolt_forecaster"
+    assert base_cfg["model"]["target"]["kind"] == "future_return_regression"
+    assert dimensions["horizon_bars"].paths == [
+        "model.params.prediction_length",
+        "model.split.purge_bars",
+        "model.split.embargo_bars",
+        "validation.purge_bars",
+        "validation.embargo_bars",
+        "backtest.min_holding_bars",
+    ]
+    assert trial_cfg["model"]["target"]["horizon_bars"] == 3
+    assert trial_cfg["model"]["params"]["prediction_length"] == 3
+    assert trial_cfg["model"]["target"]["fwd_col"] == "target_future_return_h3"
+    assert trial_cfg["logging"]["enabled"] is False
+
+def test_foundation_signal_gate_optuna_yaml_matches_current_base_contract() -> None:
+    optuna_cfg_path = Path(
+        "config/optuna/foundation_alpha/"
+        "optuna_ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_"
+        "ehlers_trend_hybrid_signal_gates_lgbm_v1.yaml"
+    )
+    spec, base_cfg, trial_cfg = _materialize_current_spec(optuna_cfg_path)
+    objective = spec["objective"]
+    dimensions = {dimension.name: dimension for dimension in spec["search_space"]}
+
+    assert spec["base_config"] == (
+        "config/experiments/foundation_alpha/BEST/ethusd/"
+        "BEST_ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_"
+        "ehlers_trend_hybrid.yaml"
+    )
     assert objective.metric_path == "evaluation.primary_summary.sharpe"
-    assert objective.stability_weight == pytest.approx(1.0)
-    assert constraints_by_path["evaluation.primary_summary.cumulative_return"].threshold == pytest.approx(0.0)
-    assert constraints_by_path["evaluation.primary_summary.cumulative_return"].penalty == pytest.approx(1.0e12)
-    assert constraints_by_path["evaluation.primary_summary.sharpe"].threshold == pytest.approx(0.0)
-    assert constraints_by_path["evaluation.primary_summary.sharpe"].penalty == pytest.approx(10.0)
-    profit_factor_constraints = [
-        constraint
-        for constraint in objective.constraints
-        if constraint.metric_path == "evaluation.primary_summary.profit_factor"
-    ]
-    assert any(
-        constraint.op == "lt"
-        and constraint.threshold == pytest.approx(1.0)
-        and constraint.penalty == pytest.approx(5.0)
-        for constraint in profit_factor_constraints
-    )
-    assert any(
-        constraint.op == "lt"
-        and constraint.threshold == pytest.approx(1.10)
-        and constraint.penalty == pytest.approx(1.25)
-        for constraint in profit_factor_constraints
-    )
-    assert constraints_by_path["derived.active_fold_count"].threshold == pytest.approx(6.0)
-    assert constraints_by_path["derived.active_fold_count"].penalty == pytest.approx(2.0)
-    active_week_ratio_constraints = [
-        constraint for constraint in objective.constraints if constraint.metric_path == "derived.active_week_ratio"
-    ]
-    assert any(
-        constraint.op == "lt"
-        and constraint.threshold == pytest.approx(0.60)
-        and constraint.penalty == pytest.approx(4.0)
-        for constraint in active_week_ratio_constraints
-    )
-    assert any(
-        constraint.op == "lt"
-        and constraint.threshold == pytest.approx(0.80)
-        and constraint.penalty == pytest.approx(1.5)
-        for constraint in active_week_ratio_constraints
-    )
-    entry_count_constraints = [
-        constraint for constraint in objective.constraints if constraint.metric_path == "derived.entry_count"
-    ]
-    assert any(
-        constraint.op == "lt"
-        and constraint.threshold == pytest.approx(20.0)
-        and constraint.penalty == pytest.approx(5.0)
-        for constraint in entry_count_constraints
-    )
-    assert any(
-        constraint.op == "lt"
-        and constraint.threshold == pytest.approx(50.0)
-        and constraint.penalty == pytest.approx(1.5)
-        for constraint in entry_count_constraints
-    )
-    assert risk_leverage.choices == [0.25]
-    assert max(signal_clip.choices or []) == pytest.approx(0.25)
-    assert pruning.metric_path == "classification_metrics.roc_auc"
-    assert trial_cfg["model"]["split"]["max_folds"] == 24
-    assert trial_cfg["model"]["target"]["max_holding"] == 18
-    assert trial_cfg["data"]["storage"]["dataset_id"] == "ftmo_fx_intraday_regime_xgboost_v2"
-    assert trial_cfg["risk"]["max_leverage"] == pytest.approx(0.25)
-    assert trial_cfg["logging"]["run_name"] == "ftmo_fx_intraday_regime_xgboost_v2"
+    assert base_cfg["model"]["kind"] == "lightgbm_regressor"
+    assert base_cfg["signals"]["kind"] == "forecast_threshold"
+    assert dimensions["atr_rank_min"].path == "signals.params.activation_filters.0.value"
+    assert dimensions["bb_width_rank_min"].path == "signals.params.activation_filters.3.value"
+    assert trial_cfg["signals"]["params"]["upper"] == pytest.approx(0.30)
+    assert trial_cfg["signals"]["params"]["activation_filters"][0]["value"] == pytest.approx(0.10)
+    assert trial_cfg["model"]["params"]["n_estimators"] == 250
     assert trial_cfg["logging"]["enabled"] is False
 
-
-def test_ftmo_panel_optuna_yaml_matches_base_config_contract() -> None:
-    optuna_cfg_path = Path("config/optuna/optuna_ftmo_fx_intraday_panel_4pair_xgboost_garch_2y_v1.yaml")
-    payload = yaml.safe_load(optuna_cfg_path.read_text(encoding="utf-8"))
-
-    search_space = load_search_space_yaml(optuna_cfg_path)
-    objective = normalize_objective_spec(payload["objective"])
-    pruning = normalize_pruning_spec(payload["pruning"])
-    base_cfg = load_experiment_config(payload["base_config"])
-
-    trial_params = {}
-    for dimension in search_space:
-        if dimension.kind == "categorical":
-            trial_params[dimension.name] = list(dimension.choices or [])[0]
-        elif dimension.kind == "int":
-            trial_params[dimension.name] = int(dimension.low)
-        elif dimension.kind == "float":
-            trial_params[dimension.name] = float(dimension.low)
-        else:
-            trial_params[dimension.name] = False
-
-    trial_cfg = prepare_trial_config(
-        base_cfg,
-        trial_params=trial_params,
-        search_space=search_space,
-        logging_enabled=False,
+def test_removed_roc_long_only_optuna_spec_is_explicitly_archived() -> None:
+    spec = _assert_archived_spec_fails_closed(
+        "config/optuna/roc_long_only/"
+        "optuna_spx500_roc_long_only_xgboost_r_multiple_filter.yaml"
     )
 
-    validate_resolved_config(trial_cfg)
-    constraints_by_path = {constraint.metric_path: constraint for constraint in objective.constraints}
-    search_dims_by_name = {dimension.name: dimension for dimension in search_space}
-    search_names = set(search_dims_by_name)
-    assert payload["base_config"] == "config/experiments/ftmo_fx_intraday_panel_4pair_xgboost_garch_2y_v1.yaml"
-    assert payload["study"]["study_name"] == "optuna_ftmo_fx_intraday_panel_4pair_xgboost_garch_2y_v1"
-    assert payload["report"]["run_name"] == "optuna_ftmo_fx_intraday_panel_4pair_xgboost_garch_2y_v1"
-    assert objective.metric_path == "evaluation.ftmo_objective.score"
-    assert objective.failure_score == pytest.approx(-1.0e15)
-    assert objective.stability_weight == pytest.approx(1.0)
-    assert constraints_by_path["evaluation.primary_summary.cumulative_return"].threshold == pytest.approx(0.0)
-    assert constraints_by_path["evaluation.primary_summary.cumulative_return"].penalty == pytest.approx(1.0e12)
-    assert constraints_by_path["evaluation.primary_summary.max_drawdown"].threshold == pytest.approx(-0.08)
-    assert constraints_by_path["evaluation.ftmo_metrics.worst_weekly_drawdown"].threshold == pytest.approx(-0.04)
-    assert constraints_by_path["evaluation.ftmo_metrics.weekly_drawdown_breach_count"].penalty == pytest.approx(1.0e12)
-    assert constraints_by_path["evaluation.ftmo_metrics.daily_loss_breach_count"].penalty == pytest.approx(1.0e12)
-    assert constraints_by_path["evaluation.ftmo_metrics.max_total_loss_breach_count"].penalty == pytest.approx(1.0e12)
-    assert constraints_by_path["derived.active_fold_count"].threshold == pytest.approx(8.0)
-    assert constraints_by_path["derived.profitable_fold_count"].threshold == pytest.approx(5.0)
-    active_week_ratio_constraints = [
-        constraint for constraint in objective.constraints if constraint.metric_path == "derived.active_week_ratio"
-    ]
-    assert any(
-        constraint.op == "lt"
-        and constraint.threshold == pytest.approx(0.55)
-        and constraint.penalty == pytest.approx(4.0)
-        for constraint in active_week_ratio_constraints
+    assert spec["base_config"] == (
+        "config/experiments/roc_long_only/"
+        "spx500_roc_long_only_xgboost_r_multiple_filter.yaml"
     )
-    assert any(
-        constraint.op == "lt"
-        and constraint.threshold == pytest.approx(0.75)
-        and constraint.penalty == pytest.approx(1.5)
-        for constraint in active_week_ratio_constraints
-    )
-    weekly_target_hit_ratio_constraints = [
-        constraint
-        for constraint in objective.constraints
-        if constraint.metric_path == "evaluation.ftmo_metrics.weekly_target_hit_ratio"
-    ]
-    assert any(
-        constraint.op == "lt"
-        and constraint.threshold == pytest.approx(0.25)
-        and constraint.penalty == pytest.approx(4.0)
-        for constraint in weekly_target_hit_ratio_constraints
-    )
-    assert all(not name.startswith("tb_") for name in search_names)
-    assert pruning.metric_path == "classification_metrics.roc_auc"
-    assert trial_cfg["data"]["symbols"] == ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD"]
-    assert sorted(trial_cfg["data"]["storage"]["load_paths"]) == ["AUDUSD", "EURUSD", "GBPUSD", "USDJPY"]
-    assert trial_cfg["data"]["end"] == "2024-10-01 00:00:00"
-    assert trial_cfg["model"]["split"]["max_folds"] == 20
-    assert trial_cfg["model"]["target"]["kind"] == "forward_return"
-    assert trial_cfg["model"]["target"]["horizon"] == 18
-    assert trial_cfg["model"]["feature_selectors"]["profile"] == "ftmo_fx_intraday_balanced_v1"
-    assert "vol_window_short" not in search_names
-    assert "trend_sma_fast" not in search_names
-    assert "trend_sma_slow" not in search_names
-    assert "adx_window" not in search_names
-    assert "regime_vol_short" not in search_names
-    assert "regime_vol_long" not in search_names
-    assert search_dims_by_name["vol_norm_vol_col"].choices == [
-        "vol_rolling_12",
-        "vol_rolling_24",
-        "vol_rolling_48",
-        "vol_rolling_72",
-        "vol_rolling_96",
-        "vol_rolling_120",
-        "vol_rolling_168",
-    ]
-    assert search_dims_by_name["activation_adx_selector"].choices == ["adx_14", "adx_18", "adx_24", "adx_30"]
-    assert trial_cfg["features"][13]["params"]["vol_col"] == "vol_rolling_12"
-    assert trial_cfg["features"][3]["params"]["base_sma_for_sign"] == 72
-    assert trial_cfg["features"][3]["params"]["short_sma"] == 24
-    assert trial_cfg["features"][3]["params"]["long_sma"] == 72
-    assert trial_cfg["signals"]["params"]["activation_filters"][2]["selector"]["exact"] == "adx_14"
-    assert (
-        trial_cfg["signals"]["params"]["activation_filters"][3]["selector"]["exact"]
-        == "regime_vol_ratio_12_120"
-    )
-    assert trial_cfg["portfolio"]["enabled"] is True
-    assert trial_cfg["portfolio"]["gross_target"] == pytest.approx(0.20)
-    assert trial_cfg["portfolio"]["constraints"]["max_gross_leverage"] == pytest.approx(0.35)
-    assert trial_cfg["portfolio"]["constraints"]["max_weight"] == pytest.approx(0.08)
-    assert trial_cfg["portfolio"]["constraints"]["min_weight"] == pytest.approx(-0.08)
-    assert trial_cfg["backtest"]["min_holding_bars"] == 4
-    assert trial_cfg["logging"]["run_name"] == "ftmo_fx_intraday_panel_4pair_xgboost_garch_2y_v1"
-    assert trial_cfg["logging"]["enabled"] is False
-
-
-def test_ftmo_triple_barrier_meta_optuna_yaml_matches_base_config_contract() -> None:
-    optuna_cfg_path = Path("config/optuna/optuna_ftmo_fx_intraday_panel_4pair_xgboost_triple_barrier_meta_v1.yaml")
-    payload = yaml.safe_load(optuna_cfg_path.read_text(encoding="utf-8"))
-
-    search_space = load_search_space_yaml(optuna_cfg_path)
-    objective = normalize_objective_spec(payload["objective"])
-    pruning = normalize_pruning_spec(payload["pruning"])
-    base_cfg = load_experiment_config(payload["base_config"])
-
-    trial_params = {}
-    for dimension in search_space:
-        if dimension.kind == "categorical":
-            trial_params[dimension.name] = list(dimension.choices or [])[0]
-        elif dimension.kind == "int":
-            trial_params[dimension.name] = int(dimension.low)
-        elif dimension.kind == "float":
-            trial_params[dimension.name] = float(dimension.low)
-        else:
-            trial_params[dimension.name] = False
-
-    trial_cfg = prepare_trial_config(
-        base_cfg,
-        trial_params=trial_params,
-        search_space=search_space,
-        logging_enabled=False,
-    )
-
-    validate_resolved_config(trial_cfg)
-    search_dims_by_name = {dimension.name: dimension for dimension in search_space}
-    search_paths = {dimension.path for dimension in search_space}
-    assert (
-        payload["base_config"]
-        == "config/experiments/ftmo_fx_intraday_panel_4pair_xgboost_triple_barrier_meta_v1.yaml"
-    )
-    assert payload["study"]["study_name"] == "optuna_ftmo_fx_intraday_panel_4pair_xgboost_triple_barrier_meta_v1"
-    assert payload["report"]["run_name"] == "optuna_ftmo_fx_intraday_panel_4pair_xgboost_triple_barrier_meta_v1"
-    assert objective.metric_path == "evaluation.ftmo_objective.score"
-    assert objective.failure_score == pytest.approx(-1.0e15)
-    assert objective.stability_weight == pytest.approx(0.5)
-    assert objective.stability_std_penalty == pytest.approx(1.0)
-    assert pruning.enabled is False
-    assert pruning.metric_path == "classification_metrics.roc_auc"
-    assert pruning.pruner == "none"
-
-    assert trial_cfg["data"]["end"] == "2024-10-01 00:00:00"
-    assert trial_cfg["data"]["storage"]["dataset_id"] == "ftmo_fx_intraday_panel_4pair_xgboost_triple_barrier_meta_v1"
-    assert trial_cfg["model"]["split"]["max_folds"] == 12
-    assert trial_cfg["model"]["kind"] == "xgboost_clf"
-    assert trial_cfg["model"]["feature_selectors"]["profile"] == "ftmo_fx_intraday_balanced_v1"
-    assert trial_cfg["model"]["target"]["kind"] == "triple_barrier"
-    assert trial_cfg["model"]["target"]["label_mode"] == "meta"
-    assert trial_cfg["model"]["target"]["entry_price_mode"] == "next_open"
-    assert trial_cfg["model"]["target"]["neutral_label"] == "lower"
-    assert trial_cfg["model"]["target"]["tie_break"] == "lower"
-    assert trial_cfg["model"]["target"]["side_col"] == "primary_side"
-    assert trial_cfg["model"]["target"]["candidate_col"] == "trade_candidate"
-    assert trial_cfg["model"]["target"]["max_holding"] == 12
-    assert trial_cfg["model"]["target"]["upper_mult"] == pytest.approx(1.0)
-    assert trial_cfg["model"]["target"]["lower_mult"] == pytest.approx(1.0)
-    assert trial_cfg["model"]["target"]["vol_window"] == 12
-
-    assert trial_cfg["features"][14]["step"] == "shock_context"
-    assert trial_cfg["features"][14]["params"]["ret_z_threshold"] == pytest.approx(1.0)
-    assert trial_cfg["features"][14]["params"]["atr_mult_threshold"] == pytest.approx(0.5)
-    assert trial_cfg["features"][14]["params"]["distance_from_mean_threshold"] == pytest.approx(0.3)
-    assert trial_cfg["features"][14]["params"]["post_shock_active_bars"] == 1
-    assert trial_cfg["features"][14]["params"]["short_horizon"] == 1
-    assert trial_cfg["features"][14]["params"]["medium_horizon"] == 4
-    assert trial_cfg["features"][15]["step"] == "lags"
-    assert trial_cfg["features"][15]["params"]["lags"][2] == 3
-    assert trial_cfg["features"][15]["params"]["lags"][3] == 12
-
-    assert trial_cfg["signals"]["kind"] == "meta_probability_side"
-    assert trial_cfg["signals"]["params"]["side_col"] == "primary_side"
-    assert trial_cfg["signals"]["params"]["candidate_col"] == "label_candidate"
-    assert trial_cfg["signals"]["params"]["signal_col"] == "signal_meta_side"
-    assert trial_cfg["signals"]["params"]["threshold"] == pytest.approx(0.50)
-    assert trial_cfg["signals"]["params"]["upper"] == pytest.approx(0.62)
-    assert trial_cfg["signals"]["params"]["clip"] == pytest.approx(0.5)
-    assert "signals.params.upper" not in search_paths
-    assert "signals.params.lower" not in search_paths
-    assert not any(path.startswith("signals.params.activation_filters") for path in search_paths)
-
-    assert trial_cfg["risk"]["sizing"]["kind"] == "ftmo_risk_per_trade"
-    assert trial_cfg["risk"]["sizing"]["confidence_mode"] == "meta_success"
-    assert trial_cfg["risk"]["sizing"]["risk_per_trade"] == pytest.approx(0.0025)
-    assert trial_cfg["risk"]["sizing"]["confidence_floor"] == pytest.approx(0.50)
-    assert trial_cfg["risk"]["sizing"]["confidence_power"] == pytest.approx(1.0)
-    assert trial_cfg["risk"]["sizing"]["max_leverage"] == pytest.approx(1.0)
-    assert trial_cfg["backtest"]["signal_col"] == "signal_meta_side"
-    assert trial_cfg["portfolio"]["gross_target"] == pytest.approx(1.0)
-    assert trial_cfg["portfolio"]["constraints"]["max_gross_leverage"] == pytest.approx(1.0)
-    assert trial_cfg["portfolio"]["constraints"]["max_weight"] == pytest.approx(0.40)
-    assert trial_cfg["portfolio"]["constraints"]["min_weight"] == pytest.approx(-0.40)
-
-    assert trial_cfg["model"]["params"]["n_estimators"] == 150
-    assert trial_cfg["model"]["params"]["learning_rate"] == pytest.approx(0.01)
-    assert trial_cfg["model"]["params"]["max_depth"] == 2
-    assert trial_cfg["model"]["params"]["min_child_weight"] == pytest.approx(4.0)
-    assert trial_cfg["model"]["params"]["subsample"] == pytest.approx(0.6)
-    assert trial_cfg["model"]["params"]["colsample_bytree"] == pytest.approx(0.6)
-    assert trial_cfg["model"]["params"]["reg_lambda"] == pytest.approx(0.5)
-    assert trial_cfg["model"]["params"]["reg_alpha"] == pytest.approx(0.0)
-    assert trial_cfg["model"]["params"]["scale_pos_weight"] == pytest.approx(1.0)
-    assert search_dims_by_name["vol_norm_vol_col"].choices == [
-        "vol_rolling_12",
-        "vol_rolling_24",
-        "vol_rolling_48",
-        "vol_rolling_72",
-        "vol_rolling_96",
-        "vol_rolling_120",
-        "vol_rolling_168",
-    ]
-    assert trial_cfg["logging"]["run_name"] == "ftmo_fx_intraday_panel_4pair_xgboost_triple_barrier_meta_v1"
-    assert trial_cfg["logging"]["enabled"] is False
-
+    assert spec["objective"].metric_path == "evaluation.primary_summary.sharpe"
+    assert spec["pruning"].metric_path == "classification_metrics.roc_auc"
+    assert {dimension.kind for dimension in spec["search_space"]} == {
+        "categorical",
+        "float",
+        "int",
+    }
 
 def test_optuna_feature_contract_rejects_unguaranteed_downstream_columns() -> None:
-    base_cfg = load_experiment_config(
-        "config/experiments/ftmo_fx_intraday_panel_4pair_xgboost_garch_2y_v1.yaml"
-    )
+    base_cfg = {
+        "features": [
+            {
+                "step": "adx",
+                "params": {"window": 14, "windows": [14]},
+            }
+        ],
+        "signals": {
+            "params": {
+                "activation_filters": [
+                    {"selector": {"exact": "adx_14"}},
+                ]
+            }
+        },
+    }
     search_space = [
         SearchDimension(
-            name="trend_sma_fast",
-            path="features.2.params.sma_windows.0",
+            name="adx_window",
+            path="features.0.params.window",
             kind="categorical",
-            choices=[36, 48],
+            choices=[14, 18],
         ),
         SearchDimension(
-            name="adx_window",
-            path="features.9.params.windows.2",
+            name="adx_windows_item",
+            path="features.0.params.windows.0",
             kind="categorical",
             choices=[14, 18],
         ),
@@ -1370,38 +1106,16 @@ def test_optuna_feature_contract_rejects_unguaranteed_downstream_columns() -> No
         validate_search_space_feature_contract(base_cfg, search_space)
 
 
-def test_optuna_template_yaml_matches_declared_contract() -> None:
-    optuna_cfg_path = Path("config/optuna/template_optuna_full.yaml")
-    payload = yaml.safe_load(optuna_cfg_path.read_text(encoding="utf-8"))
-
-    search_space = load_search_space_yaml(optuna_cfg_path)
-    objective = normalize_objective_spec(payload["objective"])
-    pruning = normalize_pruning_spec(payload["pruning"])
-    base_cfg = load_experiment_config(payload["base_config"])
-
-    trial_params = {}
-    for dimension in search_space:
-        if dimension.kind == "categorical":
-            trial_params[dimension.name] = list(dimension.choices or [])[0]
-        elif dimension.kind == "int":
-            trial_params[dimension.name] = int(dimension.low)
-        elif dimension.kind == "float":
-            trial_params[dimension.name] = float(dimension.low)
-        else:
-            trial_params[dimension.name] = False
-
-    trial_cfg = prepare_trial_config(
-        base_cfg,
-        trial_params=trial_params,
-        search_space=search_space,
-        logging_enabled=False,
+def test_archived_roc_v2_optuna_yaml_preserves_all_dimension_kinds() -> None:
+    spec = _assert_archived_spec_fails_closed(
+        "config/optuna/roc_long_only/V2/"
+        "optuna_spx500_roc_long_only_xgboost_r_multiple_filter_v2.yaml"
     )
-
-    validate_resolved_config(trial_cfg)
-    assert payload["base_config"] == "config/experiments/btcusd_1h_shock_meta_xgboost_long_only.yaml"
+    objective = spec["objective"]
+    pruning = spec["pruning"]
+    search_space = spec["search_space"]
     assert objective.metric_path == "evaluation.primary_summary.sharpe"
-    assert objective.constraints[1].metric_path == "derived.turnover_event_count"
-    assert pruning.pruner == "median"
+    assert pruning.metric_path == "metrics.sharpe"
     assert {dimension.kind for dimension in search_space} == {"bool", "categorical", "float", "int"}
 
 

@@ -1,4 +1,4 @@
-base_config: config/experiments/lab/08_pretrained_vs_naive_timesfm_eurusd_h12.yaml
+base_config: config/lab/08_pretrained_vs_naive_timesfm_eurusd_h12.yaml
 study: {study_name: optuna_lab_08_pretrained_vs_naive_timesfm_eurusd_h12, storage: null, load_if_exists: false, sampler: tpe, seed: 42, n_trials: 40, timeout: null, n_jobs: 1, logging_enabled: true, catch_exceptions: true}
 report: {enabled: true, output_dir: logs/lab, run_name: optuna_lab_08_pretrained_vs_naive_timesfm_eurusd_h12}
 objective:

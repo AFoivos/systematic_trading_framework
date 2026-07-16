@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from src.market_data.order_book import LocalOrderBook
 from src.market_making.quote_generator import QuoteDecision
 from src.market_making.risk import RiskEngine, RiskLimits, RiskState
@@ -149,3 +151,54 @@ def test_max_open_orders_allows_candidate_count_equal_to_limit() -> None:
     )
 
     assert decision.allowed
+
+
+def test_non_finite_risk_state_triggers_fail_closed_kill_switch() -> None:
+    risk = RiskEngine(_limits())
+
+    decision = risk.check_quote(
+        quote=_quote(),
+        book=_book(),
+        state=RiskState(
+            inventory=float("nan"),
+            realized_pnl=0.0,
+            unrealized_pnl=0.0,
+            open_orders=0,
+        ),
+    )
+
+    assert not decision.allowed
+    assert decision.kill_switch
+    assert decision.cancel_all
+    assert decision.reason == "invalid non-finite risk state"
+
+
+def test_quote_symbol_mismatch_is_rejected() -> None:
+    risk = RiskEngine(_limits())
+    quote = QuoteDecision(
+        **{**_quote().__dict__, "symbol": "ETH/USD"}
+    )
+
+    decision = risk.check_quote(
+        quote=quote,
+        book=_book(),
+        state=RiskState(inventory=0.0, realized_pnl=0.0, unrealized_pnl=0.0, open_orders=0),
+    )
+
+    assert not decision.allowed
+    assert decision.reason == "quote symbol does not match order book"
+
+
+def test_invalid_risk_limit_is_rejected_at_construction() -> None:
+    with pytest.raises(ValueError, match="max_position_value"):
+        RiskEngine(
+            RiskLimits(
+                max_inventory=1.0,
+                max_position_value=float("nan"),
+                max_daily_loss=50.0,
+                max_open_orders=2,
+                max_order_size=0.5,
+                max_allowed_spread_bps=100.0,
+                stale_order_book_ms=1_000,
+            )
+        )

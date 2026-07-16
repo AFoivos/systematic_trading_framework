@@ -642,6 +642,37 @@ def test_validate_ohlcv_rejects_missing_core_prices() -> None:
         validate_ohlcv(df)
 
 
+@pytest.mark.parametrize(
+    ("column", "value", "match"),
+    [
+        ("open", np.inf, "non-finite"),
+        ("close", 0.0, "non-positive"),
+        ("volume", -1.0, "negative volume"),
+        ("volume", np.inf, "non-finite volume"),
+    ],
+)
+def test_validate_ohlcv_rejects_impossible_numeric_values(
+    column: str,
+    value: float,
+    match: str,
+) -> None:
+    idx = pd.date_range("2020-01-01", periods=2, freq="D")
+    df = pd.DataFrame(
+        {
+            "open": [10.0, 10.0],
+            "high": [11.0, 11.0],
+            "low": [9.0, 9.0],
+            "close": [10.5, 10.5],
+            "volume": [0.0, 100.0],
+        },
+        index=idx,
+    )
+    df.loc[idx[1], column] = value
+
+    with pytest.raises(ValueError, match=match):
+        validate_ohlcv(df)
+
+
 def test_run_backtest_costs_and_slippage_reduce_returns() -> None:
     """
     Verify that backtest costs and slippage reduce returns behaves as expected under a
@@ -977,32 +1008,38 @@ def test_manual_barrier_backtest_supports_disabled_time_exit() -> None:
     assert trade["bars_held"] == 4
 
 
-def test_roc_long_only_configs_load_as_manual_barrier_experiments() -> None:
+def test_current_long_only_configs_load_as_manual_barrier_experiments() -> None:
     config_paths = [
-        "config/experiments/roc_long_only/xauusd_roc_long_only_manual_barrier.yaml",
-        "config/experiments/roc_long_only/us100_roc_long_only_manual_barrier.yaml",
-        "config/experiments/roc_long_only/us30_roc_long_only_manual_barrier.yaml",
-        "config/experiments/roc_long_only/ger40_roc_long_only_manual_barrier.yaml",
-        "config/experiments/roc_long_only/spx500_roc_long_only_manual_barrier.yaml",
+        "config/experiments/ema_rms_ppo_vwap/best_long_only/"
+        "xauusd_30m_vwap_rms_cross_ema50_regime_3atr_no_time_exit_BEST.yaml",
+        "config/experiments/ema_rms_ppo_vwap/best_long_only/"
+        "us100_30m_vwap_rms_cross_ema50_regime_3atr_no_time_exit_BEST.yaml",
+        "config/experiments/ema_rms_ppo_vwap/best_long_only/"
+        "us30_30m_vwap_rms_cross_ema50_regime_3atr_no_time_exit_BEST.yaml",
+        "config/experiments/ema_rms_ppo_vwap/best_long_only/"
+        "ger40_30m_vwap_rms_cross_ema50_regime_3atr_no_time_exit_BEST.yaml",
+        "config/experiments/ema_rms_ppo_vwap/best_long_only/"
+        "spx500_30m_vwap_rms_cross_ema50_regime_3atr_no_time_exit_BEST.yaml",
     ]
 
     for config_path in config_paths:
         cfg = load_experiment_config(config_path)
         assert cfg["model"]["kind"] == "none"
-        assert cfg["model"]["target"]["kind"] == "r_multiple"
-        assert cfg["model"]["target"]["candidate_col"] == "manual_long_signal"
-        assert cfg["signals"]["kind"] == "roc_long_only_conditions"
+        assert cfg["signals"]["kind"] == "vwap_rms_ema_cross_long"
         assert cfg["backtest"]["engine"] == "manual_barrier"
-        assert cfg["backtest"]["signal_col"] == "manual_vol_adjusted_signal"
+        assert cfg["backtest"]["signal_col"] == "signal_side"
+        assert cfg["backtest"]["allow_short"] is False
 
 
-def test_stochrsi_cross_ma_manual_barrier_config_loads_short_execution() -> None:
+def test_current_short_only_manual_barrier_config_loads_short_execution() -> None:
     cfg = load_experiment_config(
-        "config/experiments/stochrsi_cross_ma/stochrsi_cross_ma_raw_manual_barrier.yaml"
+        "config/experiments/ema_rms_ppo_vwap/short_only/"
+        "xauusd_30m_vwap_rms_cross_ema50_regime_3atr_no_time_exit_BEST_short_only.yaml"
     )
 
     assert cfg["model"]["kind"] == "none"
-    assert cfg["signals"]["kind"] == "none"
+    assert cfg["signals"]["kind"] == "vwap_rms_ema_cross_long"
+    assert cfg["signals"]["params"]["mode"] == "short_only"
     assert cfg["backtest"]["engine"] == "manual_barrier"
     assert cfg["backtest"]["signal_col"] == "signal_side"
     assert cfg["backtest"]["allow_short"] is True
@@ -1061,9 +1098,10 @@ def test_run_backtest_drawdown_guard_applies_from_next_bar() -> None:
         cooloff_bars=1,
     )
 
-    assert np.isclose(bt.positions.iloc[1], 1.0)
-    assert np.isclose(bt.positions.iloc[2], 0.0)
-    assert np.isclose(bt.turnover.iloc[1], 0.0)
+    assert np.isclose(bt.positions.iloc[1], 0.0)
+    assert np.isclose(bt.returns.iloc[1], -0.30)
+    assert np.isclose(bt.returns.iloc[2], 0.0)
+    assert np.isclose(bt.turnover.iloc[1], 1.0)
 
 
 def test_run_backtest_drawdown_guard_respects_exact_cooloff_bars() -> None:
@@ -1085,7 +1123,8 @@ def test_run_backtest_drawdown_guard_respects_exact_cooloff_bars() -> None:
         cooloff_bars=2,
     )
 
-    assert bt.positions.tolist() == [1.0, 1.0, 0.0, 0.0, 1.0]
+    assert bt.positions.tolist() == [1.0, 0.0, 0.0, 1.0, 1.0]
+    assert bt.returns.iloc[2] == pytest.approx(0.0)
 
 
 def test_run_backtest_drawdown_guard_does_not_permanently_retrigger_underwater() -> None:
@@ -1108,7 +1147,7 @@ def test_run_backtest_drawdown_guard_does_not_permanently_retrigger_underwater()
         rearm_drawdown=0.05,
     )
 
-    assert bt.positions.tolist() == [1.0, 1.0, 0.0, 1.0, 1.0]
+    assert bt.positions.tolist() == [1.0, 0.0, 1.0, 1.0, 1.0]
 
 
 def test_run_backtest_drawdown_guard_can_rearm_after_recovery() -> None:
@@ -1116,7 +1155,7 @@ def test_run_backtest_drawdown_guard_can_rearm_after_recovery() -> None:
     df = pd.DataFrame(
         {
             "signal": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-            "returns": [0.0, -0.20, 0.25, 0.0, -0.15, 0.0],
+            "returns": [0.0, -0.20, 0.0, 0.25, -0.15, 0.0],
         },
         index=idx,
     )
@@ -1131,9 +1170,67 @@ def test_run_backtest_drawdown_guard_can_rearm_after_recovery() -> None:
         rearm_drawdown=0.05,
     )
 
-    assert bt.positions.iloc[2] == 0.0
-    assert bt.positions.iloc[3] == 1.0
-    assert bt.positions.iloc[5] == 0.0
+    assert bt.positions.iloc[1] == 0.0
+    assert bt.positions.iloc[2] == 1.0
+    assert bt.positions.iloc[4] == 0.0
+    assert bt.summary["drawdown_guard_trigger_count"] == pytest.approx(2.0)
+
+
+def test_run_backtest_bankruptcy_is_terminal() -> None:
+    idx = pd.date_range("2020-01-01", periods=4, freq="D")
+    df = pd.DataFrame(
+        {
+            "signal": [3.0, 3.0, 3.0, 3.0],
+            "returns": [0.0, -0.50, -0.50, 1.0],
+        },
+        index=idx,
+    )
+
+    bt = run_backtest(
+        df,
+        signal_col="signal",
+        returns_col="returns",
+        max_leverage=3.0,
+        dd_guard=False,
+    )
+
+    assert bt.returns.tolist() == [0.0, -1.0, 0.0, 0.0]
+    assert bt.equity_curve.tolist() == [1.0, 0.0, 0.0, 0.0]
+    assert bt.positions.iloc[1:].eq(0.0).all()
+    assert bt.summary["bankrupt"] is True
+
+
+def test_run_backtest_terminal_liquidation_is_explicit() -> None:
+    idx = pd.date_range("2020-01-01", periods=3, freq="D")
+    df = pd.DataFrame(
+        {
+            "signal": [1.0, 1.0, 1.0],
+            "returns": [0.0, 0.0, 0.0],
+        },
+        index=idx,
+    )
+
+    open_contract = run_backtest(
+        df,
+        signal_col="signal",
+        returns_col="returns",
+        cost_per_unit_turnover=0.01,
+        dd_guard=False,
+        liquidate_at_end=False,
+    )
+    liquidated = run_backtest(
+        df,
+        signal_col="signal",
+        returns_col="returns",
+        cost_per_unit_turnover=0.01,
+        dd_guard=False,
+        liquidate_at_end=True,
+    )
+
+    assert open_contract.summary["terminal_open_exposure"] == pytest.approx(1.0)
+    assert liquidated.summary["terminal_open_exposure"] == pytest.approx(0.0)
+    assert liquidated.positions.iloc[-1] == pytest.approx(0.0)
+    assert liquidated.costs.iloc[-1] == pytest.approx(0.01)
 
 
 def test_volatility_regime_signal_is_causal_by_default() -> None:

@@ -179,18 +179,22 @@ def test_orb_candidate_rows_have_no_missing_model_features() -> None:
     assert out.loc[candidates, feature_cols].notna().all().all()
 
 
-def test_new_orb_experiment_config_validates_and_keeps_shock_config_valid() -> None:
+def test_active_raw_orb_experiment_and_shock_config_validate() -> None:
     cfg = load_experiment_config(
-        "config/experiments/ftmo_30m_xau_indices_london_newyork_opening_range_breakout_xgboost_meta_v1.yaml"
+        "config/experiments/London_NY/us100_30m_ny_cash_orb_round1_raw_v1.yaml"
     )
-    shock_cfg = load_experiment_config("config/experiments/btcusd_1h_shock_meta_xgboost.yaml")
+    shock_cfg = load_experiment_config(
+        "config/experiments/others/btcusd_1h_shock_meta_xgboost_long_only.yaml"
+    )
+    orb_step = next(step for step in cfg["features"] if step["step"] == "opening_range_breakout")
 
-    assert cfg["features"][14]["step"] == "multi_timeframe"
-    assert cfg["features"][14]["params"]["timestamp_convention"] == "bar_start"
-    assert cfg["features"][15]["step"] == "opening_range_breakout"
-    assert cfg["features"][15]["params"]["enabled_sessions"] == ["london", "new_york_cash"]
-    assert cfg["features"][15]["params"]["asset_session_map"]["XAUUSD"] == ["london"]
-    assert cfg["portfolio"]["constraints"]["enforce_target_net_exposure"] is False
+    assert cfg["strategy"]["name"] == "us100_30m_ny_cash_orb_round1_raw_v1"
+    assert orb_step["params"].get("timestamp_convention", "bar_start") == "bar_start"
+    assert orb_step["params"]["enabled_sessions"] == ["new_york_cash"]
+    assert orb_step["params"]["asset_session_map"]["US100"] == ["new_york_cash"]
+    assert cfg["model"]["kind"] == "none"
+    assert cfg["signals"]["kind"] == "orb_candidate_side"
+    assert cfg["portfolio"]["enabled"] is False
     assert shock_cfg["model"]["target"]["kind"] == "triple_barrier"
 
 
@@ -211,20 +215,27 @@ def test_dukascopy_load_paths_can_allow_missing_symbols_explicitly() -> None:
         validate_data_block(data)
 
 
-def test_orb_optuna_tunes_threshold_without_independent_upper_alias() -> None:
-    cfg = yaml.safe_load(
-        Path(
-            "config/optuna/optuna_ftmo_30m_xau_indices_london_newyork_opening_range_breakout_xgboost_meta_v1.yaml"
-        ).read_text()
+def test_retired_orb_meta_pair_is_not_an_active_or_archived_optuna_spec() -> None:
+    retired_experiment = Path(
+        "config/experiments/ftmo_30m_xau_indices_london_newyork_opening_range_breakout_xgboost_meta_v1.yaml"
     )
-    search_paths = {entry["path"] for entry in cfg["search_space"]}
-    search_names = {entry["name"] for entry in cfg["search_space"]}
+    retired_spec = Path(
+        "config/optuna/optuna_ftmo_30m_xau_indices_london_newyork_opening_range_breakout_xgboost_meta_v1.yaml"
+    )
+    archive_manifest = yaml.safe_load(
+        Path("config/optuna/archive_manifest.json").read_text(encoding="utf-8")
+    )
+    active_orb_base = "config/experiments/London_NY/us100_30m_ny_cash_orb_round1_raw_v1.yaml"
+    active_orb_search_specs = []
+    for spec_path in Path("config/optuna").rglob("*.yaml"):
+        spec = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
+        if spec.get("base_config") == active_orb_base:
+            active_orb_search_specs.append(spec_path)
 
-    assert "signals.params.threshold" in search_paths
-    assert "signals.params.upper" not in search_paths
-    assert "meta_signal_upper_alias" not in search_names
-    enabled_sessions = next(entry for entry in cfg["search_space"] if entry["name"] == "enabled_sessions")
-    assert enabled_sessions["choices"] == [["london"], ["new_york_cash"], ["london", "new_york_cash"]]
+    assert not retired_experiment.exists()
+    assert not retired_spec.exists()
+    assert retired_spec.as_posix() not in set(archive_manifest["specs"])
+    assert active_orb_search_specs == []
 
 
 def test_orb_portfolio_keeps_inactive_assets_flat_after_ftmo_sizing() -> None:

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
+import re
 from typing import Sequence
 
 import numpy as np
@@ -33,6 +35,16 @@ class MomentResearchModel:
     """Small research wrapper around MOMENT embeddings or a deterministic fixture baseline."""
 
     def __init__(self, config: MomentModelConfig) -> None:
+        if config.backend not in {"deterministic_fixture", "moment"}:
+            raise ValueError("MOMENT backend must be one of: deterministic_fixture, moment")
+        if config.lookback_length <= 0:
+            raise ValueError("lookback_length must be > 0")
+        if config.batch_size <= 0:
+            raise ValueError("batch_size must be > 0")
+        if not math.isfinite(float(config.ridge_alpha)) or config.ridge_alpha < 0.0:
+            raise ValueError("ridge_alpha must be finite and >= 0")
+        if re.fullmatch(r"h[1-9][0-9]*", str(config.target_horizon)) is None:
+            raise ValueError("target_horizon must use the form h<positive integer>, for example h5")
         self.config = config
         self.feature_columns_: list[str] = []
         self.buy_mean_: float = 0.0
@@ -45,12 +57,20 @@ class MomentResearchModel:
         self._sell_readout: np.ndarray | None = None
         self._moment_embedding_dim: int | None = None
         self._moment_fit_rows: int = 0
+        self._is_fitted = False
 
     def fit(self, frame: pd.DataFrame, *, feature_columns: Sequence[str]) -> "MomentResearchModel":
         assert_no_target_leakage(feature_columns)
         self.feature_columns_ = list(feature_columns)
         np.random.seed(int(self.config.random_seed))
         horizon = self.config.target_horizon
+        required_targets = [
+            f"buy_markout_bps_{horizon}",
+            f"sell_markout_bps_{horizon}",
+        ]
+        missing_targets = [column for column in required_targets if column not in frame.columns]
+        if missing_targets:
+            raise KeyError(f"MOMENT training frame is missing target columns: {missing_targets}")
         buy_target = pd.to_numeric(frame.get(f"buy_markout_bps_{horizon}", 0.0), errors="coerce").dropna()
         sell_target = pd.to_numeric(frame.get(f"sell_markout_bps_{horizon}", 0.0), errors="coerce").dropna()
         self.buy_mean_ = float(buy_target.mean()) if not buy_target.empty else 0.0
@@ -63,10 +83,11 @@ class MomentResearchModel:
             self.sell_scale_ = 1.0
         if self.config.backend == "moment":
             self._fit_moment_readouts(frame, horizon=horizon)
+        self._is_fitted = True
         return self
 
     def predict(self, frame: pd.DataFrame) -> pd.DataFrame:
-        if not self.feature_columns_:
+        if not self._is_fitted:
             raise ValueError("model must be fit before predict")
         if self.config.backend == "moment":
             return self._predict_moment(frame)
@@ -74,10 +95,10 @@ class MomentResearchModel:
 
     def _predict_deterministic(self, frame: pd.DataFrame) -> pd.DataFrame:
         out = pd.DataFrame(index=frame.index)
-        imbalance = pd.to_numeric(frame.get("book_imbalance_1", 0.5), errors="coerce").fillna(0.5)
-        slope = pd.to_numeric(frame.get("recent_mid_slope", 0.0), errors="coerce").fillna(0.0)
-        volatility = pd.to_numeric(frame.get("recent_volatility", 0.0), errors="coerce").fillna(0.0)
-        spread = pd.to_numeric(frame.get("book_spread_bps", 0.0), errors="coerce").fillna(0.0)
+        imbalance = _numeric_feature(frame, "book_imbalance_1", default=0.5)
+        slope = _numeric_feature(frame, "recent_mid_slope", default=0.0)
+        volatility = _numeric_feature(frame, "recent_volatility", default=0.0)
+        spread = _numeric_feature(frame, "book_spread_bps", default=0.0)
         directional_signal = ((imbalance - 0.5) * 10.0) + (slope * 1_000.0)
         out["moment_buy_score"] = self.buy_mean_ + directional_signal
         out["moment_sell_score"] = self.sell_mean_ - directional_signal
@@ -170,13 +191,24 @@ class MomentResearchModel:
         if self._moment_model is None or self._torch is None:
             raise MomentDependencyError("MOMENT backend has not been loaded; call fit before predict.")
         values = _feature_matrix(frame, self.feature_columns_)
+        group_ids = (
+            frame["symbol"].astype("string").fillna("").to_numpy()
+            if "symbol" in frame.columns
+            else None
+        )
         batch_size = max(1, int(self.config.batch_size))
         outputs: list[np.ndarray] = []
         torch = self._torch
         with torch.no_grad():
             for start in range(0, len(values), batch_size):
                 stop = min(start + batch_size, len(values))
-                x_np, mask_np = _window_batch(values, start=start, stop=stop, lookback=int(self.config.lookback_length))
+                x_np, mask_np = _window_batch(
+                    values,
+                    start=start,
+                    stop=stop,
+                    lookback=int(self.config.lookback_length),
+                    group_ids=group_ids,
+                )
                 x = torch.as_tensor(x_np, dtype=torch.float32, device=self.config.device)
                 input_mask = torch.as_tensor(mask_np, dtype=torch.float32, device=self.config.device)
                 result = self._moment_model(x_enc=x, input_mask=input_mask)
@@ -213,8 +245,22 @@ class MomentResearchModel:
 def _feature_matrix(frame: pd.DataFrame, columns: Sequence[str]) -> np.ndarray:
     values = frame.reindex(columns=list(columns))
     values = values.apply(pd.to_numeric, errors="coerce").replace([np.inf, -np.inf], np.nan)
-    values = values.ffill().fillna(0.0)
+    if "symbol" in frame.columns:
+        groups = frame["symbol"].astype("string").fillna("")
+        values = values.groupby(groups, sort=False).ffill()
+    else:
+        values = values.ffill()
+    values = values.fillna(0.0)
     return values.to_numpy(dtype="float32", copy=False)
+
+
+def _numeric_feature(frame: pd.DataFrame, column: str, *, default: float) -> pd.Series:
+    values = (
+        frame[column]
+        if column in frame.columns
+        else pd.Series(default, index=frame.index, dtype="float64")
+    )
+    return pd.to_numeric(values, errors="coerce").fillna(default)
 
 
 def _target_values(frame: pd.DataFrame, column: str) -> np.ndarray:
@@ -222,16 +268,30 @@ def _target_values(frame: pd.DataFrame, column: str) -> np.ndarray:
     return pd.to_numeric(values, errors="coerce").to_numpy(dtype=float)
 
 
-def _window_batch(values: np.ndarray, *, start: int, stop: int, lookback: int) -> tuple[np.ndarray, np.ndarray]:
+def _window_batch(
+    values: np.ndarray,
+    *,
+    start: int,
+    stop: int,
+    lookback: int,
+    group_ids: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
     if lookback <= 0:
         raise ValueError("lookback_length must be > 0")
+    if group_ids is not None and len(group_ids) != len(values):
+        raise ValueError("group_ids length must match the feature matrix")
     batch_rows = max(0, stop - start)
     n_channels = int(values.shape[1]) if values.ndim == 2 else 0
     windows = np.zeros((batch_rows, n_channels, lookback), dtype="float32")
     masks = np.zeros((batch_rows, lookback), dtype="float32")
     for batch_idx, row_idx in enumerate(range(start, stop)):
-        length = min(lookback, row_idx + 1)
-        window = values[row_idx - length + 1 : row_idx + 1]
+        if group_ids is None:
+            row_indices = np.arange(max(0, row_idx - lookback + 1), row_idx + 1)
+        else:
+            matching = np.flatnonzero(group_ids[: row_idx + 1] == group_ids[row_idx])
+            row_indices = matching[-lookback:]
+        length = len(row_indices)
+        window = values[row_indices]
         windows[batch_idx, :, -length:] = window.T
         masks[batch_idx, -length:] = 1.0
     return windows, masks

@@ -117,10 +117,20 @@ def _scale_values(values: np.ndarray, *, mean: np.ndarray, std: np.ndarray) -> n
     return np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32, copy=False)
 
 
-def _contiguous_segments(indices: Sequence[int]) -> list[np.ndarray]:
+def _contiguous_segments(
+    indices: Sequence[int],
+    *,
+    minimum_length: int = 2,
+) -> list[np.ndarray]:
     arr = np.asarray(indices, dtype=int)
     if arr.size == 0:
         return []
+    if arr.ndim != 1:
+        raise ValueError("indices must be one-dimensional.")
+    if minimum_length <= 0:
+        raise ValueError("minimum_length must be > 0.")
+    if len(arr) > 1 and bool(np.any(np.diff(arr) <= 0)):
+        raise ValueError("indices must be strictly increasing without duplicates.")
     out: list[np.ndarray] = []
     start = 0
     for i in range(1, len(arr)):
@@ -128,7 +138,7 @@ def _contiguous_segments(indices: Sequence[int]) -> list[np.ndarray]:
             out.append(arr[start:i].copy())
             start = i
     out.append(arr[start:].copy())
-    return [segment for segment in out if len(segment) >= 2]
+    return [segment for segment in out if len(segment) >= int(minimum_length)]
 
 
 def _build_single_asset_bundle(
@@ -383,47 +393,55 @@ def _rollout_single_asset_policy(
     reward_config: RLRewardConfig,
     execution_config: RLExecutionConfig,
 ) -> tuple[pd.Series, pd.Series, pd.Series]:
-    rollout_env = SingleAssetTradingEnv(
-        features=bundle.features,
-        simple_returns=bundle.simple_returns,
-        window_size=window_size,
-        continuous_actions=continuous_actions,
-        max_signal_abs=max_signal_abs,
-        discrete_action_values=discrete_action_values,
-        reward_config=reward_config,
-        execution_config=execution_config,
-    )
     signals = pd.Series(np.nan, index=bundle.index, dtype="float32")
     actions = pd.Series(np.nan, index=bundle.index, dtype="float32")
     rewards = pd.Series(np.nan, index=bundle.index, dtype="float32")
 
-    position = 0.0
-    equity = 1.0
-    running_max = 1.0
-    drawdown = 0.0
+    rollout_indices = np.asarray(indices, dtype=int)
+    if rollout_indices.size and (
+        int(rollout_indices.min()) < 0 or int(rollout_indices.max()) >= len(bundle.index)
+    ):
+        raise ValueError("RL rollout indices are outside the available bundle rows.")
 
-    for idx in np.asarray(indices, dtype=int):
-        obs = rollout_env._build_observation(step=int(idx), position=position, drawdown=drawdown)
-        action, _ = model.predict(obs, deterministic=True)
-        action_value = rollout_env._map_action(action)
-        actions.iat[int(idx)] = np.float32(
-            float(np.asarray(action).reshape(-1)[0]) if np.asarray(action).size > 0 else float(action_value)
+    # Add a synthetic zero-return terminal row so the environment's public
+    # ``step`` contract can still execute controls for a signal on the final
+    # observable row.  Its reward is deliberately not emitted because no real
+    # next-bar return exists.
+    rollout_features = np.concatenate(
+        [bundle.features, bundle.features[-1:].copy()],
+        axis=0,
+    )
+    rollout_returns = np.concatenate(
+        [bundle.simple_returns, np.zeros(1, dtype=bundle.simple_returns.dtype)],
+        axis=0,
+    )
+
+    for segment in _contiguous_segments(rollout_indices, minimum_length=1):
+        rollout_env = SingleAssetTradingEnv(
+            features=rollout_features,
+            simple_returns=rollout_returns,
+            window_size=window_size,
+            continuous_actions=continuous_actions,
+            max_signal_abs=max_signal_abs,
+            discrete_action_values=discrete_action_values,
+            reward_config=reward_config,
+            execution_config=execution_config,
+            start_step=int(segment[0]),
+            end_step=int(segment[-1]),
         )
-        signals.iat[int(idx)] = np.float32(action_value)
-        if int(idx) >= len(bundle.simple_returns) - 1:
-            position = float(action_value)
-            continue
-        rollout_env.current_step = int(idx)
-        rollout_env.position = position
-        rollout_env.equity = equity
-        rollout_env.running_max = running_max
-        rollout_env.drawdown = drawdown
-        reward, info = rollout_env._transition(action_value=float(action_value))
-        rewards.iat[int(idx)] = np.float32(reward)
-        position = float(info["position"])
-        equity = float(info["equity"])
-        running_max = float(info["running_max"])
-        drawdown = float(info["drawdown"])
+        obs, _ = rollout_env.reset()
+        for idx in segment:
+            action, _ = model.predict(obs, deterministic=True)
+            obs, reward, terminated, truncated, info = rollout_env.step(action)
+            raw_action = np.asarray(action).reshape(-1)
+            actions.iat[int(idx)] = np.float32(
+                float(raw_action[0]) if raw_action.size > 0 else float(info["position"])
+            )
+            signals.iat[int(idx)] = np.float32(float(info["position"]))
+            if int(idx) < len(bundle.simple_returns) - 1:
+                rewards.iat[int(idx)] = np.float32(reward)
+            if bool(terminated or truncated) and int(idx) != int(segment[-1]):
+                raise RuntimeError("RL rollout environment terminated before the requested segment ended.")
 
     return signals, actions, rewards
 
@@ -444,50 +462,60 @@ def _rollout_portfolio_policy(
     long_short: bool,
     gross_target: float,
 ) -> tuple[dict[str, pd.Series], pd.Series]:
-    rollout_env = PortfolioTradingEnv(
-        features=bundle.features,
-        simple_returns=bundle.simple_returns,
-        asset_names=bundle.asset_names,
-        window_size=window_size,
-        continuous_actions=continuous_actions,
-        max_signal_abs=max_signal_abs,
-        discrete_action_templates=discrete_action_templates,
-        reward_config=reward_config,
-        execution_config=execution_config,
-        constraints=constraints,
-        asset_to_group=asset_to_group,
-        long_short=long_short,
-        gross_target=gross_target,
-    )
     signals_by_asset = {
         asset: pd.Series(np.nan, index=bundle.index, dtype="float32") for asset in bundle.asset_names
     }
     rewards = pd.Series(np.nan, index=bundle.index, dtype="float32")
 
-    weights = pd.Series(0.0, index=bundle.asset_names, dtype=float)
-    equity = 1.0
-    running_max = 1.0
-    drawdown = 0.0
+    rollout_indices = np.asarray(indices, dtype=int)
+    if rollout_indices.size and (
+        int(rollout_indices.min()) < 0 or int(rollout_indices.max()) >= len(bundle.index)
+    ):
+        raise ValueError("Portfolio RL rollout indices are outside the available bundle rows.")
 
-    for idx in np.asarray(indices, dtype=int):
-        obs = rollout_env._build_observation(step=int(idx), weights=weights, drawdown=drawdown)
-        action, _ = model.predict(obs, deterministic=True)
-        signal_values = rollout_env._map_action(action)
-        for asset_idx, asset in enumerate(bundle.asset_names):
-            signals_by_asset[asset].iat[int(idx)] = np.float32(signal_values[asset_idx])
-        if int(idx) >= len(bundle.index) - 1:
-            continue
-        rollout_env.current_step = int(idx)
-        rollout_env.weights = weights
-        rollout_env.equity = equity
-        rollout_env.running_max = running_max
-        rollout_env.drawdown = drawdown
-        reward, info = rollout_env._transition(signal_values=signal_values)
-        rewards.iat[int(idx)] = np.float32(reward)
-        weights = pd.Series(info["weights"], dtype=float).reindex(bundle.asset_names).fillna(0.0)
-        equity = float(info["equity"])
-        running_max = float(info["running_max"])
-        drawdown = float(info["drawdown"])
+    rollout_features = np.concatenate(
+        [bundle.features, bundle.features[-1:].copy()],
+        axis=0,
+    )
+    rollout_returns = np.concatenate(
+        [
+            bundle.simple_returns,
+            np.zeros((1, len(bundle.asset_names)), dtype=bundle.simple_returns.dtype),
+        ],
+        axis=0,
+    )
+
+    for segment in _contiguous_segments(rollout_indices, minimum_length=1):
+        rollout_env = PortfolioTradingEnv(
+            features=rollout_features,
+            simple_returns=rollout_returns,
+            asset_names=bundle.asset_names,
+            window_size=window_size,
+            continuous_actions=continuous_actions,
+            max_signal_abs=max_signal_abs,
+            discrete_action_templates=discrete_action_templates,
+            reward_config=reward_config,
+            execution_config=execution_config,
+            constraints=constraints,
+            asset_to_group=asset_to_group,
+            long_short=long_short,
+            gross_target=gross_target,
+            start_step=int(segment[0]),
+            end_step=int(segment[-1]),
+        )
+        obs, _ = rollout_env.reset()
+        for idx in segment:
+            action, _ = model.predict(obs, deterministic=True)
+            obs, reward, terminated, truncated, info = rollout_env.step(action)
+            executed_signals = pd.Series(info["signals"], dtype=float).reindex(bundle.asset_names)
+            for asset in bundle.asset_names:
+                signals_by_asset[asset].iat[int(idx)] = np.float32(executed_signals.loc[asset])
+            if int(idx) < len(bundle.index) - 1:
+                rewards.iat[int(idx)] = np.float32(reward)
+            if bool(terminated or truncated) and int(idx) != int(segment[-1]):
+                raise RuntimeError(
+                    "Portfolio RL rollout environment terminated before the requested segment ended."
+                )
 
     return signals_by_asset, rewards
 
@@ -579,4 +607,3 @@ def _aggregate_policy_summary(per_asset_meta: Mapping[str, Mapping[str, Any]]) -
         if summary.get("total_reward") is not None:
             out["total_reward"] += float(summary["total_reward"])
     return out
-

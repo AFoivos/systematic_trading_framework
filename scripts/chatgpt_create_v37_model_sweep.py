@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 import yaml
 
-REPO_ROOT = Path("/workspace")
-BASE_PATH = REPO_ROOT / "config/experiments/foundation_alpha/BEST/BEST_ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid.yaml"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+BASE_PATH = REPO_ROOT / "config/experiments/foundation_alpha/BEST/ethusd/BEST_ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid.yaml"
 RAW_DIR = REPO_ROOT / "data/raw/dukascopy_30m_clean"
 OUT_DIR = REPO_ROOT / "config/experiments/foundation_alpha/asset_sweep_v3_7"
 
@@ -16,12 +16,15 @@ def asset_from_csv(path: Path) -> str:
     stem = path.stem
     if not stem.endswith("_30m"):
         raise ValueError(f"Unexpected raw file name: {path.name}")
-    return stem[:4]
+    asset = stem.removesuffix("_30m")
+    if not asset:
+        raise ValueError(f"Missing asset symbol in raw file name: {path.name}")
+    return asset
 
 
 def build_config(base: dict, asset: str, csv_path: Path) -> dict:
     asset_upper = asset.upper()
-    run_id = f"asset}_{SUFFIX}"
+    run_id = f"{asset}_{SUFFIX}"
 
     cfg = yaml.safe_load(yaml.safe_dump(base, sort_keys=False))
 

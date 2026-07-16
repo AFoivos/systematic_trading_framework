@@ -24,9 +24,9 @@ data:
     dataset_id: ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_robustness_cost_delay
     save_raw: false
     save_processed: true
-    load_path: /workspace/data/raw/dukascopy_30m_clean/ethusd_30m.csv
-    raw_dir: /workspace/data/raw
-    processed_dir: /workspace/data/processed
+    load_path: data/raw/dukascopy_30m_clean/ethusd_30m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed
     load_paths: null
 features:
 - step: returns
@@ -622,7 +622,7 @@ execution:
 logging:
   enabled: true
   run_name: ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid_robustness_cost_delay
-  output_dir: /workspace/logs/experiments
+  output_dir: logs/experiments
   stage_tails:
     enabled: false
     stdout: false

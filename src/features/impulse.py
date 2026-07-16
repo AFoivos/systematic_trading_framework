@@ -13,11 +13,45 @@ def add_impulse_12_96(
     volatility_window: int = 96,
     output_col: str = "impulse_12_96",
 ) -> pd.DataFrame:
-    """Add a trailing, native-observation volatility-normalized price impulse.
+    """
+    Add a trailing, native-observation volatility-normalized price impulse.
 
     The calculation deliberately uses dataframe rows rather than elapsed-clock bars.  This
     is important for assets with different sessions: a missing bar never becomes a synthetic
     observation merely to make their histories line up.
+
+    YAML declaration::
+
+        features:
+          - step: impulse_12_96
+            params:
+              close_col: close
+              returns_col: close_ret
+              return_bars: 12
+              volatility_window: 96
+              output_col: impulse_12_96
+
+    Required input columns
+    ----------------------
+    close_col:
+        Price column used for the trailing return.
+    returns_col:
+        Return column used for the causal volatility estimate.
+
+    Parameters
+    ----------
+    df:
+        Time-ordered dataframe containing the configured price and return columns.
+    close_col:
+        Price column used to calculate the trailing simple return.
+    returns_col:
+        One-period return column used to estimate trailing realized volatility.
+    return_bars:
+        Positive native-row horizon for the trailing price return.
+    volatility_window:
+        Trailing native-row window for the causal volatility estimate.
+    output_col:
+        Name of the volatility-normalized impulse output column.
     """
     if close_col not in df.columns:
         raise KeyError(f"impulse requires close column '{close_col}'.")

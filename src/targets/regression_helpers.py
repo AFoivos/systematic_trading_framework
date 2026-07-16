@@ -212,7 +212,7 @@ def build_future_realized_volatility(
             ppy = require_finite_number(periods_per_year, field="target.periods_per_year")
             if ppy <= 0.0:
                 raise ValueError("target.periods_per_year must be > 0.")
-            values = values * float(np.sqrt(ppy / float(horizon)))
+            values = values * float(np.sqrt(ppy))
         out.loc[valid] = values
     return out
 

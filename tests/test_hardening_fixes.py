@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -1399,6 +1400,7 @@ def test_save_artifacts_writes_experiment_report(tmp_path) -> None:
     """
     Saving artifacts should also emit a human-readable experiment report with charts.
     """
+    pytest.importorskip("matplotlib")
     idx = pd.date_range("2024-01-01", periods=5, freq="D", name="datetime")
     perf = BacktestResult(
         equity_curve=pd.Series([1.0, 1.01, 1.005, 1.02, 1.03], index=idx, name="equity"),
@@ -1704,6 +1706,7 @@ def test_forecast_diagnostics_write_prediction_timeseries_plot(tmp_path: Path) -
     """
     Forecast diagnostics should expose model prediction time-series plots, not only PnL charts.
     """
+    pytest.importorskip("matplotlib")
     from src.evaluation.model_diagnostics import write_dense_diagnostic_plots
 
     idx = pd.date_range("2024-01-01", periods=64, freq="30min")
@@ -1783,6 +1786,7 @@ def test_forecast_diagnostic_artifacts_run_for_foundation_forecasters(tmp_path: 
     """
     Foundation forecaster labs should get prediction diagnostics, not only dense LightGBM configs.
     """
+    pytest.importorskip("matplotlib")
     idx = pd.date_range("2024-01-01", periods=64, freq="30min")
     frame = pd.DataFrame(
         {
@@ -2352,7 +2356,7 @@ def test_load_ohlcv_rejects_dukascopy_csv_provider_route() -> None:
 
 
 CURRENT_TRACKED_CONFIG_CASES = [
-    ("experiments/btcusd_1h_dukas_xgboost_triple_barrier_garch_long_oos.yaml", 8760),
+    ("config/experiments/others/btcusd_1h_shock_meta_xgboost_long_only.yaml", 8760),
 ]
 
 
@@ -2386,7 +2390,7 @@ def test_tracked_experiment_configs_load_and_produce_declared_features(
     assert cfg["portfolio"]["enabled"] is False
     assert cfg["backtest"]["periods_per_year"] == expected_periods_per_year
     assert "close_logret" in features_df.columns
-    assert "vol_rolling_24" in features_df.columns
+    assert "shock_strength" in features_df.columns
 
     model_cfg = dict(cfg.get("model", {}) or {})
     feature_cols = infer_feature_columns(
@@ -2398,14 +2402,16 @@ def test_tracked_experiment_configs_load_and_produce_declared_features(
     assert not missing
 
 
-def test_btcusd_dukas_hourly_config_feature_pipeline_computes_expected_features() -> None:
+def test_current_btcusd_hourly_config_feature_pipeline_computes_expected_features() -> None:
     """
-    The tracked BTCUSD Dukas hourly config should produce the declared feature set with
-    numerically consistent 24/7 annualization and volume-aware columns.
+    The current BTCUSD hourly shock-meta config should produce its declared feature set with
+    numerically consistent log returns and lagged inputs.
     """
-    cfg = load_experiment_config("experiments/btcusd_1h_dukas_xgboost_triple_barrier_garch_long_oos.yaml")
+    cfg = load_experiment_config(
+        "config/experiments/others/btcusd_1h_shock_meta_xgboost_long_only.yaml"
+    )
 
-    idx = pd.date_range("2024-01-01 00:00:00", periods=240, freq="h")
+    idx = pd.date_range("2024-01-01 00:00:00", periods=400, freq="h")
     base = np.linspace(0.0, 0.03, len(idx))
     cyc = 0.002 * np.sin(np.arange(len(idx)) / 8.0)
     close = 42_000.0 * np.exp(base + cyc)
@@ -2421,7 +2427,10 @@ def test_btcusd_dukas_hourly_config_feature_pipeline_computes_expected_features(
     features_df = runner_mod._apply_feature_steps(df, list(cfg.get("features", []) or []))
 
     assert cfg["backtest"]["periods_per_year"] == 8760
-    assert cfg["features"][1]["params"]["annualization_factor"] == 8760.0
+    assert cfg["data"]["symbol"] == "BTCUSD"
+    assert cfg["model"]["kind"] == "xgboost_clf"
+    assert cfg["model"]["target"]["kind"] == "triple_barrier"
+    assert cfg["signals"]["kind"] == "probability_threshold"
 
     model_cfg = dict(cfg.get("model", {}) or {})
     feature_cols = infer_feature_columns(
@@ -2434,21 +2443,13 @@ def test_btcusd_dukas_hourly_config_feature_pipeline_computes_expected_features(
 
     signal_df = features_df.copy()
     signal_df["pred_prob"] = 0.60
-    signal_df["pred_vol"] = 0.02
     signal_df = runner_mod._apply_signal_step(signal_df, dict(cfg.get("signals", {}) or {}))
-    assert "signal_prob_vol_adj" in signal_df.columns
+    assert "signal_prob_threshold" in signal_df.columns
 
     expected_logret = np.log(df["close"] / df["close"].shift(1))
     np.testing.assert_allclose(
         features_df["close_logret"].to_numpy(dtype=float),
         expected_logret.to_numpy(dtype=float),
-        equal_nan=True,
-    )
-
-    expected_vol_24 = expected_logret.rolling(window=24).std(ddof=1) * np.sqrt(8760.0)
-    np.testing.assert_allclose(
-        features_df["vol_rolling_24"].to_numpy(dtype=float),
-        expected_vol_24.to_numpy(dtype=float),
         equal_nan=True,
     )
 
@@ -2459,28 +2460,16 @@ def test_btcusd_dukas_hourly_config_feature_pipeline_computes_expected_features(
         equal_nan=True,
     )
 
-    assert "volume_z_72" in features_df.columns
-    assert "volume_over_atr_24" in features_df.columns
-    assert "mfi_24" not in features_df.columns
-
-    model_cfg = dict(cfg.get("model", {}) or {})
-    feature_cols = infer_feature_columns(
-        features_df,
-        explicit_cols=model_cfg.get("feature_cols"),
-        feature_selectors=model_cfg.get("feature_selectors"),
-    )
-    missing = [c for c in feature_cols if c not in features_df.columns]
-    assert not missing
-
-    if cfg["signals"]["kind"] == "volatility_regime":
-        assert cfg["signals"]["params"]["vol_col"] in features_df.columns
+    assert "regime_vol_ratio_24_168" in features_df.columns
+    assert "bb_percent_b_24_2.0" in features_df.columns
+    assert "shock_strength" in features_df.columns
 
 
 def test_btcusd_shock_meta_xgboost_config_feature_selectors_resolve() -> None:
     """
     The shock meta XGBoost config should resolve selector-based model inputs after feature generation.
     """
-    cfg = load_experiment_config("experiments/btcusd_1h_shock_meta_xgboost.yaml")
+    cfg = load_experiment_config("config/experiments/others/btcusd_1h_shock_meta_xgboost_long_only.yaml")
 
     idx = pd.date_range("2024-01-01 00:00:00", periods=400, freq="h")
     base = np.linspace(0.0, 0.04, len(idx))
@@ -2503,7 +2492,7 @@ def test_btcusd_shock_meta_xgboost_config_feature_selectors_resolve() -> None:
         feature_selectors=model_cfg.get("feature_selectors"),
     )
 
-    assert len(feature_cols) >= 14
+    assert len(feature_cols) == 12
     assert "close_rsi_14" in feature_cols
     assert "bb_percent_b_24_2.0" in feature_cols
     assert "shock_distance_ema" in feature_cols
@@ -2632,14 +2621,17 @@ def test_requirements_lock_contains_pinned_versions() -> None:
     content = Path("requirements.lock.txt").read_text(encoding="utf-8").splitlines()
     pins = [line for line in content if line.strip() and not line.strip().startswith("#")]
     assert pins
-    assert all("==" in line for line in pins)
+    immutable_git_archive = re.compile(r"^[A-Za-z0-9_.-]+ @ https://github\.com/.+/[0-9a-f]{40}\.zip$")
+    assert all("==" in line or immutable_git_archive.fullmatch(line) for line in pins)
 
 
 def test_btcusd_shock_meta_long_only_config_loads_and_produces_declared_features() -> None:
     """
     The archived BTCUSD shock-meta BEST config should remain rerunnable after config evolution.
     """
-    cfg = load_experiment_config("config/experiments/btcusd_1h_shock_meta_xgboost_long_only.yaml")
+    cfg = load_experiment_config(
+        "config/experiments/others/btcusd_1h_shock_meta_xgboost_long_only.yaml"
+    )
 
     idx = pd.date_range("2024-01-01 00:00:00", periods=400, freq="h")
     base = np.linspace(0.0, 0.04, len(idx))

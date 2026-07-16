@@ -669,7 +669,10 @@ def turnover_cost_diagnostics(
 
 def write_dense_diagnostic_plots(diagnostics_dir: Path, frames: Mapping[str, Any]) -> dict[str, Path]:
     diagnostics_dir.mkdir(parents=True, exist_ok=True)
-    import matplotlib
+    try:
+        import matplotlib
+    except ImportError:
+        return {}
 
     mpl_dir = diagnostics_dir / ".mplconfig"
     mpl_dir.mkdir(parents=True, exist_ok=True)

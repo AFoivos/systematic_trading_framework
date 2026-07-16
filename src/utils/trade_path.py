@@ -357,11 +357,14 @@ def simulate_barrier_trade_outcome(
     entry_idx = signal_idx + 1 if entry_price_mode == "next_open" else signal_idx
     if entry_idx >= n:
         return _empty_barrier_outcome(signal_idx=signal_idx, side=side_int, exit_reason="unavailable_tail")
+    path_start_idx = entry_idx if entry_price_mode == "next_open" else signal_idx + 1
+    if path_start_idx >= n:
+        return _empty_barrier_outcome(signal_idx=signal_idx, side=side_int, exit_reason="unavailable_tail")
 
     if max_holding_bars is None:
         max_exit_idx = n - 1
     else:
-        full_max_exit_idx = entry_idx + int(max_holding_bars) - 1
+        full_max_exit_idx = path_start_idx + int(max_holding_bars) - 1
         if full_max_exit_idx >= n and not allow_partial_horizon:
             return _empty_barrier_outcome(signal_idx=signal_idx, side=side_int, exit_reason="unavailable_tail")
         max_exit_idx = min(n - 1, full_max_exit_idx)
@@ -403,7 +406,7 @@ def simulate_barrier_trade_outcome(
             lows=lows,
             closes=closes,
             signals=signals,
-            entry_idx=entry_idx,
+            entry_idx=path_start_idx,
             max_exit_idx=max_exit_idx,
             entry_price=raw_entry_price,
             initial_stop_price=stop_price,
@@ -424,7 +427,7 @@ def simulate_barrier_trade_outcome(
             lows=lows,
             closes=closes,
             signals=signals,
-            entry_idx=entry_idx,
+            entry_idx=path_start_idx,
             max_exit_idx=max_exit_idx,
             entry_price=raw_entry_price,
             initial_stop_price=stop_price,
@@ -467,6 +470,7 @@ def simulate_barrier_trade_outcome(
         "valid": True,
         "signal_idx": int(signal_idx),
         "entry_idx": int(entry_idx),
+        "path_start_idx": int(path_start_idx),
         "exit_idx": int(exit_idx),
         "side": int(side_int),
         "side_name": "short" if is_short else "long",
@@ -564,35 +568,25 @@ def simulate_long_trade_path(
             continue
 
         bars_held += 1
-        max_favorable_r = max(max_favorable_r, float((bar_high - entry) / risk_distance))
-        max_adverse_r = min(max_adverse_r, float((bar_low - entry) / risk_distance))
+        bar_favorable_r = float((bar_high - entry) / risk_distance)
+        bar_adverse_r = float((bar_low - entry) / risk_distance)
+        max_favorable_r = max(max_favorable_r, bar_favorable_r)
+        max_adverse_r = min(max_adverse_r, bar_adverse_r)
+        prior_stop_price = effective_stop_price
+        prior_stop_reason = stop_reason
 
-        if dynamic_cfg["breakeven"]["enabled"] and max_favorable_r >= dynamic_cfg["breakeven"]["trigger_r"]:
-            breakeven_activated = True
-            candidate_stop = entry + dynamic_cfg["breakeven"]["lock_r"] * risk_distance
-            if candidate_stop > effective_stop_price:
-                effective_stop_price = float(candidate_stop)
-                stop_reason = "breakeven_stop"
+        if bar_open <= prior_stop_price:
+            exit_idx = idx
+            raw_exit_price = bar_open
+            exit_reason = prior_stop_reason
+            break
+        if bar_open >= take_profit:
+            exit_idx = idx
+            raw_exit_price = bar_open
+            exit_reason = "take_profit"
+            break
 
-        if dynamic_cfg["profit_lock"]["enabled"] and max_favorable_r >= dynamic_cfg["profit_lock"]["trigger_r"]:
-            profit_lock_activated = True
-            candidate_stop = entry + dynamic_cfg["profit_lock"]["lock_r"] * risk_distance
-            if candidate_stop >= effective_stop_price:
-                effective_stop_price = float(candidate_stop)
-                stop_reason = "profit_lock_stop"
-
-        atr_trailing = dynamic_cfg["atr_trailing"]
-        if atr_trailing["enabled"] and max_favorable_r >= atr_trailing["activation_r"] and volatility is not None:
-            current_volatility = float(volatility[idx]) if idx < len(volatility) else np.nan
-            if np.isfinite(current_volatility) and current_volatility > 0.0:
-                trailing_distance = entry * current_volatility * atr_trailing["distance_mult"]
-                highest_price = entry + max_favorable_r * risk_distance
-                candidate_stop = highest_price - trailing_distance
-                if candidate_stop >= effective_stop_price:
-                    effective_stop_price = float(candidate_stop)
-                    stop_reason = "atr_trailing_stop"
-
-        stop_hit = bar_low <= effective_stop_price
+        stop_hit = bar_low <= prior_stop_price
         take_profit_hit = bar_high >= take_profit
         partial_rule_hits = [
             (rule_idx, rule, entry + float(rule["trigger_r"]) * risk_distance)
@@ -605,17 +599,17 @@ def simulate_long_trade_path(
             raw_exit_price, exit_reason = _double_touch_exit(
                 tie_break=tie_break,
                 bar_open=bar_open,
-                effective_stop_price=effective_stop_price,
+                effective_stop_price=prior_stop_price,
                 take_profit_price=take_profit,
-                stop_reason=stop_reason,
+                stop_reason=prior_stop_reason,
             )
             if legacy_same_bar_stop_reason and exit_reason == "stop_loss":
                 exit_reason = "stop_and_target_same_bar_stop_first"
             break
         if stop_hit:
             exit_idx = idx
-            raw_exit_price = effective_stop_price
-            exit_reason = stop_reason
+            raw_exit_price = prior_stop_price
+            exit_reason = prior_stop_reason
             break
         if take_profit_hit:
             for rule_idx, rule, trigger_price in partial_rule_hits:
@@ -660,6 +654,31 @@ def simulate_long_trade_path(
                     "raw_exit_price": float(partial_price),
                 }
             )
+
+        if dynamic_cfg["breakeven"]["enabled"] and max_favorable_r >= dynamic_cfg["breakeven"]["trigger_r"]:
+            breakeven_activated = True
+            candidate_stop = entry + dynamic_cfg["breakeven"]["lock_r"] * risk_distance
+            if candidate_stop > effective_stop_price:
+                effective_stop_price = float(candidate_stop)
+                stop_reason = "breakeven_stop"
+
+        if dynamic_cfg["profit_lock"]["enabled"] and max_favorable_r >= dynamic_cfg["profit_lock"]["trigger_r"]:
+            profit_lock_activated = True
+            candidate_stop = entry + dynamic_cfg["profit_lock"]["lock_r"] * risk_distance
+            if candidate_stop >= effective_stop_price:
+                effective_stop_price = float(candidate_stop)
+                stop_reason = "profit_lock_stop"
+
+        atr_trailing = dynamic_cfg["atr_trailing"]
+        if atr_trailing["enabled"] and max_favorable_r >= atr_trailing["activation_r"] and volatility is not None:
+            current_volatility = float(volatility[idx]) if idx < len(volatility) else np.nan
+            if np.isfinite(current_volatility) and current_volatility > 0.0:
+                trailing_distance = entry * current_volatility * atr_trailing["distance_mult"]
+                highest_price = entry + max_favorable_r * risk_distance
+                candidate_stop = highest_price - trailing_distance
+                if candidate_stop >= effective_stop_price:
+                    effective_stop_price = float(candidate_stop)
+                    stop_reason = "atr_trailing_stop"
 
         signal_off = dynamic_cfg["signal_off_exit"]
         if signal_off["enabled"] and bars_held >= signal_off["min_bars_held"] and signals is not None:
@@ -814,35 +833,25 @@ def simulate_short_trade_path(
             continue
 
         bars_held += 1
-        max_favorable_r = max(max_favorable_r, float((entry - bar_low) / risk_distance))
-        max_adverse_r = min(max_adverse_r, float((entry - bar_high) / risk_distance))
+        bar_favorable_r = float((entry - bar_low) / risk_distance)
+        bar_adverse_r = float((entry - bar_high) / risk_distance)
+        max_favorable_r = max(max_favorable_r, bar_favorable_r)
+        max_adverse_r = min(max_adverse_r, bar_adverse_r)
+        prior_stop_price = effective_stop_price
+        prior_stop_reason = stop_reason
 
-        if dynamic_cfg["breakeven"]["enabled"] and max_favorable_r >= dynamic_cfg["breakeven"]["trigger_r"]:
-            breakeven_activated = True
-            candidate_stop = entry - dynamic_cfg["breakeven"]["lock_r"] * risk_distance
-            if candidate_stop < effective_stop_price:
-                effective_stop_price = float(candidate_stop)
-                stop_reason = "breakeven_stop"
+        if bar_open >= prior_stop_price:
+            exit_idx = idx
+            raw_exit_price = bar_open
+            exit_reason = prior_stop_reason
+            break
+        if bar_open <= take_profit:
+            exit_idx = idx
+            raw_exit_price = bar_open
+            exit_reason = "take_profit"
+            break
 
-        if dynamic_cfg["profit_lock"]["enabled"] and max_favorable_r >= dynamic_cfg["profit_lock"]["trigger_r"]:
-            profit_lock_activated = True
-            candidate_stop = entry - dynamic_cfg["profit_lock"]["lock_r"] * risk_distance
-            if candidate_stop <= effective_stop_price:
-                effective_stop_price = float(candidate_stop)
-                stop_reason = "profit_lock_stop"
-
-        atr_trailing = dynamic_cfg["atr_trailing"]
-        if atr_trailing["enabled"] and max_favorable_r >= atr_trailing["activation_r"] and volatility is not None:
-            current_volatility = float(volatility[idx]) if idx < len(volatility) else np.nan
-            if np.isfinite(current_volatility) and current_volatility > 0.0:
-                trailing_distance = entry * current_volatility * atr_trailing["distance_mult"]
-                lowest_price = entry - max_favorable_r * risk_distance
-                candidate_stop = lowest_price + trailing_distance
-                if candidate_stop <= effective_stop_price:
-                    effective_stop_price = float(candidate_stop)
-                    stop_reason = "atr_trailing_stop"
-
-        stop_hit = bar_high >= effective_stop_price
+        stop_hit = bar_high >= prior_stop_price
         take_profit_hit = bar_low <= take_profit
         partial_rule_hits = [
             (rule_idx, rule, entry - float(rule["trigger_r"]) * risk_distance)
@@ -855,17 +864,17 @@ def simulate_short_trade_path(
             raw_exit_price, exit_reason = _double_touch_exit(
                 tie_break=tie_break,
                 bar_open=bar_open,
-                effective_stop_price=effective_stop_price,
+                effective_stop_price=prior_stop_price,
                 take_profit_price=take_profit,
-                stop_reason=stop_reason,
+                stop_reason=prior_stop_reason,
             )
             if legacy_same_bar_stop_reason and exit_reason == "stop_loss":
                 exit_reason = "stop_and_target_same_bar_stop_first"
             break
         if stop_hit:
             exit_idx = idx
-            raw_exit_price = effective_stop_price
-            exit_reason = stop_reason
+            raw_exit_price = prior_stop_price
+            exit_reason = prior_stop_reason
             break
         if take_profit_hit:
             for rule_idx, rule, trigger_price in partial_rule_hits:
@@ -910,6 +919,31 @@ def simulate_short_trade_path(
                     "raw_exit_price": float(partial_price),
                 }
             )
+
+        if dynamic_cfg["breakeven"]["enabled"] and max_favorable_r >= dynamic_cfg["breakeven"]["trigger_r"]:
+            breakeven_activated = True
+            candidate_stop = entry - dynamic_cfg["breakeven"]["lock_r"] * risk_distance
+            if candidate_stop < effective_stop_price:
+                effective_stop_price = float(candidate_stop)
+                stop_reason = "breakeven_stop"
+
+        if dynamic_cfg["profit_lock"]["enabled"] and max_favorable_r >= dynamic_cfg["profit_lock"]["trigger_r"]:
+            profit_lock_activated = True
+            candidate_stop = entry - dynamic_cfg["profit_lock"]["lock_r"] * risk_distance
+            if candidate_stop <= effective_stop_price:
+                effective_stop_price = float(candidate_stop)
+                stop_reason = "profit_lock_stop"
+
+        atr_trailing = dynamic_cfg["atr_trailing"]
+        if atr_trailing["enabled"] and max_favorable_r >= atr_trailing["activation_r"] and volatility is not None:
+            current_volatility = float(volatility[idx]) if idx < len(volatility) else np.nan
+            if np.isfinite(current_volatility) and current_volatility > 0.0:
+                trailing_distance = entry * current_volatility * atr_trailing["distance_mult"]
+                lowest_price = entry - max_favorable_r * risk_distance
+                candidate_stop = lowest_price + trailing_distance
+                if candidate_stop <= effective_stop_price:
+                    effective_stop_price = float(candidate_stop)
+                    stop_reason = "atr_trailing_stop"
 
         signal_off = dynamic_cfg["signal_off_exit"]
         if signal_off["enabled"] and bars_held >= signal_off["min_bars_held"] and signals is not None:

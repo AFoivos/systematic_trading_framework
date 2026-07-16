@@ -13,7 +13,7 @@ from src.signals.quote_flow_scalp_router_signal import (
 from src.utils.config import load_experiment_config
 
 
-DIAGNOSTIC_CONFIG_DIR = Path("config/experiments/scalp/diagnostics")
+BEST_QFS_CONFIG_PATH = Path("config/experiments/scalp/us100_30m_qfs_best_spread075_z20_v1.yaml")
 
 
 def _base_row() -> dict[str, float]:
@@ -432,38 +432,36 @@ def test_us100_quote_flow_scalp_meta_configs_are_asset_specific_and_not_threshol
     assert cfg["data"]["symbol"] == "US100"
     assert cfg["data"]["interval"] == timeframe
     assert cfg["data"]["storage"]["dataset_id"] == f"us100_{timeframe}_quote_flow_proxy_scalp_meta_v1"
-    assert str(cfg["data"]["storage"]["load_path"]).endswith(load_path)
+    assert Path(cfg["data"]["storage"]["load_path"]).resolve() == Path(load_path).resolve()
     assert cfg["signals"]["kind"] == "meta_probability_side"
     assert float(params["threshold"]) <= ev_probability_floor
 
 
-def test_qfs_diagnostic_yaml_suite_loads_and_preserves_contract() -> None:
-    paths = sorted(DIAGNOSTIC_CONFIG_DIR.glob("*.yaml"))
-    assert len(paths) == 18
+def test_qfs_best_config_loads_and_preserves_the_selected_diagnostic_contract() -> None:
+    cfg = load_experiment_config(BEST_QFS_CONFIG_PATH)
+    router_params = next(
+        step["params"]
+        for step in cfg["features"]
+        if step.get("step") == "quote_flow_scalp_router"
+    )
+    target = cfg["model"]["target"]
+    signal_params = cfg["signals"]["params"]
 
-    for path in paths:
-        cfg = load_experiment_config(path)
-        router_params = next(
-            step["params"]
-            for step in cfg["features"]
-            if step.get("step") == "quote_flow_scalp_router"
-        )
-        target = cfg["model"]["target"]
-        signal_params = cfg["signals"]["params"]
-
-        assert cfg["data"]["symbol"] == "US100"
-        assert cfg["data"]["interval"] == "30m"
-        assert str(cfg["data"]["storage"]["load_path"]).endswith(
-            "data/raw/dukascopy_30m_clean/us100_30m.csv"
-        )
-        assert cfg["backtest"]["periods_per_year"] == 12096
-        assert target["kind"] == "directional_triple_barrier"
-        assert target["entry_price_mode"] == "next_open"
-        assert target["profit_barrier_r"] == pytest.approx(0.70)
-        assert target["stop_barrier_r"] == pytest.approx(0.50)
-        assert signal_params["profit_barrier_r"] == pytest.approx(0.70)
-        assert signal_params["stop_barrier_r"] == pytest.approx(0.50)
-        assert cfg["execution"]["enabled"] is False
-        assert cfg["runtime"]["seed"] == 7
-        assert cfg["runtime"]["deterministic"] is True
-        assert router_params.get("enabled_modes") in (None, [1], [2], [3], [1, 2], [2, 3])
+    assert cfg["data"]["symbol"] == "US100"
+    assert cfg["data"]["interval"] == "30m"
+    assert Path(cfg["data"]["storage"]["load_path"]).resolve() == Path(
+        "data/raw/dukascopy_30m_clean/us100_30m.csv"
+    ).resolve()
+    assert cfg["backtest"]["periods_per_year"] == 12096
+    assert target["kind"] == "directional_triple_barrier"
+    assert target["entry_price_mode"] == "next_open"
+    assert target["profit_barrier_r"] == pytest.approx(0.70)
+    assert target["stop_barrier_r"] == pytest.approx(0.50)
+    assert signal_params["profit_barrier_r"] == pytest.approx(0.70)
+    assert signal_params["stop_barrier_r"] == pytest.approx(0.50)
+    assert cfg["execution"]["enabled"] is False
+    assert cfg["runtime"]["seed"] == 7
+    assert cfg["runtime"]["deterministic"] is True
+    assert router_params["max_spread_rank"] == pytest.approx(0.75)
+    assert router_params["max_spread_z"] == pytest.approx(2.0)
+    assert router_params.get("enabled_modes") is None

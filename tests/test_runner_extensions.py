@@ -291,7 +291,7 @@ def test_portfolio_evaluation_preserves_vectorized_trade_count_without_trade_tab
 
 
 def test_dense_return_forecasting_v2_config_uses_stationary_features_and_abstention() -> None:
-    cfg = load_experiment_config("config/experiments/dense_return_forecasting_v2.yaml")
+    cfg = load_experiment_config("config/experiments/others/dense_return_forecasting_v2.yaml")
     validate_resolved_config(cfg)
 
     include_rules = cfg["model"]["feature_selectors"]["include"]
@@ -662,6 +662,42 @@ def test_load_dataset_snapshot_filters_cached_snapshot_by_assets_and_window(tmp_
     assert df.index.min() == pd.Timestamp("2020-01-03")
     assert df.index.max() == pd.Timestamp("2020-01-05")
     assert metadata["verified_fingerprint"] is True
+
+
+def test_legacy_snapshot_fingerprint_is_verified_before_subset_filtering(tmp_path) -> None:
+    asset_frames = {
+        "AAA": _synthetic_ohlcv(periods=8, seed=1),
+        "BBB": _synthetic_ohlcv(periods=8, seed=2),
+    }
+    saved = save_dataset_snapshot(
+        asset_frames,
+        dataset_id="legacy_dataset",
+        stage="raw",
+        root_dir=tmp_path,
+        context={"source": "synthetic"},
+    )
+    metadata_path = Path(saved["metadata_path"])
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata.pop("data_sha256")
+    serialized_frames = storage_mod.long_frame_to_asset_frames(
+        pd.read_csv(Path(saved["data_path"]))
+    )
+    metadata["fingerprint"] = storage_mod.compute_dataframe_fingerprint(
+        storage_mod.asset_frames_to_long_frame(serialized_frames)
+    )
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+    loaded_frames, loaded_metadata = load_dataset_snapshot(
+        stage="raw",
+        root_dir=tmp_path,
+        dataset_id="legacy_dataset",
+        requested_assets=["BBB"],
+        start="2020-01-03",
+        end="2020-01-06",
+    )
+
+    assert list(loaded_frames) == ["BBB"]
+    assert loaded_metadata["verified_fingerprint"] is True
 
 
 def test_save_dataset_snapshot_works_without_fcntl(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

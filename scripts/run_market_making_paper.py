@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import logging
+import math
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -76,6 +77,7 @@ def build_components(config: dict[str, Any]) -> tuple[Any, PaperMarketMakingEngi
         max_spread_bps=float(mm.get("max_spread_bps", 40)),
         maker_fee_bps=float(fees.get("maker_fee_bps", 0)),
         taker_fee_bps=float(fees.get("taker_fee_bps", 0)),
+        volatility_multiplier=float(mm.get("volatility_multiplier", 1.0)),
     )
     quote_generator = QuoteGenerator(
         QuoteGeneratorConfig(
@@ -123,6 +125,7 @@ def build_components(config: dict[str, Any]) -> tuple[Any, PaperMarketMakingEngi
                 max_imbalance=float(filters.get("max_imbalance", 0.8)),
                 min_imbalance=float(filters.get("min_imbalance", 0.2)),
                 disable_on_high_volatility=bool(filters.get("disable_on_high_volatility", True)),
+                high_volatility_bps=float(filters.get("high_volatility_bps", 40.0)),
                 disable_on_strong_trend=bool(filters.get("disable_on_strong_trend", True)),
             )
         )
@@ -194,10 +197,27 @@ def run_synthetic_paper(config: dict[str, Any], *, duration_seconds: int, output
         book.apply_update(timestamp=event_time, sequence=step + 2)
         quote = quote_generator.generate(book=book, inventory=engine.account.inventory, recent_returns=[0.0, 0.0001])
         engine.place_quote(quote=quote, book=book, now=event_time)
-        trade_price = quote.bid_price if step % 2 == 0 and quote.bid_price is not None else quote.ask_price
-        if trade_price is not None:
+        candidate_fills = (
+            ((quote.bid_price, quote.bid_size), (quote.ask_price, quote.ask_size))
+            if step % 2 == 0
+            else ((quote.ask_price, quote.ask_size), (quote.bid_price, quote.bid_size))
+        )
+        trade_price, trade_quantity = next(
+            (
+                (price, quantity)
+                for price, quantity in candidate_fills
+                if price is not None and quantity > 0.0
+            ),
+            (None, 0.0),
+        )
+        if trade_price is not None and trade_quantity > 0.0:
             fills = engine.process_trade(
-                Trade(symbol=symbol, price=float(trade_price), quantity=quote.bid_size, timestamp=event_time)
+                Trade(
+                    symbol=symbol,
+                    price=float(trade_price),
+                    quantity=float(trade_quantity),
+                    timestamp=event_time,
+                )
             )
             if fills:
                 logging.info("step=%s fills=%s inventory=%.6f", step, len(fills), engine.account.inventory)
@@ -215,6 +235,18 @@ def run_synthetic_paper(config: dict[str, Any], *, duration_seconds: int, output
 def run_csv_orderbook_replay(config: dict[str, Any], *, input_events: str | Path, output_dir: str | Path | None = None) -> dict[str, Any]:
     """Run paper market making on reconstructed Kraken order book CSV events."""
     events, input_event_count, skipped_events = load_orderbook_events(input_events)
+    symbols = {event.symbol for event in events}
+    if len(symbols) > 1:
+        raise ValueError(
+            "CSV market-making replay supports exactly one symbol per run; "
+            f"found {sorted(symbols)}."
+        )
+    configured_symbol = str(config.get("execution", {}).get("symbol") or "").strip()
+    if configured_symbol and symbols and symbols != {configured_symbol}:
+        raise ValueError(
+            f"CSV replay symbol {next(iter(symbols))!r} does not match configured "
+            f"execution symbol {configured_symbol!r}."
+        )
     output_dir = (
         Path(output_dir)
         if output_dir is not None
@@ -384,7 +416,8 @@ def _parse_timestamp(value: str | None) -> datetime:
 def _optional_float(value: str | None) -> float | None:
     if value is None or value == "":
         return None
-    return float(value)
+    parsed = float(value)
+    return parsed if math.isfinite(parsed) else None
 
 
 def _optional_int(value: str | None) -> int | None:

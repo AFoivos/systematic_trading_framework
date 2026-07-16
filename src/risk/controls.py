@@ -13,8 +13,8 @@ def compute_drawdown(equity: pd.Series) -> pd.Series:
     if not isinstance(equity, pd.Series):
         raise TypeError("equity must be a pandas Series")
 
-    running_max = equity.cummax()
-    dd = equity / running_max - 1.0
+    running_max = equity.astype(float).cummax().clip(lower=1.0)
+    dd = equity.astype(float) / running_max - 1.0
     dd.name = f"{equity.name}_drawdown"
     return dd
 
@@ -134,10 +134,18 @@ def event_risk_guard_multiplier(
         dtype=bool,
     )
     daily_return = compounded(day_mask)
-    weekly_return = compounded(week_mask)
+    weekly_values = prefix.to_numpy(dtype=float)[week_mask]
+    if weekly_values.size:
+        weekly_equity = np.cumprod(1.0 + weekly_values)
+        weekly_peak = np.maximum.accumulate(
+            np.concatenate(([1.0], weekly_equity))
+        )[-1]
+        weekly_drawdown = float(weekly_equity[-1] / weekly_peak - 1.0)
+    else:
+        weekly_drawdown = 0.0
 
     weekly_stop = loss_threshold("weekly_drawdown")
-    if weekly_stop is not None and weekly_return <= weekly_stop:
+    if weekly_stop is not None and weekly_drawdown <= weekly_stop:
         return 0.0, "weekly_stop"
     daily_hard_stop = loss_threshold("daily_hard_stop")
     if daily_hard_stop is not None and daily_return <= daily_hard_stop:

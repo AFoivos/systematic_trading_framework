@@ -124,6 +124,34 @@ def test_diagnostics_reads_artifacts_and_writes_summary(tmp_path: Path) -> None:
     assert not list(run.rglob("*.pptx"))
 
 
+def test_diagnostics_drawdown_includes_initial_zero_anchor(tmp_path: Path) -> None:
+    run = tmp_path / "run"
+    run.mkdir()
+    (run / "summary.json").write_text("{}", encoding="utf-8")
+    pd.DataFrame(
+        [
+            {
+                "timestamp": "2026-07-01T00:00:00+00:00",
+                "realized_pnl": -2.0,
+                "unrealized_pnl": 0.0,
+                "total_pnl": -2.0,
+                "fees": 0.0,
+            },
+            {
+                "timestamp": "2026-07-01T00:00:01+00:00",
+                "realized_pnl": -1.0,
+                "unrealized_pnl": 0.0,
+                "total_pnl": -1.0,
+                "fees": 0.0,
+            },
+        ]
+    ).to_csv(run / "pnl_timeseries.csv", index=False)
+
+    diagnostics = build_market_making_diagnostics(run)
+
+    assert diagnostics["pnl"]["max_drawdown"] == 2.0
+
+
 def test_saved_summary_contains_plot_artifact_paths(tmp_path: Path) -> None:
     run = tmp_path / "run"
     _write_run(run)

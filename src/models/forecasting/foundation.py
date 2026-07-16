@@ -257,6 +257,19 @@ def _forecast_values_to_return(
     return raw_ret.astype("float32")
 
 
+def _marginal_quantiles_define_target_quantiles(spec: FoundationForecastSpec) -> bool:
+    """Return whether per-step marginal quantiles map to the configured target.
+
+    A terminal price quantile maps monotonically to a return quantile, and a
+    one-step return quantile maps directly to the one-step target.  For a
+    multi-step returns source, however, compounding the same marginal quantile
+    at every step does not produce a quantile of the cumulative return without
+    joint path samples.
+    """
+
+    return spec.source_kind == "price" or spec.target_horizon == 1
+
+
 def _assemble_prediction_output(
     *,
     index: pd.Index,
@@ -277,6 +290,9 @@ def _assemble_prediction_output(
     pred_ret = pd.Series(pred_values, index=index, dtype="float32")
 
     extra_cols: dict[str, pd.Series] = {}
+    if not _marginal_quantiles_define_target_quantiles(spec):
+        return pred_ret, extra_cols
+
     quantile_return_cols: dict[float, pd.Series] = {}
     for quantile, forecast_values in sorted(quantile_forecasts.items()):
         values = _forecast_values_to_return(
@@ -528,6 +544,7 @@ def _chronos_common_meta(
     contexts: list[np.ndarray],
     model_params: dict[str, Any],
 ) -> dict[str, Any]:
+    quantile_returns_available = _marginal_quantiles_define_target_quantiles(spec)
     return {
         "model_family": spec.model_family,
         "model_id": spec.model_id,
@@ -538,6 +555,16 @@ def _chronos_common_meta(
         "prediction_length": spec.prediction_length,
         "target_horizon": spec.target_horizon,
         "quantiles": list(spec.quantiles),
+        "quantile_return_columns_available": quantile_returns_available,
+        "quantile_return_contract": (
+            "terminal_price_marginal"
+            if spec.source_kind == "price"
+            else (
+                "single_step_return_marginal"
+                if quantile_returns_available
+                else "unavailable_without_joint_return_paths"
+            )
+        ),
         "foundation_train_rows": int(len(train_idx)),
         "foundation_test_samples": int(len(contexts)),
         "zero_shot": True,

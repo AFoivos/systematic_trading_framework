@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
+
 from src.market_data.order_book import LocalOrderBook
 from src.market_data.trades import Trade
 from src.market_making.adverse_selection_filter import AdverseSelectionConfig, AdverseSelectionFilter
@@ -340,3 +342,58 @@ def test_directional_feature_gate_does_not_override_fee_gate_without_aligned_sig
 
     assert not quote.should_quote
     assert quote.reason == "insufficient edge after fees"
+
+
+def test_invalid_side_selection_mode_is_rejected_instead_of_failing_open() -> None:
+    with pytest.raises(ValueError, match="allowed_side_mode"):
+        SideSelectionGate(allowed_side_mode="typo")  # type: ignore[arg-type]
+
+
+def test_adverse_filter_blocks_non_finite_volatility() -> None:
+    book = LocalOrderBook("PI_XBTUSD")
+    book.apply_snapshot(bids=[(100.0, 1.0)], asks=[(101.0, 1.0)])
+    adverse_filter = AdverseSelectionFilter(AdverseSelectionConfig())
+
+    decision = adverse_filter.evaluate(
+        book=book,
+        recent_volatility_bps=float("nan"),
+    )
+
+    assert not decision.should_quote
+    assert decision.reason == "invalid recent volatility"
+
+
+def test_strategy_passes_recent_return_volatility_to_adverse_filter() -> None:
+    book = LocalOrderBook("PI_XBTUSD")
+    book.apply_snapshot(bids=[(100.0, 1.0)], asks=[(101.0, 1.0)])
+    quote_generator = QuoteGenerator(
+        QuoteGeneratorConfig(
+            fair_price_model="mid_price",
+            spread=SpreadConfig(
+                model="fixed",
+                base_spread_bps=10.0,
+                min_spread_bps=5.0,
+                max_spread_bps=40.0,
+            ),
+            order_size=1.0,
+            max_inventory=10.0,
+            tick_size=0.01,
+            lot_size=0.1,
+            min_notional=1.0,
+        )
+    )
+    strategy = MarketMakingStrategy(
+        quote_generator=quote_generator,
+        adverse_filter=AdverseSelectionFilter(
+            AdverseSelectionConfig(high_volatility_bps=1.0)
+        ),
+    )
+
+    quote = strategy.decide(
+        book=book,
+        inventory=0.0,
+        recent_returns=[0.0, 0.001],
+    )
+
+    assert not quote.should_quote
+    assert quote.reason == "high recent volatility"

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from contextlib import contextmanager
+import time
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -16,6 +17,11 @@ try:
     import fcntl
 except ImportError:  # pragma: no cover - Windows fallback
     fcntl = None
+
+try:
+    import msvcrt
+except ImportError:  # pragma: no cover - POSIX fallback
+    msvcrt = None
 
 _REQUIRED_OHLC_COLUMNS = ("open", "high", "low", "close")
 
@@ -63,15 +69,43 @@ def _snapshot_lock(snapshot_dir: Path):
     clobber each other's temporary files.
     """
     lock_path = snapshot_dir / ".snapshot.lock"
-    with lock_path.open("w", encoding="utf-8") as handle:
-        if fcntl is None:
-            yield
+    with lock_path.open("a+b") as handle:
+        if fcntl is not None:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
             return
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+        if msvcrt is not None:
+            handle.seek(0, 2)
+            if handle.tell() == 0:
+                handle.write(b"\0")
+                handle.flush()
+            deadline = time.monotonic() + 60.0
+            while True:
+                try:
+                    handle.seek(0)
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                    break
+                except OSError:
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError(
+                            f"Timed out waiting for dataset snapshot lock: {lock_path}"
+                        )
+                    time.sleep(0.05)
+            try:
+                yield
+            finally:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            return
+
+        # Only reached on platforms without either POSIX or Windows locking.
+        # Preserve functionality there; all supported production platforms take
+        # one of the serialized branches above.
+        yield
 
 
 def _filter_asset_frames(
@@ -501,6 +535,7 @@ def load_dataset_snapshot(
         metadata.setdefault("verified_fingerprint", False)
         return asset_frames, metadata
 
+    lock_context = nullcontext()
     if load_path is not None:
         p = _resolve_path(load_path)
         if p.is_dir():
@@ -515,28 +550,50 @@ def load_dataset_snapshot(
         snapshot_dir = _resolve_snapshot_dir(root_dir=root_dir, stage=stage, dataset_id=dataset_id)
         data_path = snapshot_dir / "dataset.csv"
         metadata_path = snapshot_dir / "metadata.json"
+        lock_context = _snapshot_lock(snapshot_dir)
 
-    if not data_path.exists():
-        raise FileNotFoundError(f"Dataset snapshot not found: {data_path}")
+    with lock_context:
+        if not data_path.exists():
+            raise FileNotFoundError(f"Dataset snapshot not found: {data_path}")
 
-    metadata: dict[str, Any] = {}
-    if metadata_path.exists():
-        with metadata_path.open("r", encoding="utf-8") as f:
-            metadata = json.load(f)
-        frame = pd.read_csv(data_path)
-        asset_frames = long_frame_to_asset_frames(frame)
-    elif load_path is not None and data_path.suffix.lower() == ".csv":
-        asset_frames, metadata = _load_external_csv_asset_frames(
-            data_path,
-            requested_assets=requested_assets,
-            start=start,
-            end=end,
-        )
-        metadata.setdefault("verified_fingerprint", False)
-        return asset_frames, metadata
-    else:
-        frame = pd.read_csv(data_path)
-        asset_frames = long_frame_to_asset_frames(frame)
+        metadata: dict[str, Any] = {}
+        if metadata_path.exists():
+            with metadata_path.open("r", encoding="utf-8") as f:
+                metadata = json.load(f)
+            frame = pd.read_csv(data_path)
+            asset_frames = long_frame_to_asset_frames(frame)
+        elif load_path is not None and data_path.suffix.lower() == ".csv":
+            asset_frames, metadata = _load_external_csv_asset_frames(
+                data_path,
+                requested_assets=requested_assets,
+                start=start,
+                end=end,
+            )
+            metadata.setdefault("verified_fingerprint", False)
+            return asset_frames, metadata
+        else:
+            frame = pd.read_csv(data_path)
+            asset_frames = long_frame_to_asset_frames(frame)
+
+        expected_data_sha256 = metadata.get("data_sha256")
+        if expected_data_sha256 is not None:
+            actual_data_sha256 = file_sha256(data_path)
+            if actual_data_sha256 != expected_data_sha256:
+                raise ValueError(
+                    f"Dataset snapshot checksum mismatch for '{data_path}'."
+                )
+            metadata["verified_fingerprint"] = True
+        else:
+            expected_fingerprint = dict(metadata.get("fingerprint", {}) or {})
+            if expected_fingerprint:
+                actual_fingerprint = compute_dataframe_fingerprint(
+                    asset_frames_to_long_frame(asset_frames)
+                )
+                if actual_fingerprint.get("sha256") != expected_fingerprint.get("sha256"):
+                    raise ValueError(
+                        f"Dataset snapshot fingerprint mismatch for '{data_path}'."
+                    )
+                metadata["verified_fingerprint"] = True
 
     asset_frames = _filter_asset_frames(
         asset_frames,
@@ -544,24 +601,6 @@ def load_dataset_snapshot(
         start=start,
         end=end,
     )
-
-    expected_data_sha256 = metadata.get("data_sha256")
-    if expected_data_sha256 is not None:
-        actual_data_sha256 = file_sha256(data_path)
-        if actual_data_sha256 != expected_data_sha256:
-            raise ValueError(
-                f"Dataset snapshot checksum mismatch for '{data_path}'."
-            )
-        metadata["verified_fingerprint"] = True
-    else:
-        expected_fingerprint = dict(metadata.get("fingerprint", {}) or {})
-        if expected_fingerprint:
-            actual_fingerprint = compute_dataframe_fingerprint(asset_frames_to_long_frame(asset_frames))
-            if actual_fingerprint.get("sha256") != expected_fingerprint.get("sha256"):
-                raise ValueError(
-                    f"Dataset snapshot fingerprint mismatch for '{data_path}'."
-                )
-            metadata["verified_fingerprint"] = True
 
     metadata.setdefault("data_path", str(data_path))
     return asset_frames, metadata

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import pytest
+
 from src.market_data.order_book import LocalOrderBook
 from src.market_making.quote_generator import QuoteGenerator, QuoteGeneratorConfig
-from src.market_making.spread_model import SpreadConfig
+from src.market_making.spread_model import SpreadConfig, SpreadModel
 
 
 def _book() -> LocalOrderBook:
@@ -144,3 +146,74 @@ def test_top_of_book_mode_does_not_apply_inventory_skew() -> None:
 
     assert long_quote.bid_price == flat_quote.bid_price
     assert long_quote.ask_price == flat_quote.ask_price
+
+
+def test_min_notional_is_enforced_per_quote_side() -> None:
+    book = LocalOrderBook("PI_XBTUSD")
+    book.apply_snapshot(bids=[(99.0, 2.0)], asks=[(101.0, 2.0)])
+    generator = QuoteGenerator(
+        QuoteGeneratorConfig(
+            fair_price_model="mid_price",
+            quote_placement_mode="join_top_of_book",
+            spread=SpreadConfig(model="fixed", base_spread_bps=10, min_spread_bps=1, max_spread_bps=1000),
+            order_size=0.05,
+            max_inventory=10.0,
+            tick_size=0.01,
+            lot_size=0.01,
+            min_notional=5.0,
+        )
+    )
+
+    quote = generator.generate(book=book, inventory=0.0)
+
+    assert quote.should_quote
+    assert quote.bid_price is None
+    assert quote.bid_size == 0.0
+    assert quote.ask_price == 101.0
+    assert quote.ask_size == 0.05
+
+
+def test_fee_aware_spread_counts_exactly_two_maker_fee_legs() -> None:
+    model = SpreadModel(
+        SpreadConfig(
+            model="fee_aware",
+            base_spread_bps=1.0,
+            min_spread_bps=0.0,
+            max_spread_bps=100.0,
+            maker_fee_bps=2.0,
+        )
+    )
+
+    assert model.compute_spread_bps() == 5.0
+
+
+def test_decimal_lot_rounding_does_not_under_round_exact_quantity() -> None:
+    generator = QuoteGenerator(
+        QuoteGeneratorConfig(
+            fair_price_model="mid_price",
+            quote_placement_mode="join_top_of_book",
+            spread=SpreadConfig(model="fixed", base_spread_bps=10, min_spread_bps=1, max_spread_bps=1000),
+            order_size=0.3,
+            max_inventory=10.0,
+            tick_size=0.01,
+            lot_size=0.1,
+            min_notional=1.0,
+        )
+    )
+
+    quote = generator.generate(book=_book(), inventory=0.0)
+
+    assert quote.bid_size == pytest.approx(0.3)
+    assert quote.ask_size == pytest.approx(0.3)
+
+
+def test_non_finite_spread_configuration_is_rejected() -> None:
+    with pytest.raises(ValueError, match="base_spread_bps"):
+        SpreadModel(
+            SpreadConfig(
+                model="fixed",
+                base_spread_bps=float("nan"),
+                min_spread_bps=1.0,
+                max_spread_bps=100.0,
+            )
+        )

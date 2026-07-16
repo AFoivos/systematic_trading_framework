@@ -391,22 +391,35 @@ def build_triple_barrier_target(
         hit_barrier = False
 
         for step_idx in range(scan_start, horizon_end):
-            hit_upper = bool(highs[step_idx] >= upper_level)
-            hit_lower = bool(lows[step_idx] <= lower_level)
-            if hit_upper and hit_lower:
-                chosen_label = _resolve_double_touch(opens[step_idx], upper_level, lower_level)
-            elif hit_upper:
+            bar_open = float(opens[step_idx])
+            if bar_open >= upper_level:
                 chosen_label = 1.0
-            elif hit_lower:
+                chosen_return = bar_open / entry_price - 1.0
+            elif bar_open <= lower_level:
                 chosen_label = 0.0
+                chosen_return = bar_open / entry_price - 1.0
+            else:
+                hit_upper = bool(highs[step_idx] >= upper_level)
+                hit_lower = bool(lows[step_idx] <= lower_level)
+                if hit_upper and hit_lower:
+                    chosen_label = _resolve_double_touch(
+                        bar_open,
+                        upper_level,
+                        lower_level,
+                    )
+                elif hit_upper:
+                    chosen_label = 1.0
+                elif hit_lower:
+                    chosen_label = 0.0
 
             if chosen_label is not None:
                 chosen_step = step_idx - start_idx
                 hit_barrier = True
-                if chosen_label == 1.0:
-                    chosen_return = upper_level / entry_price - 1.0
-                else:
-                    chosen_return = lower_level / entry_price - 1.0
+                if chosen_return is None:
+                    if chosen_label == 1.0:
+                        chosen_return = upper_level / entry_price - 1.0
+                    else:
+                        chosen_return = lower_level / entry_price - 1.0
                 hit_types[start_idx] = _hit_type_for_price_label(float(chosen_label), start_side)
                 break
 

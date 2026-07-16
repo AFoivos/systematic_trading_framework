@@ -21,7 +21,7 @@ from src.utils.repro import (
 from src.utils.run_metadata import build_artifact_manifest, compute_config_hash, compute_dataframe_fingerprint
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-TRACKED_CONFIG = "experiments/btcusd_1h_dukas_xgboost_triple_barrier_garch_long_oos.yaml"
+TRACKED_CONFIG = "config/experiments/others/btcusd_1h_shock_meta_xgboost_long_only.yaml"
 
 
 def test_runtime_defaults_are_loaded_from_config() -> None:

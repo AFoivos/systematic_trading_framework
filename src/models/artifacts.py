@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import pickle
 import re
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -10,10 +12,11 @@ from typing import Any, Mapping
 import numpy as np
 import pandas as pd
 
+from src.evaluation.model_metrics import forecast_to_probability
 from src.utils.paths import PROJECT_ROOT, enforce_safe_absolute_path
 
 
-MODEL_BUNDLE_VERSION = 1
+MODEL_BUNDLE_VERSION = 2
 _MODEL_EXTENSION = ".pkl"
 
 
@@ -50,33 +53,47 @@ def _jsonable(value: Any) -> Any:
     return value
 
 
-def _forecast_to_probability(prediction: pd.Series, *, scale: float | None) -> pd.Series:
-    if prediction.empty:
-        return pd.Series(dtype="float32", index=prediction.index)
-    denom = float(abs(scale)) if scale is not None else 0.0
-    if not np.isfinite(denom) or denom <= 1e-8:
-        denom = float(np.nanstd(prediction.to_numpy(dtype=float), ddof=1))
-    if not np.isfinite(denom) or denom <= 1e-8:
-        denom = 1.0
-    logits = np.clip(prediction.astype(float).to_numpy(dtype=float) / denom, -25.0, 25.0)
-    probs = 1.0 / (1.0 + np.exp(-logits))
-    return pd.Series(probs.astype("float32"), index=prediction.index, dtype="float32")
-
-
 def _atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_name(path.name + ".tmp")
-    with tmp_path.open("w", encoding="utf-8") as handle:
-        json.dump(_jsonable(dict(payload)), handle, indent=2, sort_keys=True)
-    tmp_path.replace(path)
+    tmp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            tmp_path = Path(handle.name)
+            json.dump(_jsonable(dict(payload)), handle, indent=2, sort_keys=True)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, path)
+    finally:
+        if tmp_path is not None and tmp_path.exists():
+            tmp_path.unlink()
 
 
 def _atomic_write_pickle(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_name(path.name + ".tmp")
-    with tmp_path.open("wb") as handle:
-        pickle.dump(dict(payload), handle, protocol=pickle.HIGHEST_PROTOCOL)
-    tmp_path.replace(path)
+    tmp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            tmp_path = Path(handle.name)
+            pickle.dump(dict(payload), handle, protocol=pickle.HIGHEST_PROTOCOL)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, path)
+    finally:
+        if tmp_path is not None and tmp_path.exists():
+            tmp_path.unlink()
 
 
 def _model_name_from_config(cfg: Mapping[str, Any], model_meta: Mapping[str, Any]) -> str:
@@ -150,10 +167,13 @@ def _bundle_manifest(bundle: Mapping[str, Any], *, model_path: Path) -> dict[str
         "model_name": bundle.get("model_name"),
         "model_path": str(model_path),
         "model_kind": model_meta.get("model_kind") or model_config.get("kind"),
+        "task_type": model_meta.get("task_type"),
         "feature_cols": feature_cols,
         "pred_ret_col": model_meta.get("pred_ret_col") or model_config.get("pred_ret_col"),
         "pred_prob_col": model_meta.get("pred_prob_col") or model_config.get("pred_prob_col"),
+        "pred_label_col": model_meta.get("pred_label_col") or model_config.get("pred_label_col"),
         "pred_is_oos_col": model_meta.get("pred_is_oos_col") or model_config.get("pred_is_oos_col"),
+        "prob_scale": model_meta.get("prob_scale"),
         "created_at_utc": bundle.get("created_at_utc"),
         "reproducibility": dict(bundle.get("reproducibility", {}) or {}),
     }
@@ -297,6 +317,7 @@ def predict_with_model_bundle(
 
     pred_ret_col = str(meta.get("pred_ret_col") or model_config.get("pred_ret_col") or "pred_ret")
     pred_prob_col = str(meta.get("pred_prob_col") or model_config.get("pred_prob_col") or "pred_prob")
+    pred_label_col = str(meta.get("pred_label_col") or model_config.get("pred_label_col") or "pred_label")
     pred_is_oos_col = str(meta.get("pred_is_oos_col") or model_config.get("pred_is_oos_col") or "pred_is_oos")
 
     features = out.loc[:, feature_cols].apply(pd.to_numeric, errors="coerce").astype(float)
@@ -308,28 +329,63 @@ def predict_with_model_bundle(
     if not has_predict and not has_predict_proba:
         raise TypeError(f"Saved model object does not expose predict or predict_proba: {type(model)!r}")
 
-    if has_predict:
+    model_kind = str(meta.get("model_kind") or model_config.get("kind") or "").lower()
+    task_type = str(meta.get("task_type") or "").lower()
+    if task_type not in {"classification", "regression"}:
+        task_type = "classification" if has_predict_proba or "classifier" in model_kind else "regression"
+
+    if task_type == "regression":
+        if not has_predict:
+            raise TypeError("Regression model artifact must expose predict().")
         pred_ret = pd.Series(np.nan, index=out.index, name=pred_ret_col, dtype="float32")
         if bool(complete.any()):
             values = model.predict(features.loc[complete, feature_cols])
             pred_ret.loc[complete] = np.asarray(values, dtype=float).reshape(-1).astype("float32")
         out[pred_ret_col] = pred_ret
-    else:
-        pred_ret = pd.Series(dtype="float32")
+        configured_scale = meta.get("prob_scale")
+        if configured_scale is None:
+            configured_scale = model_config.get(
+                "prob_scale",
+                dict(model_config.get("params", {}) or {}).get("prob_scale"),
+            )
+        out[pred_prob_col] = forecast_to_probability(
+            out[pred_ret_col].astype(float),
+            scale=float(configured_scale) if configured_scale is not None else None,
+        )
+        return out
+
+    if has_predict:
+        pred_label = pd.Series(pd.NA, index=out.index, name=pred_label_col, dtype="object")
+        if bool(complete.any()):
+            values = model.predict(features.loc[complete, feature_cols])
+            pred_label.loc[complete] = np.asarray(values).reshape(-1)
+        out[pred_label_col] = pred_label
 
     if has_predict_proba:
         pred_prob = pd.Series(np.nan, index=out.index, name=pred_prob_col, dtype="float32")
         if bool(complete.any()):
             proba = model.predict_proba(features.loc[complete, feature_cols])
             proba_arr = np.asarray(proba, dtype=float)
-            if proba_arr.ndim == 2 and proba_arr.shape[1] >= 2:
+            if proba_arr.ndim == 2 and proba_arr.shape[1] == 2:
                 values = proba_arr[:, 1]
-            else:
+                pred_prob.loc[complete] = values.astype("float32")
+            elif proba_arr.ndim == 1 or (proba_arr.ndim == 2 and proba_arr.shape[1] == 1):
                 values = proba_arr.reshape(-1)
-            pred_prob.loc[complete] = values.astype("float32")
+                pred_prob.loc[complete] = values.astype("float32")
+            elif proba_arr.ndim == 2:
+                classes = list(getattr(model, "classes_", range(proba_arr.shape[1])))
+                for class_idx, class_label in enumerate(classes):
+                    class_col = (
+                        f"{pred_prob_col}_"
+                        f"{safe_model_name(class_label, default=str(class_idx))}"
+                    )
+                    class_prob = pd.Series(np.nan, index=out.index, dtype="float32")
+                    class_prob.loc[complete] = proba_arr[:, class_idx].astype("float32")
+                    out[class_col] = class_prob
+                return out
+            else:
+                raise ValueError("Classifier predict_proba returned an unsupported shape.")
         out[pred_prob_col] = pred_prob
-    elif pred_ret_col in out.columns:
-        out[pred_prob_col] = _forecast_to_probability(out[pred_ret_col].astype(float), scale=None)
 
     return out
 

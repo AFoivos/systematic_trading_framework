@@ -266,6 +266,7 @@ def _run_guarded_portfolio_performance(
     periods_per_year: int,
     guard_cfg: PortfolioRiskGuardConfig,
     drawdown_sizing: Mapping[str, Any] | None = None,
+    liquidate_at_end: bool = False,
 ) -> PortfolioPerformance:
     index = asset_returns.index
     columns = asset_returns.columns
@@ -291,10 +292,13 @@ def _run_guarded_portfolio_performance(
     weekly_armed = True
     daily_soft_stopped = False
     daily_hard_stopped = False
+    weekly_target_reached = False
     weekly_locked = False
+    bankrupt = False
+    bankruptcy_time: pd.Timestamp | None = None
     drawdown_sizing_cfg = _normalize_drawdown_sizing(drawdown_sizing)
 
-    for ts in index:
+    for row_number, ts in enumerate(index):
         timestamp = pd.Timestamp(ts)
         period_timestamp = timestamp.tz_localize(None) if timestamp.tzinfo is not None else timestamp
         day_key = timestamp.normalize()
@@ -312,49 +316,48 @@ def _run_guarded_portfolio_performance(
             last_week = week_key
             if guard_cfg.rearm_on_new_period:
                 weekly_armed = True
+                weekly_target_reached = False
                 weekly_locked = False
 
-        current_total_drawdown = float(equity / total_peak_equity - 1.0) if total_peak_equity > 0.0 else 0.0
-        drawdown_multiplier = _drawdown_sizing_multiplier(current_total_drawdown, drawdown_sizing_cfg)
-        soft_multiplier = float(guard_cfg.daily_soft_stop_risk_multiplier) if daily_soft_stopped else 1.0
-        weekly_lock_multiplier = 1.0
-        if weekly_locked:
-            weekly_lock_multiplier = (
-                0.0
-                if guard_cfg.after_target_mode == "flatten"
-                else float(guard_cfg.after_target_risk_multiplier)
+        if bankrupt:
+            returns_t = pd.Series(0.0, index=columns, dtype=float)
+            gross_return_t = 0.0
+        else:
+            returns_t = _resolve_returns_row(
+                asset_returns.loc[timestamp],
+                prev_weights=prev_actual_weights,
+                missing_return_policy=missing_return_policy,
+                timestamp=timestamp,
             )
-        risk_multiplier = float(drawdown_multiplier * soft_multiplier * weekly_lock_multiplier)
-        guard_active = permanent_flat or cooloff_remaining > 0 or daily_hard_stopped or risk_multiplier <= 0.0
-        desired_weights = weights.loc[timestamp].astype(float)
-        actual_weights = (
-            pd.Series(0.0, index=columns, dtype=float)
-            if guard_active
-            else desired_weights.reindex(columns).fillna(0.0).astype(float) * risk_multiplier
-        )
+            gross_return_t = float((prev_actual_weights * returns_t).sum())
+            if not np.isfinite(gross_return_t):
+                raise ValueError(f"Non-finite portfolio gross return at {timestamp}.")
+            gross_return_t = max(gross_return_t, -1.0)
 
-        returns_t = _resolve_returns_row(
-            asset_returns.loc[timestamp],
-            prev_weights=prev_actual_weights,
-            missing_return_policy=missing_return_policy,
-            timestamp=timestamp,
+        projected_equity = equity * max(1.0 + gross_return_t, 0.0)
+        week_peak_equity = max(week_peak_equity, projected_equity)
+        total_peak_equity = max(total_peak_equity, projected_equity)
+        daily_loss = (
+            float(projected_equity / day_start_equity - 1.0)
+            if day_start_equity > 0.0
+            else -1.0
         )
-        turnover_t = float((actual_weights - prev_actual_weights).abs().sum())
-        gross_return_t = float((prev_actual_weights * returns_t).sum())
-        cost_t = float((cost_per_turnover + slippage_per_turnover) * turnover_t)
-        net_return_t = float(gross_return_t - cost_t)
-        equity *= 1.0 + net_return_t
-        week_peak_equity = max(week_peak_equity, equity)
-        total_peak_equity = max(total_peak_equity, equity)
-
-        daily_loss = float(equity / day_start_equity - 1.0)
-        weekly_return = float(equity / week_start_equity - 1.0) if week_start_equity > 0.0 else 0.0
-        weekly_drawdown = float(equity / week_peak_equity - 1.0) if week_peak_equity > 0.0 else 0.0
-        total_loss = float(equity - 1.0)
+        weekly_return = (
+            float(projected_equity / week_start_equity - 1.0)
+            if week_start_equity > 0.0
+            else -1.0
+        )
+        weekly_drawdown = (
+            float(projected_equity / week_peak_equity - 1.0)
+            if week_peak_equity > 0.0
+            else -1.0
+        )
+        total_loss = float(projected_equity - 1.0)
 
         breach_reasons: list[str] = []
         soft_stop_triggered = False
         hard_stop_triggered = False
+        weekly_target_triggered = False
         weekly_lock_triggered = False
         if (
             guard_cfg.daily_soft_stop is not None
@@ -381,6 +384,14 @@ def _run_guarded_portfolio_performance(
             breach_reasons.append("daily_loss")
             daily_armed = False
         if (
+            guard_cfg.weekly_return_target is not None
+            and not weekly_target_reached
+            and weekly_return >= float(guard_cfg.weekly_return_target)
+        ):
+            breach_reasons.append("weekly_return_target")
+            weekly_target_reached = True
+            weekly_target_triggered = True
+        if (
             guard_cfg.weekly_profit_lock is not None
             and not weekly_locked
             and weekly_return >= float(guard_cfg.weekly_profit_lock)
@@ -401,14 +412,82 @@ def _run_guarded_portfolio_performance(
         ):
             breach_reasons.append("max_total_loss")
             permanent_flat = True
+        if gross_return_t <= -1.0 or projected_equity <= 0.0:
+            breach_reasons.append("bankruptcy")
+            permanent_flat = True
+            bankrupt = True
+            bankruptcy_time = timestamp
 
-        triggered = bool(breach_reasons) and not guard_active
+        triggered = bool(breach_reasons)
         starts_cooloff = any(
             reason in {"daily_loss", "weekly_drawdown", "max_total_loss"}
             for reason in breach_reasons
         )
         if triggered and starts_cooloff and not permanent_flat:
             cooloff_remaining = max(cooloff_remaining, int(guard_cfg.cooloff_bars))
+
+        current_total_drawdown = (
+            float(projected_equity / total_peak_equity - 1.0)
+            if total_peak_equity > 0.0
+            else -1.0
+        )
+        drawdown_multiplier = _drawdown_sizing_multiplier(
+            current_total_drawdown,
+            drawdown_sizing_cfg,
+        )
+        soft_multiplier = (
+            float(guard_cfg.daily_soft_stop_risk_multiplier)
+            if daily_soft_stopped
+            else 1.0
+        )
+        weekly_target_multiplier = 1.0
+        if weekly_target_reached:
+            weekly_target_multiplier = (
+                0.0
+                if guard_cfg.after_target_mode == "flatten"
+                else float(guard_cfg.after_target_risk_multiplier)
+            )
+        weekly_lock_multiplier = 0.0 if weekly_locked else 1.0
+        risk_multiplier = float(
+            drawdown_multiplier
+            * soft_multiplier
+            * weekly_target_multiplier
+            * weekly_lock_multiplier
+        )
+        guard_active = (
+            bankrupt
+            or permanent_flat
+            or cooloff_remaining > 0
+            or daily_hard_stopped
+            or "daily_loss" in breach_reasons
+            or "weekly_drawdown" in breach_reasons
+            or risk_multiplier <= 0.0
+        )
+        desired_weights = weights.loc[timestamp].astype(float)
+        force_terminal_liquidation = bool(
+            liquidate_at_end and row_number == len(index) - 1
+        )
+        actual_weights = (
+            pd.Series(0.0, index=columns, dtype=float)
+            if guard_active or force_terminal_liquidation
+            else desired_weights.reindex(columns).fillna(0.0).astype(float)
+            * risk_multiplier
+        )
+        turnover_t = float((actual_weights - prev_actual_weights).abs().sum())
+        available_after_gross = max(1.0 + gross_return_t, 0.0)
+        cost_t = min(
+            float((cost_per_turnover + slippage_per_turnover) * turnover_t),
+            available_after_gross,
+        )
+        net_return_t = float(gross_return_t - cost_t)
+        if net_return_t <= -1.0:
+            net_return_t = -1.0
+            actual_weights = pd.Series(0.0, index=columns, dtype=float)
+            bankrupt = True
+            permanent_flat = True
+            bankruptcy_time = bankruptcy_time or timestamp
+        equity = equity * max(1.0 + net_return_t, 0.0)
+        total_peak_equity = max(total_peak_equity, equity)
 
         applied_weights.loc[timestamp] = actual_weights
         gross_returns.loc[timestamp] = gross_return_t
@@ -424,6 +503,7 @@ def _run_guarded_portfolio_performance(
                 "risk_guard_reason": ",".join(breach_reasons),
                 "risk_guard_daily_soft_stop_breach": bool(soft_stop_triggered),
                 "risk_guard_daily_hard_stop_breach": bool(hard_stop_triggered),
+                "risk_guard_weekly_return_target": bool(weekly_target_triggered),
                 "risk_guard_weekly_profit_lock": bool(weekly_lock_triggered),
                 "risk_guard_daily_loss_breach": bool("daily_loss" in breach_reasons),
                 "risk_guard_weekly_drawdown_breach": bool("weekly_drawdown" in breach_reasons),
@@ -452,6 +532,23 @@ def _run_guarded_portfolio_performance(
         gross_returns=gross_returns,
     )
     summary.update(compute_weight_transition_accounting(applied_weights))
+    summary.update(
+        {
+            "bankrupt": bool(bankrupt),
+            "bankruptcy_time": bankruptcy_time,
+            "liquidate_at_end": bool(liquidate_at_end),
+            "terminal_open_exposure": (
+                float(applied_weights.iloc[-1].abs().sum())
+                if not applied_weights.empty
+                else 0.0
+            ),
+            "terminal_liquidation_turnover": (
+                float(turnover.iloc[-1])
+                if liquidate_at_end and not turnover.empty
+                else 0.0
+            ),
+        }
+    )
     risk_guard_summary = {
         "enabled": bool(guard_cfg.enabled),
         "weekly_return_target": guard_cfg.weekly_return_target,
@@ -471,6 +568,7 @@ def _run_guarded_portfolio_performance(
         "trigger_count": int(timeline["risk_guard_triggered"].sum()),
         "soft_stop_trigger_count": int(timeline["risk_guard_daily_soft_stop_breach"].sum()),
         "hard_stop_trigger_count": int(timeline["risk_guard_daily_hard_stop_breach"].sum()),
+        "weekly_target_trigger_count": int(timeline["risk_guard_weekly_return_target"].sum()),
         "weekly_lock_trigger_count": int(timeline["risk_guard_weekly_profit_lock"].sum()),
         "daily_loss_trigger_count": int(timeline["risk_guard_daily_loss_breach"].sum()),
         "weekly_drawdown_trigger_count": int(timeline["risk_guard_weekly_drawdown_breach"].sum()),
@@ -483,6 +581,19 @@ def _run_guarded_portfolio_performance(
             else None
         ),
         "permanent_flattened": bool(permanent_flat),
+        "bankrupt": bool(bankrupt),
+        "bankruptcy_time": bankruptcy_time,
+        "liquidate_at_end": bool(liquidate_at_end),
+        "terminal_open_exposure": (
+            float(applied_weights.iloc[-1].abs().sum())
+            if not applied_weights.empty
+            else 0.0
+        ),
+        "terminal_liquidation_turnover": (
+            float(turnover.iloc[-1])
+            if liquidate_at_end and not turnover.empty
+            else 0.0
+        ),
     }
 
     return PortfolioPerformance(
@@ -696,7 +807,9 @@ def build_ranked_weights_from_scores_over_time(
             score_value = numeric.get(asset, np.nan)
             score_abs = abs(float(score_value)) if np.isfinite(score_value) else 0.0
             current_sign = float(np.sign(score_value)) if np.isfinite(score_value) and score_value != 0.0 else side
-            can_exit = active_age[asset] >= min_holding_bars
+            # Entry is the first held bar. Since age is incremented above before
+            # checking an exit, require it to move past the configured minimum.
+            can_exit = active_age[asset] > min_holding_bars
             sign_flipped = bool(current_sign != side and np.isfinite(score_value) and score_value != 0.0)
             should_exit = can_exit and (score_abs < exit_threshold or sign_flipped)
             if should_exit:
@@ -896,6 +1009,116 @@ def build_optimized_weights_over_time(
     return weights.fillna(0.0), diagnostics
 
 
+def _run_unguarded_portfolio_accounting(
+    *,
+    desired_weights: pd.DataFrame,
+    asset_returns: pd.DataFrame,
+    missing_return_policy: str,
+    cost_rate: float,
+    liquidate_at_end: bool,
+) -> tuple[
+    pd.DataFrame,
+    pd.Series,
+    pd.Series,
+    pd.Series,
+    pd.Series,
+    pd.Series,
+    dict[str, Any],
+]:
+    if cost_rate < 0.0:
+        raise ValueError("combined portfolio turnover cost must be >= 0.")
+    if missing_return_policy not in _ALLOWED_MISSING_RETURN_POLICIES:
+        raise ValueError(
+            f"missing_return_policy must be one of {_ALLOWED_MISSING_RETURN_POLICIES}."
+        )
+
+    index = desired_weights.index
+    columns = desired_weights.columns
+    applied = pd.DataFrame(0.0, index=index, columns=columns, dtype=float)
+    turnover = pd.Series(0.0, index=index, name="turnover", dtype=float)
+    gross = pd.Series(0.0, index=index, name="gross_returns", dtype=float)
+    costs = pd.Series(0.0, index=index, name="costs", dtype=float)
+    net = pd.Series(0.0, index=index, name="net_returns", dtype=float)
+    equity_curve = pd.Series(1.0, index=index, name="equity", dtype=float)
+
+    previous = pd.Series(0.0, index=columns, dtype=float)
+    equity = 1.0
+    bankrupt = False
+    bankruptcy_time: pd.Timestamp | None = None
+    terminal_liquidation_turnover = 0.0
+
+    for row_number, timestamp in enumerate(index):
+        if bankrupt:
+            equity_curve.iloc[row_number] = 0.0
+            continue
+        returns_t = _resolve_returns_row(
+            asset_returns.loc[timestamp],
+            prev_weights=previous,
+            missing_return_policy=missing_return_policy,
+            timestamp=pd.Timestamp(timestamp),
+        )
+        gross_t = float((previous * returns_t).sum())
+        if not np.isfinite(gross_t):
+            raise ValueError(f"Non-finite portfolio gross return at {timestamp}.")
+        gross_t = max(gross_t, -1.0)
+
+        desired = desired_weights.loc[timestamp].reindex(columns).fillna(0.0).astype(float)
+        force_liquidation = bool(liquidate_at_end and row_number == len(index) - 1)
+        actual = (
+            pd.Series(0.0, index=columns, dtype=float)
+            if force_liquidation or gross_t <= -1.0
+            else desired
+        )
+        turnover_t = float((actual - previous).abs().sum())
+        if force_liquidation:
+            terminal_liquidation_turnover = turnover_t
+        available_after_gross = max(1.0 + gross_t, 0.0)
+        cost_t = min(float(cost_rate * turnover_t), available_after_gross)
+        net_t = float(gross_t - cost_t)
+
+        if net_t <= -1.0:
+            if gross_t > -1.0 and not actual.eq(0.0).all():
+                turnover_t += float(actual.abs().sum())
+                cost_t = min(float(cost_rate * turnover_t), available_after_gross)
+                net_t = float(gross_t - cost_t)
+            net_t = -1.0
+            actual = pd.Series(0.0, index=columns, dtype=float)
+            bankrupt = True
+            bankruptcy_time = pd.Timestamp(timestamp)
+
+        equity *= max(1.0 + net_t, 0.0)
+        if equity <= 0.0:
+            bankrupt = True
+            bankruptcy_time = bankruptcy_time or pd.Timestamp(timestamp)
+
+        applied.loc[timestamp] = actual
+        turnover.loc[timestamp] = turnover_t
+        gross.loc[timestamp] = gross_t
+        costs.loc[timestamp] = cost_t
+        net.loc[timestamp] = net_t
+        equity_curve.loc[timestamp] = equity
+        previous = actual
+
+    terminal_open_exposure = (
+        float(applied.iloc[-1].abs().sum()) if not applied.empty else 0.0
+    )
+    return (
+        applied,
+        turnover,
+        gross,
+        costs,
+        net,
+        equity_curve,
+        {
+            "bankrupt": bool(bankrupt),
+            "bankruptcy_time": bankruptcy_time,
+            "liquidate_at_end": bool(liquidate_at_end),
+            "terminal_open_exposure": terminal_open_exposure,
+            "terminal_liquidation_turnover": float(terminal_liquidation_turnover),
+        },
+    )
+
+
 def compute_portfolio_performance(
     weights: pd.DataFrame,
     asset_returns: pd.DataFrame,
@@ -906,6 +1129,7 @@ def compute_portfolio_performance(
     periods_per_year: int = 252,
     portfolio_guard: Mapping[str, Any] | None = None,
     drawdown_sizing: Mapping[str, Any] | None = None,
+    liquidate_at_end: bool = False,
 ) -> PortfolioPerformance:
     """
     Compute portfolio performance for the portfolio construction layer. The helper keeps the
@@ -917,13 +1141,20 @@ def compute_portfolio_performance(
     if not isinstance(asset_returns, pd.DataFrame):
         raise TypeError("asset_returns must be a pandas DataFrame.")
 
+    if weights.index.has_duplicates:
+        raise ValueError("weights index must not contain duplicate timestamps.")
+    if weights.columns.has_duplicates:
+        raise ValueError("weights columns must not contain duplicate assets.")
     common_index = asset_returns.index.intersection(weights.index)
     common_cols = asset_returns.columns.intersection(weights.columns)
     if len(common_index) == 0 or len(common_cols) == 0:
         raise ValueError("weights and asset_returns have no common index/columns.")
 
-    w = weights.reindex(index=common_index, columns=common_cols).fillna(0.0).astype(float)
-    r = asset_returns.reindex(index=common_index, columns=common_cols).astype(float)
+    # The weight calendar and universe define the requested exposures. Reindexing to their
+    # intersection first would silently delete a held asset or timestamp before the missing
+    # return policy can validate it.
+    w = weights.fillna(0.0).astype(float).copy()
+    r = asset_returns.reindex(index=w.index, columns=w.columns).astype(float)
 
     guard_cfg = _normalize_portfolio_risk_guard_config(portfolio_guard)
     drawdown_sizing_cfg = _normalize_drawdown_sizing(drawdown_sizing)
@@ -937,25 +1168,23 @@ def compute_portfolio_performance(
             periods_per_year=periods_per_year,
             guard_cfg=guard_cfg,
             drawdown_sizing=drawdown_sizing_cfg,
+            liquidate_at_end=bool(liquidate_at_end),
         )
-
-    prev_w = w.shift(1).fillna(0.0)
-    r = _apply_missing_return_policy(
-        r,
-        prev_weights=prev_w,
+    (
+        w,
+        turnover,
+        gross_returns,
+        costs,
+        net_returns,
+        equity,
+        accounting_meta,
+    ) = _run_unguarded_portfolio_accounting(
+        desired_weights=w,
+        asset_returns=r,
         missing_return_policy=missing_return_policy,
+        cost_rate=float(cost_per_turnover + slippage_per_turnover),
+        liquidate_at_end=bool(liquidate_at_end),
     )
-    turnover = (w - prev_w).abs().sum(axis=1)
-    gross_returns = (w.shift(1).fillna(0.0) * r).sum(axis=1)
-    costs = (cost_per_turnover + slippage_per_turnover) * turnover
-    net_returns = gross_returns - costs
-
-    equity = (1.0 + net_returns).cumprod()
-    equity.name = "equity"
-    gross_returns.name = "gross_returns"
-    net_returns.name = "net_returns"
-    costs.name = "costs"
-    turnover.name = "turnover"
 
     summary = compute_backtest_metrics(
         net_returns=net_returns,
@@ -965,6 +1194,7 @@ def compute_portfolio_performance(
         gross_returns=gross_returns,
     )
     summary.update(compute_weight_transition_accounting(w))
+    summary.update(accounting_meta)
 
     return PortfolioPerformance(
         equity_curve=equity,
@@ -974,7 +1204,10 @@ def compute_portfolio_performance(
         turnover=turnover,
         summary=summary,
         applied_weights=w,
-        risk_guard_summary={"enabled": False},
+        risk_guard_summary={
+            "enabled": False,
+            **accounting_meta,
+        },
         risk_guard_timeline=pd.DataFrame(index=w.index),
     )
 

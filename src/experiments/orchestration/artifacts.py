@@ -114,13 +114,17 @@ def _rolling_window_length(series: pd.Series, *, default: int = 48) -> int:
     return max(8, min(default, max(len(series) // 4, 8)))
 
 
-def _ensure_matplotlib_backend(run_dir: Path) -> None:
+def _ensure_matplotlib_backend(run_dir: Path) -> bool:
     mpl_dir = run_dir / ".mplconfig"
     mpl_dir.mkdir(parents=True, exist_ok=True)
     os.environ["MPLCONFIGDIR"] = str(mpl_dir)
-    import matplotlib
+    try:
+        import matplotlib
+    except ImportError:
+        return False
 
     matplotlib.use("Agg", force=True)
+    return True
 
 
 def _save_line_chart(
@@ -130,7 +134,8 @@ def _save_line_chart(
     ylabel: str,
     series_map: dict[str, pd.Series],
 ) -> None:
-    _ensure_matplotlib_backend(path.parent.parent)
+    if not _ensure_matplotlib_backend(path.parent.parent):
+        return
     import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(figsize=(11, 4))
@@ -156,7 +161,8 @@ def _save_histogram_chart(
     series_map: dict[str, pd.Series],
     bins: int = 40,
 ) -> None:
-    _ensure_matplotlib_backend(path.parent.parent)
+    if not _ensure_matplotlib_backend(path.parent.parent):
+        return
     import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(figsize=(10, 4))
@@ -191,7 +197,8 @@ def _save_dual_panel_chart(
     top_ylabel: str,
     bottom_ylabel: str,
 ) -> None:
-    _ensure_matplotlib_backend(path.parent.parent)
+    if not _ensure_matplotlib_backend(path.parent.parent):
+        return
     import matplotlib.pyplot as plt
 
     fig, axes = plt.subplots(2, 1, figsize=(11, 6), sharex=True)
@@ -209,7 +216,8 @@ def _save_dual_panel_chart(
 
 
 def _save_monthly_bar_chart(path: Path, *, net_returns: pd.Series, gross_returns: pd.Series) -> None:
-    _ensure_matplotlib_backend(path.parent.parent)
+    if not _ensure_matplotlib_backend(path.parent.parent):
+        return
     import matplotlib.pyplot as plt
 
     monthly = pd.DataFrame({"net": net_returns, "gross": gross_returns}).copy()
@@ -237,7 +245,8 @@ def _save_monthly_bar_chart(path: Path, *, net_returns: pd.Series, gross_returns
 def _save_fold_bar_chart(path: Path, *, fold_summaries: list[dict[str, Any]]) -> None:
     if not fold_summaries:
         return
-    _ensure_matplotlib_backend(path.parent.parent)
+    if not _ensure_matplotlib_backend(path.parent.parent):
+        return
     import matplotlib.pyplot as plt
 
     folds = [int(item.get("fold", idx)) for idx, item in enumerate(fold_summaries)]
@@ -264,7 +273,8 @@ def _save_fold_metric_bar_chart(
 ) -> None:
     if not rows:
         return
-    _ensure_matplotlib_backend(path.parent.parent)
+    if not _ensure_matplotlib_backend(path.parent.parent):
+        return
     import matplotlib.pyplot as plt
 
     folds = [str(int(row.get("fold", idx))) for idx, row in enumerate(rows)]
@@ -290,7 +300,8 @@ def _save_horizontal_bar_chart(
 ) -> None:
     if not labels or not values:
         return
-    _ensure_matplotlib_backend(path.parent.parent)
+    if not _ensure_matplotlib_backend(path.parent.parent):
+        return
     import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(figsize=(10, max(3.5, 0.35 * len(labels))))
@@ -318,7 +329,8 @@ def _save_category_bar_chart(
 ) -> None:
     if not categories or not values:
         return
-    _ensure_matplotlib_backend(path.parent.parent)
+    if not _ensure_matplotlib_backend(path.parent.parent):
+        return
     import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(figsize=(8, 4))
@@ -1565,7 +1577,8 @@ def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
             ylabel="Equity",
             series_map={"equity": equity_curve},
         )
-        chart_paths["equity_curve_chart"] = str(equity_path.relative_to(run_dir))
+        if equity_path.exists():
+            chart_paths["equity_curve_chart"] = str(equity_path.relative_to(run_dir))
 
         drawdown_path = report_assets_dir / "drawdown_curve.png"
         _save_line_chart(
@@ -1574,7 +1587,8 @@ def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
             ylabel="Drawdown",
             series_map={"drawdown": _drawdown_from_equity(equity_curve)},
         )
-        chart_paths["drawdown_curve"] = str(drawdown_path.relative_to(run_dir))
+        if drawdown_path.exists():
+            chart_paths["drawdown_curve"] = str(drawdown_path.relative_to(run_dir))
 
     if not forecast_first and not net_returns.empty and not gross_returns.empty:
         cumulative_path = report_assets_dir / "cumulative_returns.png"
@@ -1587,7 +1601,8 @@ def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
                 "net": _returns_to_curve(net_returns, returns_type=returns_type),
             },
         )
-        chart_paths["cumulative_returns"] = str(cumulative_path.relative_to(run_dir))
+        if cumulative_path.exists():
+            chart_paths["cumulative_returns"] = str(cumulative_path.relative_to(run_dir))
 
         monthly_path = report_assets_dir / "monthly_returns.png"
         _save_monthly_bar_chart(monthly_path, net_returns=net_returns, gross_returns=gross_returns)
@@ -1627,7 +1642,8 @@ def write_experiment_report_from_run_dir(run_dir: Path) -> dict[str, str]:
             top_ylabel="Signal",
             bottom_ylabel="Turnover",
         )
-        chart_paths["positions_turnover"] = str(signal_turnover_path.relative_to(run_dir))
+        if signal_turnover_path.exists():
+            chart_paths["positions_turnover"] = str(signal_turnover_path.relative_to(run_dir))
 
         behavior_window = _rolling_window_length(positions, default=48)
         rolling_behavior_path = report_assets_dir / "rolling_behavior.png"

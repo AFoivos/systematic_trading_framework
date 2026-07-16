@@ -273,6 +273,7 @@ def run_single_asset_backtest(
         rearm_drawdown=dd_cfg.get("rearm_drawdown"),
         periods_per_year=backtest_cfg.get("periods_per_year", 252),
         min_holding_bars=backtest_cfg.get("min_holding_bars", 0),
+        liquidate_at_end=bool(backtest_cfg.get("liquidate_at_end", False)),
     )
     if oos_mask is not None and bool(oos_mask.any()):
         aligned_oos_mask = oos_mask.reindex(result.returns.index).fillna(False).astype(bool)
@@ -353,10 +354,11 @@ def run_portfolio_backtest(
             asset_params=dict(backtest_cfg.get("asset_params", {}) or {}),
             asset_to_group=asset_groups or None,
             portfolio_guard=dict(risk_cfg.get("portfolio_guard", {}) or {}),
-            event_time_remap_policy=str(backtest_cfg.get("event_time_remap_policy", "next_aligned")),
+            event_time_remap_policy=str(backtest_cfg.get("event_time_remap_policy") or "skip"),
             max_cost_r=backtest_cfg.get("max_cost_r"),
             dynamic_exit=dict(backtest_cfg.get("dynamic_exit", {}) or {}),
             correlation_guard=dict(backtest_cfg.get("correlation_guard", {}) or {}),
+            liquidate_at_end=bool(backtest_cfg.get("liquidate_at_end", False)),
         )
         portfolio_meta = PortfolioMetaPayload(
             construction="portfolio_barrier",
@@ -481,6 +483,7 @@ def run_portfolio_backtest(
         periods_per_year=backtest_cfg.get("periods_per_year", 252),
         portfolio_guard=risk_cfg.get("portfolio_guard"),
         drawdown_sizing=risk_cfg.get("drawdown_sizing"),
+        liquidate_at_end=bool(backtest_cfg.get("liquidate_at_end", False)),
     )
     if performance.applied_weights is not None:
         weights = performance.applied_weights.copy()
@@ -826,7 +829,7 @@ def build_robustness_diagnostics(
         )
         remap_policy = (
             "skip" if bool(robustness_cfg.get("strict_no_remap", False))
-            else str(cfg["backtest"].get("event_time_remap_policy", "next_aligned"))
+            else str(cfg["backtest"].get("event_time_remap_policy") or "skip")
         )
         if not combined_cost_multipliers:
             combined_cost_multipliers = [1.0]

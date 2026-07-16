@@ -13,16 +13,10 @@ from src.features.regime_context import add_regime_context_features
 from src.features.session_context import add_session_context_features
 from src.features.macro import add_macro_context_features
 from src.models.forecasting.sequence import build_sequence_samples, fit_sequence_scaler
-
-
-def _torch_available_in_subprocess() -> bool:
-    proc = subprocess.run(
-        [sys.executable, "-c", "import torch; print('ok')"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return proc.returncode == 0
+from tests.optional_dependencies import (
+    is_optional_dependency_runtime_failure,
+    optional_dependency_stack_available,
+)
 
 
 def _run_python_json(script: str) -> dict[str, object]:
@@ -33,7 +27,12 @@ def _run_python_json(script: str) -> dict[str, object]:
         check=False,
     )
     if proc.returncode != 0:
-        pytest.skip(f"torch runtime unavailable in subprocess: {proc.stderr.strip() or proc.stdout.strip()}")
+        if is_optional_dependency_runtime_failure(proc, modules=("torch",)):
+            pytest.skip(
+                f"torch runtime unavailable in subprocess: "
+                f"{proc.stderr.strip() or proc.stdout.strip()}"
+            )
+        raise AssertionError(proc.stderr or proc.stdout)
     return json.loads(proc.stdout)
 
 
@@ -138,7 +137,7 @@ def test_build_sequence_samples_respects_train_boundary_and_test_alignment() -> 
 
 
 def test_lstm_forecaster_oos_alignment_with_garch_overlay() -> None:
-    if not _torch_available_in_subprocess():
+    if not optional_dependency_stack_available("torch"):
         pytest.skip("torch is unavailable or unstable in this environment.")
     payload = _run_python_json(
         """
@@ -248,7 +247,7 @@ print(json.dumps({
 
 
 def test_patchtst_forecaster_quantile_outputs_are_aligned() -> None:
-    if not _torch_available_in_subprocess():
+    if not optional_dependency_stack_available("torch"):
         pytest.skip("torch is unavailable or unstable in this environment.")
     payload = _run_python_json(
         """
@@ -346,7 +345,7 @@ print(json.dumps({
 
 
 def test_tft_forecaster_exposes_variable_selection_importance() -> None:
-    if not _torch_available_in_subprocess():
+    if not optional_dependency_stack_available("torch"):
         pytest.skip("torch is unavailable or unstable in this environment.")
     payload = _run_python_json(
         """
@@ -448,7 +447,7 @@ print(json.dumps({
 
 
 def test_lstm_forecaster_rejects_short_sequence_sample_with_clear_error() -> None:
-    if not _torch_available_in_subprocess():
+    if not optional_dependency_stack_available("torch"):
         pytest.skip("torch is unavailable or unstable in this environment.")
     proc = subprocess.run(
         [
@@ -517,6 +516,6 @@ train_lstm_forecaster(
         check=False,
     )
     assert proc.returncode != 0
-    if "OMP: Error" in (proc.stderr or proc.stdout):
-        pytest.skip("torch/OpenMP runtime is unstable in this environment.")
+    if is_optional_dependency_runtime_failure(proc, modules=("torch",)):
+        pytest.skip("torch runtime is unavailable or unstable in this environment.")
     assert "train samples after sequence construction" in (proc.stderr or proc.stdout)

@@ -26,6 +26,7 @@ from src.evaluation.model_metrics import (
     empty_classification_metrics,
     empty_regression_metrics,
     empty_volatility_metrics,
+    fit_forecast_probability_scale,
     forecast_to_probability,
     regression_metrics,
     volatility_metrics,
@@ -184,10 +185,16 @@ def prepare_forecaster_inputs(
     )
     target_cfg = dict(model_cfg.get("target", {}) or {})
     target_kind = target_cfg.get("kind", "forward_return")
-    if target_kind not in {"forward_return", "future_return_regression", "triple_barrier", *REGRESSION_TARGET_KINDS}:
+    if target_kind not in {
+        "forward_return",
+        "future_return_regression",
+        "triple_barrier",
+        "directional_triple_barrier",
+        *REGRESSION_TARGET_KINDS,
+    }:
         raise ValueError(f"Unsupported target.kind: {target_kind}")
     out, label_col, fwd_col, target_meta = build_target(df=df, target_cfg=target_cfg)
-    if target_kind == "triple_barrier":
+    if target_kind in {"triple_barrier", "directional_triple_barrier"}:
         event_col = fwd_col
         regression_target_col = str(
             target_cfg.get("target_col")
@@ -198,7 +205,8 @@ def prepare_forecaster_inputs(
         )
         if regression_target_col not in out.columns:
             raise KeyError(
-                f"Configured triple_barrier regression target_col '{regression_target_col}' was not emitted."
+                f"Configured {target_kind} regression target_col "
+                f"'{regression_target_col}' was not emitted."
             )
         fwd_col = regression_target_col
         target_meta = dict(target_meta)
@@ -245,10 +253,10 @@ def prepare_forecaster_inputs(
     )
     if minimum_expected_features is not None:
         minimum_expected = int(minimum_expected_features)
-        if len(active_feature_cols) <= minimum_expected:
+        if len(active_feature_cols) < minimum_expected:
             raise ValueError(
                 "Resolved model feature count is below the configured integrity floor: "
-                f"{len(active_feature_cols)} <= minimum_expected_features={minimum_expected}."
+                f"{len(active_feature_cols)} < minimum_expected_features={minimum_expected}."
             )
     feature_selection_meta = describe_feature_set(
         active_feature_cols,
@@ -487,6 +495,7 @@ def train_forward_forecaster(
     target_distributions: list[dict[str, Any]] = []
     total_test_rows_without_prediction = 0
     folds_with_zero_predictions = 0
+    configured_prob_scale = model_cfg.get("prob_scale", model_params.get("prob_scale"))
 
     for split in splits:
         raw_train_idx = np.asarray(split.train_idx, dtype=int)
@@ -504,6 +513,8 @@ def train_forward_forecaster(
         total_trimmed_rows += trimmed_rows
 
         model_params_for_fold = dict(model_params)
+        if model_kind == "garch_forecaster":
+            model_params_for_fold["_target_horizon"] = target_horizon
         if model_cfg.get("diagnostics") is not None:
             model_params_for_fold["_diagnostics"] = dict(model_cfg.get("diagnostics", {}) or {})
 
@@ -516,6 +527,7 @@ def train_forward_forecaster(
             model_params_for_fold,
             runtime_meta,
         )
+        fold_extra_meta = dict(fold_extra_meta or {})
         model = fitted_model
 
         test_index = out.index[np.asarray(split.test_idx, dtype=int)]
@@ -543,13 +555,15 @@ def train_forward_forecaster(
 
         overlay_fold_meta: dict[str, Any] = {}
         if overlay_predictor is not None:
+            overlay_params_for_fold = dict(overlay_params)
+            overlay_params_for_fold["_target_horizon"] = target_horizon
             _, overlay_extra_cols, _, overlay_fold_meta = overlay_predictor(
                 out,
                 np.asarray(safe_train_idx, dtype=int),
                 np.asarray(split.test_idx, dtype=int),
                 [],
                 fwd_col,
-                overlay_params,
+                overlay_params_for_fold,
                 runtime_meta,
             )
             for col_name, values in dict(overlay_extra_cols or {}).items():
@@ -564,7 +578,18 @@ def train_forward_forecaster(
                 series = series.loc[series.index.intersection(test_index)]
                 extra_prediction_cols[col_name].loc[series.index] = series.astype("float32")
 
-        fold_scale = fold_extra_meta.get("prob_scale")
+        fold_scale = fit_forecast_probability_scale(
+            out.iloc[safe_train_idx][fwd_col],
+            configured_scale=(
+                float(configured_prob_scale)
+                if configured_prob_scale is not None
+                else None
+            ),
+        )
+        fold_extra_meta["prob_scale"] = float(fold_scale)
+        fold_extra_meta["prob_scale_source"] = (
+            "configured" if configured_prob_scale is not None else "train_target_std"
+        )
         fold_prob = forecast_to_probability(pred_ret_fold, scale=fold_scale)
         pred_prob.loc[fold_prob.index] = fold_prob
 
@@ -668,6 +693,65 @@ def train_forward_forecaster(
         fold_meta.append(fold_record)
         report_optuna_fold(model_kind, int(split.fold), dict(fold_record))
 
+    final_refit_meta: dict[str, Any] = {"enabled": False}
+    if bool(model_cfg.get("final_refit", True)):
+        labeled_positions = np.flatnonzero(out[fwd_col].notna().to_numpy(dtype=bool))
+        if len(labeled_positions) == 0:
+            raise ValueError("Final forecaster refit has no fully observed target rows.")
+        final_cutoff = int(labeled_positions[-1])
+        final_train_idx = np.arange(final_cutoff + 1, dtype=int)
+        final_model_params = dict(model_params)
+        if model_kind == "garch_forecaster":
+            final_model_params["_target_horizon"] = target_horizon
+        if model_cfg.get("diagnostics") is not None:
+            final_model_params["_diagnostics"] = {"enabled": False}
+        _, _, final_model, final_extra_meta = fold_predictor(
+            out,
+            final_train_idx,
+            np.asarray([], dtype=int),
+            feature_cols,
+            fwd_col,
+            final_model_params,
+            runtime_meta,
+        )
+        if final_model is None:
+            raise ValueError("Final forecaster refit did not return a fitted model.")
+        model = final_model
+        final_extra_meta = dict(final_extra_meta or {})
+        final_refit_meta = {
+            "enabled": True,
+            "train_start_position": 0,
+            "train_end_position": int(final_cutoff),
+            "train_end_timestamp": out.index[final_cutoff],
+            "train_rows_raw": int(len(final_train_idx)),
+            "labeled_rows": int(out.iloc[final_train_idx][fwd_col].notna().sum()),
+            "model_train_rows": int(
+                final_extra_meta.get(
+                    "model_train_rows",
+                    final_extra_meta.get(
+                        "lstm_train_samples",
+                        final_extra_meta.get(
+                            "patchtst_train_samples",
+                            final_extra_meta.get(
+                                "tft_train_samples",
+                                int(out.iloc[final_train_idx][fwd_col].notna().sum()),
+                            ),
+                        ),
+                    ),
+                )
+                or 0
+            ),
+            "target_horizon": int(target_horizon),
+            "prob_scale": fit_forecast_probability_scale(
+                out.iloc[final_train_idx][fwd_col],
+                configured_scale=(
+                    float(configured_prob_scale)
+                    if configured_prob_scale is not None
+                    else None
+                ),
+            ),
+        }
+
     if model is None:
         raise ValueError("Model training failed: no valid folds were trained.")
     if (oos_assignment_count > 1).any():
@@ -708,11 +792,23 @@ def train_forward_forecaster(
 
     meta = {
         "model_kind": model_kind,
+        "task_type": "regression",
         "runtime": runtime_meta,
         "feature_cols": feature_cols,
         "pred_ret_col": pred_ret_col,
         "pred_prob_col": pred_prob_col,
         "pred_is_oos_col": pred_is_oos_col,
+        "prob_scale": fit_forecast_probability_scale(
+            out[fwd_col],
+            configured_scale=(
+                float(configured_prob_scale)
+                if configured_prob_scale is not None
+                else None
+            ),
+        ),
+        "prob_scale_source": (
+            "configured" if configured_prob_scale is not None else "full_refit_target_std"
+        ),
         "fwd_col": fwd_col,
         "split_method": split_meta["split_method"],
         "split_index": int(splits[0].test_start),
@@ -771,6 +867,7 @@ def train_forward_forecaster(
             "target_horizon": target_horizon,
             "total_trimmed_train_rows": int(total_trimmed_rows),
         },
+        "final_refit": final_refit_meta,
     }
     if model_kind == "chronos_2_forecaster" and fold_meta:
         first_fold = fold_meta[0]

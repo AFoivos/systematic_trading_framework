@@ -7,7 +7,7 @@ import pandas as pd
 from src.execution.broker_base import BrokerBase
 from src.execution.exceptions import OrderRejected
 from src.execution.models import AccountSnapshot, PriceTick
-from src.execution.mt5_connector import MT5Connector
+from src.execution.mt5_connector import MT5Connector, MT5ConnectorError, MT5CredentialsError
 
 
 def _attr(obj: Any, name: str, default: Any = None) -> Any:
@@ -23,21 +23,20 @@ class MT5Execution(BrokerBase):
 
     def __init__(self, config: Mapping[str, Any], *, connector: MT5Connector | None = None) -> None:
         self.config = dict(config)
+        self.execution_mode = str(self.config.get("mode", "dry_run")).lower()
         mt5_cfg = dict(self.config.get("mt5", self.config) or {})
         self.connector = connector or MT5Connector(terminal_path=mt5_cfg.get("terminal_path"))
         self._connected = False
 
     def connect(self) -> None:
         mt5_cfg = dict(self.config.get("mt5", self.config) or {})
+        _reject_plaintext_credentials(mt5_cfg)
         self.connector.initialize()
-        if all(mt5_cfg.get(key) for key in ("login", "password", "server")):
-            self.connector.login_from_mapping(mt5_cfg)
-        else:
-            self.connector.login_from_env(
-                login_env=str(mt5_cfg.get("login_env", "MT5_LOGIN")),
-                password_env=str(mt5_cfg.get("password_env", "MT5_PASSWORD")),
-                server_env=str(mt5_cfg.get("server_env", "MT5_SERVER")),
-            )
+        self.connector.login_from_env(
+            login_env=str(mt5_cfg.get("login_env", "MT5_LOGIN")),
+            password_env=str(mt5_cfg.get("password_env", "MT5_PASSWORD")),
+            server_env=str(mt5_cfg.get("server_env", "MT5_SERVER")),
+        )
         self._connected = True
 
     def disconnect(self) -> None:
@@ -70,9 +69,13 @@ class MT5Execution(BrokerBase):
     def get_orders(self) -> list[Any]:
         orders_get = getattr(self.connector.mt5, "orders_get", None)
         if orders_get is None:
-            return []
+            raise MT5ConnectorError(
+                "MT5 orders_get is unavailable; pending-order state is unknown."
+            )
         raw = orders_get()
-        return list(raw or [])
+        if raw is None:
+            raise MT5ConnectorError(f"MT5 orders_get failed: {self.connector.last_error()}")
+        return list(raw)
 
     def get_symbol_info(self, symbol: str) -> Any:
         return self.connector.symbol_info(symbol)
@@ -95,6 +98,7 @@ class MT5Execution(BrokerBase):
         return out[["datetime", "open", "high", "low", "close", "volume"]]
 
     def place_market_order(self, **kwargs: Any) -> Any:
+        self._require_mutations_enabled()
         request = self.connector.build_market_order_request(**kwargs)
         result = self.connector.order_send(request)
         if not self.connector.is_successful_order(result):
@@ -102,6 +106,7 @@ class MT5Execution(BrokerBase):
         return result
 
     def place_limit_order(self, **_: Any) -> Any:
+        self._require_mutations_enabled()
         kwargs = dict(_)
         mt5 = self.connector.mt5
         side = str(kwargs.get("side", "")).lower()
@@ -130,6 +135,7 @@ class MT5Execution(BrokerBase):
         return result
 
     def modify_order(self, order_id: str, **kwargs: Any) -> Any:
+        self._require_mutations_enabled()
         mt5 = self.connector.mt5
         request = {
             "action": getattr(mt5, "TRADE_ACTION_MODIFY"),
@@ -144,6 +150,7 @@ class MT5Execution(BrokerBase):
         return result
 
     def cancel_order(self, order_id: str) -> Any:
+        self._require_mutations_enabled()
         mt5 = self.connector.mt5
         request = {"action": getattr(mt5, "TRADE_ACTION_REMOVE"), "order": int(order_id)}
         result = self.connector.order_send(request)
@@ -152,6 +159,7 @@ class MT5Execution(BrokerBase):
         return result
 
     def close_position(self, symbol: str, **kwargs: Any) -> Any:
+        self._require_mutations_enabled()
         side_filter = str(kwargs.get("side", "")).lower()
         max_volume = _optional_float(kwargs.get("volume", kwargs.get("units")))
         results: list[Any] = []
@@ -165,6 +173,7 @@ class MT5Execution(BrokerBase):
         return results
 
     def close_all_positions(self) -> list[Any]:
+        self._require_mutations_enabled()
         results: list[Any] = []
         for position in self.get_positions():
             result = self._close_mt5_position(position, max_volume=None)
@@ -202,6 +211,12 @@ class MT5Execution(BrokerBase):
             raise OrderRejected(f"MT5 position close rejected: {_object_to_dict(result)}")
         return result
 
+    def _require_mutations_enabled(self) -> None:
+        if self.execution_mode not in {"demo_mt5", "live_mt5"}:
+            raise OrderRejected(
+                f"MT5 mutation blocked in execution mode {self.execution_mode!r}."
+            )
+
 
 def _optional_float(value: Any) -> float | None:
     if value in (None, ""):
@@ -224,6 +239,15 @@ def _object_to_dict(obj: Any) -> dict[str, Any]:
         for name in dir(obj)
         if not name.startswith("_") and not callable(getattr(obj, name))
     }
+
+
+def _reject_plaintext_credentials(config: Mapping[str, Any]) -> None:
+    present = [key for key in ("login", "password", "server") if config.get(key) not in (None, "")]
+    if present:
+        raise MT5CredentialsError(
+            "Plaintext MT5 credential fields are not supported. "
+            "Use login_env/password_env/server_env and an external secret store."
+        )
 
 
 __all__ = ["MT5Execution"]

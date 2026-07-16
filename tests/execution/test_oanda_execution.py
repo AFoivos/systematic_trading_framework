@@ -6,7 +6,14 @@ import pandas as pd
 import pytest
 import yaml
 
-from src.execution import AuthenticationError, OandaExecution, RateLimitExceeded, create_execution_engine
+from src.execution import (
+    AuthenticationError,
+    ConnectionLost,
+    DryRunExecution,
+    OandaExecution,
+    RateLimitExceeded,
+    create_execution_engine,
+)
 from src.execution.broker_base import BrokerBase
 from src.execution.oanda_execution import OandaTransport
 
@@ -134,7 +141,18 @@ def test_symbol_mapping_and_latest_price() -> None:
 
 
 def test_market_order_payload_supports_dependent_orders() -> None:
-    transport = FakeOandaTransport([{"orderCreateTransaction": {"id": "11"}, "orderFillTransaction": {"id": "12"}}])
+    transport = FakeOandaTransport(
+        [
+            {
+                "orderCreateTransaction": {"id": "11"},
+                "orderFillTransaction": {
+                    "id": "12",
+                    "orderID": "11",
+                    "tradeOpened": {"tradeID": "99"},
+                },
+            }
+        ]
+    )
     broker = OandaExecution(_config(), transport=transport)
 
     result = broker.place_market_order(
@@ -154,6 +172,9 @@ def test_market_order_payload_supports_dependent_orders() -> None:
     assert order["takeProfitOnFill"] == {"price": "1.2"}
     assert order["stopLossOnFill"] == {"price": "1.1"}
     assert order["trailingStopLossOnFill"] == {"distance": "0.01"}
+    assert order["clientExtensions"]["id"].startswith("stf-")
+    assert result.order_id == "11"
+    assert result.trade_id == "99"
 
 
 def test_limit_order_payload_uses_negative_units_for_sell() -> None:
@@ -197,6 +218,37 @@ def test_reconnect_retries_connection_loss() -> None:
     assert sleeps
 
 
+def test_mutation_connection_loss_is_not_retried() -> None:
+    transport = FakeOandaTransport(
+        [
+            {"_http_status": 503, "errorMessage": "outcome unknown"},
+            {"orderCreateTransaction": {"id": "should-not-be-used"}},
+        ]
+    )
+    broker = OandaExecution(_config(max_retry=3), transport=transport, sleep_fn=lambda _: None)
+
+    with pytest.raises(ConnectionLost, match="outcome is unknown"):
+        broker.place_market_order(
+            symbol="EURUSD",
+            side="buy",
+            units=1000,
+            client_order_id="test-idempotency-key",
+        )
+
+    assert len(transport.calls) == 1
+    assert (
+        transport.calls[0]["json_body"]["order"]["clientExtensions"]["id"]
+        == "test-idempotency-key"
+    )
+
+
+def test_empty_success_payload_is_not_accepted() -> None:
+    broker = OandaExecution(_config(), transport=FakeOandaTransport([{}]))
+
+    with pytest.raises(ConnectionLost, match="no confirmed transaction"):
+        broker.place_market_order(symbol="EURUSD", side="buy", units=1000)
+
+
 def test_rate_limit_retries_then_raises() -> None:
     transport = FakeOandaTransport(
         [
@@ -228,3 +280,24 @@ execution:
 
     assert isinstance(broker, BrokerBase)
     assert isinstance(broker, OandaExecution)
+
+
+def test_dry_run_factory_uses_non_routing_adapter() -> None:
+    broker = create_execution_engine(
+        {
+            "execution": {
+                "mode": "dry_run",
+                "mt5": {
+                    "login_env": "MT5_LOGIN",
+                    "password_env": "MT5_PASSWORD",
+                    "server_env": "MT5_SERVER",
+                },
+            }
+        }
+    )
+
+    result = broker.place_market_order(symbol="EURUSD", side="buy", volume=1.0)
+
+    assert isinstance(broker, DryRunExecution)
+    assert result.status == "dry_run"
+    assert result.raw["sent"] is False

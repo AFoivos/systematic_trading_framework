@@ -1,5 +1,6 @@
 from .broker_base import BrokerBase
 from .broker_factory import create_execution_engine
+from .dry_run_execution import DryRunExecution
 from .exceptions import (
     AuthenticationError,
     BrokerError,
@@ -42,6 +43,7 @@ __all__ = [
     "BrokerOrderRejected",
     "BrokerOrderResult",
     "ConnectionLost",
+    "DryRunExecution",
     "MT5Connector",
     "MT5ConnectorError",
     "MT5CredentialsError",

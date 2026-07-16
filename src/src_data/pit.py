@@ -18,7 +18,7 @@ def align_ohlcv_timestamps(
     *,
     source_timezone: str = "UTC",
     output_timezone: str = "UTC",
-    normalize_daily: bool = True,
+    normalize_daily: bool = False,
     duplicate_policy: str = "last",
 ) -> pd.DataFrame:
     """
@@ -95,6 +95,11 @@ def apply_corporate_actions_policy(
                 out[col] = out[col].astype(float) * factor
         out["close"] = adj_close
     elif policy == "adj_close_replace_close":
+        # Replacing only close creates impossible bars around splits/dividends.
+        # Apply the close-derived factor to the complete OHLC geometry.
+        for col in price_cols:
+            if col in out.columns:
+                out[col] = out[col].astype(float) * factor
         out["close"] = adj_close
 
     out["pit_adjustment_factor"] = factor
@@ -137,18 +142,30 @@ def load_universe_snapshot(path: str | Path) -> pd.DataFrame:
 
     out = df.copy()
     out["symbol"] = out["symbol"].astype(str)
-    out["effective_from"] = pd.to_datetime(out["effective_from"], errors="coerce")
+    out["effective_from"] = pd.to_datetime(
+        out["effective_from"],
+        errors="coerce",
+        utc=True,
+    )
     if out["effective_from"].isna().any():
         raise ValueError("Universe snapshot has invalid 'effective_from' values.")
 
     if "effective_to" in out.columns:
         raw_effective_to = out["effective_to"].copy()
-        out["effective_to"] = pd.to_datetime(out["effective_to"], errors="coerce")
+        out["effective_to"] = pd.to_datetime(
+            out["effective_to"],
+            errors="coerce",
+            utc=True,
+        )
         invalid_effective_to = raw_effective_to.notna() & out["effective_to"].isna()
         if invalid_effective_to.any():
             raise ValueError("Universe snapshot has invalid 'effective_to' values.")
     else:
-        out["effective_to"] = pd.NaT
+        out["effective_to"] = pd.Series(
+            pd.NaT,
+            index=out.index,
+            dtype="datetime64[ns, UTC]",
+        )
 
     return out
 
@@ -160,8 +177,12 @@ def symbols_active_in_snapshot(snapshot_df: pd.DataFrame, as_of: str | pd.Timest
     easier to test.
     """
     ts = pd.Timestamp(as_of)
-    effective_from = snapshot_df["effective_from"]
-    effective_to = snapshot_df["effective_to"]
+    if ts.tzinfo is None:
+        ts = ts.tz_localize("UTC")
+    else:
+        ts = ts.tz_convert("UTC")
+    effective_from = pd.to_datetime(snapshot_df["effective_from"], errors="coerce", utc=True)
+    effective_to = pd.to_datetime(snapshot_df["effective_to"], errors="coerce", utc=True)
 
     active = snapshot_df.loc[
         (effective_from <= ts) & (effective_to.isna() | (effective_to >= ts)),
@@ -192,6 +213,7 @@ def symbol_active_mask_over_time(
     *,
     symbol: str,
     index: pd.DatetimeIndex,
+    index_timezone: str = "UTC",
 ) -> pd.Series:
     """
     Build a per-timestamp membership mask for one symbol from a universe snapshot so PIT
@@ -201,16 +223,31 @@ def symbol_active_mask_over_time(
         raise TypeError("index must be a pandas DatetimeIndex.")
 
     idx = pd.DatetimeIndex(pd.to_datetime(index, errors="raise"))
+    comparison_idx = (
+        idx.tz_localize(index_timezone).tz_convert("UTC")
+        if idx.tz is None
+        else idx.tz_convert("UTC")
+    )
     symbol_rows = snapshot_df.loc[snapshot_df["symbol"].astype(str) == str(symbol)]
     mask = pd.Series(False, index=idx, dtype=bool)
     if symbol_rows.empty or mask.empty:
         return mask
 
     for _, row in symbol_rows.iterrows():
-        interval = row["effective_from"] <= idx
+        effective_from = pd.Timestamp(row["effective_from"])
+        if effective_from.tzinfo is None:
+            effective_from = effective_from.tz_localize("UTC")
+        else:
+            effective_from = effective_from.tz_convert("UTC")
+        interval = effective_from <= comparison_idx
         effective_to = row["effective_to"]
         if pd.notna(effective_to):
-            interval = interval & (idx <= effective_to)
+            effective_to = pd.Timestamp(effective_to)
+            if effective_to.tzinfo is None:
+                effective_to = effective_to.tz_localize("UTC")
+            else:
+                effective_to = effective_to.tz_convert("UTC")
+            interval = interval & (comparison_idx <= effective_to)
         mask.loc[interval] = True
     return mask
 
@@ -221,6 +258,7 @@ def enforce_symbol_membership_over_time(
     snapshot_df: pd.DataFrame,
     symbol: str,
     inactive_policy: str = "raise",
+    index_timezone: str = "UTC",
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """
     Enforce symbol membership across the entire dataframe index using the universe snapshot.
@@ -234,6 +272,7 @@ def enforce_symbol_membership_over_time(
         snapshot_df,
         symbol=symbol,
         index=pd.DatetimeIndex(df.index),
+        index_timezone=index_timezone,
     )
     inactive_mask = ~active_mask
     inactive_rows = int(inactive_mask.sum())
@@ -278,7 +317,7 @@ def apply_pit_hardening(
         df,
         source_timezone=str(ts_cfg.get("source_timezone", "UTC")),
         output_timezone=str(ts_cfg.get("output_timezone", "UTC")),
-        normalize_daily=bool(ts_cfg.get("normalize_daily", True)),
+        normalize_daily=bool(ts_cfg.get("normalize_daily", False)),
         duplicate_policy=str(ts_cfg.get("duplicate_policy", "last")),
     )
     out, corp_meta = apply_corporate_actions_policy(
@@ -306,6 +345,7 @@ def apply_pit_hardening(
                 snapshot_df=snapshot_df,
                 symbol=symbol,
                 inactive_policy=str(universe_cfg.get("inactive_policy", "raise")),
+                index_timezone=str(ts_cfg.get("output_timezone", "UTC")),
             )
             universe_meta = {
                 "path": str(_resolve_snapshot_path(snapshot_path)),
@@ -317,7 +357,7 @@ def apply_pit_hardening(
         "timestamp_alignment": {
             "source_timezone": str(ts_cfg.get("source_timezone", "UTC")),
             "output_timezone": str(ts_cfg.get("output_timezone", "UTC")),
-            "normalize_daily": bool(ts_cfg.get("normalize_daily", True)),
+            "normalize_daily": bool(ts_cfg.get("normalize_daily", False)),
             "duplicate_policy": str(ts_cfg.get("duplicate_policy", "last")),
         },
         "corporate_actions": corp_meta,

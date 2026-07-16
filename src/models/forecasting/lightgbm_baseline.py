@@ -122,10 +122,22 @@ def prediction_to_signal(
 
 
 def train_test_split_time(
-    df: pd.DataFrame, train_frac: float = 0.7
+    df: pd.DataFrame,
+    train_frac: float = 0.7,
+    *,
+    target_horizon: int = 0,
+    embargo_bars: int = 0,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Time-ordered split (no shuffling)."""
+    """Time-ordered split with an explicit forward-label purge and embargo."""
     if not 0.0 < train_frac < 1.0:
         raise ValueError("train_frac must be in (0,1)")
+    if isinstance(target_horizon, bool) or int(target_horizon) < 0:
+        raise ValueError("target_horizon must be a non-negative integer")
+    if isinstance(embargo_bars, bool) or int(embargo_bars) < 0:
+        raise ValueError("embargo_bars must be a non-negative integer")
     split = int(len(df) * train_frac)
-    return df.iloc[:split], df.iloc[split:]
+    purge = int(target_horizon)
+    embargo = int(embargo_bars)
+    train_end = max(split - purge, 0)
+    test_start = min(split + embargo, len(df))
+    return df.iloc[:train_end], df.iloc[test_start:]

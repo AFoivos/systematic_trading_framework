@@ -47,9 +47,25 @@ def binary_classification_metrics(
 ) -> dict[str, float | int | None]:
     if y_true.empty or pred_prob.empty:
         return empty_classification_metrics()
+    if y_true.index.has_duplicates or pred_prob.index.has_duplicates:
+        raise ValueError("Binary classification metric inputs must have unique indexes.")
+    common_index = y_true.index.intersection(pred_prob.index)
+    if len(common_index) == 0:
+        raise ValueError("Binary classification metric inputs have no overlapping index.")
+    aligned = pd.concat(
+        [
+            y_true.reindex(common_index).rename("y_true"),
+            pred_prob.reindex(common_index).rename("pred_prob"),
+        ],
+        axis=1,
+    ).dropna()
+    if aligned.empty:
+        return empty_classification_metrics()
 
-    y = y_true.astype(int).to_numpy(dtype=int, copy=False)
-    prob = pred_prob.astype(float).to_numpy(dtype=float, copy=False)
+    y = aligned["y_true"].astype(int).to_numpy(dtype=int, copy=False)
+    prob = aligned["pred_prob"].astype(float).to_numpy(dtype=float, copy=False)
+    if not np.isfinite(prob).all() or bool(((prob < 0.0) | (prob > 1.0)).any()):
+        raise ValueError("Binary classification probabilities must be finite and within [0, 1].")
     pred_label = (prob >= 0.5).astype(int)
 
     metrics: dict[str, float | int | None] = {
@@ -141,14 +157,30 @@ def volatility_metrics(
     }
 
 
+def fit_forecast_probability_scale(
+    train_target: pd.Series,
+    *,
+    configured_scale: float | None = None,
+) -> float:
+    if configured_scale is not None:
+        scale = float(abs(configured_scale))
+        if not np.isfinite(scale) or scale <= 1e-8:
+            raise ValueError("Configured forecast probability scale must be finite and > 1e-8.")
+        return scale
+    values = train_target.astype(float).replace([np.inf, -np.inf], np.nan).dropna()
+    scale = float(values.std(ddof=1)) if len(values) >= 2 else np.nan
+    return scale if np.isfinite(scale) and scale > 1e-8 else 1.0
+
+
 def forecast_to_probability(prediction: pd.Series, *, scale: float | None) -> pd.Series:
     if prediction.empty:
         return pd.Series(dtype="float32", index=prediction.index)
-    denom = float(abs(scale)) if scale is not None else 0.0
+    denom = float(abs(scale)) if scale is not None else np.nan
     if not np.isfinite(denom) or denom <= 1e-8:
-        denom = float(np.nanstd(prediction.to_numpy(dtype=float), ddof=1))
-    if not np.isfinite(denom) or denom <= 1e-8:
-        denom = 1.0
+        raise ValueError(
+            "forecast_to_probability requires a finite train-fitted scale; "
+            "inference-batch scaling is forbidden."
+        )
     logits = np.clip(prediction.astype(float).to_numpy(dtype=float) / denom, -25.0, 25.0)
     probs = 1.0 / (1.0 + np.exp(-logits))
     return pd.Series(probs.astype("float32"), index=prediction.index, dtype="float32")
@@ -159,6 +191,7 @@ __all__ = [
     "empty_classification_metrics",
     "empty_regression_metrics",
     "empty_volatility_metrics",
+    "fit_forecast_probability_scale",
     "forecast_to_probability",
     "regression_metrics",
     "volatility_metrics",

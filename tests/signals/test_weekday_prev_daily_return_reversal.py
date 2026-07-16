@@ -66,9 +66,12 @@ def test_weekday_reversal_is_available_from_signal_registry() -> None:
     assert get_signal_fn("weekday_prev_daily_return_reversal") is weekday_prev_daily_return_reversal_signal
 
 
-def test_codex_spx500_thursday_reversal_config_loads() -> None:
+def test_spx500_thursday_reversal_config_loads() -> None:
     cfg = load_experiment_config(
-        Path("config/experiments/codex/spx500_30m_thursday_weak_prevday_reversal_v1.yaml")
+        Path(
+            "config/experiments/thursday_weak_prevday_reversal/"
+            "spx500_30m_thursday_weak_prevday_reversal_v1.yaml"
+        )
     )
 
     assert cfg["model"]["kind"] == "none"

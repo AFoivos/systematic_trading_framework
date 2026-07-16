@@ -170,10 +170,20 @@ def test_trend_slope_volatility_can_be_composed_from_helpers() -> None:
                 "output_col": "trend_slope_volatility_used_12",
             },
             "ratio": {
-                "numerator_col": "trend_slope_12",
-                "denominator_col": "trend_slope_volatility_used_12",
-                "eps": 0.0,
-                "output_col": "trend_slope_vol_ratio_12",
+                "items": [
+                    {
+                        "numerator_col": "trend_slope_12",
+                        "denominator_col": "close",
+                        "eps": 0.0,
+                        "output_col": "trend_fractional_slope_12",
+                    },
+                    {
+                        "numerator_col": "trend_fractional_slope_12",
+                        "denominator_col": "trend_slope_volatility_used_12",
+                        "eps": 0.0,
+                        "output_col": "trend_slope_vol_ratio_12",
+                    },
+                ],
             },
             "rising_flag": {
                 "source_col": "trend_slope_vol_ratio_12",

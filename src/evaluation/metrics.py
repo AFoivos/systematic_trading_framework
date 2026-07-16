@@ -13,7 +13,21 @@ def equity_curve_from_returns(returns: pd.Series) -> pd.Series:
     test.
     """
     rets = returns.astype(float).fillna(0.0)
-    equity = (1.0 + rets).cumprod()
+    values: list[float] = []
+    capital = 1.0
+    bankrupt = False
+    for value in rets.to_numpy(dtype=float):
+        if bankrupt:
+            values.append(0.0)
+            continue
+        factor = 1.0 + float(value)
+        if not np.isfinite(factor) or factor <= 0.0:
+            capital = 0.0
+            bankrupt = True
+        else:
+            capital *= factor
+        values.append(float(capital))
+    equity = pd.Series(values, index=rets.index, dtype=float)
     equity.name = "equity"
     return equity
 
@@ -25,7 +39,8 @@ def max_drawdown(equity: pd.Series) -> float:
     """
     if equity.empty:
         return 0.0
-    dd = equity / equity.cummax() - 1.0
+    running_peak = equity.astype(float).cummax().clip(lower=1.0)
+    dd = equity.astype(float) / running_peak - 1.0
     return float(dd.min())
 
 
@@ -54,14 +69,28 @@ def annualized_volatility(returns: pd.Series, periods_per_year: int = 252) -> fl
     return float(rets.std(ddof=1) * np.sqrt(periods_per_year))
 
 
-def sharpe_ratio(returns: pd.Series, periods_per_year: int = 252) -> float:
+def sharpe_ratio(
+    returns: pd.Series,
+    periods_per_year: int = 252,
+    risk_free_rate: float = 0.0,
+) -> float:
     """
     Handle sharpe ratio inside the evaluation layer. The helper isolates one focused
     responsibility so the surrounding code remains modular, readable, and easier to test.
     """
-    ann_ret = annualized_return(returns, periods_per_year=periods_per_year)
-    ann_vol = annualized_volatility(returns, periods_per_year=periods_per_year)
-    return float(ann_ret / ann_vol) if ann_vol > 0 else 0.0
+    rets = returns.dropna().astype(float)
+    if len(rets) < 2:
+        return 0.0
+    if periods_per_year <= 0:
+        raise ValueError("periods_per_year must be positive.")
+    if risk_free_rate <= -1.0:
+        raise ValueError("risk_free_rate must be greater than -1.")
+    period_risk_free = (1.0 + float(risk_free_rate)) ** (1.0 / float(periods_per_year)) - 1.0
+    excess = rets - period_risk_free
+    volatility = float(excess.std(ddof=1))
+    if not np.isfinite(volatility) or volatility <= 0.0:
+        return 0.0
+    return float(np.sqrt(float(periods_per_year)) * excess.mean() / volatility)
 
 
 def downside_volatility(
@@ -91,13 +120,17 @@ def sortino_ratio(
     Handle sortino ratio inside the evaluation layer. The helper isolates one focused
     responsibility so the surrounding code remains modular, readable, and easier to test.
     """
-    ann_ret = annualized_return(returns, periods_per_year=periods_per_year)
+    rets = returns.dropna().astype(float)
+    if rets.empty:
+        return 0.0
+    excess_mean = float((rets - float(minimum_acceptable_return)).mean())
     down_vol = downside_volatility(
-        returns,
+        rets,
         periods_per_year=periods_per_year,
         minimum_acceptable_return=minimum_acceptable_return,
     )
-    return float(ann_ret / down_vol) if down_vol > 0 else 0.0
+    annualized_excess = excess_mean * float(periods_per_year)
+    return float(annualized_excess / down_vol) if down_vol > 0 else 0.0
 
 
 def calmar_ratio(returns: pd.Series, periods_per_year: int = 252) -> float:
@@ -121,7 +154,7 @@ def profit_factor(returns: pd.Series) -> float:
     gross_profit = float(rets[rets > 0].sum())
     gross_loss = float((-rets[rets < 0]).sum())
     if gross_loss <= 0:
-        return 0.0
+        return float("inf") if gross_profit > 0.0 else 0.0
     return float(gross_profit / gross_loss)
 
 
@@ -307,16 +340,22 @@ def cost_attribution(
     responsibility so the surrounding code remains modular, readable, and easier to test.
     """
     net = net_returns.dropna().astype(float)
-    gross = gross_returns.dropna().astype(float) if gross_returns is not None else None
     c = costs.dropna().astype(float) if costs is not None else None
+    if gross_returns is not None:
+        gross = gross_returns.dropna().astype(float)
+    elif c is not None:
+        aligned_net, aligned_cost = net.align(c, join="outer", fill_value=0.0)
+        gross = aligned_net + aligned_cost
+    else:
+        gross = net.copy()
 
-    gross_pnl = float(gross.sum()) if gross is not None and not gross.empty else float(net.sum())
-    net_pnl = float(net.sum()) if not net.empty else 0.0
+    gross_pnl = float(equity_curve_from_returns(gross).iloc[-1] - 1.0) if not gross.empty else 0.0
+    net_pnl = float(equity_curve_from_returns(net).iloc[-1] - 1.0) if not net.empty else 0.0
     total_cost = float(c.sum()) if c is not None and not c.empty else 0.0
     cost_drag = gross_pnl - net_pnl
 
     if abs(gross_pnl) > 1e-12:
-        cost_to_gross_pnl = float(total_cost / abs(gross_pnl))
+        cost_to_gross_pnl = float(cost_drag / abs(gross_pnl))
     else:
         cost_to_gross_pnl = 0.0
 
@@ -326,6 +365,9 @@ def cost_attribution(
         "total_cost": total_cost,
         "cost_drag": float(cost_drag),
         "cost_to_gross_pnl": cost_to_gross_pnl,
+        "gross_return_sum": float(gross.sum()) if not gross.empty else 0.0,
+        "net_return_sum": float(net.sum()) if not net.empty else 0.0,
+        "cost_return_sum": total_cost,
     }
 
 
@@ -382,12 +424,13 @@ def compute_backtest_metrics(
             "cumulative_return": cumulative,
             "annualized_return": annualized,
             "annualized_vol": annualized_vol,
-            "sharpe": float(annualized / annualized_vol) if annualized_vol > 0.0 else 0.0,
-            "sortino": float(annualized / downside) if downside > 0.0 else 0.0,
+            "sharpe": sharpe_ratio(metric_returns, periods_per_year=365.25),
+            "sortino": sortino_ratio(metric_returns, periods_per_year=365.25),
             "calmar": float(annualized / abs(maximum_drawdown)) if maximum_drawdown < 0.0 else 0.0,
             "max_drawdown": maximum_drawdown,
-            "profit_factor": profit_factor(metric_returns),
-            "hit_rate": hit_rate(metric_returns),
+            "profit_factor": profit_factor(rets),
+            "hit_rate": hit_rate(rets),
+            "metric_scope": "bar_returns",
             "annualization_mode": annualization_mode,
             "annualization_elapsed_days": elapsed_days,
             "annualization_daily_observations": float(len(metric_returns)),
@@ -405,6 +448,7 @@ def compute_backtest_metrics(
             "profit_factor": profit_factor(rets),
             "hit_rate": hit_rate(rets),
             "annualization_mode": annualization_mode,
+            "metric_scope": "bar_returns",
         }
     metrics.update(turnover_stats(turnover))
     metrics.update(

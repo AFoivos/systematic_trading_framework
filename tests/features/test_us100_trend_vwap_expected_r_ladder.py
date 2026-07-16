@@ -30,6 +30,10 @@ def test_all_eleven_yaml_configs_parse_and_have_cumulative_explicit_features() -
         assert cfg["model"]["kind"] == "lightgbm_regressor"
         assert cfg["model"]["feature_cols"] == model_features_for_stage(stage)
         assert len(cfg["model"]["feature_cols"]) == len(set(cfg["model"]["feature_cols"]))
+        feature_params = cfg["features"][-1]["params"]
+        assert feature_params["session_open"] == "09:30"
+        assert feature_params["session_close"] == "16:00"
+        assert feature_params["timestamp_convention"] == "bar_start"
         assert "trend_vwap_candidate_side" not in cfg["model"]["feature_cols"]
         assert "trend_vwap_base_candidate" not in cfg["model"]["feature_cols"]
         expected_threshold = 0.25 if stage >= 9 else 0.0
@@ -171,10 +175,10 @@ def _execution_frame() -> pd.DataFrame:
     )
 
 
-def test_next_open_gap_filter_rejects_gap_over_point_three_five_atr() -> None:
+def test_next_open_gap_filter_rejects_adverse_long_gap_over_point_three_five_atr() -> None:
     frame = _execution_frame().iloc[:5].copy()
     frame["signal"] = [1.0, 0.0, 0.0, 0.0, 0.0]
-    frame.iloc[1, frame.columns.get_loc("open")] = 100.36
+    frame.iloc[1, frame.columns.get_loc("open")] = 99.64
     result = run_manual_barrier_backtest(
         frame,
         signal_col="signal",
@@ -263,6 +267,18 @@ def test_daily_and_weekly_event_risk_guards_use_only_prior_realized_returns() ->
         index=pd.DatetimeIndex(["2024-01-08 15:00Z", "2024-01-08 15:30Z", "2024-01-09 15:00Z"]),
     )
     multiplier, reason = event_risk_guard_multiplier(weekly, at_position=2, config=config)
+    assert multiplier == 0.0
+    assert reason == "weekly_stop"
+
+    weekly_retracement = pd.Series(
+        [0.10, -0.0455, 0.0],
+        index=pd.DatetimeIndex(["2024-01-08 15:00Z", "2024-01-08 15:30Z", "2024-01-09 15:00Z"]),
+    )
+    multiplier, reason = event_risk_guard_multiplier(
+        weekly_retracement,
+        at_position=2,
+        config=config,
+    )
     assert multiplier == 0.0
     assert reason == "weekly_stop"
 

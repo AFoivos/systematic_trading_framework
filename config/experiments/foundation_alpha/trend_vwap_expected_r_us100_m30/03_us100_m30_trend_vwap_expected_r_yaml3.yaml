@@ -36,6 +36,9 @@ features:
   params:
     stage: 3
     timezone: America/New_York
+    session_open: 09:30
+    session_close: '16:00'
+    timestamp_convention: bar_start
   enabled: true
 model:
   kind: lightgbm_regressor

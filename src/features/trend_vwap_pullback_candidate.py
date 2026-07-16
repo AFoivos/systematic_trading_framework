@@ -13,7 +13,6 @@ the next bar open.
 
 from __future__ import annotations
 
-from collections import deque
 from numbers import Integral
 
 import numpy as np
@@ -48,46 +47,20 @@ def _safe_divide(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
 
 def _shifted_zscore(values: pd.Series, window: int) -> pd.Series:
     history = pd.to_numeric(values, errors="coerce").astype(float)
-    if history.isna().any():
-        result = np.full(len(history), np.nan, dtype=float)
-        valid_history: deque[float] = deque(maxlen=window)
-        for position, value in enumerate(history.to_numpy(dtype=float)):
-            if not np.isfinite(value):
-                continue
-            if len(valid_history) == window:
-                sample = np.fromiter(valid_history, dtype=float, count=window)
-                std = float(sample.std(ddof=1))
-                if std > _EPSILON:
-                    result[position] = (value - float(sample.mean())) / std
-            valid_history.append(float(value))
-        return pd.Series(result, index=values.index, dtype=float)
-    mean = history.rolling(window, min_periods=window).mean().shift(1)
-    std = history.rolling(window, min_periods=window).std(ddof=1).shift(1)
+    prior_rows = history.shift(1)
+    mean = prior_rows.rolling(window, min_periods=window).mean()
+    std = prior_rows.rolling(window, min_periods=window).std(ddof=1)
     return _safe_divide(history - mean, std)
 
 
 def _shifted_robust_zscore(values: pd.Series, window: int) -> pd.Series:
     history = pd.to_numeric(values, errors="coerce").astype(float)
-    if history.isna().any():
-        result = np.full(len(history), np.nan, dtype=float)
-        valid_history: deque[float] = deque(maxlen=window)
-        for position, value in enumerate(history.to_numpy(dtype=float)):
-            if not np.isfinite(value):
-                continue
-            if len(valid_history) == window:
-                sample = np.fromiter(valid_history, dtype=float, count=window)
-                median = float(np.median(sample))
-                mad = float(np.median(np.abs(sample - median)))
-                scale = 1.4826 * mad
-                if scale > _EPSILON:
-                    result[position] = (value - median) / scale
-            valid_history.append(float(value))
-        return pd.Series(result, index=values.index, dtype=float)
-    median = history.rolling(window, min_periods=window).median().shift(1)
-    mad = history.rolling(window, min_periods=window).apply(
+    prior_rows = history.shift(1)
+    median = prior_rows.rolling(window, min_periods=window).median()
+    mad = prior_rows.rolling(window, min_periods=window).apply(
         lambda sample: float(np.median(np.abs(sample - np.median(sample)))),
         raw=True,
-    ).shift(1)
+    )
     return _safe_divide(history - median, 1.4826 * mad)
 
 
@@ -95,16 +68,6 @@ def _shifted_percent_rank(values: pd.Series, window: int) -> pd.Series:
     """Rank each current value against exactly the preceding ``window`` rows."""
     numeric = pd.to_numeric(values, errors="coerce").astype(float).to_numpy()
     result = np.full(numeric.size, np.nan, dtype=float)
-    if not np.isfinite(numeric).all():
-        valid_history: deque[float] = deque(maxlen=window)
-        for position, value in enumerate(numeric):
-            if not np.isfinite(value):
-                continue
-            if len(valid_history) == window:
-                sample = np.fromiter(valid_history, dtype=float, count=window)
-                result[position] = float(np.mean(sample <= value))
-            valid_history.append(float(value))
-        return pd.Series(result, index=values.index, dtype=float)
     if numeric.size <= window:
         return pd.Series(result, index=values.index, dtype=float)
     windows = np.lib.stride_tricks.sliding_window_view(numeric, window + 1)
@@ -115,6 +78,42 @@ def _shifted_percent_rank(values: pd.Series, window: int) -> pd.Series:
     ranks[valid] = np.mean(history[valid] <= current[valid, None], axis=1)
     result[window:] = ranks
     return pd.Series(result, index=values.index, dtype=float)
+
+
+def _clock_minutes(value: str, *, field: str) -> int:
+    if not isinstance(value, str):
+        raise TypeError(f"{field} must be a string in HH:MM format.")
+    parts = value.strip().split(":")
+    if len(parts) != 2 or any(not part.isdigit() for part in parts):
+        raise ValueError(f"{field} must use HH:MM format.")
+    hour, minute = (int(part) for part in parts)
+    if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+        raise ValueError(f"{field} must be a valid local clock time.")
+    return hour * 60 + minute
+
+
+def _session_window_mask(
+    local_index: pd.DatetimeIndex,
+    index: pd.Index,
+    *,
+    session_open: str,
+    session_close: str,
+    timestamp_convention: str,
+) -> pd.Series:
+    open_minute = _clock_minutes(session_open, field="session_open")
+    close_minute = _clock_minutes(session_close, field="session_close")
+    if close_minute <= open_minute:
+        raise ValueError("session_close must be later than session_open for the US cash-session contract.")
+    convention = str(timestamp_convention).strip().lower()
+    minutes = local_index.hour * 60 + local_index.minute
+    if convention == "bar_start":
+        intraday = (minutes >= open_minute) & (minutes < close_minute)
+    elif convention == "bar_close":
+        intraday = (minutes > open_minute) & (minutes <= close_minute)
+    else:
+        raise ValueError("timestamp_convention must be 'bar_start' or 'bar_close'.")
+    weekday = local_index.dayofweek < 5
+    return pd.Series(intraday & weekday, index=index, dtype=bool)
 
 
 def _rolling_log_regression(close: pd.Series, window: int = 96) -> tuple[pd.Series, pd.Series]:
@@ -157,11 +156,19 @@ def _session_vwap(
     volume: pd.Series,
     *,
     timezone: str,
+    session_open: str = "09:30",
+    session_close: str = "16:00",
+    timestamp_convention: str = "bar_start",
 ) -> tuple[pd.Series, pd.DatetimeIndex]:
-    """Compute cash-session VWAP, reset by New York trading date."""
+    """Compute cash-session VWAP and freeze it outside the configured window."""
     local_index = index_in_timezone(close.index, timezone)
-    minutes = local_index.hour * 60 + local_index.minute
-    cash_mask = minutes >= 9 * 60 + 30
+    cash_mask = _session_window_mask(
+        local_index,
+        close.index,
+        session_open=session_open,
+        session_close=session_close,
+        timestamp_convention=timestamp_convention,
+    )
     session_dates = pd.Series(local_index.date, index=close.index, dtype="object")
     typical = (high + low + close) / 3.0
     valid_volume = pd.to_numeric(volume, errors="coerce").astype(float).where(volume > 0.0)
@@ -169,7 +176,11 @@ def _session_vwap(
     denominator = valid_volume.where(cash_mask)
     cumulative_numerator = numerator.groupby(session_dates, sort=False).cumsum()
     cumulative_denominator = denominator.groupby(session_dates, sort=False).cumsum()
-    return _safe_divide(cumulative_numerator, cumulative_denominator), local_index
+    # Outside-session rows must not update the cash statistic, but retaining
+    # the latest completed cash value keeps downstream row-window features on
+    # a fixed elapsed-bar contract.  Eligibility is gated separately.
+    session_vwap = _safe_divide(cumulative_numerator, cumulative_denominator).ffill()
+    return session_vwap, local_index
 
 
 def transition_pulse(state: pd.Series) -> pd.Series:
@@ -190,7 +201,14 @@ def _bars_since_prior_event(event: pd.Series) -> pd.Series:
     return pd.Series(result, index=event.index, dtype=float)
 
 
-def _add_core_features(out: pd.DataFrame, *, timezone: str) -> tuple[pd.DataFrame, pd.DatetimeIndex]:
+def _add_core_features(
+    out: pd.DataFrame,
+    *,
+    timezone: str,
+    session_open: str,
+    session_close: str,
+    timestamp_convention: str,
+) -> tuple[pd.DataFrame, pd.DatetimeIndex]:
     high = pd.to_numeric(out["high"], errors="coerce").astype(float)
     low = pd.to_numeric(out["low"], errors="coerce").astype(float)
     close = pd.to_numeric(out["close"], errors="coerce").astype(float)
@@ -209,7 +227,16 @@ def _add_core_features(out: pd.DataFrame, *, timezone: str) -> tuple[pd.DataFram
     for span in (50, 100):
         out[f"ema_{span}"] = close.ewm(span=span, adjust=False, min_periods=span).mean().astype("float32")
 
-    session_vwap, local_index = _session_vwap(high, low, close, volume, timezone=timezone)
+    session_vwap, local_index = _session_vwap(
+        high,
+        low,
+        close,
+        volume,
+        timezone=timezone,
+        session_open=session_open,
+        session_close=session_close,
+        timestamp_convention=timestamp_convention,
+    )
     out["session_vwap"] = session_vwap.astype("float32")
     out["d_vwap_atr"] = _safe_divide(close - session_vwap, atr).astype("float32")
     out["d_vwap_pct"] = (_safe_divide(close, session_vwap) - 1.0).astype("float32")
@@ -483,7 +510,15 @@ def _add_risk_state_features(out: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def _apply_candidate_rules(out: pd.DataFrame, *, stage: int, local_index: pd.DatetimeIndex) -> pd.DataFrame:
+def _apply_candidate_rules(
+    out: pd.DataFrame,
+    *,
+    stage: int,
+    local_index: pd.DatetimeIndex,
+    session_open: str = "09:30",
+    session_close: str = "16:00",
+    timestamp_convention: str = "bar_start",
+) -> pd.DataFrame:
     close = out["close"].astype(float)
     low = out["low"].astype(float)
     atr = out["atr_20"].astype(float)
@@ -536,13 +571,20 @@ def _apply_candidate_rules(out: pd.DataFrame, *, stage: int, local_index: pd.Dat
             )
         )
 
-    session_ok = pd.Series(True, index=out.index, dtype=bool)
+    session_ok = _session_window_mask(
+        local_index,
+        out.index,
+        session_open=session_open,
+        session_close=session_close,
+        timestamp_convention=timestamp_convention,
+    )
     if stage >= 7:
-        minutes = local_index.hour * 60 + local_index.minute
-        session_ok = pd.Series(
-            (minutes >= 10 * 60) & (minutes < 12 * 60 + 30),
-            index=out.index,
-            dtype=bool,
+        session_ok &= _session_window_mask(
+            local_index,
+            out.index,
+            session_open="10:00",
+            session_close="12:30",
+            timestamp_convention=timestamp_convention,
         )
 
     shock_ok = pd.Series(True, index=out.index, dtype=bool)
@@ -587,8 +629,35 @@ def trend_vwap_pullback_candidate_feature(
     *,
     stage: int = 8,
     timezone: str = "America/New_York",
+    session_open: str = "09:30",
+    session_close: str = "16:00",
+    timestamp_convention: str = "bar_start",
 ) -> pd.DataFrame:
     """Add the cumulative causal feature/candidate ladder through ``stage``.
+
+    YAML declaration::
+
+        features:
+          - step: trend_vwap_pullback_candidate
+            params:
+              stage: 8
+              timezone: America/New_York
+              session_open: "09:30"
+              session_close: "16:00"
+              timestamp_convention: bar_start
+
+    Required input columns
+    ----------------------
+    open:
+        Bar open price.
+    high:
+        Bar high price.
+    low:
+        Bar low price.
+    close:
+        Bar close price.
+    volume:
+        Bar volume used for the causal session VWAP.
 
     Parameters
     ----------
@@ -599,6 +668,12 @@ def trend_vwap_pullback_candidate_feature(
         Integer from 0 through 8 corresponding to YAML0 through YAML8.
     timezone:
         IANA timezone used for the cash-session VWAP and entry window.
+    session_open, session_close:
+        Local cash-session bounds.  The default contract is the US regular
+        session from 09:30 through 16:00 New York time.
+    timestamp_convention:
+        ``bar_start`` uses ``[open, close)`` labels; ``bar_close`` uses
+        ``(open, close]`` labels for bars wholly inside the same session.
     """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("df must be a pandas DataFrame.")
@@ -613,7 +688,13 @@ def trend_vwap_pullback_candidate_feature(
     _require_columns(df, ("open", "high", "low", "close", "volume"))
 
     resolved_stage = int(stage)
-    out, local_index = _add_core_features(df.copy(), timezone=timezone)
+    out, local_index = _add_core_features(
+        df.copy(),
+        timezone=timezone,
+        session_open=session_open,
+        session_close=session_close,
+        timestamp_convention=timestamp_convention,
+    )
     if resolved_stage >= 1:
         out = _add_return_features(out)
     if resolved_stage >= 2:
@@ -634,7 +715,14 @@ def trend_vwap_pullback_candidate_feature(
     # state/candidate columns.  This keeps wide stage-6+ frames from becoming
     # highly fragmented without changing any values or temporal semantics.
     out = out.copy()
-    return _apply_candidate_rules(out, stage=resolved_stage, local_index=local_index)
+    return _apply_candidate_rules(
+        out,
+        stage=resolved_stage,
+        local_index=local_index,
+        session_open=session_open,
+        session_close=session_close,
+        timestamp_convention=timestamp_convention,
+    )
 
 
 __all__ = ["transition_pulse", "trend_vwap_pullback_candidate_feature"]

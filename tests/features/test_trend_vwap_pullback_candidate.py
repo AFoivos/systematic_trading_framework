@@ -9,6 +9,9 @@ from src.features.trend_vwap_pullback_candidate import (
     _add_risk_state_features,
     _apply_candidate_rules,
     _session_vwap,
+    _shifted_percent_rank,
+    _shifted_robust_zscore,
+    _shifted_zscore,
     transition_pulse,
     trend_vwap_pullback_candidate_feature,
 )
@@ -64,11 +67,70 @@ def test_session_vwap_resets_excludes_premarket_and_handles_dst() -> None:
 
     assert local[1].hour == 9 and local[1].minute == 30
     assert local[4].hour == 9 and local[4].minute == 30
-    assert np.isnan(vwap.iloc[0]) and np.isnan(vwap.iloc[3])
+    assert np.isnan(vwap.iloc[0])
     assert vwap.iloc[1] == pytest.approx(20.0)
     assert vwap.iloc[2] == pytest.approx((20.0 * 1.0 + 30.0 * 3.0) / 4.0)
+    assert vwap.iloc[3] == pytest.approx(vwap.iloc[2])
     assert vwap.iloc[4] == pytest.approx(40.0)
     assert vwap.iloc[5] == pytest.approx(50.0)
+
+
+def test_session_vwap_excludes_close_label_after_hours_and_weekends() -> None:
+    index = pd.DatetimeIndex(
+        [
+            "2024-05-06 13:00:00+00:00",  # 09:00 EDT
+            "2024-05-06 13:30:00+00:00",  # 09:30 EDT
+            "2024-05-06 19:30:00+00:00",  # 15:30 EDT
+            "2024-05-06 20:00:00+00:00",  # 16:00 EDT
+            "2024-05-06 21:00:00+00:00",  # 17:00 EDT
+            "2024-05-11 14:00:00+00:00",  # Saturday 10:00 EDT
+        ]
+    )
+    price = pd.Series([50.0, 100.0, 200.0, 300.0, 400.0, 500.0], index=index)
+    volume = pd.Series(1.0, index=index)
+
+    vwap, _ = _session_vwap(
+        price,
+        price,
+        price,
+        volume,
+        timezone="America/New_York",
+        session_open="09:30",
+        session_close="16:00",
+        timestamp_convention="bar_start",
+    )
+
+    assert np.isnan(vwap.iloc[0])
+    assert vwap.iloc[1] == pytest.approx(100.0)
+    assert vwap.iloc[2] == pytest.approx(150.0)
+    assert vwap.iloc[3:].tolist() == pytest.approx([150.0, 150.0, 150.0])
+
+
+def test_session_vwap_supports_bar_close_label_convention() -> None:
+    index = pd.DatetimeIndex(
+        [
+            "2024-05-06 13:30:00+00:00",  # 09:30 EDT
+            "2024-05-06 14:00:00+00:00",  # 10:00 EDT
+            "2024-05-06 20:00:00+00:00",  # 16:00 EDT
+            "2024-05-06 20:30:00+00:00",  # 16:30 EDT
+        ]
+    )
+    price = pd.Series([50.0, 100.0, 200.0, 300.0], index=index)
+    volume = pd.Series(1.0, index=index)
+
+    vwap, _ = _session_vwap(
+        price,
+        price,
+        price,
+        volume,
+        timezone="America/New_York",
+        timestamp_convention="bar_close",
+    )
+
+    assert np.isnan(vwap.iloc[0])
+    assert vwap.iloc[1] == pytest.approx(100.0)
+    assert vwap.iloc[2] == pytest.approx(150.0)
+    assert vwap.iloc[3] == pytest.approx(150.0)
 
 
 def test_session_vwap_is_unchanged_when_future_inputs_change() -> None:
@@ -85,6 +147,20 @@ def test_session_vwap_is_unchanged_when_future_inputs_change() -> None:
         timezone="America/New_York",
     )
     pd.testing.assert_series_equal(first.iloc[:-2], second.iloc[:-2])
+
+
+@pytest.mark.parametrize(
+    "normalizer",
+    [_shifted_zscore, _shifted_robust_zscore, _shifted_percent_rank],
+)
+def test_trend_vwap_normalizers_use_preceding_rows_not_finite_history(normalizer) -> None:
+    values = pd.Series([1.0, 2.0, np.nan, 4.0, 5.0, 6.0, 7.0])
+
+    out = normalizer(values, 3)
+
+    assert np.isnan(out.iloc[4])
+    assert np.isnan(out.iloc[5])
+    assert np.isfinite(out.iloc[6])
 
 
 def test_expansion_memory_excludes_current_bar_and_pullback_depth_is_exact() -> None:
@@ -145,6 +221,29 @@ def test_final_trend_score_accepts_four_of_five() -> None:
     assert out["trend_vwap_base_state"].iloc[-1] == 1
 
 
+def test_cash_session_gate_applies_to_every_feature_stage() -> None:
+    index = pd.DatetimeIndex(
+        [
+            "2024-05-06 13:00:00+00:00",  # 09:00 EDT
+            "2024-05-06 13:30:00+00:00",  # 09:30 EDT
+            "2024-05-06 19:30:00+00:00",  # 15:30 EDT
+            "2024-05-06 20:00:00+00:00",  # 16:00 EDT
+            "2024-05-06 21:00:00+00:00",  # 17:00 EDT
+            "2024-05-11 14:00:00+00:00",  # Saturday 10:00 EDT
+        ]
+    )
+    frame = _rule_frame(index)
+
+    for stage in range(7):
+        out = _apply_candidate_rules(
+            frame.copy(),
+            stage=stage,
+            local_index=index.tz_convert("America/New_York"),
+        )
+        assert out["trend_vwap_session_ok"].tolist() == [0, 1, 1, 0, 0, 0]
+        assert out["trend_vwap_base_state"].tolist() == [0, 1, 1, 0, 0, 0]
+
+
 def test_resistance_rejects_near_level_but_allows_breakout() -> None:
     index = pd.date_range("2024-05-06 14:00", periods=2, freq="30min", tz="UTC")
     near = _rule_frame(index)
@@ -174,4 +273,3 @@ def test_shock_uses_shifted_volatility_reference() -> None:
     )
     out = _add_risk_state_features(frame)
     assert out["shock_active"].iloc[-1] == 1
-

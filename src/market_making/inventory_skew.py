@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 
 @dataclass(frozen=True)
@@ -15,12 +16,16 @@ class InventorySkew:
     """Shift quotes away from inventory risk while preserving a valid bid/ask order."""
 
     def __init__(self, config: InventorySkewConfig) -> None:
-        if config.max_inventory <= 0:
-            raise ValueError("max_inventory must be > 0.")
+        if not math.isfinite(float(config.max_inventory)) or config.max_inventory <= 0:
+            raise ValueError("max_inventory must be finite and > 0.")
+        if not math.isfinite(float(config.skew_strength)) or config.skew_strength < 0:
+            raise ValueError("skew_strength must be finite and >= 0.")
         self.config = config
 
     def normalized_inventory(self, inventory: float) -> float:
         """Return clipped inventory ratio in [-1, 1]."""
+        if not math.isfinite(float(inventory)):
+            raise ValueError("inventory must be finite.")
         ratio = float(inventory) / self.config.max_inventory
         return min(max(ratio, -1.0), 1.0)
 

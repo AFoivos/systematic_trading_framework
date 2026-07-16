@@ -302,37 +302,57 @@ def test_ftmo_risk_sizing_meta_success_confidence_does_not_invert_shorts() -> No
     assert exposure.iloc[1] == pytest.approx(0.0)
 
 
-def test_new_ftmo_triple_barrier_configs_load_and_preserve_target_kind() -> None:
-    meta_cfg = load_experiment_config(
-        "experiments/ftmo_fx_intraday_panel_4pair_xgboost_triple_barrier_meta_v1.yaml"
-    )
-    conservative_cfg = load_experiment_config(
-        "experiments/ftmo_fx_intraday_panel_4pair_xgboost_triple_barrier_conservative_v1.yaml"
+def test_ftmo_risk_sizing_missing_directional_confidence_fails_closed() -> None:
+    idx = pd.RangeIndex(2)
+    signal = pd.Series([1.0, -1.0], index=idx, name="signal")
+    vol = pd.Series([0.001, 0.001], index=idx, name="pred_vol")
+    confidence = pd.Series([np.nan, np.nan], index=idx, name="pred_prob")
+
+    exposure = scale_signal_for_ftmo(
+        signal,
+        vol,
+        risk_per_trade=0.002,
+        max_leverage=1.0,
+        confidence=confidence,
+        confidence_mode="directional_class1",
     )
 
-    assert meta_cfg["model"]["target"]["kind"] == "triple_barrier"
-    assert meta_cfg["model"]["target"]["label_mode"] == "meta"
+    assert exposure.eq(0.0).all()
+
+
+def test_ftmo_risk_sizing_invalid_volatility_fails_closed_for_both_sides() -> None:
+    idx = pd.RangeIndex(5)
+    signal = pd.Series([1.0, -1.0, 1.0, -1.0, 1.0], index=idx, name="signal")
+    vol = pd.Series([np.nan, 0.0, -0.01, np.inf, 0.001], index=idx, name="pred_vol")
+
+    exposure = scale_signal_for_ftmo(
+        signal,
+        vol,
+        risk_per_trade=0.002,
+        max_leverage=3.0,
+        min_leverage=0.5,
+    )
+
+    assert exposure.iloc[:4].eq(0.0).all()
+    assert exposure.iloc[4] == pytest.approx(2.0)
+
+
+def test_new_ftmo_triple_barrier_configs_load_and_preserve_target_kind() -> None:
+    meta_cfg = load_experiment_config(
+        "config/experiments/others/ftmo_fx_swing_panel_4pair_lightgbm_alpha_meta_barrier_v3.yaml"
+    )
+    conservative_cfg = load_experiment_config(
+        "config/experiments/others/ftmo_fx_swing_panel_4pair_lightgbm_alpha_meta_barrier_v2.yaml"
+    )
+
+    assert meta_cfg["model"]["target"]["kind"] == "directional_triple_barrier"
+    assert meta_cfg["model"]["target"]["direction_col"] == "primary_side"
     assert meta_cfg["signals"]["kind"] == "meta_probability_side"
     assert meta_cfg["backtest"]["signal_col"] == "signal_meta_side"
     assert meta_cfg["risk"]["sizing"]["confidence_mode"] == "meta_success"
-    assert meta_cfg["model"]["feature_selectors"]["exact"] == ["primary_side"]
-    assert meta_cfg["model"]["feature_selectors"]["include"] == [
-        {"exact": "shock_strength"},
-        {"exact": "shock_distance_ema"},
-        {"startswith": "shock_ret_z_"},
-        {"startswith": "shock_atr_multiple_"},
-    ]
-    assert meta_cfg["model"]["feature_selectors"]["exclude"] == [
-        {"exact": "trade_candidate"},
-        {"exact": "shock_candidate"},
-        {"exact": "shock_up_candidate"},
-        {"exact": "shock_down_candidate"},
-        {"exact": "shock_side_contrarian"},
-        {"exact": "shock_side_contrarian_active"},
-        {"startswith": "label_"},
-        {"startswith": "pred_"},
-        {"startswith": "tb_"},
-    ]
-    assert conservative_cfg["model"]["target"]["kind"] == "triple_barrier"
-    assert conservative_cfg["model"]["target"]["label_mode"] == "binary"
+    assert "primary_side" in meta_cfg["model"]["feature_selectors"]["exact"]
+    assert meta_cfg["model"]["feature_selectors"]["include"] == [{"startswith": ["mtf_"]}]
+    assert conservative_cfg["model"]["target"]["kind"] == "directional_triple_barrier"
+    assert conservative_cfg["model"]["split"]["max_folds"] == 8
+    assert meta_cfg["model"]["split"]["max_folds"] == 20
     assert meta_cfg["risk"]["sizing"]["kind"] == "ftmo_risk_per_trade"

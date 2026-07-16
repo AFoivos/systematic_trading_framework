@@ -9,6 +9,7 @@ import pytest
 
 from src.execution.mt5_connector import (
     MT5Connector,
+    MT5ConnectorError,
     MT5CredentialsError,
     MT5DemoAccountError,
     MT5TradingDisabledError,
@@ -19,6 +20,7 @@ from src.execution.mt5_bot_runner import (
     SingleInstanceLockError,
     _feature_snapshot_payload,
     _order_side_for_signal,
+    load_execution_config,
 )
 from src.execution.mt5_order_manager import MT5OrderManager, TradeParameters
 from src.execution.mt5_position_manager import MT5PositionManager
@@ -194,6 +196,29 @@ def test_position_sizing_uses_tick_value_and_stop_distance() -> None:
     assert result.risk_per_lot == pytest.approx(100.0)
 
 
+def test_position_sizing_prefers_loss_side_tick_value() -> None:
+    symbol_info = SimpleNamespace(
+        trade_tick_value=1.0,
+        trade_tick_value_profit=1.5,
+        trade_tick_value_loss=2.0,
+        trade_tick_size=0.1,
+        volume_min=0.01,
+        volume_max=100.0,
+        volume_step=0.01,
+    )
+
+    result = calculate_position_size(
+        equity=10_000.0,
+        risk_per_trade=0.01,
+        stop_distance=10.0,
+        symbol_info=symbol_info,
+    )
+
+    assert result.can_trade is True
+    assert result.risk_per_lot == pytest.approx(200.0)
+    assert result.volume == pytest.approx(0.5)
+
+
 def test_order_manager_rejects_duplicate_position_before_order_send() -> None:
     connector = FakeConnector(
         positions=[
@@ -285,6 +310,33 @@ def test_demo_mt5_mode_calls_order_send_when_all_guards_pass() -> None:
     assert result.request["side"] == "buy"
 
 
+def test_partial_fill_is_not_reported_as_fully_filled() -> None:
+    connector = FakeConnector()
+    connector.order_status = lambda _: "partial"  # type: ignore[attr-defined]
+    connector.order_send = lambda request: SimpleNamespace(  # type: ignore[method-assign]
+        retcode=10010,
+        price=request["price"],
+        volume=float(request["volume"]) / 2.0,
+    )
+    order_manager = _order_manager(connector, dry_run=False, execution_mode="demo_mt5")
+
+    result = order_manager.place_market_order(
+        framework_symbol="SPX500",
+        mt5_symbol="US500.cash",
+        side="buy",
+        latest_row=pd.Series({"close": 100.0, "atr_14": 1.0}),
+        account_info=SimpleNamespace(equity=10_000.0),
+        trade_params=TradeParameters(stop_loss_r=3.0, take_profit_r=4.0, volatility_col="atr_14"),
+        now_utc=NOW,
+    )
+
+    assert result.status == "partial"
+    assert result.accepted is True
+    assert result.reason == "mt5_order_partially_filled"
+    assert result.details["filled_volume"] < result.details["requested_volume"]
+    assert result.details["residual_volume"] > 0.0
+
+
 def test_sell_order_rejected_when_short_trading_disabled() -> None:
     connector = FakeConnector()
     order_manager = _order_manager(connector, dry_run=False, execution_mode="demo_mt5")
@@ -354,26 +406,44 @@ def test_missing_mt5_credentials_fail_safely(monkeypatch: pytest.MonkeyPatch) ->
         )
 
 
-def test_direct_mt5_credentials_from_config_mapping() -> None:
-    fake_mt5 = FakeMT5Module()
-    connector = MT5Connector(mt5_module=fake_mt5)
-
-    connector.login_from_mapping(
-        {
-            "login": "1513691391",
-            "password": "secret",
-            "server": "FTMO-Demo",
-        }
-    )
-
-    assert fake_mt5.login_calls == [(1513691391, "secret", "FTMO-Demo")]
-
-
-def test_direct_mt5_credentials_require_all_fields() -> None:
+def test_direct_mt5_credentials_from_config_mapping_are_disabled() -> None:
     connector = MT5Connector(mt5_module=FakeMT5Module())
 
-    with pytest.raises(MT5CredentialsError, match="password"):
-        connector.credentials_from_mapping({"login": 1513691391, "server": "FTMO-Demo"})
+    with pytest.raises(MT5CredentialsError, match="Plaintext"):
+        connector.login_from_mapping(
+            {
+                "login": "123",
+                "password": "not-a-real-secret",
+                "server": "Demo",
+            }
+        )
+
+
+def test_execution_config_rejects_plaintext_mt5_credentials(tmp_path: Path) -> None:
+    path = tmp_path / "execution.yaml"
+    path.write_text(
+        """
+execution:
+  mode: dry_run
+  mt5:
+    login: 123
+    password: not-a-real-secret
+    server: Demo
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(MT5CredentialsError, match="Plaintext"):
+        load_execution_config(path)
+
+
+def test_positions_get_none_fails_closed() -> None:
+    fake_mt5 = FakeMT5Module()
+    fake_mt5.positions_get = lambda **_: None
+    connector = MT5Connector(mt5_module=fake_mt5)
+
+    with pytest.raises(MT5ConnectorError, match="positions_get failed"):
+        connector.positions_get()
 
 
 def test_algo_trading_preflight_rejects_disabled_terminal() -> None:
@@ -531,6 +601,63 @@ def test_max_spread_blocks_order_send() -> None:
     assert connector.order_send_calls == 0
 
 
+def test_configured_spread_limit_fails_closed_when_spread_is_unknown() -> None:
+    manager = MT5RiskManager(
+        RiskConfig(max_spread_points=50.0, disable_weekend_trading=False),
+        initial_equity=10_000.0,
+        daily_start_equity=10_000.0,
+    )
+
+    decision = manager.evaluate_entry(
+        account_equity=10_000.0,
+        positions=[],
+        mt5_symbol="US500.cash",
+        framework_symbol="SPX500",
+        side="buy",
+        spread_points=None,
+        now_utc=NOW,
+    )
+
+    assert decision.allowed is False
+    assert decision.reason == "spread_unavailable"
+
+
+def test_risk_baselines_survive_restart(tmp_path: Path) -> None:
+    state_path = tmp_path / "risk_state.json"
+    config = RiskConfig(
+        max_total_drawdown_pct=0.05,
+        disable_weekend_trading=False,
+        state_path=state_path,
+    )
+    manager = MT5RiskManager(config)
+    manager.update_equity_baselines(10_000.0, now_utc=NOW)
+    manager.update_equity_baselines(10_500.0, now_utc=NOW)
+
+    restarted = MT5RiskManager(config)
+    decision = restarted.evaluate_entry(
+        account_equity=9_900.0,
+        positions=[],
+        mt5_symbol="US500.cash",
+        side="buy",
+        spread_points=1.0,
+        now_utc=NOW,
+    )
+
+    assert restarted.initial_equity == pytest.approx(10_000.0)
+    assert restarted.daily_start_equity == pytest.approx(10_000.0)
+    assert restarted.equity_peak == pytest.approx(10_500.0)
+    assert decision.allowed is False
+    assert decision.reason == "max_total_drawdown_exceeded"
+
+
+def test_corrupt_risk_state_fails_closed(tmp_path: Path) -> None:
+    state_path = tmp_path / "risk_state.json"
+    state_path.write_text("{not-json", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Cannot load MT5 risk state"):
+        MT5RiskManager(RiskConfig(state_path=state_path))
+
+
 def test_per_symbol_spread_limit_overrides_global_limit() -> None:
     connector = FakeConnector(bid=100.0, ask=100.8)
     order_manager = _order_manager(
@@ -619,10 +746,12 @@ def test_model_artifact_custom_name_installs_and_predicts(tmp_path: Path) -> Non
     }
     model_meta = {
         "model_kind": "lightgbm_regressor",
+        "task_type": "regression",
         "feature_cols": ["feature_a"],
         "pred_ret_col": "pred_ret",
         "pred_prob_col": "pred_prob",
         "pred_is_oos_col": "pred_is_oos",
+        "prob_scale": 2.0,
     }
 
     artifacts = save_model_artifacts(

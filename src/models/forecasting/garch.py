@@ -133,6 +133,9 @@ def make_garch_fold_predictor(
             raise ValueError("model.params.mean_model for GARCH must be one of: zero, constant, ar1.")
         if returns_input_col not in train_df.columns:
             raise KeyError(f"GARCH returns input column '{returns_input_col}' not found.")
+        forecast_horizon = int(model_params.get("_target_horizon", 1))
+        if forecast_horizon <= 0:
+            raise ValueError("GARCH target forecast horizon must be positive.")
 
         garch_state = fit_garch11_state(train_df[returns_input_col], mean_model=mean_model)
         test_index = test_df.index
@@ -141,39 +144,92 @@ def make_garch_fold_predictor(
             return (
                 empty,
                 {"pred_vol": empty},
-                {"model": "garch", "status": "empty_test_index"},
+                garch_state,
                 {
                     "mean_model": mean_model,
                     "returns_input_col": returns_input_col,
+                    "forecast_horizon": forecast_horizon,
                     "prob_scale": None,
                     "used_fallback": garch_state.used_fallback,
                     "optimizer_message": garch_state.optimizer_message,
                 },
             )
 
-        observed_test_returns = test_df[returns_input_col].astype(float)
-        prev_r = float(train_df[returns_input_col].dropna().iloc[-1])
+        test_positions = np.asarray(test_idx, dtype=int)
+        if bool((np.diff(test_positions) <= 0).any()):
+            raise ValueError("GARCH test positions must be unique and increasing.")
+        observed_returns = full_df[returns_input_col].astype(float)
+        valid_train_returns = train_df[returns_input_col].astype(float).dropna()
+        valid_train_positions = full_df.index.get_indexer(valid_train_returns.index)
+        if bool((valid_train_positions < 0).any()):
+            raise ValueError("GARCH could not map fitted return rows back to the full timeline.")
+        state_origin_position = int(valid_train_positions[-1])
+        if int(test_positions.min()) <= state_origin_position:
+            raise ValueError("GARCH test positions must occur after the fitted state origin.")
+
+        prev_r = float(valid_train_returns.iloc[-1])
         prev_eps = float(garch_state.last_eps)
         prev_h = float(garch_state.last_h)
+        last_observed_position = state_origin_position
 
         pred_ret_values: list[float] = []
         pred_vol_values: list[float] = []
-        for ts in test_index:
-            next_h = garch_state.omega + garch_state.alpha * (prev_eps**2) + garch_state.beta * prev_h
-            next_h = float(max(next_h, 1e-12))
-            if mean_model == "ar1":
-                pred_r = garch_state.mu + garch_state.phi * (prev_r - garch_state.mu)
-            else:
-                pred_r = garch_state.mu
-            pred_ret_values.append(float(pred_r))
-            pred_vol_values.append(float(np.sqrt(next_h)))
+        for position in test_positions:
+            # A row-t forward target is predicted after all row-t inputs are observed.
+            # Roll the latent state through the label-purge gap and through the current
+            # row before forecasting t+1...t+h.
+            for observed_position in range(last_observed_position + 1, int(position) + 1):
+                current_h = (
+                    garch_state.omega
+                    + garch_state.alpha * (prev_eps**2)
+                    + garch_state.beta * prev_h
+                )
+                current_h = float(max(current_h, 1e-12))
+                current_mean = (
+                    garch_state.mu + garch_state.phi * (prev_r - garch_state.mu)
+                    if mean_model == "ar1"
+                    else garch_state.mu
+                )
+                realized = float(observed_returns.iloc[observed_position])
+                if not np.isfinite(realized):
+                    realized = float(current_mean)
+                prev_eps = float(realized - garch_state.mu)
+                prev_r = realized
+                prev_h = current_h
+            last_observed_position = int(position)
 
-            realized = observed_test_returns.loc[ts]
-            if not np.isfinite(realized):
-                realized = pred_r
-            prev_eps = float(realized - garch_state.mu)
-            prev_r = float(realized)
-            prev_h = float(next_h)
+            horizon_variances: list[float] = []
+            next_h = float(
+                max(
+                    garch_state.omega
+                    + garch_state.alpha * (prev_eps**2)
+                    + garch_state.beta * prev_h,
+                    1e-12,
+                )
+            )
+            forecast_prev_r = prev_r
+            forecast_gross_return = 1.0
+            for step in range(forecast_horizon):
+                if step:
+                    next_h = float(
+                        max(
+                            garch_state.omega
+                            + (garch_state.alpha + garch_state.beta) * next_h,
+                            1e-12,
+                        )
+                    )
+                horizon_variances.append(next_h)
+                expected_step_return = (
+                    garch_state.mu
+                    + garch_state.phi * (forecast_prev_r - garch_state.mu)
+                    if mean_model == "ar1"
+                    else garch_state.mu
+                )
+                forecast_gross_return *= 1.0 + float(expected_step_return)
+                forecast_prev_r = float(expected_step_return)
+
+            pred_ret_values.append(float(forecast_gross_return - 1.0))
+            pred_vol_values.append(float(np.sqrt(np.sum(horizon_variances))))
 
         pred_ret = pd.Series(pred_ret_values, index=test_index, dtype="float32")
         pred_vol = pd.Series(pred_vol_values, index=test_index, dtype="float32")
@@ -181,6 +237,11 @@ def make_garch_fold_predictor(
         fold_meta = {
             "mean_model": mean_model,
             "returns_input_col": returns_input_col,
+            "forecast_horizon": forecast_horizon,
+            "state_origin_position": state_origin_position,
+            "first_prediction_state_position": int(test_positions[0]),
+            "variance_aggregation": "sum_conditional_variances",
+            "return_aggregation": "compound_expected_step_returns",
             "garch_params": {
                 "mu": garch_state.mu,
                 "omega": garch_state.omega,

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
+import math
 from typing import Literal
 
 from .fair_price import FairPriceModel, compute_fair_price
@@ -50,6 +52,19 @@ class QuoteGenerator:
     """Generate constrained bid/ask quotes from order book state and inventory."""
 
     def __init__(self, config: QuoteGeneratorConfig) -> None:
+        for name, value in (
+            ("order_size", config.order_size),
+            ("tick_size", config.tick_size),
+            ("lot_size", config.lot_size),
+        ):
+            if not math.isfinite(float(value)) or float(value) <= 0.0:
+                raise ValueError(f"{name} must be finite and > 0.")
+        for name, value in (
+            ("min_order_size", config.min_order_size),
+            ("min_notional", config.min_notional),
+        ):
+            if not math.isfinite(float(value)) or float(value) < 0.0:
+                raise ValueError(f"{name} must be finite and >= 0.")
         self.config = config
         self.spread_model = SpreadModel(config.spread)
         self.inventory_skew = InventorySkew(
@@ -68,8 +83,10 @@ class QuoteGenerator:
         spread_multiplier: float = 1.0,
     ) -> QuoteDecision:
         """Return a complete quote decision for the current book state."""
-        if spread_multiplier <= 0:
-            raise ValueError("spread_multiplier must be > 0.")
+        if not math.isfinite(float(inventory)):
+            raise ValueError("inventory must be finite.")
+        if not math.isfinite(float(spread_multiplier)) or spread_multiplier <= 0:
+            raise ValueError("spread_multiplier must be finite and > 0.")
         fair_price = compute_fair_price(book, self.config.fair_price_model)
         raw_spread_bps = self.spread_model.compute_spread_bps(recent_returns=recent_returns or ())
         spread_bps = min(
@@ -85,19 +102,27 @@ class QuoteGenerator:
         size = self._round_down(self.config.order_size, self.config.lot_size)
         inventory_ratio = self.inventory_skew.normalized_inventory(inventory)
 
-        if bid_price <= 0 or ask_price <= 0 or bid_price >= ask_price:
+        if (
+            not math.isfinite(bid_price)
+            or not math.isfinite(ask_price)
+            or bid_price <= 0
+            or ask_price <= 0
+            or bid_price >= ask_price
+        ):
             return self._reject(book.symbol, fair_price, spread_bps, inventory_ratio, "invalid quote prices")
         if size < max(self.config.min_order_size, self.config.lot_size):
             return self._reject(book.symbol, fair_price, spread_bps, inventory_ratio, "order size below minimum")
-        if bid_price * size < self.config.min_notional and ask_price * size < self.config.min_notional:
+        bid_valid = bid_price * size >= self.config.min_notional
+        ask_valid = ask_price * size >= self.config.min_notional
+        if not bid_valid and not ask_valid:
             return self._reject(book.symbol, fair_price, spread_bps, inventory_ratio, "quote notional below minimum")
 
         return QuoteDecision(
             symbol=book.symbol,
-            bid_price=bid_price,
-            ask_price=ask_price,
-            bid_size=size,
-            ask_size=size,
+            bid_price=bid_price if bid_valid else None,
+            ask_price=ask_price if ask_valid else None,
+            bid_size=size if bid_valid else 0.0,
+            ask_size=size if ask_valid else 0.0,
             fair_price=fair_price,
             spread_bps=spread_bps,
             inventory_ratio=inventory_ratio,
@@ -124,7 +149,7 @@ class QuoteGenerator:
             )
             bid_price = self._round_down(fair_price + shift - half_spread, self.config.tick_size)
             ask_price = self._round_up(fair_price + shift + half_spread, self.config.tick_size)
-            return bid_price, ask_price, spread_bps
+            return bid_price, ask_price, self._quoted_spread_bps(bid_price, ask_price)
         if mode == "join_top_of_book":
             return self._join_top_of_book(book)
         if mode == "improve_top_of_book":
@@ -158,15 +183,19 @@ class QuoteGenerator:
     def _round_down(value: float, step: float) -> float:
         if step <= 0:
             raise ValueError("rounding step must be > 0.")
-        return int(value / step) * step
+        value_decimal = Decimal(str(value))
+        step_decimal = Decimal(str(step))
+        units = (value_decimal / step_decimal).to_integral_value(rounding=ROUND_FLOOR)
+        return float(units * step_decimal)
 
     @staticmethod
     def _round_up(value: float, step: float) -> float:
         if step <= 0:
             raise ValueError("rounding step must be > 0.")
-        units = int(value / step)
-        rounded = units * step
-        return rounded if rounded >= value else (units + 1) * step
+        value_decimal = Decimal(str(value))
+        step_decimal = Decimal(str(step))
+        units = (value_decimal / step_decimal).to_integral_value(rounding=ROUND_CEILING)
+        return float(units * step_decimal)
 
     @staticmethod
     def _reject(

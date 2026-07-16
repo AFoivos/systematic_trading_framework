@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from pathlib import Path
 from typing import Any, Mapping
@@ -22,6 +23,7 @@ def write_market_making_experiment_artifacts(
     run_dir: str | Path,
     cfg: Mapping[str, Any],
     dataset: pd.DataFrame,
+    evaluation_dataset: pd.DataFrame | None = None,
     predictions: pd.DataFrame,
     comparison: pd.DataFrame,
     model_meta: Mapping[str, Any],
@@ -59,7 +61,7 @@ def write_market_making_experiment_artifacts(
     _write_quote_and_trade_artifacts(out, dataset, predictions, artifacts)
 
     summary_payload = build_market_making_experiment_summary(
-        dataset=dataset,
+        dataset=evaluation_dataset if evaluation_dataset is not None else dataset,
         predictions=predictions,
         comparison=comparison,
         model_meta=model_meta,
@@ -95,7 +97,7 @@ def write_market_making_experiment_artifacts(
     for label, source_key in (("source_trades", "trades_path"), ("source_quote_events", "quote_events_path")):
         source = source_paths.get(source_key)
         if source and Path(source).exists():
-            target_name = "trades.csv" if label == "source_trades" else "quote_decisions_source.csv"
+            target_name = "source_trades.csv" if label == "source_trades" else "quote_decisions_source.csv"
             target = out / target_name
             shutil.copyfile(source, target)
             artifacts[label] = str(target)
@@ -116,10 +118,19 @@ def build_market_making_experiment_summary(
     split_summary: Mapping[str, Any],
     cfg: Mapping[str, Any],
 ) -> dict[str, Any]:
-    pnl = pd.to_numeric(predictions.get("moment_realized_edge_bps", pd.Series(dtype=float)), errors="coerce").fillna(0.0)
+    pnl = _numeric_series(
+        predictions.get("moment_realized_edge_bps", 0.0),
+        index=predictions.index,
+    ).fillna(0.0)
     equity = pnl.cumsum()
-    costs = pd.to_numeric(predictions.get("maker_fee_bps", 0.0), errors="coerce").fillna(0.0)
-    gross = pd.to_numeric(predictions.get("moment_gross_edge_bps", pnl), errors="coerce").fillna(0.0)
+    costs = _numeric_series(
+        predictions.get("cost_bps", predictions.get("maker_fee_bps", 0.0)),
+        index=predictions.index,
+    ).fillna(0.0)
+    gross = _numeric_series(
+        predictions.get("moment_gross_edge_bps", pnl),
+        index=predictions.index,
+    ).fillna(0.0)
     returns = pnl / 10_000.0
     summary = _classic_metrics(returns=returns, equity=equity, gross=gross, net=pnl, costs=costs)
     market_summary = _market_making_summary(dataset=dataset, predictions=predictions, cfg=cfg)
@@ -189,17 +200,37 @@ def build_market_making_moment_report(summary: Mapping[str, Any]) -> str:
 
 def _write_timeseries_artifacts(out: Path, predictions: pd.DataFrame, artifacts: dict[str, str]) -> None:
     timestamp = pd.to_datetime(predictions.get("timestamp"), utc=True, errors="coerce") if "timestamp" in predictions else pd.Series(range(len(predictions)))
-    pnl = pd.to_numeric(predictions.get("moment_realized_edge_bps", 0.0), errors="coerce").fillna(0.0)
-    gross = pd.to_numeric(predictions.get("moment_gross_edge_bps", pnl), errors="coerce").fillna(0.0)
-    costs = pd.to_numeric(predictions.get("maker_fee_bps", 0.0), errors="coerce").fillna(0.0)
-    turnover = pd.to_numeric(predictions.get("moment_allowed", False), errors="coerce").fillna(0.0)
+    pnl = _numeric_series(
+        predictions.get("moment_realized_edge_bps", 0.0),
+        index=predictions.index,
+    ).fillna(0.0)
+    gross = _numeric_series(
+        predictions.get("moment_gross_edge_bps", pnl),
+        index=predictions.index,
+    ).fillna(0.0)
+    costs = _numeric_series(
+        predictions.get("cost_bps", predictions.get("maker_fee_bps", 0.0)),
+        index=predictions.index,
+    ).fillna(0.0)
+    turnover = _numeric_series(
+        predictions.get("moment_allowed", False),
+        index=predictions.index,
+    ).fillna(0.0)
     frames = {
         "returns": pd.DataFrame({"timestamp": timestamp, "return": pnl / 10_000.0}),
         "equity_curve": pd.DataFrame({"timestamp": timestamp, "equity": pnl.cumsum()}),
         "gross_returns": pd.DataFrame({"timestamp": timestamp, "gross_return": gross / 10_000.0}),
         "costs": pd.DataFrame({"timestamp": timestamp, "cost_bps": costs}),
         "turnover": pd.DataFrame({"timestamp": timestamp, "turnover": turnover}),
-        "positions": pd.DataFrame({"timestamp": timestamp, "position": pd.to_numeric(predictions.get("inventory", 0.0), errors="coerce").fillna(0.0)}),
+        "positions": pd.DataFrame(
+            {
+                "timestamp": timestamp,
+                "position": _numeric_series(
+                    predictions.get("inventory", 0.0),
+                    index=predictions.index,
+                ).fillna(0.0),
+            }
+        ),
     }
     for label, frame in frames.items():
         path = out / f"{label}.csv"
@@ -211,7 +242,16 @@ def _write_quote_and_trade_artifacts(out: Path, dataset: pd.DataFrame, predictio
     quote_path = out / "quote_decisions.csv"
     predictions.to_csv(quote_path, index=False)
     artifacts["quote_decisions"] = str(quote_path)
-    trade_cols = [col for col in ["timestamp", "quote_event_id", "quoted_side_candidate", "buy_markout_bps_h5", "sell_markout_bps_h5"] if col in dataset]
+    trade_cols = [
+        col
+        for col in ["timestamp", "quote_event_id", "quoted_side_candidate"]
+        if col in dataset
+    ]
+    trade_cols.extend(
+        col
+        for col in dataset.columns
+        if re.fullmatch(r"(?:buy|sell)_markout_bps_h[1-9][0-9]*", str(col))
+    )
     trades_path = out / "trades.csv"
     dataset.loc[:, trade_cols].dropna(how="all").to_csv(trades_path, index=False)
     artifacts["trades"] = str(trades_path)
@@ -247,26 +287,41 @@ def _classic_metrics(*, returns: pd.Series, equity: pd.Series, gross: pd.Series,
 def _market_making_summary(*, dataset: pd.DataFrame, predictions: pd.DataFrame, cfg: Mapping[str, Any]) -> dict[str, Any]:
     placed = _bool_series(dataset.get("placed", pd.Series(False, index=dataset.index)))
     allowed = _bool_series(predictions.get("moment_allowed", pd.Series(False, index=predictions.index)))
-    fills = placed.sum()
-    inventory = pd.to_numeric(dataset.get("inventory", 0.0), errors="coerce").fillna(0.0)
+    fill_flags = _bool_series(dataset["filled"]) if "filled" in dataset.columns else None
+    fill_count = int(fill_flags.sum()) if fill_flags is not None else None
+    fill_side = (
+        dataset.get("fill_side", pd.Series("", index=dataset.index)).fillna("").astype(str).str.lower()
+        if fill_flags is not None
+        else None
+    )
+    inventory = _numeric_series(
+        dataset.get("inventory", 0.0),
+        index=dataset.index,
+    ).fillna(0.0)
     max_inventory = float(dict(cfg.get("market_making", {}) or {}).get("max_inventory", max(float(inventory.abs().max()), 1.0)))
+    total_cost = _sum(predictions.get("cost_bps", predictions.get("maker_fee_bps")))
+    total_gross = _sum(predictions.get("moment_gross_edge_bps"))
     return {
         "input_events": int(len(dataset)),
         "quoted_events": int(placed.sum()),
         "skipped_events": int((~placed).sum()),
         "quoted_event_rate": _safe_div(float(placed.sum()), float(len(dataset))),
         "skipped_event_rate": _safe_div(float((~placed).sum()), float(len(dataset))),
-        "fills": int(fills),
-        "buy_fills": int(dataset["buy_markout_bps_h5"].notna().sum()) if "buy_markout_bps_h5" in dataset else 0,
-        "sell_fills": int(dataset["sell_markout_bps_h5"].notna().sum()) if "sell_markout_bps_h5" in dataset else 0,
-        "fills_per_input_event": _safe_div(float(fills), float(len(dataset))),
-        "fills_per_placed_quote": _safe_div(float(fills), float(placed.sum())),
+        "fills": fill_count,
+        "fill_observations_available": fill_flags is not None,
+        "buy_fills": int(((fill_side == "buy") & fill_flags).sum()) if fill_side is not None else None,
+        "sell_fills": int(((fill_side == "sell") & fill_flags).sum()) if fill_side is not None else None,
+        "fills_per_input_event": _safe_div(float(fill_count), float(len(dataset))) if fill_count is not None else None,
+        "fills_per_placed_quote": _safe_div(float(fill_count), float(placed.sum())) if fill_count is not None else None,
         "cancel_to_quote_ratio": None,
         "avg_quoted_spread_bps": _mean(dataset.get("spread_bps")),
         "avg_book_spread_bps": _mean(dataset.get("book_spread_bps")),
         "quote_vs_book_spread_ratio": _safe_div(_mean(dataset.get("spread_bps")), _mean(dataset.get("book_spread_bps"))),
-        "fees": _mean(predictions.get("maker_fee_bps")),
-        "fee_drag_ratio": _safe_div(_mean(predictions.get("maker_fee_bps")), abs(_mean(predictions.get("moment_gross_edge_bps")))),
+        "fees": total_cost,
+        "fee_drag_ratio": _safe_div(
+            total_cost,
+            abs(total_gross) if total_gross is not None else None,
+        ),
         "avg_inventory": float(inventory.mean()) if len(inventory) else 0.0,
         "avg_abs_inventory": float(inventory.abs().mean()) if len(inventory) else 0.0,
         "max_abs_inventory": float(inventory.abs().max()) if len(inventory) else 0.0,
@@ -280,7 +335,17 @@ def _market_making_summary(*, dataset: pd.DataFrame, predictions: pd.DataFrame, 
 
 def _markout_summary(dataset: pd.DataFrame) -> dict[str, Any]:
     out: dict[str, Any] = {}
-    for horizon in (1, 5, 10, 30):
+    discovered_horizons = {
+        int(match.group(1))
+        for column in dataset.columns
+        if (
+            match := re.fullmatch(
+                r"(?:buy|sell)_markout_bps_h([1-9][0-9]*)",
+                str(column),
+            )
+        )
+    }
+    for horizon in sorted({1, 5, 10, 30, *discovered_horizons}):
         key = f"h{horizon}"
         cols = [col for col in (f"buy_markout_bps_{key}", f"sell_markout_bps_{key}") if col in dataset]
         combined = pd.concat([pd.to_numeric(dataset[col], errors="coerce") for col in cols], ignore_index=True) if cols else pd.Series(dtype=float)
@@ -348,8 +413,8 @@ def _timestamp_max(frame: pd.DataFrame) -> str | None:
 def _max_drawdown(equity: pd.Series) -> float:
     if equity.empty:
         return 0.0
-    peak = equity.cummax()
-    return float((equity - peak).min())
+    peak = equity.cummax().clip(lower=0.0)
+    return abs(float((equity - peak).min()))
 
 
 def _safe_div(num: float | None, den: float | None) -> float | None:
@@ -369,8 +434,29 @@ def _safe_float(value: object) -> float | None:
 def _mean(values: object) -> float | None:
     if values is None:
         return None
-    series = pd.to_numeric(values, errors="coerce")
+    series = _numeric_series(values)
     return float(series.mean()) if series.notna().any() else None
+
+
+def _sum(values: object) -> float | None:
+    if values is None:
+        return None
+    series = _numeric_series(values)
+    return float(series.sum()) if series.notna().any() else None
+
+
+def _numeric_series(values: object, *, index: pd.Index | None = None) -> pd.Series:
+    if isinstance(values, pd.Series):
+        series = values
+    elif np.isscalar(values):
+        series = (
+            pd.Series(values, index=index)
+            if index is not None
+            else pd.Series([values])
+        )
+    else:
+        series = pd.Series(values, index=index)
+    return pd.to_numeric(series, errors="coerce")
 
 
 def _bool_series(values: object) -> pd.Series:

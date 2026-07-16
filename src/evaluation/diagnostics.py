@@ -344,6 +344,16 @@ def summarize_prediction_alignment(
     oos_valid_pred = valid_pred & oos
     pred_index = pred.index[oos_valid_pred]
 
+    def serialize_index_value(value: Any) -> Any:
+        if isinstance(value, (pd.Timestamp, pd.Period)):
+            return value.isoformat()
+        if isinstance(value, np.generic):
+            return value.item()
+        isoformat = getattr(value, "isoformat", None)
+        if callable(isoformat):
+            return isoformat()
+        return str(value)
+
     diagnostics: dict[str, Any] = {
         "oos_rows": int(oos.sum()),
         "predicted_rows": int(oos_valid_pred.sum()),
@@ -351,8 +361,8 @@ def summarize_prediction_alignment(
         "missing_oos_prediction_rows": int((oos & ~valid_pred).sum()),
         "oos_prediction_coverage": float(oos_valid_pred.sum() / max(int(oos.sum()), 1)),
         "alignment_ok": bool((valid_pred & ~oos).sum() == 0),
-        "first_prediction_index": pred_index[0].isoformat() if len(pred_index) else None,
-        "last_prediction_index": pred_index[-1].isoformat() if len(pred_index) else None,
+        "first_prediction_index": serialize_index_value(pred_index[0]) if len(pred_index) else None,
+        "last_prediction_index": serialize_index_value(pred_index[-1]) if len(pred_index) else None,
         "prediction_distribution": summarize_numeric_distribution(pred.loc[oos_valid_pred]),
     }
     if target is not None:

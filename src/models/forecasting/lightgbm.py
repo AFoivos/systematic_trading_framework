@@ -16,6 +16,7 @@ from src.models.types import ForecasterFoldPredictor
 _INTERNAL_PARAM_KEYS = {
     "minimum_expected_features",
     "_diagnostics",
+    "prob_scale",
 }
 
 

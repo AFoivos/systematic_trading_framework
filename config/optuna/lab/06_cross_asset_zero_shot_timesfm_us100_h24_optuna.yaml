@@ -1,4 +1,4 @@
-base_config: config/experiments/lab/06_cross_asset_zero_shot_timesfm_us100_h24.yaml
+base_config: config/lab/06_cross_asset_zero_shot_timesfm_us100_h24.yaml
 study: {study_name: optuna_lab_06_cross_asset_zero_shot_timesfm_us100_h24, storage: null, load_if_exists: false, sampler: tpe, seed: 42, n_trials: 40, timeout: null, n_jobs: 1, logging_enabled: true, catch_exceptions: true}
 report: {enabled: true, output_dir: logs/lab, run_name: optuna_lab_06_cross_asset_zero_shot_timesfm_us100_h24}
 objective:

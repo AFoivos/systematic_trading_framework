@@ -46,6 +46,49 @@ def test_portfolio_barrier_rejects_entry_above_asset_spread_limit() -> None:
     assert meta["skipped_spread_filter"] == 1
 
 
+def test_portfolio_barrier_executes_observed_bid_ask_spread() -> None:
+    index = pd.date_range("2026-06-15", periods=4, freq="30min", tz="UTC")
+    narrow = _frame(index, signals=[1, 0, 0, 0])
+    wide = narrow.copy()
+    narrow.loc[index[1], "low"] = 100.0
+    wide.loc[index[1], "low"] = 100.0
+    narrow[["bid_open", "ask_open"]] = [99.9, 100.1]
+    wide[["bid_open", "ask_open"]] = [99.8, 100.2]
+    params = {
+        "SPX500": {
+            "volatility_col": "atr_14",
+            "point_size": 0.01,
+            "max_spread_points": 50,
+            "spread_bid_col": "bid_open",
+            "spread_ask_col": "ask_open",
+        }
+    }
+
+    narrow_result, _, _, _ = run_portfolio_barrier_backtest(
+        {"SPX500": narrow},
+        signal_col="signal",
+        profit_barrier_r=1.0,
+        stop_barrier_r=2.0,
+        vertical_barrier_bars=2,
+        asset_params=params,
+    )
+    wide_result, _, _, _ = run_portfolio_barrier_backtest(
+        {"SPX500": wide},
+        signal_col="signal",
+        profit_barrier_r=1.0,
+        stop_barrier_r=2.0,
+        vertical_barrier_bars=2,
+        asset_params=params,
+    )
+
+    narrow_trade = narrow_result.trades.iloc[0]
+    wide_trade = wide_result.trades.iloc[0]
+    assert narrow_trade["entry_price"] == 100.1
+    assert narrow_trade["exit_price"] == 100.9
+    assert wide_trade["net_return"] < narrow_trade["net_return"]
+    assert wide_trade["observed_spread_cost"] > narrow_trade["observed_spread_cost"]
+
+
 def test_portfolio_barrier_daily_loss_blocks_only_current_day() -> None:
     index = pd.DatetimeIndex(
         [

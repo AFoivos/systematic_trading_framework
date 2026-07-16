@@ -93,6 +93,45 @@ def test_future_mutation_cannot_change_prior_panel_features() -> None:
     )
 
 
+def test_fixed_universe_eligibility_is_invariant_to_future_member_resumption() -> None:
+    index = pd.date_range("2024-01-02", periods=3, freq="30min")
+    prefix_frames = _panel(index[:2])
+    prefix_frames["US30"] = _frame(index[:1])
+    appended_frames = {asset: frame.copy() for asset, frame in prefix_frames.items()}
+    appended_frames["US30"] = _frame(index[[0, 2]])
+    clusters = {"usa": {"assets": ["SPX500", "US30", "US100"], "minimum_active_assets": 2}}
+
+    prefix = global_session_relay_features(
+        prefix_frames,
+        clusters=clusters,
+        universe_mode="fixed",
+    )
+    appended = global_session_relay_features(
+        appended_frames,
+        clusters=clusters,
+        universe_mode="fixed",
+    )
+
+    assert bool(prefix["SPX500"].loc[index[1], "usa_cluster_eligible"])
+    assert (
+        bool(prefix["SPX500"].loc[index[1], "usa_cluster_eligible"])
+        == bool(appended["SPX500"].loc[index[1], "usa_cluster_eligible"])
+    )
+
+
+def test_missing_first_session_open_is_not_backfilled_from_later_row() -> None:
+    index = pd.date_range("2024-01-02 14:30", periods=2, freq="30min")
+    frames = _panel(index)
+    frames["SPX500"].loc[index[0], "open"] = np.nan
+    frames["SPX500"].loc[index[1], "open"] = 200.0
+    frames["SPX500"].loc[index[1], "close"] = 200.0
+
+    out = global_session_relay_features(frames)
+
+    assert out["SPX500"]["session_open_price"].isna().all()
+    assert out["SPX500"]["session_return"].isna().all()
+
+
 def test_relay_priority_overrides_intra_cluster_and_context_assets_stay_flat() -> None:
     index = pd.date_range("2024-01-02 14:30", periods=2, freq="30min")
     usa = _frame(index, 0.2)
@@ -155,6 +194,41 @@ def test_fixed_requires_all_configured_fresh_members_while_dynamic_uses_minimum(
     assert bool(dynamic["SPX500"].loc[index[1], "usa_cluster_eligible"])
     assert fixed["SPX500"].loc[index[3], "usa_cluster_configured_member_count"] == 3.0
     assert fixed["SPX500"].loc[index[3], "usa_cluster_active_member_count"] == 3.0
+
+
+def test_fixed_relay_does_not_shrink_when_a_configured_source_is_missing() -> None:
+    index = pd.date_range("2024-01-02 00:00", periods=2, freq="30min")
+    assets = [
+        "NIKKEI225",
+        "EU50",
+        "GER40",
+        "FRA40",
+        "UK100",
+        "SPX500",
+        "US30",
+        "US100",
+    ]
+    frames = {asset: _frame(index) for asset in assets}
+    clusters = {
+        "europe": {
+            "assets": ["EU50", "GER40", "FRA40", "UK100"],
+            "minimum_active_assets": 3,
+        },
+        "usa": {
+            "assets": ["SPX500", "US30", "US100"],
+            "minimum_active_assets": 3,
+        },
+    }
+
+    out = global_session_relay_features(
+        frames,
+        clusters=clusters,
+        universe_mode="fixed",
+    )
+
+    assert out["EU50"]["asia_to_europe_source_count"].eq(1.0).all()
+    assert not out["EU50"]["asia_to_europe_eligible"].any()
+    assert out["EU50"]["asia_to_europe_relay_score"].isna().all()
 
 
 def test_dynamic_exit_reason_is_side_specific_with_convergence_priority() -> None:

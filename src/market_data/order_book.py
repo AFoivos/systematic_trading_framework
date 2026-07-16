@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import math
 from typing import Iterable, Literal
 
 
@@ -86,11 +87,13 @@ class LocalOrderBook:
         sequence: int | None = None,
     ) -> None:
         """Replace local state with a full depth snapshot."""
-        self._bids = self._normalize_side(bids)
-        self._asks = self._normalize_side(asks)
+        normalized_bids = self._normalize_side(bids)
+        normalized_asks = self._normalize_side(asks)
+        self._validate_sides(normalized_bids, normalized_asks)
+        self._bids = normalized_bids
+        self._asks = normalized_asks
         self.timestamp = timestamp or datetime.now(timezone.utc)
         self.sequence = sequence
-        self._validate_crossed_book()
 
     def apply_update(
         self,
@@ -103,11 +106,15 @@ class LocalOrderBook:
         """Apply incremental price-level updates; non-positive quantities remove levels."""
         if sequence is not None and self.sequence is not None and sequence < self.sequence:
             raise ValueError("sequence must be monotonic when provided.")
-        self._apply_side_updates("bid", bids)
-        self._apply_side_updates("ask", asks)
+        updated_bids = dict(self._bids)
+        updated_asks = dict(self._asks)
+        self._apply_side_updates(updated_bids, bids)
+        self._apply_side_updates(updated_asks, asks)
+        self._validate_sides(updated_bids, updated_asks)
+        self._bids = updated_bids
+        self._asks = updated_asks
         self.timestamp = timestamp or datetime.now(timezone.utc)
         self.sequence = sequence if sequence is not None else self.sequence
-        self._validate_crossed_book()
 
     def depth(self, levels: int) -> dict[str, list[OrderBookLevel]]:
         """Return top N levels on each side."""
@@ -143,26 +150,36 @@ class LocalOrderBook:
         for price, quantity in levels:
             price_f = float(price)
             quantity_f = float(quantity)
-            if price_f <= 0:
-                raise ValueError("order book prices must be positive.")
+            if not math.isfinite(price_f) or price_f <= 0:
+                raise ValueError("order book prices must be finite and positive.")
+            if not math.isfinite(quantity_f):
+                raise ValueError("order book quantities must be finite.")
             if quantity_f > 0:
                 normalized[price_f] = quantity_f
         return normalized
 
-    def _apply_side_updates(self, side: BookSide, levels: Iterable[tuple[float, float]]) -> None:
-        target = self._bids if side == "bid" else self._asks
+    @staticmethod
+    def _apply_side_updates(
+        target: dict[float, float],
+        levels: Iterable[tuple[float, float]],
+    ) -> None:
         for price, quantity in levels:
             price_f = float(price)
             quantity_f = float(quantity)
-            if price_f <= 0:
-                raise ValueError("order book prices must be positive.")
+            if not math.isfinite(price_f) or price_f <= 0:
+                raise ValueError("order book prices must be finite and positive.")
+            if not math.isfinite(quantity_f):
+                raise ValueError("order book quantities must be finite.")
             if quantity_f <= 0:
                 target.pop(price_f, None)
             else:
                 target[price_f] = quantity_f
 
-    def _validate_crossed_book(self) -> None:
-        if self.best_bid is not None and self.best_ask is not None and self.best_bid >= self.best_ask:
+    @staticmethod
+    def _validate_sides(bids: dict[float, float], asks: dict[float, float]) -> None:
+        best_bid = max(bids) if bids else None
+        best_ask = min(asks) if asks else None
+        if best_bid is not None and best_ask is not None and best_bid >= best_ask:
             raise ValueError("invalid crossed book: best_bid must be < best_ask.")
 
 

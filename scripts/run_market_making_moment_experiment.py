@@ -67,12 +67,29 @@ def run_experiment(cfg: dict[str, Any], *, config_path: str | Path) -> dict[str,
         )
 
     dataset["timestamp"] = pd.to_datetime(dataset["timestamp"], utc=True)
+    target_horizon = str(model_cfg.get("target_horizon", "h5"))
+    target_columns = [
+        f"buy_markout_bps_{target_horizon}",
+        f"sell_markout_bps_{target_horizon}",
+    ]
+    missing_targets = [column for column in target_columns if column not in dataset.columns]
+    if missing_targets:
+        raise KeyError(
+            f"configured target_horizon={target_horizon!r} was not built; "
+            f"missing columns: {missing_targets}"
+        )
+    eligible_mask = dataset[target_columns].notna().any(axis=1)
+    model_dataset = dataset.loc[eligible_mask].reset_index(drop=True)
+    if model_dataset.empty:
+        raise ValueError(
+            f"market-making dataset has no fully observable {target_horizon} target rows"
+        )
     splits = chronological_split(
-        dataset,
+        model_dataset,
         train_fraction=float(split_cfg.get("train_fraction", 0.6)),
         validation_fraction=float(split_cfg.get("validation_fraction", 0.2)),
     )
-    features = feature_columns(dataset)
+    features = feature_columns(model_dataset)
     model = MomentResearchModel(
         MomentModelConfig(
             backend=str(model_cfg.get("backend", "deterministic_fixture")),
@@ -80,7 +97,7 @@ def run_experiment(cfg: dict[str, Any], *, config_path: str | Path) -> dict[str,
             frozen_encoder=bool(model_cfg.get("frozen_encoder", True)),
             fine_tune=bool(model_cfg.get("fine_tune", False)),
             random_seed=int(runtime_cfg.get("random_seed", 42)),
-            target_horizon=str(model_cfg.get("target_horizon", "h5")),
+            target_horizon=target_horizon,
             lookback_length=int(model_cfg.get("lookback_length", 512)),
             batch_size=int(model_cfg.get("batch_size", 8)),
             device=str(model_cfg.get("device", "cpu")),
@@ -90,8 +107,12 @@ def run_experiment(cfg: dict[str, Any], *, config_path: str | Path) -> dict[str,
         )
     ).fit(splits["train"], feature_columns=features)
 
-    scored = dataset.copy()
-    model_predictions = model.predict(scored)
+    scored = splits["test"].copy()
+    if scored.empty:
+        raise ValueError("market-making MOMENT evaluation split is empty")
+    model_predictions = model.predict(model_dataset).loc[scored.index].copy()
+    scored = scored.reset_index(drop=True)
+    model_predictions = model_predictions.reset_index(drop=True)
     scored = pd.concat([scored.reset_index(drop=True), model_predictions.reset_index(drop=True)], axis=1)
     quote_filter = MomentQuoteFilter(
         MomentQuoteFilterConfig(
@@ -110,25 +131,38 @@ def run_experiment(cfg: dict[str, Any], *, config_path: str | Path) -> dict[str,
     predictions = pd.concat([scored.reset_index(drop=True), decision_frame], axis=1)
     predictions["moment_allowed"] = predictions["allow_buy"] | predictions["allow_sell"]
     predictions["maker_fee_bps"] = float(market_cfg.get("maker_fee_bps", 0.0))
-    predictions["moment_gross_edge_bps"] = predictions.apply(_selected_gross_edge, axis=1)
-    predictions["moment_realized_edge_bps"] = predictions["moment_gross_edge_bps"] - predictions["maker_fee_bps"]
-    predictions["moment_hypothetical_edge_bps"] = predictions.apply(_best_hypothetical_edge, axis=1)
-    predictions.loc[~predictions["moment_allowed"], "moment_realized_edge_bps"] = 0.0
+    predictions["moment_gross_edge_bps"] = predictions.apply(
+        _selected_gross_edge,
+        axis=1,
+        horizon=target_horizon,
+    )
+    predictions["cost_bps"] = predictions["maker_fee_bps"].where(
+        predictions["moment_allowed"],
+        0.0,
+    )
+    predictions["moment_realized_edge_bps"] = (
+        predictions["moment_gross_edge_bps"] - predictions["cost_bps"]
+    ).where(predictions["moment_allowed"], 0.0)
+    predictions["moment_hypothetical_edge_bps"] = predictions.apply(
+        _candidate_gross_edge,
+        axis=1,
+        horizon=target_horizon,
+    )
 
-    comparison = _baseline_vs_moment(predictions)
+    comparison = _baseline_vs_moment(predictions, horizon=target_horizon)
     split_summary = _split_summary(splits)
     model_meta = {
         **model.metadata(),
         "lookback_length": model_cfg.get("lookback_length", 512),
         "prediction_horizons": horizons,
-        "target_definition": "fee-adjusted quote-side markout in basis points",
+        "target_definition": f"fee-adjusted quote-side markout in basis points ({target_horizon})",
         "buy_threshold": filter_cfg.get("min_expected_edge_bps", 0.0),
         "sell_threshold": filter_cfg.get("min_expected_edge_bps", 0.0),
         "uncertainty_threshold": filter_cfg.get("max_uncertainty", 1.0),
     }
     run_dir = _resolve_run_dir(output_cfg, cfg)
     summary_preview = build_market_making_experiment_summary(
-        dataset=dataset,
+        dataset=scored,
         predictions=predictions,
         comparison=comparison,
         model_meta=model_meta,
@@ -140,6 +174,7 @@ def run_experiment(cfg: dict[str, Any], *, config_path: str | Path) -> dict[str,
         run_dir=run_dir,
         cfg=cfg,
         dataset=dataset,
+        evaluation_dataset=scored,
         predictions=predictions,
         comparison=comparison,
         model_meta=model_meta,
@@ -157,11 +192,20 @@ def run_experiment(cfg: dict[str, Any], *, config_path: str | Path) -> dict[str,
     return artifacts
 
 
-def _baseline_vs_moment(predictions: pd.DataFrame) -> pd.DataFrame:
-    baseline_edge = predictions.apply(_best_hypothetical_edge, axis=1) - pd.to_numeric(predictions["maker_fee_bps"], errors="coerce").fillna(0.0)
+def _baseline_vs_moment(predictions: pd.DataFrame, *, horizon: str) -> pd.DataFrame:
+    if "placed" in predictions.columns:
+        baseline_allowed = _bool_series(predictions["placed"])
+    else:
+        baseline_allowed = predictions["quoted_side_candidate"].astype(str).ne("none")
+    baseline_gross = predictions.apply(_candidate_gross_edge, axis=1, horizon=horizon)
+    baseline_cost = pd.to_numeric(predictions["maker_fee_bps"], errors="coerce").fillna(0.0).where(
+        baseline_allowed,
+        0.0,
+    )
+    baseline_edge = (baseline_gross - baseline_cost).where(baseline_allowed, 0.0)
     moment_edge = pd.to_numeric(predictions["moment_realized_edge_bps"], errors="coerce").fillna(0.0)
     rows = [
-        _comparison_row("baseline", baseline_edge, allowed=pd.Series(True, index=predictions.index)),
+        _comparison_row("baseline", baseline_edge, allowed=baseline_allowed),
         _comparison_row("moment_filtered", moment_edge, allowed=predictions["moment_allowed"]),
     ]
     rows.append(
@@ -193,20 +237,31 @@ def _comparison_row(label: str, edge: pd.Series, *, allowed: pd.Series) -> dict[
     }
 
 
-def _selected_gross_edge(row: pd.Series) -> float:
+def _selected_gross_edge(row: pd.Series, *, horizon: str) -> float:
     candidates = []
     if bool(row.get("allow_buy")):
-        candidates.append(row.get("buy_markout_bps_h5"))
+        candidates.append(row.get(f"buy_markout_bps_{horizon}"))
     if bool(row.get("allow_sell")):
-        candidates.append(row.get("sell_markout_bps_h5"))
+        candidates.append(row.get(f"sell_markout_bps_{horizon}"))
     numeric = [float(value) for value in candidates if pd.notna(value)]
-    return max(numeric) if numeric else 0.0
+    return float(sum(numeric) / len(numeric)) if numeric else 0.0
 
 
-def _best_hypothetical_edge(row: pd.Series) -> float:
-    candidates = [row.get("buy_markout_bps_h5"), row.get("sell_markout_bps_h5")]
+def _candidate_gross_edge(row: pd.Series, *, horizon: str) -> float:
+    candidate_side = str(row.get("quoted_side_candidate", "both"))
+    candidates: list[object] = []
+    if candidate_side in {"buy", "both"}:
+        candidates.append(row.get(f"buy_markout_bps_{horizon}"))
+    if candidate_side in {"sell", "both"}:
+        candidates.append(row.get(f"sell_markout_bps_{horizon}"))
     numeric = [float(value) for value in candidates if pd.notna(value)]
-    return max(numeric) if numeric else 0.0
+    return float(sum(numeric) / len(numeric)) if numeric else 0.0
+
+
+def _bool_series(values: pd.Series) -> pd.Series:
+    if values.dtype == bool:
+        return values.fillna(False)
+    return values.astype(str).str.lower().isin({"true", "1", "yes"})
 
 
 def _split_summary(splits: dict[str, pd.DataFrame]) -> dict[str, Any]:

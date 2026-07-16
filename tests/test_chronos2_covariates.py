@@ -157,10 +157,7 @@ def test_chronos2_covariates_are_causal_independent_and_aligned(
     assert out.loc[df.index[8:10], "pred_is_oos"].all()
     assert not out.loc[df.index[:8], "pred_is_oos"].any()
     assert predicted_rows["pred_ret"].to_numpy() == pytest.approx([3.02, 3.02])
-    assert predicted_rows["pred_q10"].to_numpy() == pytest.approx([1.0025, 1.0025])
-    assert predicted_rows["pred_q50"].to_numpy() == pytest.approx([3.02, 3.02])
-    assert predicted_rows["pred_q90"].to_numpy() == pytest.approx([4.0, 4.0])
-    assert predicted_rows["pred_vol"].to_numpy() == pytest.approx([(4.0 - 1.0025) / 2.0] * 2)
+    assert not {"pred_q10", "pred_q50", "pred_q90", "pred_vol"}.intersection(out.columns)
 
     fold = meta["folds"][0]
     assert fold["covariate_cols"] == ["feature_a", "feature_b"]
@@ -169,6 +166,8 @@ def test_chronos2_covariates_are_causal_independent_and_aligned(
     assert fold["minimum_context_rows"] == 4
     assert fold["maximum_context_rows"] == 4
     assert fold["test_rows_without_prediction"] == 0
+    assert fold["quantile_return_columns_available"] is False
+    assert fold["quantile_return_contract"] == "unavailable_without_joint_return_paths"
     assert meta["model_family"] == "chronos_2"
     assert meta["zero_shot"] is True
     assert meta["covariate_cols"] == ["feature_a", "feature_b"]

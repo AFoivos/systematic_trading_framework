@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 from src.market_data.order_book import LocalOrderBook
 from src.market_data.trades import Trade
@@ -38,6 +39,17 @@ class AdverseSelectionFilter:
     """Stop or widen quotes during unstable microstructure regimes."""
 
     def __init__(self, config: AdverseSelectionConfig, trend_provider: TrendRegimeProvider | None = None) -> None:
+        for name, value in (
+            ("max_imbalance", config.max_imbalance),
+            ("min_imbalance", config.min_imbalance),
+            ("high_volatility_bps", config.high_volatility_bps),
+        ):
+            if not math.isfinite(float(value)):
+                raise ValueError(f"{name} must be finite.")
+        if not 0.0 <= config.min_imbalance < config.max_imbalance <= 1.0:
+            raise ValueError("imbalance thresholds must satisfy 0 <= min < max <= 1.")
+        if config.high_volatility_bps < 0.0:
+            raise ValueError("high_volatility_bps must be >= 0.")
         self.config = config
         self.trend_provider = trend_provider
 
@@ -53,14 +65,17 @@ class AdverseSelectionFilter:
             return FilterDecision(False, "extreme bid-side imbalance")
         if imbalance is not None and imbalance <= self.config.min_imbalance:
             return FilterDecision(False, "extreme ask-side imbalance")
+        if self.config.disable_on_high_volatility and not math.isfinite(float(recent_volatility_bps)):
+            return FilterDecision(False, "invalid recent volatility")
         if self.config.disable_on_high_volatility and recent_volatility_bps >= self.config.high_volatility_bps:
             return FilterDecision(False, "high recent volatility")
         if self.config.disable_on_strong_trend and self.trend_provider is not None:
             if self.trend_provider.is_strong_trend(book.symbol):
                 return FilterDecision(False, "strong external trend regime")
         if recent_trades:
-            buy_qty = sum(t.quantity for t in recent_trades if t.aggressor_side == "buy")
-            sell_qty = sum(t.quantity for t in recent_trades if t.aggressor_side == "sell")
+            matching_trades = [trade for trade in recent_trades if trade.symbol == book.symbol]
+            buy_qty = sum(t.quantity for t in matching_trades if t.aggressor_side == "buy")
+            sell_qty = sum(t.quantity for t in matching_trades if t.aggressor_side == "sell")
             total = buy_qty + sell_qty
             if total > 0 and max(buy_qty, sell_qty) / total >= 0.9:
                 return FilterDecision(True, "one-sided aggressive flow", spread_multiplier=1.5)

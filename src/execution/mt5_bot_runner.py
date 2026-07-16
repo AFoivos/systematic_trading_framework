@@ -17,6 +17,7 @@ import yaml
 from src.execution.mt5_connector import (
     MT5Connector,
     MT5ConnectorError,
+    MT5CredentialsError,
     MT5DemoAccountError,
 )
 from src.execution.mt5_order_manager import MT5OrderManager, OrderResult, TradeParameters
@@ -178,10 +179,17 @@ class MT5DemoBot:
         )
         if kill_switch_path not in (None, ""):
             kill_switch_path = str(_resolve_path(kill_switch_path))
+        risk_state_path = self.safety_cfg.get(
+            "risk_state_path",
+            self.risk_cfg.get("state_path", log_dir / "risk_state.json"),
+        )
+        if risk_state_path not in (None, ""):
+            risk_state_path = str(_resolve_path(risk_state_path))
         risk_config = RiskConfig.from_mapping(
             {
                 **self.risk_cfg,
                 "kill_switch_path": kill_switch_path,
+                "state_path": risk_state_path,
             }
         )
         self.risk_manager = MT5RiskManager(risk_config)
@@ -204,15 +212,17 @@ class MT5DemoBot:
 
     def connect(self) -> None:
         mt5_cfg = dict(self.execution_cfg.get("mt5", {}) or {})
-        self.connector.initialize()
         if _has_direct_mt5_credentials(mt5_cfg):
-            self.connector.login_from_mapping(mt5_cfg)
-        else:
-            self.connector.login_from_env(
-                login_env=str(mt5_cfg.get("login_env", "MT5_LOGIN")),
-                password_env=str(mt5_cfg.get("password_env", "MT5_PASSWORD")),
-                server_env=str(mt5_cfg.get("server_env", "MT5_SERVER")),
+            raise MT5CredentialsError(
+                "Plaintext MT5 credential fields are not supported. "
+                "Use login_env/password_env/server_env and an external secret store."
             )
+        self.connector.initialize()
+        self.connector.login_from_env(
+            login_env=str(mt5_cfg.get("login_env", "MT5_LOGIN")),
+            password_env=str(mt5_cfg.get("password_env", "MT5_PASSWORD")),
+            server_env=str(mt5_cfg.get("server_env", "MT5_SERVER")),
+        )
         require_demo = bool(self.safety_cfg.get("require_demo_account", True)) or bool(
             self.risk_manager.config.demo_only
         )
@@ -419,6 +429,23 @@ class MT5DemoBot:
                     order_result=None,
                     order_reason="flat_signal",
                 )
+        except MT5ConnectorError as exc:
+            self.logger.exception(
+                "MT5 failed processing symbol %s (%s)",
+                framework_symbol,
+                mt5_symbol,
+            )
+            self.event_logger.write(
+                "errors",
+                {
+                    "asset": framework_symbol,
+                    "mt5_symbol": mt5_symbol,
+                    "event": "process_symbol_failed",
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                },
+            )
+            raise
         except Exception as exc:
             self.logger.exception("failed processing symbol %s (%s)", framework_symbol, mt5_symbol)
             self.event_logger.write(
@@ -545,6 +572,7 @@ class MT5DemoBot:
                 "initial_equity": self.risk_manager.initial_equity,
                 "daily_start_equity": self.risk_manager.daily_start_equity,
                 "equity_peak": self.risk_manager.equity_peak,
+                "state_path": str(config.state_path) if config.state_path is not None else None,
                 "kill_switch_path": str(kill_switch_path) if kill_switch_path is not None else None,
                 "kill_switch_active": bool(kill_switch_path.exists()) if kill_switch_path is not None else False,
             },
@@ -637,6 +665,8 @@ class MT5DemoBot:
         self.event_logger.write("orders", event)
         if result.status == "filled":
             self.event_logger.write("fills", event)
+        if result.status == "partial":
+            self.event_logger.write("partial_fills", event)
         if result.status == "rejected":
             self.event_logger.write("rejected_orders", event)
 
@@ -646,6 +676,13 @@ def load_execution_config(path: str | Path) -> dict[str, Any]:
         raw = yaml.safe_load(handle) or {}
     if not isinstance(raw, dict):
         raise TypeError("execution config must be a YAML mapping.")
+    execution_cfg = dict(raw.get("execution", {}) or {})
+    mt5_cfg = dict(execution_cfg.get("mt5", {}) or {})
+    if _has_direct_mt5_credentials(mt5_cfg):
+        raise MT5CredentialsError(
+            "Plaintext MT5 credential fields are not supported. "
+            "Use login_env/password_env/server_env and an external secret store."
+        )
     return raw
 
 

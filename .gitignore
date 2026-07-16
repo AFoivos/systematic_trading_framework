@@ -134,8 +134,11 @@ notebooks/
 tests/
 !tests/
 tests/*
+!tests/optional_dependencies.py
 !tests/test_architecture_registries.py
 !tests/test_chronos2_covariates.py
+!tests/test_audit_portability_regressions.py
+!tests/test_model_metrics_and_artifacts.py
 !tests/features/
 !tests/features/*.py
 !tests/signals/

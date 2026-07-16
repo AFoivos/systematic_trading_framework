@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any
+from types import MappingProxyType
+from typing import Any, Mapping
 
 import numpy as np
 import pandas as pd
@@ -45,6 +46,18 @@ REGRESSION_TARGET_KINDS = frozenset(
     }
 )
 
+# ``(default_horizon, minimum_horizon)`` for regression targets whose
+# estimands require at least two future observations.  Builders and config
+# validation consume this single contract so an accepted config is runnable.
+REGRESSION_TARGET_HORIZON_CONTRACTS: Mapping[str, tuple[int, int]] = MappingProxyType(
+    {
+        "risk_adjusted_future_return": (2, 2),
+        "future_trend_slope": (5, 2),
+        "future_path_efficiency": (2, 2),
+        "future_realized_volatility": (5, 2),
+    }
+)
+
 
 def _cfg(target_cfg: dict[str, Any] | None) -> dict[str, Any]:
     return apply_target_output_aliases(flatten_target_cfg(target_cfg))
@@ -61,6 +74,11 @@ def _horizon(cfg: dict[str, Any], *, default: int = 1, minimum: int = 1) -> int:
         field="target.horizon_bars",
         minimum=minimum,
     )
+
+
+def _target_horizon(cfg: dict[str, Any], *, kind: str) -> int:
+    default, minimum = REGRESSION_TARGET_HORIZON_CONTRACTS.get(kind, (1, 1))
+    return _horizon(cfg, default=default, minimum=minimum)
 
 
 def _finite(series: pd.Series) -> pd.Series:
@@ -99,8 +117,8 @@ def _mfe_mae_values(
         mfe = max_high / price - 1.0
         mae = min_low / price - 1.0
     else:
-        mfe = price / min_low - 1.0
-        mae = price / max_high - 1.0
+        mfe = 1.0 - min_low / price
+        mae = 1.0 - max_high / price
     return _finite(mfe), _finite(mae)
 
 
@@ -236,7 +254,7 @@ def build_risk_adjusted_future_return_target(
     returns_type = validate_returns_type(cfg.get("returns_type", "simple"))
     if returns_col is None and returns_type == "log":
         raise ValueError("target.returns_type='log' requires target.returns_col.")
-    horizon = _horizon(cfg)
+    horizon = _target_horizon(cfg, kind="risk_adjusted_future_return")
     volatility_floor = require_finite_number(cfg.get("volatility_floor", 1e-12), field="target.volatility_floor")
     raw_fwd_col = str(cfg.get("raw_fwd_col", f"target_future_return_raw_{horizon}"))
     realized_vol_col = str(cfg.get("realized_vol_col", f"target_realized_vol_{horizon}"))
@@ -408,7 +426,7 @@ def build_mfe_regression_target(
     price = as_float_series(out, price_col)
     max_high, min_low = _future_extremes(out, high_col=high_col, low_col=low_col, horizon=horizon)
     long_mfe = _finite(max_high / price - 1.0)
-    short_mfe = _finite(price / min_low - 1.0)
+    short_mfe = _finite(1.0 - min_low / price)
     if direction == "long":
         target = long_mfe
     elif direction == "short":
@@ -486,7 +504,7 @@ def build_mae_regression_target(
     price = as_float_series(out, price_col)
     max_high, min_low = _future_extremes(out, high_col=high_col, low_col=low_col, horizon=horizon)
     long_mae = _finite(min_low / price - 1.0)
-    short_mae = _finite(price / max_high - 1.0)
+    short_mae = _finite(1.0 - max_high / price)
     if direction == "long":
         target = long_mae
     elif direction == "short":
@@ -650,7 +668,7 @@ def build_downside_adjusted_future_return_target(
     if direction == "long":
         raw_future = _finite(terminal / price - 1.0)
     else:
-        raw_future = _finite(price / terminal - 1.0)
+        raw_future = _finite(1.0 - terminal / price)
     _, mae = _mfe_mae_values(
         out,
         price_col=price_col,
@@ -721,7 +739,7 @@ def build_future_trend_slope_target(
     """
     cfg = _cfg(target_cfg)
     price_col = str(cfg.get("price_col", "close"))
-    horizon = _horizon(cfg, default=5, minimum=2)
+    horizon = _target_horizon(cfg, kind="future_trend_slope")
     normalize_by_price = bool(cfg.get("normalize_by_price", True))
     normalize_by_volatility = bool(cfg.get("normalize_by_volatility", False))
     volatility_col = str(cfg.get("volatility_col", "atr_14"))
@@ -806,7 +824,7 @@ def build_future_path_efficiency_target(
     """
     cfg = _cfg(target_cfg)
     price_col = str(cfg.get("price_col", "close"))
-    horizon = _horizon(cfg, default=2, minimum=2)
+    horizon = _target_horizon(cfg, kind="future_path_efficiency")
     signed = bool(cfg.get("signed", True))
     path_floor = require_finite_number(cfg.get("path_floor", 1e-12), field="target.path_floor")
     if path_floor <= 0.0:
@@ -1120,7 +1138,7 @@ def build_future_realized_volatility_target(
     price_col = str(cfg.get("price_col", "close"))
     returns_col = _optional_col(cfg, "returns_col")
     returns_type = validate_returns_type(cfg.get("returns_type", "simple"))
-    horizon = _horizon(cfg, default=5, minimum=2)
+    horizon = _target_horizon(cfg, kind="future_realized_volatility")
     annualize = bool(cfg.get("annualize", False))
     periods_per_year = cfg.get("periods_per_year")
     fwd_col = str(cfg.get("fwd_col", f"target_future_realized_vol_{horizon}"))
@@ -1150,7 +1168,8 @@ def build_future_realized_volatility_target(
             "returns_type": returns_type,
             "annualize": annualize,
             "periods_per_year": float(periods_per_year) if periods_per_year is not None else None,
-            "annualization_convention": "std(future one-step returns) * sqrt(periods_per_year / horizon_bars)",
+            "annualization_convention": "std(future one-step returns) * sqrt(periods_per_year)",
+            "annualization_convention_version": 2,
         },
     )
 
@@ -1197,7 +1216,7 @@ def build_future_drawdown_regression_target(
     if direction == "long":
         target = _finite(min_low / price - 1.0)
     else:
-        target = _finite(price / max_high - 1.0)
+        target = _finite(1.0 - max_high / price)
     target = _maybe_vol_normalize(
         out,
         target,

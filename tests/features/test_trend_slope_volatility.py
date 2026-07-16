@@ -36,7 +36,7 @@ def test_trend_slope_volatility_contract_and_numeric_sanity() -> None:
         positive_col="ratio_positive",
         rising_col="ratio_rising",
         strong_trend_col="ratio_strong",
-        strong_threshold=0.1,
+        strong_threshold=0.001,
     )
 
     assert {"slope", "vol_used", "ratio", "ratio_positive", "ratio_rising", "ratio_strong"}.issubset(
@@ -53,7 +53,7 @@ def test_trend_slope_volatility_contract_and_numeric_sanity() -> None:
         positive_col="ratio_positive",
         rising_col="ratio_rising",
         strong_trend_col="ratio_strong",
-        strong_threshold=0.1,
+        strong_threshold=0.001,
     )
     assert out["ratio_positive"].dtype == np.dtype("int8")
     assert out["ratio_rising"].dtype == np.dtype("int8")
@@ -61,10 +61,31 @@ def test_trend_slope_volatility_contract_and_numeric_sanity() -> None:
     assert out["slope"].iloc[: window - 1].isna().all()
     assert out["ratio"].iloc[: window - 1].isna().all()
     assert out["slope"].dropna().iloc[-1] == pytest.approx(0.5)
-    assert out["ratio"].dropna().iloc[-1] == pytest.approx(0.25)
+    assert out["ratio"].dropna().iloc[-1] == pytest.approx(0.5 / df["close"].iloc[-1] / 2.0)
     assert out["ratio"].dropna().gt(0.0).all()
     assert out["ratio_positive"].iloc[window - 1 :].eq(1).all()
     assert out["ratio_strong"].iloc[window - 1 :].eq(1).all()
+
+
+def test_trend_slope_volatility_ratio_is_invariant_to_price_quote_scale() -> None:
+    df = _trend_frame()
+    scaled = df.copy()
+    scaled["close"] *= 100.0
+
+    base_out = add_trend_slope_volatility(
+        df,
+        volatility_col="vol",
+        window=8,
+        slope_vol_ratio_col="ratio",
+    )
+    scaled_out = add_trend_slope_volatility(
+        scaled,
+        volatility_col="vol",
+        window=8,
+        slope_vol_ratio_col="ratio",
+    )
+
+    pd.testing.assert_series_equal(base_out["ratio"], scaled_out["ratio"])
 
 
 def test_trend_slope_volatility_zero_volatility_returns_nan_ratio() -> None:

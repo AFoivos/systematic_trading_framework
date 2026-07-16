@@ -104,13 +104,13 @@ def scale_signal_for_ftmo(
 
     index = signal.index
     sig = signal.astype(float).replace([np.inf, -np.inf], np.nan).fillna(0.0)
-    vol_aligned = (
+    raw_vol = (
         vol.reindex(index)
         .astype(float)
         .replace([np.inf, -np.inf], np.nan)
-        .fillna(0.0)
-        .abs()
     )
+    valid_volatility = raw_vol.notna() & raw_vol.gt(0.0)
+    vol_aligned = raw_vol.where(valid_volatility)
     stop_distance = (float(stop_mult) * vol_aligned).clip(lower=float(eps))
     risk_based = float(risk_per_trade) / stop_distance
     if target_vol is not None:
@@ -122,17 +122,14 @@ def scale_signal_for_ftmo(
         lower=float(min_leverage),
         upper=float(max_leverage),
     )
+    leverage = leverage.where(valid_volatility, 0.0)
 
-    active = sig.abs() >= float(min_abs_signal)
+    active = (sig.abs() >= float(min_abs_signal)) & valid_volatility
     confidence_adj = pd.Series(1.0, index=index, dtype=float)
     if confidence is not None:
-        conf = (
-            confidence.reindex(index)
-            .astype(float)
-            .replace([np.inf, -np.inf], np.nan)
-            .fillna(0.0)
-            .clip(lower=0.0, upper=1.0)
-        )
+        raw_conf = confidence.reindex(index).astype(float).replace([np.inf, -np.inf], np.nan)
+        valid_confidence = raw_conf.notna()
+        conf = raw_conf.clip(lower=0.0, upper=1.0)
         if confidence_mode == "directional_class1":
             conf = conf.where(sig >= 0.0, 1.0 - conf)
         if confidence_floor is not None:
@@ -143,7 +140,11 @@ def scale_signal_for_ftmo(
             )
         else:
             confidence_adj = conf
-        confidence_adj = confidence_adj.pow(float(confidence_power))
+        confidence_adj = (
+            confidence_adj.pow(float(confidence_power))
+            .where(valid_confidence, 0.0)
+            .fillna(0.0)
+        )
 
     exposure = np.sign(sig) * sig.abs().clip(upper=1.0) * leverage * confidence_adj
     exposure = exposure.where(active, 0.0).replace([np.inf, -np.inf], np.nan).fillna(0.0)

@@ -13,7 +13,12 @@ from src.utils.trade_path import (
     simulate_long_trade_path,
     simulate_short_trade_path,
 )
-from src.evaluation.metrics import compute_backtest_metrics
+from src.evaluation.metrics import (
+    compute_backtest_metrics,
+    equity_curve_from_returns,
+    hit_rate,
+    profit_factor,
+)
 from src.risk.controls import event_risk_guard_multiplier
 
 
@@ -35,6 +40,15 @@ def _finite_positive(value: Any, *, field: str) -> float:
     if not np.isfinite(out) or out <= 0.0:
         raise ValueError(f"{field} must be finite and > 0.")
     return out
+
+
+def _is_stop_exit_reason(reason: str) -> bool:
+    normalized = str(reason).strip().lower()
+    return (
+        normalized in {"stop", "stop_loss", "same_bar_stop"}
+        or normalized.endswith("_stop")
+        or "stop_first" in normalized
+    )
 
 
 _DEFAULT_TREND_BREAK_INDICATORS = [
@@ -71,16 +85,15 @@ def _trend_break_arrays(
 
 
 def _apply_mark_to_market_trade_path(
-    mark_to_market_returns: pd.Series,
+    mark_to_market_gross_returns: pd.Series,
     *,
     closes: np.ndarray,
     entry_idx: int,
     exit_idx: int,
     entry_price: float,
-    exit_price: float,
     size: float,
     is_short: bool,
-    total_cost: float,
+    exit_legs: list[dict[str, Any]],
 ) -> None:
     """
     Add a close-to-close floating PnL path for one completed event trade.
@@ -89,19 +102,60 @@ def _apply_mark_to_market_trade_path(
     path keeps that contract intact while exposing the open-trade drawdown that a live account
     would have experienced between entry and exit.
     """
+    legs_by_index: dict[int, list[dict[str, Any]]] = {}
+    for leg in exit_legs:
+        legs_by_index.setdefault(int(leg["exit_idx"]), []).append(dict(leg))
+
     previous_price = float(entry_price)
+    remaining_fraction = 1.0
     for bar_idx in range(int(entry_idx), int(exit_idx) + 1):
-        mark_price = float(exit_price) if bar_idx == int(exit_idx) else float(closes[bar_idx])
-        if not np.isfinite(mark_price) or mark_price <= 0.0 or previous_price <= 0.0:
+        if previous_price <= 0.0 or not np.isfinite(previous_price):
+            break
+        gross_return = 0.0
+        exited_fraction = 0.0
+        for leg in sorted(
+            legs_by_index.get(bar_idx, []),
+            key=lambda item: float(item["raw_exit_price"]),
+            reverse=not is_short,
+        ):
+            fraction = min(
+                max(float(leg["fraction"]), 0.0),
+                max(remaining_fraction - exited_fraction, 0.0),
+            )
+            exit_price = float(leg["raw_exit_price"])
+            if fraction <= 0.0 or not np.isfinite(exit_price) or exit_price <= 0.0:
+                continue
+            gross_return += (
+                float(size)
+                * fraction
+                * _leg_raw_return(
+                    is_short=is_short,
+                    entry_price=previous_price,
+                    exit_price=exit_price,
+                )
+            )
+            exited_fraction += fraction
+
+        remaining_after_exits = max(remaining_fraction - exited_fraction, 0.0)
+        if remaining_after_exits > 1e-12:
+            mark_price = float(closes[bar_idx])
+            if not np.isfinite(mark_price) or mark_price <= 0.0:
+                continue
+            gross_return += (
+                float(size)
+                * remaining_after_exits
+                * _leg_raw_return(
+                    is_short=is_short,
+                    entry_price=previous_price,
+                    exit_price=mark_price,
+                )
+            )
             previous_price = mark_price
-            continue
-        if is_short:
-            gross_return = float(size) * (1.0 - mark_price / previous_price)
-        else:
-            gross_return = float(size) * (mark_price / previous_price - 1.0)
-        cost = float(total_cost) if bar_idx == int(exit_idx) else 0.0
-        mark_to_market_returns.iloc[bar_idx] += gross_return - cost
-        previous_price = mark_price
+
+        mark_to_market_gross_returns.iloc[bar_idx] += gross_return
+        remaining_fraction = remaining_after_exits
+        if remaining_fraction <= 1e-12:
+            break
 
 
 def _leg_raw_return(*, is_short: bool, entry_price: float, exit_price: float) -> float:
@@ -242,7 +296,12 @@ def run_manual_barrier_backtest(
     costs = pd.Series(0.0, index=index, name="costs", dtype=float)
     positions = pd.Series(0.0, index=index, name="positions", dtype=float)
     turnover_events = pd.Series(0.0, index=index, name="turnover", dtype=float)
-    mark_to_market_returns = pd.Series(0.0, index=index, name="mark_to_market_returns", dtype=float)
+    mark_to_market_gross_returns = pd.Series(
+        0.0,
+        index=index,
+        name="mark_to_market_gross_returns",
+        dtype=float,
+    )
     trades: list[dict[str, Any]] = []
     rejection_counts = {
         "gap_filter": 0,
@@ -275,8 +334,12 @@ def run_manual_barrier_backtest(
                 frame.iloc[i][str(entry_gap_atr_col)],
                 field=f"{entry_gap_atr_col}[signal]",
             )
-            entry_gap_atr = (entry_open - float(closes[i])) / signal_atr
-            if entry_gap_atr > float(max_entry_gap_atr):
+            adverse_entry_gap_atr = (
+                -float(np.sign(raw_signal))
+                * (entry_open - float(closes[i]))
+                / signal_atr
+            )
+            if adverse_entry_gap_atr > float(max_entry_gap_atr):
                 rejection_counts["gap_filter"] += 1
                 i += 1
                 continue
@@ -485,6 +548,14 @@ def run_manual_barrier_backtest(
                 fixed_cost = size * 2.0 * float(cost_per_unit_turnover)
                 total_cost = fixed_cost + slippage_drag
                 net_return = gross_before_cost - total_cost
+            exit_legs = [
+                {
+                    "fraction": 1.0,
+                    "exit_idx": exit_idx,
+                    "raw_exit_price": raw_exit_price,
+                    "trigger_r": np.nan,
+                }
+            ]
         risk_capital = max(size * stop_distance_pct, 1e-12)
         trade_r = net_return / risk_capital
         partial_realized_r = (
@@ -553,21 +624,23 @@ def run_manual_barrier_backtest(
                 net_returns.iloc[exit_idx] += final_gross - final_cost
         else:
             gross_returns.iloc[exit_idx] += gross_before_cost
-            costs.iloc[exit_idx] += total_cost
-            net_returns.iloc[exit_idx] += net_return
-            if partial_enabled:
-                turnover_events.iloc[entry_idx] += size
-                turnover_events.iloc[exit_idx] += size
+            entry_fixed_cost = size * float(cost_per_unit_turnover)
+            exit_cost = max(total_cost - entry_fixed_cost, 0.0)
+            costs.iloc[entry_idx] += entry_fixed_cost
+            net_returns.iloc[entry_idx] -= entry_fixed_cost
+            costs.iloc[exit_idx] += exit_cost
+            net_returns.iloc[exit_idx] += gross_before_cost - exit_cost
+            turnover_events.iloc[entry_idx] += size
+            turnover_events.iloc[exit_idx] += size
         _apply_mark_to_market_trade_path(
-            mark_to_market_returns,
+            mark_to_market_gross_returns,
             closes=closes,
             entry_idx=entry_idx,
             exit_idx=exit_idx,
             entry_price=entry_open,
-            exit_price=raw_exit_price,
             size=size,
             is_short=is_short,
-            total_cost=total_cost,
+            exit_legs=exit_legs,
         )
         if exit_idx > entry_idx:
             if partial_events:
@@ -637,40 +710,72 @@ def run_manual_barrier_backtest(
                 }
             )
         trades.append(trade_record)
-        if exit_reason in {"stop_loss", "same_bar_stop", "stop"}:
-            cooldown_until_idx = exit_idx + int(stop_cooldown_bars)
-        i = exit_idx + 1
+        if _is_stop_exit_reason(exit_reason) and int(stop_cooldown_bars) > 0:
+            cooldown_until_idx = exit_idx + int(stop_cooldown_bars) - 1
+        i = exit_idx
 
-    turnover = turnover_events if partial_enabled else (positions - positions.shift(1).fillna(0.0)).abs()
+    turnover = turnover_events
     turnover.name = "turnover"
-    equity_curve = (1.0 + net_returns).cumprod()
-    equity_curve.name = "equity"
-    summary = compute_backtest_metrics(
+    realized_equity_curve = equity_curve_from_returns(net_returns)
+    realized_summary = compute_backtest_metrics(
         net_returns=net_returns,
         periods_per_year=int(periods_per_year),
         turnover=turnover,
         costs=costs,
         gross_returns=gross_returns,
     )
-    summary.update({f"rejected_{key}": int(value) for key, value in rejection_counts.items()})
-    mark_to_market_equity = (1.0 + mark_to_market_returns).cumprod()
+    trades_df = pd.DataFrame(trades)
+    trade_returns = (
+        pd.to_numeric(trades_df["net_return"], errors="coerce").dropna().astype(float)
+        if not trades_df.empty
+        else pd.Series(dtype=float)
+    )
+    trade_metric_overrides = {
+        "profit_factor": profit_factor(trade_returns),
+        "hit_rate": hit_rate(trade_returns),
+        "metric_scope": "trade_ledger",
+        "trade_count": float(len(trades_df)),
+    }
+    realized_summary.update(trade_metric_overrides)
+    realized_summary.update(
+        {f"rejected_{key}": int(value) for key, value in rejection_counts.items()}
+    )
+
+    mark_to_market_returns = mark_to_market_gross_returns - costs
+    mark_to_market_returns.name = "mark_to_market_returns"
+    mark_to_market_equity = equity_curve_from_returns(mark_to_market_returns)
     mark_to_market_equity.name = "mark_to_market_equity"
     mark_to_market_summary = compute_backtest_metrics(
         net_returns=mark_to_market_returns,
         periods_per_year=int(periods_per_year),
+        turnover=turnover,
+        costs=costs,
+        gross_returns=mark_to_market_gross_returns,
     )
+    mark_to_market_summary.update(trade_metric_overrides)
+    mark_to_market_summary.update(
+        {f"rejected_{key}": int(value) for key, value in rejection_counts.items()}
+    )
+    mark_to_market_summary["equity_source"] = "mark_to_market"
+    mark_to_market_summary["realized_cumulative_return"] = realized_summary[
+        "cumulative_return"
+    ]
     return BacktestResult(
-        equity_curve=equity_curve,
-        returns=net_returns,
-        gross_returns=gross_returns,
+        equity_curve=mark_to_market_equity.rename("equity"),
+        returns=mark_to_market_returns,
+        gross_returns=mark_to_market_gross_returns,
         costs=costs,
         positions=positions,
         turnover=turnover,
-        summary=summary,
-        trades=pd.DataFrame(trades),
+        summary=mark_to_market_summary,
+        trades=trades_df,
         mark_to_market_returns=mark_to_market_returns,
         mark_to_market_equity_curve=mark_to_market_equity,
         mark_to_market_summary=mark_to_market_summary,
+        realized_returns=net_returns,
+        realized_gross_returns=gross_returns,
+        realized_equity_curve=realized_equity_curve,
+        realized_summary=realized_summary,
     )
 
 

@@ -629,7 +629,7 @@ def _pnl_diagnostics(
     total = p.get("total_pnl", pd.Series(dtype=float))
     fees = _coalesce(summary.get("fees"), _last(p.get("fees")))
     net = _last(total)
-    drawdowns = total - total.cummax()
+    drawdowns = total - total.cummax().clip(lower=0.0)
     max_dd = abs(float(drawdowns.min())) if not drawdowns.empty else None
     max_dd_ts = p.loc[drawdowns.idxmin(), "timestamp"].isoformat() if not drawdowns.empty and drawdowns.notna().any() else None
     notional = None
@@ -914,7 +914,12 @@ def _write_plots(out_dir: Path, *, tables: Mapping[str, pd.DataFrame], diagnosti
     if not pnl_ts.empty and "total_pnl" in pnl_ts:
         _coerce_numeric(pnl_ts)
         save_plot("pnl_curve.png", lambda plt: plt.plot(pnl_ts["total_pnl"]))
-        save_plot("drawdown.png", lambda plt: plt.plot(pnl_ts["total_pnl"] - pnl_ts["total_pnl"].cummax()))
+        save_plot(
+            "drawdown.png",
+            lambda plt: plt.plot(
+                pnl_ts["total_pnl"] - pnl_ts["total_pnl"].cummax().clip(lower=0.0)
+            ),
+        )
     if not inv.empty and "inventory" in inv:
         save_plot("inventory_timeseries.png", lambda plt: plt.plot(inv["inventory"]))
     if not quotes.empty and "quote_spread_bps" in quotes:

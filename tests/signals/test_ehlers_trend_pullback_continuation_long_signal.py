@@ -5,13 +5,11 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from src.experiments.optuna_search import load_search_space_yaml, validate_search_space_feature_contract
+from src.experiments.optuna_search import load_optuna_spec_yaml, run_optuna_spec
 from src.signals.ehlers_trend_pullback_continuation_long_signal import (
     build_ehlers_trend_pullback_continuation_long_signal,
 )
 from src.signals.registry import SIGNAL_KINDS
-from src.targets.registry import TARGET_REGISTRY
-from src.utils.config import load_experiment_config
 
 
 CONFIG_DIR = Path("config/experiments/ehlers_trend_pullback_continuation_long")
@@ -137,29 +135,40 @@ def test_signal_uses_current_and_past_only_for_laguerre_rising() -> None:
 
 
 @pytest.mark.parametrize(
-    "path",
+    ("path", "expected_optuna_references"),
     [
-        CONFIG_DIR / "us100_30m_ehlers_trend_pullback_continuation_long_v1.yaml",
-        CONFIG_DIR / "all6_30m_ehlers_trend_pullback_continuation_long_v1.yaml",
-        CONFIG_DIR / "us100_30m_ehlers_trend_pullback_continuation_target_lab_v1.yaml",
+        (
+            CONFIG_DIR / "us100_30m_ehlers_trend_pullback_continuation_long_v1.yaml",
+            1,
+        ),
+        (
+            CONFIG_DIR / "all6_30m_ehlers_trend_pullback_continuation_long_v1.yaml",
+            0,
+        ),
+        (
+            CONFIG_DIR / "us100_30m_ehlers_trend_pullback_continuation_target_lab_v1.yaml",
+            1,
+        ),
     ],
 )
-def test_ehlers_trend_pullback_yaml_contracts_load(path: Path) -> None:
-    cfg = load_experiment_config(path)
+def test_retired_ehlers_trend_pullback_configs_are_not_referenced_by_active_specs(
+    path: Path,
+    expected_optuna_references: int,
+) -> None:
+    assert not path.is_file()
 
-    assert cfg["model"]["kind"] == "none"
-    assert cfg["signals"]["kind"] == "ehlers_trend_pullback_continuation_long"
-    assert cfg["signals"]["kind"] in SIGNAL_KINDS
-    assert cfg["signals"]["params"]["long_only"] is True
-    assert cfg["backtest"]["allow_short"] is False
-    assert all(step["step"] != "feature_transforms" for step in cfg["features"])
-    assert all(step["step"] != "tsfresh_rolling" for step in cfg["features"])
-    for step in cfg["features"]:
-        assert "feature_transforms" not in step
+    specs = [
+        load_optuna_spec_yaml(spec_path)
+        for spec_path in sorted(OPTUNA_DIR.glob("*.yaml"))
+    ]
+    references = [
+        spec
+        for spec in specs
+        if Path(spec["base_config"]).as_posix() == path.as_posix()
+    ]
 
-    if "target_lab" in path.name:
-        assert cfg["target"]["kind"] == "candidate_expected_r"
-        assert "candidate_expected_r" in TARGET_REGISTRY
+    assert len(references) == expected_optuna_references
+    assert all(spec["archived"] is True for spec in references)
 
 
 @pytest.mark.parametrize(
@@ -169,9 +178,12 @@ def test_ehlers_trend_pullback_yaml_contracts_load(path: Path) -> None:
         OPTUNA_DIR / "optuna_us100_30m_ehlers_trend_pullback_continuation_target_lab_v1.yaml",
     ],
 )
-def test_ehlers_trend_pullback_optuna_contracts_load(path: Path) -> None:
-    search_space = load_search_space_yaml(path)
-    base_cfg = load_experiment_config(path.read_text(encoding="utf-8").splitlines()[0].split(":", 1)[1].strip())
+def test_ehlers_trend_pullback_optuna_specs_are_archived_and_fail_closed(path: Path) -> None:
+    spec = load_optuna_spec_yaml(path)
 
-    validate_search_space_feature_contract(base_cfg, search_space)
-    assert search_space
+    assert spec["archived"] is True
+    assert spec["archive_reason"]
+    assert spec["search_space"]
+    assert not Path(spec["base_config"]).is_file()
+    with pytest.raises(ValueError, match="archived and cannot be run"):
+        run_optuna_spec(path, no_report=True)

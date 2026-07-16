@@ -34,6 +34,9 @@ def _target(
     cost_per_unit_turnover: float = 0.0,
     max_holding_bars: int = 3,
     allow_partial_horizon: bool = False,
+    entry_price_mode: str = "next_open",
+    stop_mode: str = "volatility_stop",
+    risk_per_trade: float = 0.006,
 ) -> pd.DataFrame:
     out, _, _, _ = build_path_dependent_r_target(
         frame,
@@ -46,6 +49,9 @@ def _target(
             "low_col": "low",
             "close_col": "close",
             "volatility_col": "vol",
+            "entry_price_mode": entry_price_mode,
+            "stop_mode": stop_mode,
+            "risk_per_trade": risk_per_trade,
             "take_profit_r": 1.0,
             "stop_loss_r": 1.0,
             "max_holding_bars": max_holding_bars,
@@ -253,3 +259,53 @@ def test_path_dependent_r_invalid_volatility_is_unlabeled() -> None:
     assert out["meta_exit_reason"].iloc[0] == "invalid_volatility"
     assert np.isnan(out["meta_net_r"].iloc[0])
     assert np.isnan(out["meta_label_positive"].iloc[0])
+
+
+def test_path_dependent_r_emits_standardized_horizon_metadata() -> None:
+    _, _, _, finite_meta = build_path_dependent_r_target(
+        _base_frame(),
+        {
+            "candidate_col": "primary_candidate",
+            "side_col": "primary_candidate_side",
+            "pred_is_oos_col": "pred_is_oos",
+            "volatility_col": "vol",
+            "max_holding_bars": 3,
+        },
+    )
+    _, _, _, unlimited_meta = build_path_dependent_r_target(
+        _base_frame(),
+        {
+            "candidate_col": "primary_candidate",
+            "side_col": "primary_candidate_side",
+            "pred_is_oos_col": "pred_is_oos",
+            "volatility_col": "vol",
+            "max_holding_bars": None,
+            "allow_partial_horizon": True,
+        },
+    )
+
+    assert finite_meta["horizon"] == 3
+    assert finite_meta["max_holding"] == 3
+    assert finite_meta["unlimited_horizon"] is False
+    assert unlimited_meta["horizon"] is None
+    assert unlimited_meta["max_holding"] is None
+    assert unlimited_meta["unlimited_horizon"] is True
+
+
+@pytest.mark.parametrize("side", [1, -1])
+def test_path_dependent_r_current_close_ignores_pre_entry_bar_extremes(side: int) -> None:
+    frame = _candidate(_base_frame(), 0, side)
+    frame.loc[frame.index[0], ["open", "high", "low", "close"]] = [100.0, 120.0, 80.0, 100.0]
+    frame.loc[frame.index[1:3], ["open", "high", "low", "close"]] = [100.0, 101.0, 99.0, 100.0]
+
+    out = _target(
+        frame,
+        max_holding_bars=2,
+        entry_price_mode="current_close",
+        stop_mode="fixed_return",
+        risk_per_trade=0.05,
+    )
+
+    assert out["meta_entry_price"].iloc[0] == pytest.approx(100.0)
+    assert out["meta_exit_reason"].iloc[0] == "max_holding_close"
+    assert out["meta_holding_bars"].iloc[0] == pytest.approx(2.0)

@@ -258,7 +258,11 @@ def build_candidate_expected_r_target(
         if entry_idx >= n:
             exit_reasons[start_idx] = "unavailable_tail"
             continue
-        max_exit_idx = entry_idx + max_holding_bars - 1
+        path_start_idx = entry_idx if entry_price_mode == "next_open" else start_idx + 1
+        if path_start_idx >= n:
+            exit_reasons[start_idx] = "unavailable_tail"
+            continue
+        max_exit_idx = path_start_idx + max_holding_bars - 1
         if max_exit_idx >= n:
             if not allow_partial_horizon:
                 exit_reasons[start_idx] = "unavailable_tail"
@@ -296,7 +300,7 @@ def build_candidate_expected_r_target(
         mfe, mae, time_to_mfe, time_to_mae = _time_to_extreme_r(
             highs=highs,
             lows=lows,
-            entry_idx=entry_idx,
+            entry_idx=path_start_idx,
             max_exit_idx=max_exit_idx,
             entry_price=entry_price,
             risk_distance_price=risk_distance_price,
@@ -313,7 +317,7 @@ def build_candidate_expected_r_target(
                 lows=lows,
                 closes=closes,
                 signals=None,
-                entry_idx=entry_idx,
+                entry_idx=path_start_idx,
                 max_exit_idx=max_exit_idx,
                 entry_price=entry_price,
                 initial_stop_price=stop_price,
@@ -417,6 +421,7 @@ def build_candidate_expected_r_target(
         "stop_mode": stop_mode,
         "stop_loss_r": stop_loss_r,
         "take_profit_r": take_profit_r,
+        "horizon": max_holding_bars,
         "max_holding_bars": max_holding_bars,
         "target_r_min": target_r_min,
         "clip_r": [clip_low, clip_high],

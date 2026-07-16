@@ -24,6 +24,86 @@ def _bars_since_last_true(mask: pd.Series, *, name: str) -> pd.Series:
     return pd.Series(out, index=mask.index, name=name, dtype="float32")
 
 
+def _breakout_retest_events(
+    *,
+    close: pd.Series,
+    high: pd.Series,
+    low: pd.Series,
+    resistance_level: pd.Series,
+    support_level: pd.Series,
+    breakout_tol: pd.Series,
+    touch_tol: pd.Series,
+    expiry_bars: int,
+) -> tuple[pd.Series, pd.Series, pd.Series, pd.Series]:
+    breakout_up_condition = (
+        resistance_level.notna() & (close > resistance_level + breakout_tol)
+    )
+    breakout_down_condition = (
+        support_level.notna() & (close < support_level - breakout_tol)
+    )
+    breakout_up = breakout_up_condition & ~breakout_up_condition.shift(1, fill_value=False)
+    breakout_down = breakout_down_condition & ~breakout_down_condition.shift(1, fill_value=False)
+
+    retest_resistance = np.zeros(len(close), dtype=bool)
+    retest_support = np.zeros(len(close), dtype=bool)
+    active_resistance: tuple[float, int] | None = None
+    active_support: tuple[float, int] | None = None
+
+    for pos in range(len(close)):
+        close_value = float(close.iloc[pos])
+        high_value = float(high.iloc[pos])
+        low_value = float(low.iloc[pos])
+        touch_value = float(touch_tol.iloc[pos])
+
+        if active_resistance is not None:
+            level, age = active_resistance
+            age += 1
+            if age > expiry_bars or not np.isfinite(close_value) or close_value < level:
+                active_resistance = None
+            elif (
+                np.isfinite(low_value)
+                and np.isfinite(touch_value)
+                and low_value <= level + touch_value
+                and close_value >= level
+            ):
+                retest_resistance[pos] = True
+                active_resistance = None
+            else:
+                active_resistance = (level, age)
+
+        if active_support is not None:
+            level, age = active_support
+            age += 1
+            if age > expiry_bars or not np.isfinite(close_value) or close_value > level:
+                active_support = None
+            elif (
+                np.isfinite(high_value)
+                and np.isfinite(touch_value)
+                and high_value >= level - touch_value
+                and close_value <= level
+            ):
+                retest_support[pos] = True
+                active_support = None
+            else:
+                active_support = (level, age)
+
+        # Arm only after evaluating this row, so a breakout can never also be
+        # its own retest. A repeated breakout replaces any older pending state.
+        if bool(breakout_up.iloc[pos]):
+            level = float(resistance_level.iloc[pos])
+            active_resistance = (level, 0) if np.isfinite(level) else None
+        if bool(breakout_down.iloc[pos]):
+            level = float(support_level.iloc[pos])
+            active_support = (level, 0) if np.isfinite(level) else None
+
+    return (
+        breakout_up.astype("float32"),
+        breakout_down.astype("float32"),
+        pd.Series(retest_resistance, index=close.index, dtype="float32"),
+        pd.Series(retest_support, index=close.index, dtype="float32"),
+    )
+
+
 def add_support_resistance_v2_features(
     df: pd.DataFrame,
     *,
@@ -36,6 +116,7 @@ def add_support_resistance_v2_features(
     pivot_confirm_bars: int = 6,
     touch_tolerance_atr: float = 0.25,
     breakout_tolerance_atr: float = 0.05,
+    retest_expiry_bars: int = 24,
     inplace: bool = False,
 ) -> pd.DataFrame:
     """
@@ -100,6 +181,10 @@ def add_support_resistance_v2_features(
     pivot_left_window = _validate_positive_int(pivot_left_window, field="pivot_left_window")
     pivot_confirm_bars = _validate_positive_int(pivot_confirm_bars, field="pivot_confirm_bars")
     atr_window = _validate_positive_int(atr_window, field="atr_window")
+    retest_expiry_bars = _validate_positive_int(
+        retest_expiry_bars,
+        field="retest_expiry_bars",
+    )
     if float(touch_tolerance_atr) < 0.0:
         raise ValueError("touch_tolerance_atr must be >= 0.")
     if float(breakout_tolerance_atr) < 0.0:
@@ -174,38 +259,22 @@ def add_support_resistance_v2_features(
     )
 
     breakout_tol = atr * float(breakout_tolerance_atr)
-    breakout_up = resistance_level.notna() & (close > (resistance_level + breakout_tol))
-    breakout_down = support_level.notna() & (close < (support_level - breakout_tol))
-    out["sr_v2_breakout_up"] = breakout_up.astype("float32")
-    out["sr_v2_breakout_down"] = breakout_down.astype("float32")
-
-    breakout_up_state = pd.Series(
-        np.where(breakout_up.to_numpy(dtype=bool), 1.0, np.nan),
-        index=out.index,
-        dtype=float,
+    breakout_up, breakout_down, resistance_retest, support_retest = (
+        _breakout_retest_events(
+            close=close,
+            high=high,
+            low=low,
+            resistance_level=resistance_level,
+            support_level=support_level,
+            breakout_tol=breakout_tol,
+            touch_tol=touch_tol,
+            expiry_bars=retest_expiry_bars,
+        )
     )
-    breakout_down_state = pd.Series(
-        np.where(breakout_down.to_numpy(dtype=bool), 1.0, np.nan),
-        index=out.index,
-        dtype=float,
-    )
-    breakout_up_active = breakout_up_state.ffill().notna()
-    breakout_down_active = breakout_down_state.ffill().notna()
-
-    resistance_retest = (
-        breakout_up_active
-        & resistance_level.notna()
-        & (low <= (resistance_level + touch_tol))
-        & (close >= resistance_level)
-    )
-    support_retest = (
-        breakout_down_active
-        & support_level.notna()
-        & (high >= (support_level - touch_tol))
-        & (close <= support_level)
-    )
-    out["sr_v2_retest_resistance"] = resistance_retest.astype("float32")
-    out["sr_v2_retest_support"] = support_retest.astype("float32")
+    out["sr_v2_breakout_up"] = breakout_up
+    out["sr_v2_breakout_down"] = breakout_down
+    out["sr_v2_retest_resistance"] = resistance_retest
+    out["sr_v2_retest_support"] = support_retest
 
     return out
 

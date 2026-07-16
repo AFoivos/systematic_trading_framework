@@ -5,6 +5,7 @@ import csv
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import datetime
+from functools import lru_cache
 import json
 import math
 from pathlib import Path
@@ -29,6 +30,44 @@ ConstraintOperator = Literal["lt", "le", "gt", "ge"]
 _DEFAULT_OBJECTIVE_PATH = "evaluation.primary_summary.sharpe"
 _DEFAULT_SAMPLER = "tpe"
 _RUN_DIR_TZ = ZoneInfo("Europe/Athens")
+_OPTUNA_ARCHIVE_MANIFEST = PROJECT_ROOT / "config" / "optuna" / "archive_manifest.json"
+
+
+@lru_cache(maxsize=1)
+def _archived_optuna_specs() -> dict[str, str]:
+    if not _OPTUNA_ARCHIVE_MANIFEST.is_file():
+        return {}
+    with _OPTUNA_ARCHIVE_MANIFEST.open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    if not isinstance(payload, Mapping):
+        raise ValueError("Optuna archive manifest must be a JSON mapping.")
+    if payload.get("schema_version") != 1:
+        raise ValueError("Optuna archive manifest schema_version must be 1.")
+    reason = payload.get("reason")
+    if not isinstance(reason, str) or not reason.strip():
+        raise ValueError("Optuna archive manifest must define a non-empty reason.")
+    specs = payload.get("specs")
+    if not isinstance(specs, list) or any(
+        not isinstance(item, str) or not item.strip() for item in specs
+    ):
+        raise ValueError("Optuna archive manifest specs must be a list of non-empty paths.")
+    normalized = [Path(item).as_posix() for item in specs]
+    if len(set(normalized)) != len(normalized):
+        raise ValueError("Optuna archive manifest must not contain duplicate spec paths.")
+    for item in normalized:
+        if not item.startswith("config/optuna/") or not item.endswith((".yaml", ".yml")):
+            raise ValueError(f"Optuna archive manifest contains an invalid spec path: {item}")
+        if not (PROJECT_ROOT / item).is_file():
+            raise ValueError(f"Optuna archive manifest references a missing spec: {item}")
+    return {item: reason.strip() for item in normalized}
+
+
+def _optuna_archive_reason(path: Path) -> str | None:
+    try:
+        relative = path.resolve().relative_to(PROJECT_ROOT.resolve()).as_posix()
+    except ValueError:
+        return None
+    return _archived_optuna_specs().get(relative)
 
 
 def _run_dir_timestamp(now: datetime | None = None) -> str:
@@ -1610,7 +1649,7 @@ def build_study_report_payload(
     return _jsonable(
         {
             "study_name": getattr(study, "study_name", None),
-            "config_path": str(Path(config_path)),
+            "config_path": Path(config_path).as_posix(),
             "objective": objective_spec,
             "pruning": pruning_spec,
             "search_space": [dimension for dimension in normalized_space],
@@ -1883,7 +1922,7 @@ def optimize_experiment(
         sampler=_build_sampler(sampler=sampler, seed=seed),
         pruner=_build_pruner(pruning_spec),
     )
-    study.set_user_attr("config_path", str(Path(config_path)))
+    study.set_user_attr("config_path", Path(config_path).as_posix())
     study.set_user_attr("objective_metric", objective_spec.metric_path)
     study.set_user_attr("sampler", str(sampler))
     if pruning_spec.enabled:
@@ -1963,6 +2002,10 @@ def load_optuna_spec_yaml(path: str | Path) -> dict[str, Any]:
     spec["search_space"] = load_search_space_yaml(resolved_path)
     spec["objective"] = normalize_objective_spec(spec.get("objective"))
     spec["pruning"] = normalize_pruning_spec(spec.get("pruning"))
+    archive_reason = _optuna_archive_reason(resolved_path)
+    spec["archived"] = archive_reason is not None
+    if archive_reason is not None:
+        spec["archive_reason"] = archive_reason
     return spec
 
 
@@ -1986,6 +2029,11 @@ def run_optuna_spec(
     Run an Optuna study from a repository Optuna spec YAML.
     """
     spec = load_optuna_spec_yaml(spec_path)
+    if spec.get("archived", False):
+        raise ValueError(
+            f"Optuna spec is archived and cannot be run: {spec_path}. "
+            f"Reason: {spec.get('archive_reason')}"
+        )
     study_cfg = dict(spec.get("study", {}) or {})
     overrides = {
         "n_trials": n_trials,

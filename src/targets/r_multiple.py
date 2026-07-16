@@ -396,8 +396,12 @@ def build_r_multiple_target(
         if entry_idx >= n:
             exit_reasons[start_idx] = "unavailable_tail"
             continue
+        path_start_idx = entry_idx if entry_price_mode == "next_open" else start_idx + 1
+        if path_start_idx >= n:
+            exit_reasons[start_idx] = "unavailable_tail"
+            continue
 
-        max_exit_idx = entry_idx + max_holding_bars - 1
+        max_exit_idx = path_start_idx + max_holding_bars - 1
         if max_exit_idx >= n:
             if not allow_partial_horizon:
                 exit_reasons[start_idx] = "unavailable_tail"
@@ -440,7 +444,7 @@ def build_r_multiple_target(
                 lows=lows,
                 closes=prices,
                 signals=None,
-                entry_idx=entry_idx,
+                entry_idx=path_start_idx,
                 max_exit_idx=max_exit_idx,
                 entry_price=entry_price,
                 initial_stop_price=stop_price,

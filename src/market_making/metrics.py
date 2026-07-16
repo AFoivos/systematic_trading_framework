@@ -68,10 +68,10 @@ class PaperRunSummary:
 
 def max_drawdown(values: list[float]) -> float:
     """Compute absolute max drawdown over an equity curve."""
-    peak: float | None = None
+    peak = 0.0
     worst = 0.0
     for value in values:
-        peak = value if peak is None else max(peak, value)
+        peak = max(peak, value)
         worst = min(worst, value - peak)
     return abs(worst)
 

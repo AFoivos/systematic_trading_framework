@@ -4,8 +4,57 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
-def _extras(data: dict[str, Any], known: set[str]) -> dict[str, Any]:
-    return {k: v for k, v in data.items() if k not in known}
+_EXTENSION_NAMESPACE_KEYS = frozenset({"extensions", "metadata"})
+
+
+def _validated_extras(
+    data: dict[str, Any],
+    known: set[str],
+    *,
+    field_name: str,
+    allowed_extra: set[str] | frozenset[str] = frozenset(),
+) -> dict[str, Any]:
+    """
+    Preserve only explicit compatibility/extension namespaces.
+
+    Execution-bearing config blocks are intentionally strict: silently carrying
+    an unknown key into resolved artifacts lets a misspelling look active while
+    the consumer executes its default. Compatibility keys are named here so
+    legacy tracked configs remain reproducible without reopening a catch-all.
+    """
+    allowed = set(allowed_extra) | set(_EXTENSION_NAMESPACE_KEYS)
+    unknown = sorted(set(data) - known - allowed)
+    if unknown:
+        supported = ", ".join(sorted(known | allowed))
+        raise ValueError(
+            f"{field_name} has unsupported keys: {unknown}. Supported keys: {supported}."
+        )
+    for namespace in _EXTENSION_NAMESPACE_KEYS:
+        if namespace in data and not isinstance(data[namespace], dict):
+            raise TypeError(f"{field_name}.{namespace} must be a mapping.")
+    return {key: value for key, value in data.items() if key in allowed}
+
+
+def _validate_model_backtest_context(data: dict[str, Any]) -> None:
+    """
+    Validate the narrow RL reward-return context accepted under ``model``.
+
+    The experiment pipeline injects the top-level backtest block into model
+    execution context when this override is absent.  Tracked RL examples also
+    support declaring only the return-series semantics locally, so keep that
+    documented compatibility surface strict instead of treating it as a
+    catch-all model extension.
+    """
+    if "backtest" not in data:
+        return
+    value = data["backtest"]
+    if not isinstance(value, dict):
+        raise TypeError("model.backtest must be a mapping when provided.")
+    _validated_extras(
+        value,
+        {"returns_col", "returns_type"},
+        field_name="model.backtest",
+    )
 
 
 @dataclass(frozen=True)
@@ -24,7 +73,18 @@ class FeatureStep:
             params=dict(data.get("params", {}) or {}),
             outputs={str(k): str(v) for k, v in dict(data.get("outputs", {}) or {}).items()},
             enabled=bool(data.get("enabled", True)),
-            extra=_extras(data, known),
+            extra=_validated_extras(
+                data,
+                known,
+                field_name="features[]",
+                allowed_extra={
+                    "normalizations",
+                    "normalizations_by_asset",
+                    "params_by_asset",
+                    "transforms",
+                    "transforms_by_asset",
+                },
+            ),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -78,7 +138,7 @@ class DataConfig:
             api_key_env=data.get("api_key_env"),
             pit=dict(data.get("pit", {}) or {}),
             storage=dict(data.get("storage", {}) or {}),
-            extra=_extras(data, known),
+            extra=_validated_extras(data, known, field_name="data"),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -144,6 +204,7 @@ class ModelConfig:
             "signal_col",
             "action_col",
         }
+        _validate_model_backtest_context(data)
         feature_cols_raw = data.get("feature_cols")
         if feature_cols_raw is not None and not isinstance(feature_cols_raw, list):
             raise TypeError("model.feature_cols must be a list[str].")
@@ -170,7 +231,12 @@ class ModelConfig:
             returns_input_col=data.get("returns_input_col"),
             signal_col=data.get("signal_col"),
             action_col=data.get("action_col"),
-            extra=_extras(data, known),
+            extra=_validated_extras(
+                data,
+                known,
+                field_name="model",
+                allowed_extra={"backtest", "minimum_expected_features", "overlay"},
+            ),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -280,7 +346,12 @@ class ModelStageConfig:
             returns_input_col=data.get("returns_input_col"),
             signal_col=data.get("signal_col"),
             action_col=data.get("action_col"),
-            extra=_extras(data, known),
+            extra=_validated_extras(
+                data,
+                known,
+                field_name="model_stages[]",
+                allowed_extra={"minimum_expected_features", "overlay"},
+            ),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -326,7 +397,12 @@ class SignalsConfig:
             kind=str(data.get("kind", "none")),
             params=dict(data.get("params", {}) or {}),
             outputs={str(k): str(v) for k, v in dict(data.get("outputs", {}) or {}).items()},
-            extra=_extras(data, known),
+            extra=_validated_extras(
+                data,
+                known,
+                field_name="signals",
+                allowed_extra={"params_by_asset"},
+            ),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -374,7 +450,12 @@ class RiskConfig:
             sizing=dict(data.get("sizing", {}) or {}),
             drawdown_sizing=dict(data.get("drawdown_sizing", {}) or {}),
             vol_col=data.get("vol_col"),
-            extra=_extras(data, known),
+            extra=_validated_extras(
+                data,
+                known,
+                field_name="risk",
+                allowed_extra={"max_correlated_us_index_risk"},
+            ),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -521,7 +602,18 @@ class BacktestConfig:
             dynamic_exits=dict(data.get("dynamic_exits", {}) or {}),
             partial_exits=dict(data.get("partial_exits", {}) or {}),
             allow_short=bool(data.get("allow_short", False)),
-            extra=_extras(data, known),
+            extra=_validated_extras(
+                data,
+                known,
+                field_name="backtest",
+                allowed_extra={
+                    "correlation_guard",
+                    "entry_gap_atr_col",
+                    "long_only",
+                    "max_entry_gap_atr",
+                    "stop_cooldown_bars",
+                },
+            ),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -615,7 +707,7 @@ class PortfolioConfig:
             selection=dict(data.get("selection", {}) or {}),
             constraints=dict(data.get("constraints", {}) or {}),
             asset_groups=dict(data.get("asset_groups", {}) or {}),
-            extra=_extras(data, known),
+            extra=_validated_extras(data, known, field_name="portfolio"),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -650,7 +742,7 @@ class MonitoringConfig:
             enabled=bool(data.get("enabled", True)),
             psi_threshold=float(data.get("psi_threshold", 0.2)),
             n_bins=int(data.get("n_bins", 10)),
-            extra=_extras(data, known),
+            extra=_validated_extras(data, known, field_name="monitoring"),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -694,7 +786,7 @@ class ExecutionConfig:
             hysteresis=dict(data.get("hysteresis", {}) or {}),
             current_weights=dict(data.get("current_weights", {}) or {}),
             current_prices=dict(data.get("current_prices", {}) or {}),
-            extra=_extras(data, known),
+            extra=_validated_extras(data, known, field_name="execution"),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -729,7 +821,23 @@ class LoggingConfig:
             output_dir=str(data.get("output_dir", "logs/experiments")),
             stage_tails=dict(data.get("stage_tails", {}) or {}),
             execution_source_audit=dict(data.get("execution_source_audit", {}) or {}),
-            extra=_extras(data, known),
+            extra=_validated_extras(
+                data,
+                known,
+                field_name="logging",
+                allowed_extra={
+                    "install_model",
+                    "installed_model_dir",
+                    "model_artifact_name",
+                    "model_filename",
+                    "model_install_dir",
+                    "model_name",
+                    "model_registry_dir",
+                    "save_model",
+                    "save_predictions",
+                    "save_processed",
+                },
+            ),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -799,7 +907,23 @@ class ResolvedExperimentConfig:
             execution=ExecutionConfig.from_dict(dict(data.get("execution", {}) or {})),
             logging=LoggingConfig.from_dict(dict(data.get("logging", {}) or {})),
             target=dict(data.get("target", {}) or {}),
-            extra=_extras(data, known),
+            extra=_validated_extras(
+                data,
+                known,
+                field_name="experiment",
+                allowed_extra={
+                    "decision",
+                    "evaluation",
+                    "metrics",
+                    "panel_features",
+                    "panel_signals",
+                    "research_metadata",
+                    "signals_catalog",
+                    "strategy",
+                    "targets_catalog",
+                    "validation",
+                },
+            ),
         )
 
     def to_dict(self) -> dict[str, Any]:

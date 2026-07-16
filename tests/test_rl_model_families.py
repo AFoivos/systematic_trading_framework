@@ -8,10 +8,24 @@ import textwrap
 
 import pytest
 import numpy as np
+import pandas as pd
 
 from src.experiments.registry import MODEL_REGISTRY
+from src.models.rl.common import (
+    _PortfolioBundle,
+    _SingleAssetBundle,
+    _rollout_portfolio_policy,
+    _rollout_single_asset_policy,
+)
+from src.utils.config import load_experiment_config
+from src.utils.config_schemas import ModelConfig
 from src.utils.config_validation import ConfigValidationError, validate_model_block, validate_resolved_config
 from src.models.rl.envs import RLExecutionConfig, RLRewardConfig, SingleAssetTradingEnv
+from src.portfolio import PortfolioConstraints
+from tests.optional_dependencies import (
+    is_optional_dependency_runtime_failure,
+    optional_dependency_stack_available,
+)
 
 
 def _base_rl_model_cfg(*, signal_col: str = "signal_rl") -> dict[str, object]:
@@ -144,16 +158,6 @@ def _resolved_rl_config(
     }
 
 
-def _torch_stack_available_in_subprocess() -> bool:
-    proc = subprocess.run(
-        [sys.executable, "-c", "import torch, stable_baselines3, gymnasium; print('ok')"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return proc.returncode == 0
-
-
 def _run_python_json(script: str, *args: str) -> dict[str, object]:
     env = dict(os.environ)
     env["OMP_NUM_THREADS"] = "1"
@@ -172,7 +176,10 @@ def _run_python_json(script: str, *args: str) -> dict[str, object]:
         env=env,
     )
     if proc.returncode != 0:
-        if "Fatal Python error: Aborted" in proc.stderr or "OMP: Error #179" in proc.stderr:
+        if is_optional_dependency_runtime_failure(
+            proc,
+            modules=("torch", "stable_baselines3", "gymnasium"),
+        ):
             pytest.skip("RL subprocess run is unstable in this environment.")
         raise AssertionError(proc.stderr or proc.stdout)
     return json.loads(proc.stdout)
@@ -213,7 +220,12 @@ def _script_prelude() -> str:
 
 
 RL_SUBPROCESS_ONLY = pytest.mark.skipif(
-    not _torch_stack_available_in_subprocess(),
+    not optional_dependency_stack_available(
+        "torch",
+        "stable_baselines3",
+        "gymnasium",
+        limit_native_threads=True,
+    ),
     reason="torch / stable-baselines3 stack is unavailable in subprocess.",
 )
 
@@ -236,6 +248,41 @@ def test_validate_model_block_rejects_continuous_dqn_action_space() -> None:
 
     with pytest.raises(ConfigValidationError, match="DQN agents require"):
         validate_model_block(model)
+
+
+def test_rl_model_backtest_context_is_strict_and_loadable(tmp_path) -> None:
+    config = _resolved_rl_config(model_kind="ppo_agent")
+    config_path = tmp_path / "ppo_agent_schema.json"
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    resolved = load_experiment_config(config_path)
+
+    assert resolved["model"]["backtest"] == {
+        "returns_col": "close_ret",
+        "returns_type": "simple",
+    }
+
+    invalid_model = dict(config["model"])
+    invalid_model["backtest"] = {
+        "returns_col": "close_ret",
+        "returns_type": "simple",
+        "returns_typo": "simple",
+    }
+    with pytest.raises(ConfigValidationError, match="model.backtest has unsupported keys.*returns_typo"):
+        validate_model_block(invalid_model)
+    with pytest.raises(ValueError, match="model.backtest has unsupported keys.*returns_typo"):
+        ModelConfig.from_dict(invalid_model)
+
+
+def test_validate_resolved_config_rejects_rl_model_backtest_mismatch() -> None:
+    cfg = _resolved_rl_config(model_kind="ppo_agent")
+    cfg["model"]["backtest"]["returns_type"] = "log"
+
+    with pytest.raises(
+        ConfigValidationError,
+        match="model.backtest.returns_type must match top-level backtest.returns_type",
+    ):
+        validate_resolved_config(cfg)
 
 
 def test_single_asset_env_enforces_min_holding_bars_and_switching_penalty() -> None:
@@ -291,6 +338,169 @@ def test_single_asset_env_dd_guard_forces_future_flat_cooloff() -> None:
     assert info_1["position"] == 1.0
     assert info_2["position"] == 0.0
     assert info_3["position"] == 1.0
+
+
+class _SequencePolicy:
+    def __init__(self, actions: list[object]) -> None:
+        self.actions = actions
+        self.position = 0
+
+    def predict(self, observation: np.ndarray, deterministic: bool = True) -> tuple[object, None]:
+        del observation, deterministic
+        action = self.actions[min(self.position, len(self.actions) - 1)]
+        self.position += 1
+        return action, None
+
+
+def _single_asset_rollout(
+    *,
+    actions: list[object],
+    simple_returns: list[float],
+    execution_config: RLExecutionConfig,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    index = pd.RangeIndex(len(simple_returns))
+    bundle = _SingleAssetBundle(
+        index=index,
+        features=np.zeros((len(index), 1), dtype=np.float32),
+        simple_returns=np.asarray(simple_returns, dtype=np.float32),
+        feature_cols=["feature_x"],
+    )
+    signals, raw_actions, rewards = _rollout_single_asset_policy(
+        model=_SequencePolicy(actions),
+        bundle=bundle,
+        indices=np.arange(len(index), dtype=int),
+        window_size=2,
+        continuous_actions=True,
+        max_signal_abs=1.0,
+        discrete_action_values=None,
+        reward_config=RLRewardConfig(),
+        execution_config=execution_config,
+    )
+    return (
+        signals.to_numpy(dtype=float),
+        raw_actions.to_numpy(dtype=float),
+        rewards.to_numpy(dtype=float),
+    )
+
+
+def test_single_asset_oos_rollout_emits_hysteresis_controlled_positions() -> None:
+    signals, raw_actions, _ = _single_asset_rollout(
+        actions=[np.array([0.1], dtype=np.float32)] * 3,
+        simple_returns=[0.0, 0.0, 0.0],
+        execution_config=RLExecutionConfig(action_hysteresis=0.2),
+    )
+
+    assert raw_actions.tolist() == pytest.approx([0.1, 0.1, 0.1])
+    assert signals.tolist() == pytest.approx([0.0, 0.0, 0.0])
+
+
+def test_single_asset_oos_rollout_matches_holding_and_drawdown_guard_controls() -> None:
+    held_signals, _, _ = _single_asset_rollout(
+        actions=[
+            np.array([1.0], dtype=np.float32),
+            np.array([-1.0], dtype=np.float32),
+            np.array([-1.0], dtype=np.float32),
+            np.array([-1.0], dtype=np.float32),
+        ],
+        simple_returns=[0.0, 0.0, 0.0, 0.0],
+        execution_config=RLExecutionConfig(min_holding_bars=2),
+    )
+    guarded_signals, _, guarded_rewards = _single_asset_rollout(
+        actions=[np.array([1.0], dtype=np.float32)] * 3,
+        simple_returns=[0.0, -0.3, 0.05],
+        execution_config=RLExecutionConfig(
+            dd_guard_enabled=True,
+            max_drawdown=0.1,
+            cooloff_bars=1,
+            rearm_drawdown=0.05,
+        ),
+    )
+
+    assert held_signals.tolist() == pytest.approx([1.0, 1.0, 1.0, -1.0])
+    assert guarded_signals.tolist() == pytest.approx([1.0, 0.0, 1.0])
+    assert guarded_rewards[:2].tolist() == pytest.approx([-0.3, 0.0])
+    assert np.isnan(guarded_rewards[-1])
+
+
+def test_portfolio_oos_rollout_emits_public_step_controlled_signals() -> None:
+    signals, _ = _portfolio_rollout(
+        actions=[np.array([0.1, -0.1], dtype=np.float32)] * 3,
+        simple_returns=np.zeros((3, 2), dtype=np.float32),
+        execution_config=RLExecutionConfig(action_hysteresis=0.2),
+    )
+
+    assert signals["AAA"].tolist() == pytest.approx([0.0, 0.0, 0.0])
+    assert signals["BBB"].tolist() == pytest.approx([0.0, 0.0, 0.0])
+
+
+def _portfolio_rollout(
+    *,
+    actions: list[object],
+    simple_returns: np.ndarray,
+    execution_config: RLExecutionConfig,
+) -> tuple[dict[str, pd.Series], pd.Series]:
+    index = pd.RangeIndex(len(simple_returns))
+    bundle = _PortfolioBundle(
+        index=index,
+        features=np.zeros((len(index), 2, 1), dtype=np.float32),
+        simple_returns=np.asarray(simple_returns, dtype=np.float32),
+        feature_cols=["feature_x"],
+        asset_names=("AAA", "BBB"),
+    )
+    return _rollout_portfolio_policy(
+        model=_SequencePolicy(actions),
+        bundle=bundle,
+        indices=np.arange(len(index), dtype=int),
+        window_size=2,
+        continuous_actions=True,
+        max_signal_abs=1.0,
+        discrete_action_templates=None,
+        reward_config=RLRewardConfig(),
+        execution_config=execution_config,
+        constraints=PortfolioConstraints(
+            min_weight=-1.0,
+            max_weight=1.0,
+            max_gross_leverage=1.0,
+            target_net_exposure=0.0,
+        ),
+        asset_to_group=None,
+        long_short=True,
+        gross_target=1.0,
+    )
+
+
+def test_portfolio_oos_rollout_matches_holding_and_drawdown_guard_controls() -> None:
+    long_short = np.array([1.0, -1.0], dtype=np.float32)
+    short_long = -long_short
+    held_signals, _ = _portfolio_rollout(
+        actions=[long_short, short_long, short_long, short_long],
+        simple_returns=np.zeros((4, 2), dtype=np.float32),
+        execution_config=RLExecutionConfig(min_holding_bars=2),
+    )
+    guarded_signals, guarded_rewards = _portfolio_rollout(
+        actions=[long_short, long_short, long_short],
+        simple_returns=np.array(
+            [
+                [0.0, 0.0],
+                [-0.3, 0.3],
+                [0.05, -0.05],
+            ],
+            dtype=np.float32,
+        ),
+        execution_config=RLExecutionConfig(
+            dd_guard_enabled=True,
+            max_drawdown=0.1,
+            cooloff_bars=1,
+            rearm_drawdown=0.05,
+        ),
+    )
+
+    assert held_signals["AAA"].tolist() == pytest.approx([1.0, 1.0, 1.0, -1.0])
+    assert held_signals["BBB"].tolist() == pytest.approx([-1.0, -1.0, -1.0, 1.0])
+    assert guarded_signals["AAA"].tolist() == pytest.approx([1.0, 0.0, 1.0])
+    assert guarded_signals["BBB"].tolist() == pytest.approx([-1.0, 0.0, -1.0])
+    assert guarded_rewards.iloc[:2].tolist() == pytest.approx([-0.3, 0.0])
+    assert np.isnan(guarded_rewards.iloc[-1])
 
 
 def test_validate_resolved_config_rejects_rl_signal_pipeline_mismatch() -> None:

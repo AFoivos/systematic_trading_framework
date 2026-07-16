@@ -342,7 +342,7 @@ def test_support_resistance_is_point_in_time_safe() -> None:
     df["high"] = np.maximum(df["open"], df["close"]) * (1.0 + intrabar)
     df["low"] = np.minimum(df["open"], df["close"]) * (1.0 - intrabar)
 
-    baseline = add_support_resistance_features(df, windows=[24], include_pct_distance=True, include_atr_distance=True)
+    baseline = add_support_resistance_features(df, windows=[24])
 
     modified = df.copy()
     modified.loc[idx[70]:, "close"] = modified.loc[idx[70]:, "close"] * 1.20
@@ -353,17 +353,11 @@ def test_support_resistance_is_point_in_time_safe() -> None:
     future_changed = add_support_resistance_features(
         modified,
         windows=[24],
-        include_pct_distance=True,
-        include_atr_distance=True,
     )
 
     check_cols = [
         "support_24",
         "resistance_24",
-        "support_distance_pct_24",
-        "resistance_distance_pct_24",
-        "support_distance_atr_24",
-        "resistance_distance_atr_24",
     ]
     pd.testing.assert_frame_equal(
         baseline.loc[: idx[69], check_cols],

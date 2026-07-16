@@ -45,6 +45,25 @@ def test_crossed_book_is_rejected() -> None:
     with pytest.raises(ValueError, match="crossed book"):
         book.apply_snapshot(bids=[(101.0, 1.0)], asks=[(100.0, 1.0)])
 
+    assert book.best_bid is None
+    assert book.best_ask is None
+
+
+def test_invalid_incremental_update_does_not_corrupt_existing_book() -> None:
+    book = LocalOrderBook("PI_XBTUSD")
+    book.apply_snapshot(
+        bids=[(100.0, 1.0)],
+        asks=[(101.0, 1.0)],
+        sequence=10,
+    )
+
+    with pytest.raises(ValueError, match="crossed book"):
+        book.apply_update(bids=[(102.0, 2.0)], sequence=11)
+
+    assert book.best_bid == 100.0
+    assert book.best_ask == 101.0
+    assert book.sequence == 10
+
 
 def test_sequence_must_be_monotonic_when_present() -> None:
     book = LocalOrderBook("PI_XBTUSD")
@@ -52,3 +71,16 @@ def test_sequence_must_be_monotonic_when_present() -> None:
 
     with pytest.raises(ValueError, match="monotonic"):
         book.apply_update(bids=[(99.0, 1.0)], sequence=4)
+
+
+def test_non_finite_levels_are_rejected_without_state_mutation() -> None:
+    book = LocalOrderBook("PI_XBTUSD")
+    book.apply_snapshot(bids=[(100.0, 1.0)], asks=[(101.0, 1.0)])
+
+    with pytest.raises(ValueError, match="finite"):
+        book.apply_update(bids=[(float("nan"), 1.0)])
+    with pytest.raises(ValueError, match="finite"):
+        book.apply_update(asks=[(102.0, float("inf"))])
+
+    assert book.best_bid == 100.0
+    assert book.best_ask == 101.0

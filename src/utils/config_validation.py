@@ -5,6 +5,7 @@ import re
 from typing import Any
 
 from src.intraday import validate_intraday_normalization_policy
+from src.targets.regression import REGRESSION_TARGET_HORIZON_CONTRACTS
 from src.utils.config_kinds import (
     FEATURE_KINDS,
     MODEL_KINDS,
@@ -13,12 +14,15 @@ from src.utils.config_kinds import (
     SIGNAL_KINDS,
     TARGET_KINDS,
 )
+from src.utils.config_schemas import ResolvedExperimentConfig
 from src.utils.repro import RuntimeConfigError, validate_runtime_config
 from src.signals.panel.global_session_relay_laggard import GLOBAL_SESSION_RELAY_ENABLED_MODULES
 
 _RL_SINGLE_ASSET_DQN_KINDS = {"dqn_agent"}
 _RL_PORTFOLIO_DQN_KINDS = {"dqn_portfolio_agent"}
 _RL_EXTRACTOR_KINDS = {"flatten", "cnn1d", "lstm", "transformer"}
+_RL_MODEL_BACKTEST_KEYS = {"returns_col", "returns_type"}
+_CONFIG_EXTENSION_NAMESPACE_KEYS = {"extensions", "metadata"}
 _CLASSIFIER_MODEL_KINDS = {
     "elastic_net_clf",
     "lightgbm_clf",
@@ -2390,6 +2394,33 @@ def validate_model_block(model: dict[str, Any]) -> None:
         if key in model and model[key] is not None and not isinstance(model[key], str):
             raise ConfigValidationError(f"model.{key} must be a string when provided.")
 
+    if "backtest" in model:
+        if model["kind"] not in RL_MODEL_KINDS:
+            raise ConfigValidationError("model.backtest is supported only for RL model kinds.")
+        model_backtest = model["backtest"]
+        if not isinstance(model_backtest, dict):
+            raise ConfigValidationError("model.backtest must be a mapping when provided.")
+        unknown_backtest_keys = sorted(
+            set(model_backtest)
+            - _RL_MODEL_BACKTEST_KEYS
+            - _CONFIG_EXTENSION_NAMESPACE_KEYS
+        )
+        if unknown_backtest_keys:
+            raise ConfigValidationError(
+                "model.backtest has unsupported keys: "
+                f"{unknown_backtest_keys}. Allowed keys: "
+                f"{sorted(_RL_MODEL_BACKTEST_KEYS | _CONFIG_EXTENSION_NAMESPACE_KEYS)}."
+            )
+        for namespace in _CONFIG_EXTENSION_NAMESPACE_KEYS:
+            if namespace in model_backtest and not isinstance(model_backtest[namespace], dict):
+                raise ConfigValidationError(f"model.backtest.{namespace} must be a mapping.")
+        if "returns_col" in model_backtest:
+            returns_col = model_backtest["returns_col"]
+            if not isinstance(returns_col, str) or not returns_col.strip():
+                raise ConfigValidationError("model.backtest.returns_col must be a non-empty string.")
+        if "returns_type" in model_backtest and model_backtest["returns_type"] not in {"simple", "log"}:
+            raise ConfigValidationError("model.backtest.returns_type must be 'simple' or 'log'.")
+
     if model["kind"] == "none":
         target = model.get("target", {}) or {}
         if not isinstance(target, dict):
@@ -2526,10 +2557,19 @@ def validate_model_block(model: dict[str, Any]) -> None:
                     raise ConfigValidationError(
                         f"model.target.kind='{target_kind}' is supported only for regression forecasters."
                     )
-                _positive_int(
-                    target.get("horizon_bars", target.get("horizon", 1)),
+                default_horizon, minimum_horizon = REGRESSION_TARGET_HORIZON_CONTRACTS.get(
+                    target_kind,
+                    (1, 1),
+                )
+                validated_horizon = _positive_int(
+                    target.get("horizon_bars", target.get("horizon", default_horizon)),
                     field="model.target.horizon_bars",
                 )
+                if validated_horizon < minimum_horizon:
+                    raise ConfigValidationError(
+                        f"model.target.horizon_bars must be >= {minimum_horizon} "
+                        f"for target.kind='{target_kind}'."
+                    )
                 for key in (
                     "price_col",
                     "returns_col",
@@ -3658,6 +3698,17 @@ def validate_risk_block(risk: dict[str, Any]) -> None:
         numeric = _finite_number(value, field=f"risk.portfolio_guard.{key}")
         if numeric <= 0:
             raise ConfigValidationError(f"risk.portfolio_guard.{key} must be > 0 when provided.")
+    weekly_return_target = portfolio_guard.get("weekly_return_target")
+    weekly_profit_lock = portfolio_guard.get("weekly_profit_lock")
+    if (
+        weekly_return_target is not None
+        and weekly_profit_lock is not None
+        and float(weekly_profit_lock) < float(weekly_return_target)
+    ):
+        raise ConfigValidationError(
+            "risk.portfolio_guard.weekly_profit_lock must be >= "
+            "risk.portfolio_guard.weekly_return_target when both are provided."
+        )
     for key in ("after_target_risk_multiplier", "daily_soft_stop_risk_multiplier"):
         value = portfolio_guard.get(key)
         if value is None:
@@ -3850,7 +3901,7 @@ def validate_backtest_block(backtest: dict[str, Any]) -> None:
         tie_break = str(backtest.get("tie_break", "closest_to_open"))
         if tie_break not in {"closest_to_open", "profit", "stop"}:
             raise ConfigValidationError("backtest.tie_break must be 'closest_to_open', 'profit', or 'stop'.")
-        event_time_remap_policy = str(backtest.get("event_time_remap_policy", "next_aligned"))
+        event_time_remap_policy = str(backtest.get("event_time_remap_policy") or "skip")
         if event_time_remap_policy not in {"next_aligned", "skip"}:
             raise ConfigValidationError(
                 "backtest.event_time_remap_policy must be 'next_aligned' or 'skip'."
@@ -4690,6 +4741,12 @@ def validate_resolved_config(cfg: dict[str, Any]) -> dict[str, Any]:
                 raise ConfigValidationError("Portfolio RL model kinds currently require data.alignment='inner'.")
         if not bool(cfg["portfolio"].get("enabled", False)) and cfg["risk"].get("target_vol") is not None:
             raise ConfigValidationError("Single-asset RL backtests currently require risk.target_vol=null.")
+        model_backtest = dict(cfg["model"].get("backtest", {}) or {})
+        for key in _RL_MODEL_BACKTEST_KEYS:
+            if key in model_backtest and str(model_backtest[key]) != str(cfg["backtest"].get(key)):
+                raise ConfigValidationError(
+                    f"model.backtest.{key} must match top-level backtest.{key} for RL runs."
+                )
     if str(cfg["backtest"].get("subset", "full")) == "test" and model_kind == "none":
         raise ConfigValidationError("backtest.subset='test' requires a model that emits an OOS boundary.")
     if str(cfg["backtest"].get("engine", "vectorized")) == "manual_barrier":
@@ -4718,6 +4775,12 @@ def validate_resolved_config(cfg: dict[str, Any]) -> dict[str, Any]:
                 "backtest.engine='portfolio_barrier' supports only risk.sizing.kind='ftmo_risk_per_trade'."
             )
         _validate_portfolio_barrier_parity(cfg)
+    strict_payload = dict(cfg)
+    strict_payload.setdefault("config_path", "<in-memory>")
+    try:
+        ResolvedExperimentConfig.from_dict(strict_payload)
+    except (TypeError, ValueError) as exc:
+        raise ConfigValidationError(str(exc)) from exc
     return cfg
 
 

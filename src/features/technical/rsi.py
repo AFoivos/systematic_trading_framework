@@ -5,6 +5,8 @@ from typing import Sequence
 import numpy as np
 import pandas as pd
 
+from .wilder import wilder_smooth
+
 
 def add_rsi_features(
     df: pd.DataFrame,
@@ -88,8 +90,8 @@ def compute_rsi(prices: pd.Series, window: int = 14, method: str = "wilder") -> 
     losses = -delta.clip(upper=0.0)
 
     if method == "wilder":
-        avg_gain = gains.ewm(alpha=1 / window, adjust=False).mean()
-        avg_loss = losses.ewm(alpha=1 / window, adjust=False).mean()
+        avg_gain = wilder_smooth(gains, window=window)
+        avg_loss = wilder_smooth(losses, window=window)
     elif method == "simple":
         avg_gain = gains.rolling(window=window, min_periods=window).mean()
         avg_loss = losses.rolling(window=window, min_periods=window).mean()

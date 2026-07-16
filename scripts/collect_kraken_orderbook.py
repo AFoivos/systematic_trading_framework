@@ -115,6 +115,12 @@ def apply_kraken_book_message(message: dict[str, Any], book: LocalOrderBook) -> 
 
     rows: list[dict[str, Any]] = []
     for payload in _payloads(message.get("data")):
+        payload_symbol = str(payload.get("symbol") or book.symbol)
+        if payload_symbol != book.symbol:
+            raise ValueError(
+                f"Kraken book payload symbol {payload_symbol!r} does not match "
+                f"local book symbol {book.symbol!r}."
+            )
         timestamp = _parse_timestamp(payload.get("timestamp")) or datetime.now(timezone.utc)
         bids = _levels(payload.get("bids", ()))
         asks = _levels(payload.get("asks", ()))

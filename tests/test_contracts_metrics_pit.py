@@ -4,7 +4,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.evaluation.metrics import annualized_return, compute_backtest_metrics
+from src.evaluation.metrics import (
+    annualized_return,
+    compute_backtest_metrics,
+    equity_curve_from_returns,
+    max_drawdown,
+    profit_factor,
+    sharpe_ratio,
+)
 from src.experiments.contracts import TargetContract, validate_feature_target_contract
 from src.experiments.models import train_logistic_regression_classifier
 from src.experiments.orchestration.feature_stage import apply_feature_steps
@@ -136,7 +143,49 @@ def test_metrics_suite_includes_risk_and_cost_attribution() -> None:
     assert np.isclose(metrics["hit_rate"], 0.5)
     assert np.isclose(metrics["total_turnover"], 1.7)
     assert np.isclose(metrics["total_cost"], 0.004)
-    assert np.isclose(metrics["cost_drag"], 0.004)
+    expected_drag = float(
+        (1.0 + gross_returns).prod() - (1.0 + net_returns).prod()
+    )
+    assert np.isclose(metrics["cost_drag"], expected_drag)
+    assert np.isclose(metrics["gross_return_sum"], gross_returns.sum())
+    assert np.isclose(metrics["net_return_sum"], net_returns.sum())
+
+
+def test_drawdown_includes_virtual_initial_capital_anchor() -> None:
+    returns = pd.Series([-0.5, 0.0])
+
+    assert max_drawdown(equity_curve_from_returns(returns)) == pytest.approx(-0.5)
+
+
+def test_standard_sharpe_uses_arithmetic_excess_return() -> None:
+    returns = pd.Series([0.10, -0.10])
+
+    assert sharpe_ratio(returns, periods_per_year=2) == pytest.approx(0.0)
+
+
+def test_profit_factor_is_infinite_for_profitable_no_loss_series() -> None:
+    assert profit_factor(pd.Series([0.1, 0.2])) == float("inf")
+
+
+def test_nonannual_metrics_are_invariant_to_annualization_mode() -> None:
+    index = pd.DatetimeIndex(
+        ["2024-01-01 10:00Z", "2024-01-01 11:00Z"],
+    )
+    returns = pd.Series([0.10, -0.20], index=index)
+
+    fixed = compute_backtest_metrics(
+        net_returns=returns,
+        periods_per_year=252,
+        annualization_mode="fixed_periods",
+    )
+    calendar = compute_backtest_metrics(
+        net_returns=returns,
+        periods_per_year=252,
+        annualization_mode="calendar_daily",
+    )
+
+    assert calendar["profit_factor"] == pytest.approx(fixed["profit_factor"])
+    assert calendar["hit_rate"] == pytest.approx(fixed["hit_rate"])
 
 
 def test_annualized_return_is_nan_after_non_positive_terminal_wealth() -> None:
@@ -291,6 +340,25 @@ def test_align_ohlcv_timestamps_sorts_and_deduplicates() -> None:
     assert not out.index.has_duplicates
     assert len(out) == 2
     assert np.isclose(out.loc[pd.Timestamp("2024-01-01"), "close"], 10.7)
+
+
+def test_align_ohlcv_timestamps_preserves_intraday_rows_by_default() -> None:
+    idx = pd.date_range("2024-01-01 09:30:00", periods=4, freq="30min")
+    df = pd.DataFrame(
+        {
+            "open": [100.0, 101.0, 102.0, 103.0],
+            "high": [101.0, 102.0, 103.0, 104.0],
+            "low": [99.0, 100.0, 101.0, 102.0],
+            "close": [100.5, 101.5, 102.5, 103.5],
+            "volume": [100.0] * 4,
+        },
+        index=idx,
+    )
+
+    out = align_ohlcv_timestamps(df)
+
+    assert len(out) == 4
+    assert out.index.tolist() == idx.tolist()
 
 
 def test_intraday_configs_do_not_normalize_timestamps_by_default(tmp_path) -> None:
@@ -569,6 +637,29 @@ def test_apply_corporate_actions_policy_adj_close_ratio() -> None:
     assert "pit_adjustment_factor" in out.columns
 
 
+def test_replace_close_corporate_action_preserves_ohlc_geometry() -> None:
+    idx = pd.date_range("2024-01-01", periods=1, freq="D")
+    df = pd.DataFrame(
+        {
+            "open": [100.0],
+            "high": [102.0],
+            "low": [99.0],
+            "close": [100.0],
+            "adj_close": [50.0],
+            "volume": [1000.0],
+        },
+        index=idx,
+    )
+
+    out, _ = apply_corporate_actions_policy(df, policy="adj_close_replace_close")
+
+    assert out.loc[idx[0], "open"] == pytest.approx(50.0)
+    assert out.loc[idx[0], "high"] == pytest.approx(51.0)
+    assert out.loc[idx[0], "low"] == pytest.approx(49.5)
+    assert out.loc[idx[0], "close"] == pytest.approx(50.0)
+    assert out.loc[idx[0], "low"] <= out.loc[idx[0], "close"] <= out.loc[idx[0], "high"]
+
+
 def test_universe_snapshot_asof_membership_check(tmp_path) -> None:
     """
     Verify that universe snapshot asof membership check behaves as expected under a
@@ -588,6 +679,25 @@ def test_universe_snapshot_asof_membership_check(tmp_path) -> None:
     assert_symbol_in_snapshot("SPY", snap, as_of="2020-06-01")
     with pytest.raises(ValueError):
         assert_symbol_in_snapshot("QQQ", snap, as_of="2020-06-01")
+
+
+def test_universe_snapshot_utc_timestamps_compare_with_aligned_naive_ohlc(tmp_path) -> None:
+    snapshot_path = tmp_path / "universe_snapshot_utc.csv"
+    pd.DataFrame(
+        {
+            "symbol": ["SPY"],
+            "effective_from": ["2024-01-01T00:00:00Z"],
+            "effective_to": ["2024-01-02T00:00:00Z"],
+        }
+    ).to_csv(snapshot_path, index=False)
+    snapshot = load_universe_snapshot(snapshot_path)
+    index = pd.date_range("2024-01-01 12:00:00", periods=2, freq="6h")
+
+    from src.src_data.pit import symbol_active_mask_over_time
+
+    mask = symbol_active_mask_over_time(snapshot, symbol="SPY", index=index)
+
+    assert mask.tolist() == [True, True]
 
 
 def test_universe_snapshot_rejects_invalid_effective_to_values(tmp_path) -> None:

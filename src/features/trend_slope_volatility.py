@@ -123,7 +123,11 @@ def add_trend_slope_volatility(
         slope = slope * float(annualization_periods)
         volatility = volatility * np.sqrt(float(annualization_periods))
 
-    ratio = slope / volatility.where(volatility.abs() > 0.0, np.nan)
+    # Convert the price-unit slope to a fractional slope before comparing it
+    # with dimensionless return volatility. This makes the ratio invariant to
+    # multiplicative quote scaling while preserving the raw slope output.
+    fractional_slope = slope / price.abs().where(price.abs() > 0.0, np.nan)
+    ratio = fractional_slope / volatility.where(volatility.abs() > 0.0, np.nan)
 
     out[slope_name] = slope
     out[volatility_name] = volatility

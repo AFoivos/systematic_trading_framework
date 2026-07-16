@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from .true_range import compute_true_range
+from .wilder import wilder_smooth
 
 
 def add_adx_features(
@@ -127,11 +128,11 @@ def compute_adx(high: pd.Series, low: pd.Series, close: pd.Series, window: int =
     minus_dm = down_move.where((down_move > up_move) & (down_move > 0), 0.0)
 
     tr = compute_true_range(high, low, close)
-    atr = tr.ewm(alpha=1 / window, adjust=False).mean()
-    plus_di = 100 * (plus_dm.ewm(alpha=1 / window, adjust=False).mean() / atr)
-    minus_di = 100 * (minus_dm.ewm(alpha=1 / window, adjust=False).mean() / atr)
+    atr = wilder_smooth(tr, window=window)
+    plus_di = 100 * (wilder_smooth(plus_dm, window=window) / atr)
+    minus_di = 100 * (wilder_smooth(minus_dm, window=window) / atr)
     dx = (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan) * 100
-    adx = dx.ewm(alpha=1 / window, adjust=False).mean()
+    adx = wilder_smooth(dx, window=window)
 
     return pd.DataFrame(
         {

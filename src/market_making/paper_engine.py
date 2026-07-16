@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import csv
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
+import math
 from pathlib import Path
 from typing import Any
 
@@ -59,6 +60,10 @@ class PaperMarketMakingEngine:
     """Conservative paper engine for market-making quotes and trade-through fills."""
 
     def __init__(self, *, risk_engine: RiskEngine, maker_fee_bps: float = 0.0, initial_cash: float = 0.0) -> None:
+        if not math.isfinite(float(maker_fee_bps)):
+            raise ValueError("maker_fee_bps must be finite.")
+        if not math.isfinite(float(initial_cash)):
+            raise ValueError("initial_cash must be finite.")
         self.risk_engine = risk_engine
         self.maker_fee_bps = float(maker_fee_bps)
         self.account = PaperAccount(initial_cash=initial_cash, cash=initial_cash)
@@ -181,9 +186,12 @@ class PaperMarketMakingEngine:
 
     def cancel_all(self, *, now: datetime | None = None) -> int:
         """Cancel all virtual open orders."""
-        count = len(self.open_orders)
+        order_ids = list(self.open_orders)
+        count = len(order_ids)
         if count:
             self.number_of_cancels += count
+            for order_id in order_ids:
+                self._set_order_status(order_id, "cancelled")
         self.open_orders.clear()
         return count
 
@@ -360,10 +368,11 @@ class PaperMarketMakingEngine:
 
     def _fill_order(self, order: PaperOrder, timestamp: datetime) -> PaperFill:
         self.open_orders.pop(order.order_id, None)
+        self._set_order_status(order.order_id, "filled")
         notional = order.price * order.quantity
         fee = notional * self.maker_fee_bps / 10_000.0
         signed_qty = order.quantity if order.side == "buy" else -order.quantity
-        self.account.cash -= signed_qty * order.price
+        self.account.cash -= signed_qty * order.price + fee
         self.account.fees += fee
         self.account.turnover += notional
         realized_delta = self._update_position(signed_qty=signed_qty, fill_price=order.price)
@@ -380,6 +389,12 @@ class PaperMarketMakingEngine:
         )
         self.fills.append(fill)
         return fill
+
+    def _set_order_status(self, order_id: str, status: str) -> None:
+        for index, order in enumerate(self.orders):
+            if order.order_id == order_id:
+                self.orders[index] = replace(order, status=status)
+                return
 
     def _update_position(self, *, signed_qty: float, fill_price: float) -> float:
         """Update signed inventory and realize PnL only on inventory reductions."""

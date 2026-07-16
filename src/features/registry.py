@@ -29,6 +29,7 @@ from .instantaneous_trendline import add_instantaneous_trendline
 from .inverse_fisher_transform import add_inverse_fisher_transform
 from .impulse import add_impulse_12_96
 from .laguerre_rsi import add_laguerre_rsi
+from .lags import add_lagged_features
 from .macro import add_macro_context_features
 from .mama import add_mama
 from .multi_timeframe import add_multi_timeframe_features
@@ -55,6 +56,7 @@ from .technical.macd import add_macd_features
 from .technical.mfi import add_mfi_features
 from .technical.ppo import add_ppo_features
 from .technical.price_momentum import add_price_momentum_features
+from .technical.return_momentum import add_return_momentum_features
 from .technical.roc import add_roc_features
 from .technical.rsi import add_rsi_features
 from .technical.schaff_trend_cycle import add_schaff_trend_cycle_features
@@ -62,6 +64,8 @@ from .technical.stochastic import add_stochastic_features
 from .technical.stochastic_rsi import add_stochastic_rsi_features
 from .technical.trend import add_trend_features
 from .technical.vwap import add_vwap_features
+from .technical.vol_normalized_momentum import add_vol_normalized_momentum_features
+from .technical.volume_features import add_volume_features
 from .trend_regime import add_trend_regime
 from .trend_slope_volatility import add_trend_slope_volatility
 from .trend_vwap_pullback_candidate import trend_vwap_pullback_candidate_feature
@@ -147,8 +151,15 @@ FEATURE_REGISTRY: Mapping[str, FeatureFn] = build_registry("feature", _FEATURE_C
 
 def _legacy_signal_feature_steps() -> Mapping[str, FeatureFn]:
     return build_registry(
-        "legacy feature-compatible signal step",
+        "legacy feature-compatible step",
         (
+            # These builders remain available solely to reproduce tracked
+            # pre-helper-migration experiment configs. New configs should use
+            # the canonical helper transforms instead.
+            ("lags", add_lagged_features),
+            ("return_momentum", add_return_momentum_features),
+            ("vol_normalized_momentum", add_vol_normalized_momentum_features),
+            ("volume_features", add_volume_features),
             ("ehlers_semiscalp_long", lazy_callable("src.signals.ehlers_semiscalp_long_signal", "ehlers_semiscalp_long_feature")),
             ("ehlers_decycler_continuation", lazy_callable("src.signals.ehlers_decycler_continuation_signal", "ehlers_decycler_continuation_feature")),
             ("ema_stoch_rsi_pullback", lazy_callable("src.signals.ema_stoch_rsi_pullback_signal", "ema_stoch_rsi_pullback_signal")),
@@ -162,6 +173,7 @@ def _legacy_signal_feature_steps() -> Mapping[str, FeatureFn]:
 
 # Compatibility entries are resolvable by configs, but intentionally kept out of
 # FEATURE_REGISTRY so the canonical registry contains feature builders only.
+FEATURE_COMPATIBILITY_VERSION = 1
 FEATURE_COMPATIBILITY_REGISTRY: Mapping[str, FeatureFn] = _legacy_signal_feature_steps()
 FEATURE_KINDS = registry_names(FEATURE_REGISTRY, FEATURE_COMPATIBILITY_REGISTRY)
 
@@ -200,6 +212,7 @@ def get_feature_fn(name: str) -> FeatureFn:
 
 __all__ = [
     "FEATURE_COMPATIBILITY_REGISTRY",
+    "FEATURE_COMPATIBILITY_VERSION",
     "FEATURE_KINDS",
     "FEATURE_REGISTRY",
     "FeatureFn",

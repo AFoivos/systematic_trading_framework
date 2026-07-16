@@ -216,7 +216,13 @@ def build_config(stage: int) -> dict[str, object]:
         "features": [
             {
                 "step": "trend_vwap_pullback_candidate",
-                "params": {"stage": feature_stage, "timezone": "America/New_York"},
+                "params": {
+                    "stage": feature_stage,
+                    "timezone": "America/New_York",
+                    "session_open": "09:30",
+                    "session_close": "16:00",
+                    "timestamp_convention": "bar_start",
+                },
                 "enabled": True,
             }
         ],

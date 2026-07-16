@@ -27,8 +27,20 @@ _KEY_PACKAGES = (
     "gymnasium",
     "stable-baselines3",
     "pyyaml",
+    "momentfm",
+    "websockets",
     "yfinance",
     "requests",
+)
+
+_SOURCE_IDENTITY_PATHS = (
+    "src",
+    "config",
+    "scripts",
+    "tests",
+    "requirements.txt",
+    "requirements.lock.txt",
+    "pyproject.toml",
 )
 
 
@@ -222,11 +234,47 @@ def collect_git_metadata() -> dict[str, Any]:
     branch = _safe_git(["branch", "--show-current"])
     status = _safe_git(["status", "--porcelain"])
     if commit is not None or branch is not None:
+        changed = _safe_git(
+            ["diff", "--name-only", "HEAD", "--", *_SOURCE_IDENTITY_PATHS]
+        )
+        untracked = _safe_git(
+            ["ls-files", "--others", "--exclude-standard", "--", *_SOURCE_IDENTITY_PATHS]
+        )
+        changed_paths = {
+            line.strip()
+            for payload in (changed, untracked)
+            if payload
+            for line in payload.splitlines()
+            if line.strip()
+        }
+        worktree_files: list[dict[str, Any]] = []
+        root = PROJECT_ROOT.resolve()
+        for relative_path in sorted(changed_paths):
+            candidate = (root / relative_path).resolve()
+            try:
+                candidate.relative_to(root)
+            except ValueError:
+                continue
+            record: dict[str, Any] = {
+                "path": Path(relative_path).as_posix(),
+                "exists": bool(candidate.is_file()),
+            }
+            if candidate.is_file():
+                record["bytes"] = int(candidate.stat().st_size)
+                record["sha256"] = file_sha256(candidate)
+            worktree_files.append(record)
+        state_payload = {"commit": commit, "files": worktree_files}
+        worktree_state_sha256 = hashlib.sha256(
+            canonical_json_dumps(state_payload).encode("utf-8")
+        ).hexdigest()
         return {
             "commit": commit,
             "branch": branch,
             "is_dirty": bool(status) if status is not None else False,
             "source": "git_cli",
+            "worktree_state_sha256": worktree_state_sha256,
+            "worktree_files": worktree_files,
+            "source_identity_complete": bool(commit),
         }
     env_commit = os.getenv("GIT_COMMIT")
     env_branch = os.getenv("GIT_BRANCH")
@@ -238,12 +286,18 @@ def collect_git_metadata() -> dict[str, Any]:
             "branch": env_branch,
             "is_dirty": dirty,
             "source": "environment",
+            "worktree_state_sha256": None,
+            "worktree_files": [],
+            "source_identity_complete": bool(env_commit and dirty is False),
         }
     return {
         "commit": None,
         "branch": None,
         "is_dirty": None,
         "source": "unavailable",
+        "worktree_state_sha256": None,
+        "worktree_files": [],
+        "source_identity_complete": False,
     }
 
 
@@ -283,6 +337,12 @@ def build_run_metadata(
     Keeping this assembly step separate makes the orchestration code easier to reason about and
     test.
     """
+    git_metadata = collect_git_metadata()
+    repro_mode = str(runtime_applied.get("repro_mode", "")).strip().lower()
+    if repro_mode == "strict" and not bool(git_metadata["source_identity_complete"]):
+        raise RuntimeError(
+            "Strict reproducibility requires an immutable commit plus an exact worktree identity."
+        )
     return {
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "cwd": str(Path.cwd()),
@@ -295,7 +355,7 @@ def build_run_metadata(
             "fingerprint": dict(data_fingerprint),
         },
         "model_meta": dict(model_meta),
-        "git": collect_git_metadata(),
+        "git": git_metadata,
         "environment": collect_environment_metadata(),
     }
 

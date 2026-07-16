@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from src.targets.r_multiple import build_r_multiple_target
+from src.targets.candidate_expected_r import build_candidate_expected_r_target
 
 
 def _base_frame(rows: int = 4) -> pd.DataFrame:
@@ -121,3 +122,49 @@ def test_max_holding_close_realizes_r_and_labels_against_threshold() -> None:
     assert out.loc[df.index[0], "r_target_trade_r"] == pytest.approx(0.6)
     assert out.loc[df.index[0], "label"] == pytest.approx(1.0)
     assert meta["max_holding_close_count"] == 1
+
+
+def test_current_close_r_multiple_starts_path_on_following_bar() -> None:
+    df = _base_frame()
+    df.loc[df.index[0], ["open", "high", "low", "close"]] = [100.0, 120.0, 80.0, 100.0]
+    df.loc[df.index[1:3], ["open", "high", "low", "close"]] = [100.0, 101.0, 99.0, 100.0]
+
+    out, _, _, _ = build_r_multiple_target(
+        df,
+        _target_cfg(
+            entry_price_mode="current_close",
+            stop_mode="fixed_return",
+            stop_loss_return=0.05,
+            take_profit_return=0.05,
+            take_profit_r=1.0,
+            stop_loss_r=1.0,
+        ),
+    )
+
+    assert out.loc[df.index[0], "r_target_entry_price"] == pytest.approx(100.0)
+    assert out.loc[df.index[0], "r_target_exit_reason"] == "max_holding_close"
+    assert out.loc[df.index[0], "r_target_bars_held"] == pytest.approx(2.0)
+
+
+def test_current_close_candidate_expected_r_starts_path_on_following_bar() -> None:
+    df = _base_frame()
+    df.loc[df.index[0], ["open", "high", "low", "close"]] = [100.0, 120.0, 80.0, 100.0]
+    df.loc[df.index[1:3], ["open", "high", "low", "close"]] = [100.0, 101.0, 99.0, 100.0]
+
+    out, _, _, _ = build_candidate_expected_r_target(
+        df,
+        {
+            "candidate_col": "manual_long_signal",
+            "entry_price_mode": "current_close",
+            "stop_mode": "fixed_return",
+            "stop_loss_return": 0.05,
+            "take_profit_r": 1.0,
+            "stop_loss_r": 1.0,
+            "max_holding_bars": 2,
+            "allow_partial_horizon": False,
+        },
+    )
+
+    assert out.loc[df.index[0], "target_entry_price"] == pytest.approx(100.0)
+    assert out.loc[df.index[0], "target_exit_reason"] == "max_holding_close"
+    assert out.loc[df.index[0], "target_bars_held"] == pytest.approx(2.0)

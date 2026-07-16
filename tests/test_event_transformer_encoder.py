@@ -10,16 +10,10 @@ import pytest
 
 from src.features import add_close_returns, add_shock_context_features
 from src.models.forecasting.sequence import build_sequence_samples, fit_sequence_scaler
-
-
-def _torch_available_in_subprocess() -> bool:
-    proc = subprocess.run(
-        [sys.executable, "-c", "import torch; print('ok')"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return proc.returncode == 0
+from tests.optional_dependencies import (
+    is_optional_dependency_runtime_failure,
+    optional_dependency_stack_available,
+)
 
 
 def _synthetic_event_frame(periods: int = 420, seed: int = 19) -> pd.DataFrame:
@@ -121,7 +115,7 @@ def test_event_sequence_samples_ignore_future_rows_after_event_time() -> None:
 
 
 def test_event_transformer_encoder_and_stacked_event_forecast_remain_oof_aligned() -> None:
-    if not _torch_available_in_subprocess():
+    if not optional_dependency_stack_available("torch"):
         pytest.skip("torch is unavailable or unstable in this environment.")
     script = """
 import json
@@ -278,7 +272,13 @@ print(json.dumps(payload))
         check=False,
     )
     if proc.returncode != 0:
-        pytest.skip(proc.stderr.strip() or proc.stdout.strip() or "event transformer subprocess failed")
+        if is_optional_dependency_runtime_failure(proc, modules=("torch",)):
+            pytest.skip(
+                proc.stderr.strip()
+                or proc.stdout.strip()
+                or "event transformer torch runtime unavailable"
+            )
+        raise AssertionError(proc.stderr or proc.stdout)
     payload = json.loads(proc.stdout)
 
     assert payload["stage_names"] == ["event_pattern_encoder", "event_forecast", "decision_layer"]
@@ -300,7 +300,7 @@ print(json.dumps(payload))
 
 def test_event_transformer_encoder_strict_determinism_fails_fast_when_unavailable(
 ) -> None:
-    if not _torch_available_in_subprocess():
+    if not optional_dependency_stack_available("torch"):
         pytest.skip("torch is unavailable or unstable in this environment.")
 
     script = """
@@ -394,4 +394,6 @@ train_event_transformer_encoder(
         check=False,
     )
     assert proc.returncode != 0
+    if is_optional_dependency_runtime_failure(proc, modules=("torch",)):
+        pytest.skip("torch runtime is unavailable or unstable in this environment.")
     assert "deterministic=True was requested" in (proc.stderr or proc.stdout)

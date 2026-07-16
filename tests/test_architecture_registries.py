@@ -17,6 +17,7 @@ from src.pipelines.canonical_pipeline import run_canonical_pipeline
 from src.pipelines.registry import PIPELINE_REGISTRY, get_pipeline_fn
 from src.signals.registry import DEPRECATED_SIGNAL_ALIASES, SIGNAL_REGISTRY, get_signal_fn
 from src.targets.registry import TARGET_REGISTRY, build_target, get_target_builder
+from src.utils.config_validation import ConfigValidationError, validate_model_block
 from src.utils.registry import RegistryDefinitionError, RegistryLookupError, build_registry
 
 
@@ -106,6 +107,66 @@ def test_config_name_resolution_uses_target_registry() -> None:
     assert fwd_col == "target_fwd_2"
     assert meta["kind"] == "forward_return"
     assert out[fwd_col].notna().sum() == 6
+
+
+@pytest.mark.parametrize(
+    ("target_kind", "default_horizon"),
+    [
+        ("risk_adjusted_future_return", 2),
+        ("future_trend_slope", 5),
+        ("future_path_efficiency", 2),
+        ("future_realized_volatility", 5),
+    ],
+)
+def test_regression_target_horizon_contract_matches_validation_and_builder(
+    target_kind: str,
+    default_horizon: int,
+) -> None:
+    frame = _synthetic_ohlcv(periods=20)
+    invalid_target = {"kind": target_kind, "horizon_bars": 1}
+
+    with pytest.raises(ConfigValidationError, match="horizon_bars must be >= 2"):
+        validate_model_block(
+            {
+                "kind": "lightgbm_regressor",
+                "feature_cols": ["feature_x"],
+                "target": invalid_target,
+            }
+        )
+    with pytest.raises(ValueError, match="horizon_bars must be >= 2"):
+        build_target(frame, invalid_target)
+
+    default_target = {"kind": target_kind}
+    validate_model_block(
+        {
+            "kind": "lightgbm_regressor",
+            "feature_cols": ["feature_x"],
+            "target": default_target,
+        }
+    )
+    out, _, fwd_col, meta = build_target(frame, default_target)
+    assert meta["horizon"] == default_horizon
+    assert out[fwd_col].notna().any()
+
+
+def test_future_realized_volatility_uses_per_bar_annualization_scale() -> None:
+    frame = _synthetic_ohlcv(periods=20)
+    horizon = 4
+
+    out, _, fwd_col, meta = build_target(
+        frame,
+        {
+            "kind": "future_realized_volatility",
+            "horizon_bars": horizon,
+            "annualize": True,
+            "periods_per_year": 252,
+        },
+    )
+
+    expected = float(frame["close"].pct_change().iloc[1 : horizon + 1].std(ddof=0)) * np.sqrt(252)
+    assert out[fwd_col].iloc[0] == pytest.approx(expected)
+    assert meta["annualization_convention"] == "std(future one-step returns) * sqrt(periods_per_year)"
+    assert meta["annualization_convention_version"] == 2
 
 
 def test_pipeline_registry_points_to_canonical_pipeline() -> None:

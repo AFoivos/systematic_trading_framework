@@ -5,6 +5,8 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
+
 from scripts.run_market_making_paper import (
     load_orderbook_events,
     resolve_output_dir,
@@ -127,6 +129,25 @@ def test_load_orderbook_events_sorts_and_reconstructs_quantities(tmp_path) -> No
     assert events[0].ask_quantity == 3.0
 
 
+def test_load_orderbook_events_skips_non_finite_top_of_book_values(tmp_path) -> None:
+    events_path = tmp_path / "orderbook_events.csv"
+    _write_events(events_path)
+    with events_path.open("r", newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    rows[0]["best_bid"] = "nan"
+    rows[1]["best_ask"] = "inf"
+    with events_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+
+    events, input_count, skipped = load_orderbook_events(events_path)
+
+    assert input_count == 3
+    assert skipped == 2
+    assert len(events) == 1
+
+
 def test_csv_replay_writes_reports_and_summary_metadata(tmp_path) -> None:
     events_path = tmp_path / "orderbook_events.csv"
     output_root = tmp_path / "reports"
@@ -167,6 +188,31 @@ def test_csv_replay_with_join_top_of_book_quotes_without_breaking(tmp_path) -> N
     assert summary["quoted_events"] >= 1
     assert summary["data_source"] == "kraken_orderbook_csv"
     assert summary["fill_model"] == "top_of_book_crossing"
+
+
+def test_csv_replay_rejects_multiple_symbols_before_cross_symbol_fills(tmp_path) -> None:
+    events_path = tmp_path / "orderbook_events.csv"
+    _write_events(events_path)
+    with events_path.open("r", newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    rows[1]["symbol"] = "ETH/USD"
+    with events_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+
+    with pytest.raises(ValueError, match="exactly one symbol"):
+        run_csv_orderbook_replay(_config(str(tmp_path / "reports")), input_events=events_path)
+
+
+def test_csv_replay_rejects_configured_symbol_mismatch(tmp_path) -> None:
+    events_path = tmp_path / "orderbook_events.csv"
+    _write_events(events_path)
+    config = _config(str(tmp_path / "reports"))
+    config["execution"]["symbol"] = "ETH/USD"
+
+    with pytest.raises(ValueError, match="does not match configured"):
+        run_csv_orderbook_replay(config, input_events=events_path)
 
 
 def test_timestamped_output_path_and_explicit_override(tmp_path) -> None:
@@ -259,3 +305,20 @@ def test_synthetic_mode_still_writes_synthetic_summary(tmp_path) -> None:
     run_dirs = sorted((output_root / "runs").iterdir())
     assert len(run_dirs) == 1
     assert (run_dirs[0] / "summary.json").exists()
+
+
+def test_synthetic_mode_uses_active_side_size_for_one_sided_quotes(tmp_path) -> None:
+    output_root = tmp_path / "synthetic_one_sided"
+    config = _config(str(output_root))
+    config["execution"]["mode"] = "paper"
+    config["execution"]["symbol"] = "BTC/USD"
+    config["filters"] = {
+        "use_side_selection_gate": True,
+        "allowed_side_mode": "sell_only",
+    }
+    config["risk"]["max_position_value"] = 100_000
+
+    summary = run_synthetic_paper(config, duration_seconds=2)
+
+    assert summary["number_of_fills"] >= 1
+    assert summary["data_source"] == "synthetic"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from statistics import pstdev
 from typing import Literal
 
@@ -18,6 +19,25 @@ class FeeAwareGate:
     min_expected_edge_bps: float = 0.0
     adverse_selection_buffer_bps: float = 0.0
     inventory_penalty_bps_per_unit: float = 0.0
+
+    def __post_init__(self) -> None:
+        for name, value in (
+            ("maker_fee_bps", self.maker_fee_bps),
+            ("min_expected_edge_bps", self.min_expected_edge_bps),
+            ("adverse_selection_buffer_bps", self.adverse_selection_buffer_bps),
+            ("inventory_penalty_bps_per_unit", self.inventory_penalty_bps_per_unit),
+        ):
+            if not math.isfinite(float(value)):
+                raise ValueError(f"{name} must be finite.")
+        if any(
+            value < 0.0
+            for value in (
+                self.min_expected_edge_bps,
+                self.adverse_selection_buffer_bps,
+                self.inventory_penalty_bps_per_unit,
+            )
+        ):
+            raise ValueError("fee-aware edge and penalty thresholds must be >= 0.")
 
     def min_required_spread_bps(self, *, inventory_ratio: float, active_sides: int) -> float:
         fee_legs = min(max(int(active_sides), 1), 2)
@@ -48,6 +68,21 @@ class SideSelectionGate:
     microprice_offset_threshold_bps: float = 0.0
     inventory_soft_limit_ratio: float = 1.0
     allowed_side_mode: Literal["both", "buy_only", "sell_only", "buy_only_with_unwind"] = "both"
+
+    def __post_init__(self) -> None:
+        if self.allowed_side_mode not in {"both", "buy_only", "sell_only", "buy_only_with_unwind"}:
+            raise ValueError(
+                "allowed_side_mode must be one of: both, buy_only, sell_only, buy_only_with_unwind"
+            )
+        if not math.isfinite(float(self.microprice_offset_threshold_bps)):
+            raise ValueError("microprice_offset_threshold_bps must be finite.")
+        if self.microprice_offset_threshold_bps < 0.0:
+            raise ValueError("microprice_offset_threshold_bps must be >= 0.")
+        if (
+            not math.isfinite(float(self.inventory_soft_limit_ratio))
+            or not 0.0 <= self.inventory_soft_limit_ratio <= 1.0
+        ):
+            raise ValueError("inventory_soft_limit_ratio must be finite and in [0, 1].")
 
     def apply(self, *, quote: QuoteDecision, book: LocalOrderBook) -> QuoteDecision:
         allowed_sides = self._allowed_sides(quote=quote, book=book)
@@ -131,6 +166,17 @@ class DirectionalFeatureGate:
     max_volatility_bps: float = 1.0e9
     edge_credit_bps: float = 0.0
 
+    def __post_init__(self) -> None:
+        for name, value in (
+            ("microprice_offset_threshold_bps", self.microprice_offset_threshold_bps),
+            ("imbalance_threshold", self.imbalance_threshold),
+            ("trend_threshold_bps", self.trend_threshold_bps),
+            ("max_volatility_bps", self.max_volatility_bps),
+            ("edge_credit_bps", self.edge_credit_bps),
+        ):
+            if not math.isfinite(float(value)) or float(value) < 0.0:
+                raise ValueError(f"{name} must be finite and >= 0.")
+
     def edge_credit(
         self,
         *,
@@ -198,7 +244,17 @@ class MarketMakingStrategy:
         """Generate a quote after optional adverse-selection gating."""
         spread_multiplier = 1.0
         if self.adverse_filter is not None:
-            filter_decision = self.adverse_filter.evaluate(book=book, recent_trades=recent_trades)
+            returns = [float(value) for value in list(recent_returns or [])]
+            recent_volatility_bps = (
+                pstdev(returns) * 10_000.0
+                if len(returns) >= 2
+                else 0.0
+            )
+            filter_decision = self.adverse_filter.evaluate(
+                book=book,
+                recent_trades=recent_trades,
+                recent_volatility_bps=recent_volatility_bps,
+            )
             if not filter_decision.should_quote:
                 fair_quote = self.quote_generator.generate(
                     book=book,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Sequence
+import math
 
 import numpy as np
 import pandas as pd
@@ -26,17 +27,41 @@ def build_market_making_moment_dataset(
     max_inventory: float | None = None,
 ) -> pd.DataFrame:
     """Build a quote-level MOMENT research dataset without leaking future targets into features."""
+    normalized_horizons: list[int] = []
+    for value in horizons:
+        horizon = int(value)
+        if horizon <= 0:
+            raise ValueError("market-making target horizons must be positive integers")
+        if horizon not in normalized_horizons:
+            normalized_horizons.append(horizon)
+    if not normalized_horizons:
+        raise ValueError("at least one market-making target horizon is required")
+    if not math.isfinite(float(maker_fee_bps)):
+        raise ValueError("maker_fee_bps must be finite")
+    if max_inventory is not None and (
+        not math.isfinite(float(max_inventory)) or float(max_inventory) <= 0.0
+    ):
+        raise ValueError("max_inventory must be finite and > 0 when provided")
+
     orderbook = _load_orderbook(orderbook_events_path)
     quotes = _load_quotes(quote_events_paths)
     if quotes.empty:
         raise ValueError("at least one non-empty quote_events.csv is required")
 
+    merge_kwargs: dict[str, object] = {}
+    if "symbol" in quotes.columns and "symbol" in orderbook.columns:
+        quotes["symbol"] = quotes["symbol"].astype(str)
+        orderbook["symbol"] = orderbook["symbol"].astype(str)
+        merge_kwargs["by"] = "symbol"
+    elif ("symbol" in quotes.columns) != ("symbol" in orderbook.columns):
+        raise ValueError("orderbook and quote events must either both contain symbol or both omit it")
     dataset = pd.merge_asof(
         quotes.sort_values("timestamp"),
         orderbook.sort_values("timestamp"),
         on="timestamp",
         direction="backward",
         suffixes=("_quote", ""),
+        **merge_kwargs,
     )
     dataset["timestamp"] = pd.to_datetime(dataset["timestamp"], utc=True)
     dataset = dataset.sort_values("timestamp").reset_index(drop=True)
@@ -55,33 +80,72 @@ def build_market_making_moment_dataset(
     dataset["microprice"] = _microprice(dataset)
     dataset["fair_price"] = _coalesce_numeric(dataset, ["fair_price", "microprice", "book_mid"])
     dataset["fair_price_offset_bps"] = _safe_div(dataset["fair_price"] - dataset["book_mid"], dataset["book_mid"]) * 10_000.0
-    mid_returns = dataset["book_mid"].pct_change()
+    symbol_groups = (
+        dataset.groupby("symbol", sort=False, group_keys=False)
+        if "symbol" in dataset.columns
+        else None
+    )
+    if symbol_groups is None:
+        mid_returns = dataset["book_mid"].pct_change(fill_method=None)
+        recent_mid_return_5 = dataset["book_mid"].pct_change(5, fill_method=None)
+        recent_mid_slope = dataset["book_mid"].diff().rolling(5, min_periods=2).mean()
+        recent_volatility = mid_returns.rolling(10, min_periods=2).std()
+    else:
+        mid_returns = symbol_groups["book_mid"].pct_change(fill_method=None)
+        recent_mid_return_5 = symbol_groups["book_mid"].pct_change(5, fill_method=None)
+        recent_mid_slope = symbol_groups["book_mid"].transform(
+            lambda values: values.diff().rolling(5, min_periods=2).mean()
+        )
+        recent_volatility = mid_returns.groupby(dataset["symbol"], sort=False).transform(
+            lambda values: values.rolling(10, min_periods=2).std()
+        )
     dataset["recent_mid_return_1"] = mid_returns.fillna(0.0)
-    dataset["recent_mid_return_5"] = dataset["book_mid"].pct_change(5).fillna(0.0)
-    dataset["recent_mid_slope"] = dataset["book_mid"].diff().rolling(5, min_periods=2).mean().fillna(0.0)
-    dataset["recent_volatility"] = mid_returns.rolling(10, min_periods=2).std().fillna(0.0)
-    dataset["inventory"] = pd.to_numeric(dataset.get("inventory", 0.0), errors="coerce").fillna(0.0)
+    dataset["recent_mid_return_5"] = recent_mid_return_5.fillna(0.0)
+    dataset["recent_mid_slope"] = recent_mid_slope.fillna(0.0)
+    dataset["recent_volatility"] = recent_volatility.fillna(0.0)
+    inventory_values = (
+        dataset["inventory"]
+        if "inventory" in dataset.columns
+        else pd.Series(0.0, index=dataset.index, dtype="float64")
+    )
+    dataset["inventory"] = pd.to_numeric(inventory_values, errors="coerce").fillna(0.0)
     if max_inventory is None:
         max_abs_inventory = float(dataset["inventory"].abs().max())
         max_inventory = max_abs_inventory if max_abs_inventory > 0 else 1.0
     dataset["inventory_ratio"] = pd.to_numeric(dataset.get("inventory_ratio", dataset["inventory"] / max_inventory), errors="coerce").fillna(0.0)
     dataset["quoted_side_candidate"] = dataset.apply(_quoted_side_candidate, axis=1)
     dataset["maker_fee_bps"] = float(maker_fee_bps)
-    dataset["current_strategy_decision"] = np.where(_as_bool(dataset.get("placed", False)), "placed", "blocked")
-    dataset["current_strategy_reason"] = dataset.get("risk_reason", dataset.get("quote_reason", "")).fillna("")
+    dataset["current_strategy_decision"] = np.where(
+        _as_bool(dataset.get("placed", pd.Series(False, index=dataset.index))),
+        "placed",
+        "blocked",
+    )
+    if "risk_reason" in dataset.columns:
+        current_reason = dataset["risk_reason"]
+    elif "quote_reason" in dataset.columns:
+        current_reason = dataset["quote_reason"]
+    else:
+        current_reason = pd.Series("", index=dataset.index, dtype="object")
+    dataset["current_strategy_reason"] = current_reason.fillna("")
 
-    for horizon in horizons:
-        future_mid = dataset["book_mid"].shift(-int(horizon))
-        suffix = f"h{int(horizon)}"
+    for horizon in normalized_horizons:
+        future_mid = (
+            dataset["book_mid"].shift(-horizon)
+            if symbol_groups is None
+            else symbol_groups["book_mid"].shift(-horizon)
+        )
+        suffix = f"h{horizon}"
         dataset[f"future_mid_return_{suffix}"] = _safe_div(future_mid - dataset["book_mid"], dataset["book_mid"])
         dataset[f"buy_markout_bps_{suffix}"] = _safe_div(future_mid - dataset["bid_price"], dataset["bid_price"]) * 10_000.0
         dataset[f"sell_markout_bps_{suffix}"] = _safe_div(dataset["ask_price"] - future_mid, dataset["ask_price"]) * 10_000.0
-
-    if "buy_markout_bps_h5" in dataset:
-        dataset["buy_good_h5"] = dataset["buy_markout_bps_h5"] > 0
-        dataset["sell_good_h5"] = dataset["sell_markout_bps_h5"] > 0
-        dataset["buy_good_after_fees_h5"] = dataset["buy_markout_bps_h5"] > maker_fee_bps
-        dataset["sell_good_after_fees_h5"] = dataset["sell_markout_bps_h5"] > maker_fee_bps
+        dataset[f"buy_good_{suffix}"] = dataset[f"buy_markout_bps_{suffix}"] > 0
+        dataset[f"sell_good_{suffix}"] = dataset[f"sell_markout_bps_{suffix}"] > 0
+        dataset[f"buy_good_after_fees_{suffix}"] = (
+            dataset[f"buy_markout_bps_{suffix}"] > maker_fee_bps
+        )
+        dataset[f"sell_good_after_fees_{suffix}"] = (
+            dataset[f"sell_markout_bps_{suffix}"] > maker_fee_bps
+        )
 
     dataset = dataset.loc[:, ~dataset.columns.duplicated()].copy()
     output = Path(output_path)
