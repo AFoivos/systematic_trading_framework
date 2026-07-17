@@ -157,6 +157,8 @@ tests/*
 !tests/market_data/*.py
 !tests/market_making/
 !tests/market_making/*.py
+!tests/integration/
+!tests/integration/test_bybit_demo_market_making_integration.py
 
 # Runtime reports and paper/live artifacts are generated outputs.
 reports/

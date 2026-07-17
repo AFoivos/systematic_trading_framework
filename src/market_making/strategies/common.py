@@ -277,6 +277,7 @@ def select_quote_sides(
             should_quote=False,
             reason=reason,
             timestamp=quote.timestamp,
+            diagnostics=quote.diagnostics,
         )
     return QuoteDecision(
         symbol=quote.symbol,
@@ -290,6 +291,7 @@ def select_quote_sides(
         should_quote=True,
         reason="ok",
         timestamp=quote.timestamp,
+        diagnostics=quote.diagnostics,
     )
 
 

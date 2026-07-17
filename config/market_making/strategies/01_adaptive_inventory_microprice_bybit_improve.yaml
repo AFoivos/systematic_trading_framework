@@ -1,0 +1,85 @@
+schema_version: 1
+
+experiment:
+  name: adaptive_inventory_microprice
+  description: "Bybit BTCUSDT adaptive microprice strategy improving the visible top of book by one tick."
+  research_only: true
+
+execution:
+  mode: research_smoke
+  venue: bybit
+  allow_order_submission: false
+  quote_order_type: post_only
+  hedge_order_type: none
+  stale_order_book_ms: 2000
+
+instruments:
+  quote_symbol: BTCUSDT
+  quote_market: usdt_linear_perpetual
+
+quote:
+  fair_price_model: microprice
+  quote_placement_mode: improve_top_of_book
+  spread_model: volatility_adjusted
+  base_spread_bps: 8.0
+  min_spread_bps: 6.0
+  max_spread_bps: 30.0
+  volatility_multiplier: 1.0
+  inventory_skew_strength: 1.5
+  # Research-smoke placeholders required by the shared strategy validator.
+  # The Bybit live engine replaces all six values below from instruments-info
+  # and its execution risk multiple before sizing or validating an order.
+  order_size: 0.001
+  max_inventory: 0.004
+  tick_size: 0.1
+  lot_size: 0.001
+  min_order_size: 0.001
+  min_notional: 5.0
+
+fees:
+  maker_fee_bps: 2.0
+  taker_fee_bps: 5.0
+  assumption: "Conservative Bybit research fee assumption; verify against the Demo account fee tier before submission."
+  verified_at: "2026-07-17"
+  source_url: "https://www.bybit.com/en/help-center/article/Trading-Fee-Structure"
+
+risk:
+  # These values constrain the deterministic research-smoke scenario only.
+  # Live risk uses runtime_order_size and runtime_maximum_inventory.
+  max_inventory: 0.004
+  max_position_value: 600.0
+  max_daily_loss: 2.0
+  max_open_orders: 2
+  max_order_size: 0.001
+  max_allowed_spread_bps: 25.0
+  kill_on_websocket_disconnect: true
+  kill_on_stale_order_book: true
+  kill_on_spread_widening: true
+
+strategy:
+  type: adaptive_inventory_microprice
+  parameters:
+    min_expected_edge_bps: 0.5
+    adverse_selection_buffer_bps: 0.75
+    inventory_penalty_bps_per_unit: 0.5
+
+scenario:
+  timestamp: "2026-07-17T12:00:00+00:00"
+  inventory: 0.0
+  realized_pnl: 0.0
+  unrealized_pnl: 0.0
+  open_orders: 0
+  websocket_connected: true
+  recent_returns:
+    - 0.0
+    - 0.00005
+    - -0.00002
+  books:
+    quote:
+      symbol: BTCUSDT
+      bids:
+        - [50000.0, 6.0]
+        - [49999.9, 4.0]
+      asks:
+        - [50000.3, 4.0]
+        - [50000.4, 5.0]

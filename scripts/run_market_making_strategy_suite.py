@@ -387,15 +387,17 @@ def _validate_execution_and_instruments(
 ) -> None:
     execution = _mapping(config["execution"], "execution")
     instruments = _mapping(config["instruments"], "instruments")
-    expected_venue = {
-        "adaptive_inventory_microprice": "kraken_derivatives",
-        "directional_one_sided_flow": "kraken_derivatives",
-        "queue_aware_join_improve": "kraken_derivatives",
-        "funding_basis_neutral": "kraken_spot_and_derivatives",
-        "cross_pair_synthetic_fair_value": "kraken_spot",
+    expected_venues = {
+        "adaptive_inventory_microprice": {"bybit", "kraken_derivatives"},
+        "directional_one_sided_flow": {"kraken_derivatives"},
+        "queue_aware_join_improve": {"kraken_derivatives"},
+        "funding_basis_neutral": {"kraken_spot_and_derivatives"},
+        "cross_pair_synthetic_fair_value": {"kraken_spot"},
     }[strategy_type]
-    if execution["venue"] != expected_venue:
-        raise ValueError(f"execution.venue must be {expected_venue!r} for {strategy_type}.")
+    if execution["venue"] not in expected_venues:
+        raise ValueError(
+            f"execution.venue must be one of {sorted(expected_venues)!r} for {strategy_type}."
+        )
     expected_hedge_type = (
         "ioc"
         if strategy_type in {"funding_basis_neutral", "cross_pair_synthetic_fair_value"}
@@ -407,11 +409,17 @@ def _validate_execution_and_instruments(
         )
     for key, value in instruments.items():
         _string(value, f"instruments.{key}")
-    if strategy_type in {
-        "adaptive_inventory_microprice",
-        "directional_one_sided_flow",
-        "queue_aware_join_improve",
-    } and instruments["quote_market"] != "derivatives_perpetual":
+    if strategy_type == "adaptive_inventory_microprice":
+        allowed_quote_markets = (
+            {"usdt_linear_perpetual"}
+            if execution["venue"] == "bybit"
+            else {"derivatives_perpetual"}
+        )
+        if instruments["quote_market"] not in allowed_quote_markets:
+            raise ValueError(
+                f"instruments.quote_market must be one of {sorted(allowed_quote_markets)!r}."
+            )
+    if strategy_type in {"directional_one_sided_flow", "queue_aware_join_improve"} and instruments["quote_market"] != "derivatives_perpetual":
         raise ValueError("instruments.quote_market must be derivatives_perpetual.")
     if strategy_type == "funding_basis_neutral":
         if instruments["quote_market"] != "derivatives_perpetual":

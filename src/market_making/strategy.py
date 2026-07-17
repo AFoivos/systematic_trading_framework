@@ -103,6 +103,7 @@ class SideSelectionGate:
                 should_quote=False,
                 reason="no quote side selected",
                 timestamp=quote.timestamp,
+                diagnostics=quote.diagnostics,
             )
         return QuoteDecision(
             symbol=quote.symbol,
@@ -116,6 +117,7 @@ class SideSelectionGate:
             should_quote=True,
             reason="ok",
             timestamp=quote.timestamp,
+            diagnostics=quote.diagnostics,
         )
 
     def _allowed_sides(self, *, quote: QuoteDecision, book: LocalOrderBook) -> set[str]:
@@ -273,6 +275,7 @@ class MarketMakingStrategy:
                     should_quote=False,
                     reason=filter_decision.reason,
                     timestamp=fair_quote.timestamp,
+                    diagnostics=fair_quote.diagnostics,
                 )
             spread_multiplier = filter_decision.spread_multiplier
 
@@ -307,6 +310,7 @@ class MarketMakingStrategy:
                 should_quote=False,
                 reason="insufficient edge after fees",
                 timestamp=quote.timestamp,
+                diagnostics=quote.diagnostics,
             )
         return quote
 

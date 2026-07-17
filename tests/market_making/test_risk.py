@@ -202,3 +202,25 @@ def test_invalid_risk_limit_is_rejected_at_construction() -> None:
                 stale_order_book_ms=1_000,
             )
         )
+
+
+def test_critical_stale_guard_runs_even_when_strategy_declines_to_quote() -> None:
+    now = datetime.now(timezone.utc)
+    risk = RiskEngine(_limits())
+    quote = QuoteDecision(**{**_quote().__dict__, "should_quote": False, "reason": "strategy gate"})
+
+    decision = risk.check_quote(
+        quote=quote,
+        book=_book(now - timedelta(seconds=5)),
+        state=RiskState(
+            inventory=0.0,
+            realized_pnl=0.0,
+            unrealized_pnl=0.0,
+            open_orders=0,
+            now=now,
+        ),
+    )
+
+    assert decision.kill_switch
+    assert decision.cancel_all
+    assert decision.reason == "stale order book"

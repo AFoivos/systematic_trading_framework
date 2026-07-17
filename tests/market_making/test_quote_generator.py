@@ -57,6 +57,18 @@ def test_join_top_of_book_quotes_at_best_bid_and_best_ask() -> None:
     assert quote.ask_price == 101.0
     assert quote.fair_price == 100.5
     assert quote.spread_bps == 1.0 / 100.5 * 10_000.0
+    assert quote.diagnostics == {
+        "requested_quote_placement_mode": "join_top_of_book",
+        "applied_quote_placement_mode": "join_top_of_book",
+        "best_bid": 100.0,
+        "best_ask": 101.0,
+        "tick_size": 0.25,
+        "quoted_bid": 100.0,
+        "quoted_ask": 101.0,
+        "quoted_spread_ticks": 4.0,
+        "quoted_spread_bps": 1.0 / 100.5 * 10_000.0,
+        "fallback_to_join": False,
+    }
 
 
 def test_improve_top_of_book_quotes_inside_spread_when_there_is_room() -> None:
@@ -78,6 +90,10 @@ def test_improve_top_of_book_quotes_inside_spread_when_there_is_room() -> None:
     assert quote.should_quote
     assert quote.bid_price == 100.25
     assert quote.ask_price == 100.75
+    assert quote.diagnostics["requested_quote_placement_mode"] == "improve_top_of_book"
+    assert quote.diagnostics["applied_quote_placement_mode"] == "improve_top_of_book"
+    assert quote.diagnostics["fallback_to_join"] is False
+    assert quote.diagnostics["quoted_spread_ticks"] == pytest.approx(2.0)
 
 
 def test_improve_top_of_book_falls_back_to_join_when_it_would_cross() -> None:
@@ -101,6 +117,10 @@ def test_improve_top_of_book_falls_back_to_join_when_it_would_cross() -> None:
     assert quote.should_quote
     assert quote.bid_price == 100.0
     assert quote.ask_price == 100.5
+    assert quote.diagnostics["requested_quote_placement_mode"] == "improve_top_of_book"
+    assert quote.diagnostics["applied_quote_placement_mode"] == "join_top_of_book"
+    assert quote.diagnostics["fallback_to_join"] is True
+    assert quote.diagnostics["quoted_spread_ticks"] == pytest.approx(1.0)
 
 
 def test_positive_inventory_skews_quotes_lower() -> None:

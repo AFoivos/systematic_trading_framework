@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 import math
-from typing import Literal
+from typing import Literal, Mapping
 
 from .fair_price import FairPriceModel, compute_fair_price
 from .inventory_skew import InventorySkew, InventorySkewConfig
@@ -46,6 +46,7 @@ class QuoteDecision:
     should_quote: bool
     reason: str
     timestamp: datetime
+    diagnostics: Mapping[str, object] = field(default_factory=dict)
 
 
 class QuoteGenerator:
@@ -93,7 +94,7 @@ class QuoteGenerator:
             max(raw_spread_bps * spread_multiplier, self.config.spread.min_spread_bps),
             self.config.spread.max_spread_bps,
         )
-        bid_price, ask_price, spread_bps = self._place_quote(
+        bid_price, ask_price, spread_bps, placement_diagnostics = self._place_quote(
             book=book,
             fair_price=fair_price,
             spread_bps=spread_bps,
@@ -109,13 +110,34 @@ class QuoteGenerator:
             or ask_price <= 0
             or bid_price >= ask_price
         ):
-            return self._reject(book.symbol, fair_price, spread_bps, inventory_ratio, "invalid quote prices")
+            return self._reject(
+                book.symbol,
+                fair_price,
+                spread_bps,
+                inventory_ratio,
+                "invalid quote prices",
+                diagnostics=placement_diagnostics,
+            )
         if size < max(self.config.min_order_size, self.config.lot_size):
-            return self._reject(book.symbol, fair_price, spread_bps, inventory_ratio, "order size below minimum")
+            return self._reject(
+                book.symbol,
+                fair_price,
+                spread_bps,
+                inventory_ratio,
+                "order size below minimum",
+                diagnostics=placement_diagnostics,
+            )
         bid_valid = bid_price * size >= self.config.min_notional
         ask_valid = ask_price * size >= self.config.min_notional
         if not bid_valid and not ask_valid:
-            return self._reject(book.symbol, fair_price, spread_bps, inventory_ratio, "quote notional below minimum")
+            return self._reject(
+                book.symbol,
+                fair_price,
+                spread_bps,
+                inventory_ratio,
+                "quote notional below minimum",
+                diagnostics=placement_diagnostics,
+            )
 
         return QuoteDecision(
             symbol=book.symbol,
@@ -129,6 +151,7 @@ class QuoteGenerator:
             should_quote=True,
             reason="ok",
             timestamp=datetime.now(timezone.utc),
+            diagnostics=placement_diagnostics,
         )
 
     def _place_quote(
@@ -138,8 +161,9 @@ class QuoteGenerator:
         fair_price: float,
         spread_bps: float,
         inventory: float,
-    ) -> tuple[float, float, float]:
+    ) -> tuple[float, float, float, Mapping[str, object]]:
         mode = self.config.quote_placement_mode
+        fallback_to_join = False
         if mode == "fair_price_bps":
             half_spread = fair_price * (spread_bps / 10_000.0) / 2.0
             shift = self.inventory_skew.reservation_price_shift(
@@ -149,12 +173,35 @@ class QuoteGenerator:
             )
             bid_price = self._round_down(fair_price + shift - half_spread, self.config.tick_size)
             ask_price = self._round_up(fair_price + shift + half_spread, self.config.tick_size)
-            return bid_price, ask_price, self._quoted_spread_bps(bid_price, ask_price)
-        if mode == "join_top_of_book":
-            return self._join_top_of_book(book)
-        if mode == "improve_top_of_book":
-            return self._improve_top_of_book(book)
-        raise ValueError(f"unsupported quote placement mode: {mode}")
+            quoted_spread_bps = self._quoted_spread_bps(bid_price, ask_price)
+            applied_mode: QuotePlacementMode = "fair_price_bps"
+        elif mode == "join_top_of_book":
+            bid_price, ask_price, quoted_spread_bps = self._join_top_of_book(book)
+            applied_mode = "join_top_of_book"
+        elif mode == "improve_top_of_book":
+            bid_price, ask_price, quoted_spread_bps = self._improve_top_of_book(book)
+            fallback_to_join = (
+                book.best_bid is not None
+                and book.best_ask is not None
+                and bid_price == float(book.best_bid)
+                and ask_price == float(book.best_ask)
+            )
+            applied_mode = "join_top_of_book" if fallback_to_join else "improve_top_of_book"
+        else:
+            raise ValueError(f"unsupported quote placement mode: {mode}")
+        diagnostics: Mapping[str, object] = {
+            "requested_quote_placement_mode": mode,
+            "applied_quote_placement_mode": applied_mode,
+            "best_bid": float(book.best_bid) if book.best_bid is not None else None,
+            "best_ask": float(book.best_ask) if book.best_ask is not None else None,
+            "tick_size": self.config.tick_size,
+            "quoted_bid": bid_price,
+            "quoted_ask": ask_price,
+            "quoted_spread_ticks": (ask_price - bid_price) / self.config.tick_size,
+            "quoted_spread_bps": quoted_spread_bps,
+            "fallback_to_join": fallback_to_join,
+        }
+        return bid_price, ask_price, quoted_spread_bps, diagnostics
 
     def _join_top_of_book(self, book: LocalOrderBook) -> tuple[float, float, float]:
         if book.best_bid is None or book.best_ask is None:
@@ -204,6 +251,7 @@ class QuoteGenerator:
         spread_bps: float,
         inventory_ratio: float,
         reason: str,
+        diagnostics: Mapping[str, object] | None = None,
     ) -> QuoteDecision:
         return QuoteDecision(
             symbol=symbol,
@@ -217,6 +265,7 @@ class QuoteGenerator:
             should_quote=False,
             reason=reason,
             timestamp=datetime.now(timezone.utc),
+            diagnostics=diagnostics or {},
         )
 
 

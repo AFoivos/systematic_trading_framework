@@ -77,36 +77,22 @@ class RiskEngine:
         """Validate a quote decision against hard limits."""
         if self.kill_switch_enabled:
             return RiskDecision(False, reason="kill switch active", cancel_all=True, kill_switch=True)
-        if not quote.should_quote:
-            return RiskDecision(False, reason=quote.reason)
         if quote.symbol != book.symbol:
             return RiskDecision(False, reason="quote symbol does not match order book", cancel_all=False)
         if not self._state_is_finite(state):
             return self.trigger_kill_switch("invalid non-finite risk state")
-        if not self._quote_is_valid(quote):
-            return RiskDecision(False, reason="invalid quote values", cancel_all=False)
         if self.limits.kill_on_websocket_disconnect and not state.websocket_connected:
             return self.trigger_kill_switch("websocket disconnected")
         if self.limits.kill_on_stale_order_book and self._is_stale(book, state.now):
             return self.trigger_kill_switch("stale order book")
         if abs(state.inventory) > self.limits.max_inventory:
             return self.trigger_kill_switch("max inventory exceeded")
-        worst_inventory = self._worst_case_inventory(quote=quote, inventory=state.inventory)
-        if abs(worst_inventory) > self.limits.max_inventory:
-            return RiskDecision(False, reason="worst-case inventory would exceed limit", cancel_all=False)
+        book_mid = book.mid_price
+        if book_mid is not None and abs(state.inventory) * book_mid > self.limits.max_position_value:
+            return self.trigger_kill_switch("max position value exceeded")
         total_pnl = state.realized_pnl + state.unrealized_pnl
         if total_pnl <= -abs(self.limits.max_daily_loss):
             return self.trigger_kill_switch("max daily loss exceeded")
-        if state.open_orders > self.limits.max_open_orders:
-            return RiskDecision(False, reason="max open orders exceeded", cancel_all=False)
-        if quote.bid_size > self.limits.max_order_size or quote.ask_size > self.limits.max_order_size:
-            return RiskDecision(False, reason="max order size exceeded")
-        notional = max(abs(state.inventory) * quote.fair_price, 0.0)
-        if notional > self.limits.max_position_value:
-            return self.trigger_kill_switch("max position value exceeded")
-        worst_notional = max(abs(worst_inventory) * quote.fair_price, 0.0)
-        if worst_notional > self.limits.max_position_value:
-            return RiskDecision(False, reason="worst-case position value would exceed limit", cancel_all=False)
         book_spread_bps = book.spread_bps
         if (
             self.limits.kill_on_spread_widening
@@ -114,6 +100,20 @@ class RiskEngine:
             and book_spread_bps > self.limits.max_allowed_spread_bps
         ):
             return self.trigger_kill_switch("extreme order book spread")
+        if not quote.should_quote:
+            return RiskDecision(False, reason=quote.reason)
+        if not self._quote_is_valid(quote):
+            return RiskDecision(False, reason="invalid quote values", cancel_all=False)
+        worst_inventory = self._worst_case_inventory(quote=quote, inventory=state.inventory)
+        if abs(worst_inventory) > self.limits.max_inventory:
+            return RiskDecision(False, reason="worst-case inventory would exceed limit", cancel_all=False)
+        if state.open_orders > self.limits.max_open_orders:
+            return RiskDecision(False, reason="max open orders exceeded", cancel_all=False)
+        if quote.bid_size > self.limits.max_order_size or quote.ask_size > self.limits.max_order_size:
+            return RiskDecision(False, reason="max order size exceeded")
+        worst_notional = max(abs(worst_inventory) * quote.fair_price, 0.0)
+        if worst_notional > self.limits.max_position_value:
+            return RiskDecision(False, reason="worst-case position value would exceed limit", cancel_all=False)
         return RiskDecision(True)
 
     def _is_stale(self, book: LocalOrderBook, now: datetime) -> bool:
