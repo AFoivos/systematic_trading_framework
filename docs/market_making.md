@@ -220,14 +220,83 @@ Interpretation:
 - Adverse selection rate: ποσοστό fills με αρνητικό markout. Δεν είναι αξιόπιστο όταν τα fills είναι λίγα.
 - Inventory utilization: δείχνει πόσο συχνά το inventory πλησιάζει το `max_inventory`. Υψηλή χρήση θέλει αυστηρότερο skew/risk ή μικρότερα order sizes.
 
+## Five-strategy research suite
+
+Το additive research package `src/market_making/strategies` περιλαμβάνει πέντε
+διαφορετικά decision models χωρίς να αλλάζει τα υπάρχοντα execution defaults:
+
+1. `AdaptiveInventoryMicropriceStrategy`: volatility-aware microprice quotes,
+   inventory reservation-price shift και fee-aware economic gate.
+2. `DirectionalOneSidedFlowStrategy`: causal L2 imbalance, past aggressor flow
+   και recent returns για one-sided passive quotes με inventory-unwind override.
+3. `QueueAwareJoinImproveStrategy`: σύγκριση join/improve με estimated queue
+   ahead, expected aggressive flow, explicit cancellation estimate και adverse
+   markout. Το `ConservativeQueuePosition` υποστηρίζει deterministic partial
+   fills μόνο από observed trade quantity και explicitly attributed cancels.
+4. `FundingBasisNeutralStrategy`: perpetual fair value από synchronized hedge
+   book, target basis και optional expected funding input. Θετικό
+   `expected_funding_bps` επηρεάζει το target basis μόνο μέσω του explicit
+   `funding_to_basis_multiplier`.
+5. `CrossPairSyntheticFairValueStrategy`: ratio-cross fair value
+   `BASE/USD / QUOTE/USD` και δύο fill-contingent hedge legs.
+
+Deterministic smoke run:
+
+```bash
+docker compose run --rm app python scripts/run_market_making_strategy_suite.py
+```
+
+Ο runner φορτώνει από προεπιλογή πέντε πλήρως αυτοτελή YAML configs:
+
+- `config/market_making/strategies/01_adaptive_inventory_microprice.yaml`
+- `config/market_making/strategies/02_directional_one_sided_flow.yaml`
+- `config/market_making/strategies/03_queue_aware_join_improve.yaml`
+- `config/market_making/strategies/04_funding_basis_neutral.yaml`
+- `config/market_making/strategies/05_cross_pair_synthetic_fair_value.yaml`
+
+Για ένα config μόνο ή για επιλεγμένο subset, το `--config` μπορεί να επαναληφθεί:
+
+```bash
+docker compose run --rm app python scripts/run_market_making_strategy_suite.py \
+  --config config/market_making/strategies/04_funding_basis_neutral.yaml
+```
+
+Το schema είναι strict: missing ή unknown keys απορρίπτονται, όλα τα books του
+scenario έχουν κοινό timezone-aware decision timestamp και directional trades
+με timestamp μετά την απόφαση απορρίπτονται ως lookahead. Κάθε αποτέλεσμα
+περιλαμβάνει ξεχωριστά `should_quote` από τη strategy και `risk_allowed` από το
+κεντρικό `RiskEngine`.
+
+Τα fee fields είναι explicit research assumptions επαληθευμένα στις
+`2026-07-17` έναντι των δημοσιευμένων entry tiers. Πριν από σοβαρό replay πρέπει
+να αντικατασταθούν από το πραγματικό rolling-volume tier του λογαριασμού και να
+συμπεριλάβουν measured hedge slippage. Το Kraken Spot και το Kraken Derivatives
+volume tier δεν πρέπει να θεωρούνται κοινά.
+
+Κάθε strategy επιστρέφει `StrategyDecision` με:
+
+- το passive `QuoteDecision`,
+- fee-adjusted expected edge και diagnostics,
+- προαιρετικά `HedgeTemplate` objects που γίνονται concrete
+  `HedgeInstruction` μόνο μετά από πραγματικό fill.
+
+Το strategy suite δεν στέλνει orders και δεν μεταβάλλει portfolio constraints.
+Τα hedge instructions είναι research intents και πρέπει να περάσουν από
+ξεχωριστό execution/risk/reconciliation layer πριν από demo ή live χρήση.
+
 Known limitations:
 
-- Δεν υπάρχει ακόμη queue-position model.
-- Δεν υπάρχει ακόμη partial-fill model.
+- Το queue/partial-fill model είναι standalone research model και δεν έχει
+  συνδεθεί ακόμη στο CSV paper replay ή σε venue order reconciliation.
+- L2 data δεν αποκαλύπτουν ποιο μέρος μιας ακύρωσης βρισκόταν πραγματικά μπροστά
+  από τη δική μας εντολή. Το queue model δέχεται μόνο explicit conservative
+  estimates και δεν τα συμπεραίνει από μελλοντικά events.
 - Δεν υπάρχει ακόμη latency-aware fill model.
 - Το markout απαιτεί διαθέσιμα `orderbook_events.csv`.
 - Το PnL attribution είναι approximate εκτός αν υπάρχει πλήρης quote/order/fill linkage.
-- Τα paper replay fills δεν είναι ακόμη venue-realistic, γιατί δεν υπάρχει queue position, partial fills ή latency-aware matching.
+- Τα paper replay fills δεν είναι ακόμη venue-realistic, γιατί το standalone
+  queue/partial-fill research model δεν έχει συνδεθεί στο replay και δεν υπάρχει
+  latency-aware matching.
 - Τα diagnostics είναι JSON/CSV/Markdown-first. Δεν παράγονται legacy PowerPoint decks.
 
 ### MOMENT research experiment
@@ -262,8 +331,9 @@ classic experiment artifact style:
 - optional `report.md`
 
 The pipeline is JSON/CSV/Markdown/Parquet-only. It does not generate HTML or PowerPoint artifacts.
-Production, demo, and live use remains disabled until queue-position, latency, and partial-fill
-modeling are implemented and validated.
+Production, demo, and live use remains disabled until queue-position/partial-fill
+research modeling is integrated with replay/order reconciliation and latency
+modeling is implemented and validated.
 
 ### Single-command large MOMENT pipeline
 
@@ -324,7 +394,8 @@ Live trading is intentionally disabled.
 
 - Persistent Kraken Futures public websocket collector.
 - Signed Kraken Futures Demo REST order placement/cancel.
-- Partial fills και queue-position model.
+- Ενσωμάτωση του standalone queue/partial-fill research model στο paper replay
+  και στο venue order-state reconciliation.
 - Latency-aware fill simulation.
 - Αυτόματη σύνδεση με υπάρχοντα candle-based trend regime features.
 - Πραγματικό live trading.

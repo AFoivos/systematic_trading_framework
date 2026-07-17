@@ -1,25 +1,28 @@
-"""Event-driven market making components."""
+"""Five additive research market-making strategy variants."""
 
-from .paper_engine import PaperMarketMakingEngine
-from .quote_generator import QuoteDecision, QuoteGenerator, QuoteGeneratorConfig
-from .risk import RiskDecision, RiskEngine, RiskLimits
-from .diagnostics import build_market_making_diagnostics, write_market_making_diagnostics
-from .strategies import (
+from .adaptive_inventory import (
     AdaptiveInventoryMicropriceStrategy,
     AdaptiveInventoryStrategyConfig,
-    BasisNeutralStrategyConfig,
-    ConservativeQueuePosition,
-    CrossPairSyntheticFairValueStrategy,
-    DirectionalFlowStrategyConfig,
-    DirectionalOneSidedFlowStrategy,
+)
+from .basis_neutral import BasisNeutralStrategyConfig, FundingBasisNeutralStrategy
+from .common import (
     ExternalFairQuoteConfig,
-    FundingBasisNeutralStrategy,
     HedgeInstruction,
     HedgeTemplate,
+    StrategyDecision,
+)
+from .directional_flow import (
+    DirectionalFlowStrategyConfig,
+    DirectionalOneSidedFlowStrategy,
+)
+from .queue_aware import (
+    ConservativeQueuePosition,
     QueueAwareJoinImproveStrategy,
     QueueAwareStrategyConfig,
     QueueState,
-    StrategyDecision,
+)
+from .synthetic_fair_value import (
+    CrossPairSyntheticFairValueStrategy,
     SyntheticFairValueStrategyConfig,
 )
 
@@ -35,18 +38,9 @@ __all__ = [
     "FundingBasisNeutralStrategy",
     "HedgeInstruction",
     "HedgeTemplate",
-    "PaperMarketMakingEngine",
-    "QuoteDecision",
-    "QuoteGenerator",
-    "QuoteGeneratorConfig",
     "QueueAwareJoinImproveStrategy",
     "QueueAwareStrategyConfig",
     "QueueState",
-    "RiskDecision",
-    "RiskEngine",
-    "RiskLimits",
     "StrategyDecision",
     "SyntheticFairValueStrategyConfig",
-    "build_market_making_diagnostics",
-    "write_market_making_diagnostics",
 ]

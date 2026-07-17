@@ -1,0 +1,87 @@
+schema_version: 1
+
+experiment:
+  name: cross_pair_synthetic_fair_value
+  description: "Quote Kraken ETH/BTC against synchronized ETH/USD divided by BTC/USD and produce two IOC hedge intents after fills."
+  research_only: true
+
+execution:
+  mode: research_smoke
+  venue: kraken_spot
+  allow_order_submission: false
+  quote_order_type: post_only
+  hedge_order_type: ioc
+  stale_order_book_ms: 3000
+
+instruments:
+  target_symbol: ETH/BTC
+  target_market: spot
+  numerator_symbol: ETH/USD
+  denominator_symbol: BTC/USD
+  hedge_market: spot
+
+quote:
+  spread_bps: 20.0
+  order_size: 1.0
+  max_inventory: 5.0
+  tick_size: 0.0001
+  lot_size: 0.01
+  inventory_skew_strength: 1.0
+  min_order_size: 0.01
+  min_notional: 0.001
+
+fees:
+  target_maker_fee_bps: 25.0
+  numerator_hedge_taker_fee_bps: 40.0
+  denominator_hedge_taker_fee_bps: 40.0
+  aggregate_hedge_slippage_bps: 2.0
+  assumption: "Kraken Spot Crypto entry tier on all three legs; aggregate hedge cost includes both taker legs and explicit total slippage."
+  verified_at: "2026-07-17"
+  source_url: "https://www.kraken.com/features/fee-schedule"
+
+risk:
+  max_inventory: 5.0
+  max_position_value: 0.5
+  max_daily_loss: 0.05
+  max_open_orders: 1
+  max_order_size: 1.0
+  max_allowed_spread_bps: 100.0
+  kill_on_websocket_disconnect: true
+  kill_on_stale_order_book: true
+  kill_on_spread_widening: true
+
+strategy:
+  type: cross_pair_synthetic_fair_value
+  parameters:
+    min_expected_edge_bps: 1.0
+    min_dislocation_bps: 50.0
+    max_abs_dislocation_bps: 1000.0
+    max_book_time_skew_ms: 250
+    quote_both_when_neutral: false
+
+scenario:
+  timestamp: "2026-07-17T12:00:00+00:00"
+  inventory: 0.0
+  realized_pnl: 0.0
+  unrealized_pnl: 0.0
+  open_orders: 0
+  websocket_connected: true
+  books:
+    target:
+      symbol: ETH/BTC
+      bids:
+        - [0.0520, 20.0]
+      asks:
+        - [0.0522, 20.0]
+    numerator:
+      symbol: ETH/USD
+      bids:
+        - [1999.0, 20.0]
+      asks:
+        - [2001.0, 20.0]
+    denominator:
+      symbol: BTC/USD
+      bids:
+        - [39990.0, 20.0]
+      asks:
+        - [40010.0, 20.0]

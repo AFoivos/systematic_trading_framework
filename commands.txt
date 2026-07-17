@@ -61,7 +61,7 @@ python -m src.experiments.runner docs/examples/minimal_experiment.yaml
 
 ```bash
 docker compose run --rm app python -m src.experiments.runner config/experiments/global_session_relay/global_session_relay_laggard_v1_intra_cluster.yaml
-docker compose run --rm app python -m src.experiments.runner config/experiments/foundation_alpha/trend_vwap_expected_r_us100_m30/00_us100_m30_trend_vwap_expected_r_yaml0.yaml
+docker compose run --rm app python -m src.experiments.runner config/experiments/foundation_alpha/ethusd/ethusd_30m_xgboost_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid.yaml
 Το οπτικό feature/signal/target lab:
 
 ```bash

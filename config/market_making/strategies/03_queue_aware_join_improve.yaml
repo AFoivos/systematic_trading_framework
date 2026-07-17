@@ -1,0 +1,75 @@
+schema_version: 1
+
+experiment:
+  name: queue_aware_join_improve
+  description: "Kraken BTC perpetual join-versus-improve selection using only causal queue and short-horizon flow estimates."
+  research_only: true
+
+execution:
+  mode: research_smoke
+  venue: kraken_derivatives
+  allow_order_submission: false
+  quote_order_type: post_only
+  hedge_order_type: none
+  stale_order_book_ms: 3000
+
+instruments:
+  quote_symbol: PF_XBTUSD
+  quote_market: derivatives_perpetual
+
+quote:
+  order_size: 0.001
+  max_inventory: 0.01
+  tick_size: 0.5
+  lot_size: 0.0001
+  min_notional: 5.0
+
+fees:
+  maker_fee_bps: 2.0
+  taker_fee_bps: 5.0
+  assumption: "Kraken Derivatives entry tier; replace with the account's actual rolling-volume tier before replay or deployment."
+  verified_at: "2026-07-17"
+  source_url: "https://support.kraken.com/articles/360048917612-fee-schedule"
+
+risk:
+  max_inventory: 0.01
+  max_position_value: 600.0
+  max_daily_loss: 50.0
+  max_open_orders: 2
+  max_order_size: 0.001
+  max_allowed_spread_bps: 25.0
+  kill_on_websocket_disconnect: true
+  kill_on_stale_order_book: true
+  kill_on_spread_widening: true
+
+strategy:
+  type: queue_aware_join_improve
+  parameters:
+    min_expected_edge_bps: 0.1
+    replacement_cost_bps: 0.05
+    inventory_penalty_bps_per_unit: 0.5
+    allow_improve: true
+
+scenario:
+  timestamp: "2026-07-17T12:00:00+00:00"
+  inventory: 0.0
+  realized_pnl: 0.0
+  unrealized_pnl: 0.0
+  open_orders: 0
+  websocket_connected: true
+  queue_state:
+    bid_queue_ahead: 0.02
+    ask_queue_ahead: 0.02
+    expected_aggressive_sell_qty: 0.001
+    expected_aggressive_buy_qty: 0.001
+    bid_cancel_fraction: 0.0
+    ask_cancel_fraction: 0.0
+    expected_buy_adverse_markout_bps: 0.0
+    expected_sell_adverse_markout_bps: 0.0
+  books:
+    quote:
+      symbol: PF_XBTUSD
+      bids:
+        - [49987.5, 0.02]
+      asks:
+        - [50012.5, 0.02]

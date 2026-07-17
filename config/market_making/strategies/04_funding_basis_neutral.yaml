@@ -1,0 +1,83 @@
+schema_version: 1
+
+experiment:
+  name: funding_basis_neutral
+  description: "Quote a dislocated Kraken BTC perpetual around synchronized Kraken spot fair value and produce an IOC delta hedge intent after fills."
+  research_only: true
+
+execution:
+  mode: research_smoke
+  venue: kraken_spot_and_derivatives
+  allow_order_submission: false
+  quote_order_type: post_only
+  hedge_order_type: ioc
+  stale_order_book_ms: 3000
+
+instruments:
+  quote_symbol: PF_XBTUSD
+  quote_market: derivatives_perpetual
+  hedge_symbol: BTC/USD
+  hedge_market: spot
+
+quote:
+  spread_bps: 20.0
+  order_size: 0.001
+  max_inventory: 0.01
+  tick_size: 0.5
+  lot_size: 0.0001
+  inventory_skew_strength: 1.0
+  min_order_size: 0.0001
+  min_notional: 5.0
+
+fees:
+  quote_maker_fee_bps: 2.0
+  hedge_taker_fee_bps: 40.0
+  hedge_slippage_bps: 2.0
+  assumption: "Entry-tier derivatives maker plus entry-tier spot taker and explicit IOC slippage; replace both tiers with account-specific costs."
+  verified_at: "2026-07-17"
+  source_url: "https://www.kraken.com/features/fee-schedule"
+
+risk:
+  max_inventory: 0.01
+  max_position_value: 600.0
+  max_daily_loss: 50.0
+  max_open_orders: 1
+  max_order_size: 0.001
+  max_allowed_spread_bps: 25.0
+  kill_on_websocket_disconnect: true
+  kill_on_stale_order_book: true
+  kill_on_spread_widening: true
+
+strategy:
+  type: funding_basis_neutral
+  parameters:
+    target_basis_bps: 0.0
+    funding_to_basis_multiplier: 2.0
+    min_expected_edge_bps: 1.0
+    min_dislocation_bps: 25.0
+    max_abs_observed_basis_bps: 500.0
+    max_book_time_skew_ms: 250
+    quote_both_when_neutral: false
+    hedge_ratio: 1.0
+
+scenario:
+  timestamp: "2026-07-17T12:00:00+00:00"
+  inventory: 0.0
+  realized_pnl: 0.0
+  unrealized_pnl: 0.0
+  open_orders: 0
+  websocket_connected: true
+  expected_funding_bps: 0.5
+  books:
+    quote:
+      symbol: PF_XBTUSD
+      bids:
+        - [50995.0, 2.0]
+      asks:
+        - [51005.0, 2.0]
+    hedge:
+      symbol: BTC/USD
+      bids:
+        - [49995.0, 2.0]
+      asks:
+        - [50005.0, 2.0]

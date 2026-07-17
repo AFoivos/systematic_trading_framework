@@ -10,7 +10,7 @@ WORKDIR /workspace
 
 # Runtime library needed by LightGBM/XGBoost wheels.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libgomp1 \
+    && apt-get install -y --no-install-recommends git libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.lock.txt requirements.tsfresh.txt /tmp/
