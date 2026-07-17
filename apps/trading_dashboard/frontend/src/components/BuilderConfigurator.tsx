@@ -444,6 +444,13 @@ function deriveFeatureOutputColumns(stepName: string, params: Record<string, unk
         ...(asBoolean(params.add_distance, true) ? [outputOrParam(params, "distance_col", `${closeCol}_over_vwap_${item}`)] : [])
       ]);
     }
+    case "twap": {
+      const windows = asIntegerList(params.windows, [asInteger(params.window, 20)]);
+      return windows.flatMap((item) => [
+        outputOrParam(params, "twap_col", `twap_${item}`),
+        ...(asBoolean(params.add_distance, false) ? [outputOrParam(params, "distance_col", `${closeCol}_over_twap_${item}`)] : [])
+      ]);
+    }
     case "mfi":
       return [`mfi_${asInteger(params.window, 14)}`];
     case "rsi":

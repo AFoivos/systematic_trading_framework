@@ -166,6 +166,19 @@ def test_builder_catalog_exposes_registered_feature_signal_and_target_defaults()
     assert directional_params["tie_break"].options == ["closest_to_open", "profit", "stop"]
 
 
+def test_dashboard_builder_catalog_exposes_twap_defaults() -> None:
+    feature_by_name = {builder.name: builder for builder in transform_catalog.feature_builders()}
+
+    twap = feature_by_name["twap"]
+    params = {param.name: param for param in twap.parameters}
+
+    assert twap.import_path == "src.features.technical.twap.add_twap_features"
+    assert params["window"].default_value == 20
+    assert params["windows"].kind == "list"
+    assert params["windows"].default_value is None
+    assert params["twap_col"].default_value is None
+
+
 def test_transform_series_runs_existing_builders_without_writing_artifacts(monkeypatch) -> None:
     index = pd.date_range("2024-01-01", periods=8, freq="h", tz="UTC")
     frame = pd.DataFrame(

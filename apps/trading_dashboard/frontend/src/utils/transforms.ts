@@ -35,7 +35,7 @@ function isIndicatorFeature(sourceType: VisualizationConfig["source_type"], name
     return false;
   }
   const lowered = name.toLowerCase();
-  return ["adx", "mfi", "bollinger", "bb_", "support", "resistance", "volume", "vwap"].some((token) =>
+  return ["adx", "mfi", "bollinger", "bb_", "support", "resistance", "volume", "twap", "vwap"].some((token) =>
     lowered.includes(token)
   );
 }
@@ -46,7 +46,7 @@ function defaultPlacement(
 ): Pick<VisualizationConfig, "chart_target" | "render_type" | "panel_id"> {
   const lowered = name.toLowerCase();
   if (isFeatureSourceType(sourceType)) {
-    if (lowered === "vwap" || lowered.startsWith("vwap_")) {
+    if (["twap", "vwap"].includes(lowered) || lowered.startsWith("twap_") || lowered.startsWith("vwap_")) {
       return { chart_target: "main_price_chart", render_type: "line", panel_id: null };
     }
     if (lowered.includes("shock") || lowered.includes("hist") || lowered.includes("regime") || lowered.includes("state")) {

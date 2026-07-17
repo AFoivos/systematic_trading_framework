@@ -38,6 +38,7 @@ from .stochastic import add_stochastic_features
 from .trend import add_trend_features
 from .trend_regime_feature import add_trend_regime_features
 from .true_range import compute_true_range
+from .twap import compute_twap, add_twap_features
 from .vol_normalized_momentum import compute_vol_normalized_momentum
 from .volume_features import compute_volume_over_atr, compute_volume_zscore
 from .volume_features import add_volume_features
@@ -83,6 +84,8 @@ __all__ = [
     "compute_volume_zscore",
     "compute_volume_over_atr",
     "add_volume_features",
+    "compute_twap",
+    "add_twap_features",
     "compute_vwap",
     "add_vwap_features",
     "compute_adx",

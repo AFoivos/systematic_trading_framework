@@ -63,6 +63,7 @@ from .technical.schaff_trend_cycle import add_schaff_trend_cycle_features
 from .technical.stochastic import add_stochastic_features
 from .technical.stochastic_rsi import add_stochastic_rsi_features
 from .technical.trend import add_trend_features
+from .technical.twap import add_twap_features
 from .technical.vwap import add_vwap_features
 from .technical.vol_normalized_momentum import add_vol_normalized_momentum_features
 from .technical.volume_features import add_volume_features
@@ -91,6 +92,7 @@ _FEATURE_COMPONENTS: tuple[tuple[str, FeatureFn], ...] = (
     ("roc", add_roc_features),
     ("atr", add_atr_features),
     ("adx", add_adx_features),
+    ("twap", add_twap_features),
     ("vwap", add_vwap_features),
     ("mfi", add_mfi_features),
     ("rsi", add_rsi_features),

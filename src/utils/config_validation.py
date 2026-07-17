@@ -2031,6 +2031,38 @@ def validate_features_block(features: Any) -> None:
                 )
             if params.get("vwap_col") is not None and params.get("vwap_col") == params.get("distance_col"):
                 raise ConfigValidationError("features[].params VWAP output columns must be unique.")
+        if step["step"] == "twap":
+            params = step.get("params") or {}
+            for key in ("high_col", "low_col", "close_col"):
+                if key in params and params[key] is not None and not isinstance(params[key], str):
+                    raise ConfigValidationError(f"features[].params.{key} must be a string when provided.")
+            for key in ("twap_col", "distance_col"):
+                if key in params and params[key] is not None and (
+                    not isinstance(params[key], str) or not params[key].strip()
+                ):
+                    raise ConfigValidationError(f"features[].params.{key} must be a non-empty string.")
+            if "window" in params and params["window"] is not None:
+                _positive_int(params["window"], field="features[].params.window")
+            windows = params.get("windows")
+            if windows is not None:
+                if not isinstance(windows, (list, tuple)) or not windows:
+                    raise ConfigValidationError("features[].params.windows must be a non-empty list of integers.")
+                for idx, window in enumerate(windows):
+                    _positive_int(window, field=f"features[].params.windows[{idx}]")
+            if windows is not None and len(windows) != 1 and params.get("twap_col") is not None:
+                raise ConfigValidationError(
+                    "features[].params stable TWAP output columns require exactly one window."
+                )
+            for field_prefix, block in _iter_feature_param_blocks(step):
+                _reject_derived_feature_param(
+                    block,
+                    field_prefix=field_prefix,
+                    flag_key="add_distance",
+                    output_key="distance_col",
+                    helper="transforms.ratio",
+                )
+            if params.get("twap_col") is not None and params.get("twap_col") == params.get("distance_col"):
+                raise ConfigValidationError("features[].params TWAP output columns must be unique.")
         if step["step"] == "ppo":
             params = step.get("params") or {}
             for key in ("price_col", "ppo_col", "ppo_signal_col", "ppo_hist_col"):

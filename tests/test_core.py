@@ -8,6 +8,7 @@ from src.features.technical.adx import add_adx_features
 from src.features.technical.atr import add_atr_features
 from src.features.technical.ppo import add_ppo_features
 from src.features.technical.trend import add_trend_features
+from src.features.technical.twap import add_twap_features, compute_twap
 from src.features.technical.vwap import add_vwap_features, compute_vwap
 from src.src_data.validation import validate_ohlcv
 from src.backtesting.engine import run_backtest
@@ -80,6 +81,49 @@ def test_compute_vwap_uses_trailing_price_volume_window() -> None:
     assert vwap.iloc[1] == pytest.approx((9.0 * 2.0 + 11.0 * 3.0) / 5.0)
     assert vwap.iloc[2] == pytest.approx((11.0 * 3.0 + 13.0 * 5.0) / 8.0)
     assert vwap.name == "vwap_2"
+
+
+def test_compute_twap_uses_trailing_equal_weight_window() -> None:
+    price = pd.Series([9.0, 11.0, 14.0], name="typical_price")
+
+    twap = compute_twap(price, window=2)
+
+    assert np.isnan(twap.iloc[0])
+    assert twap.iloc[1] == pytest.approx(10.0)
+    assert twap.iloc[2] == pytest.approx(12.5)
+    assert twap.name == "twap_2"
+
+
+def test_twap_feature_step_emits_requested_windows_and_ratio_transform() -> None:
+    step = {
+        "step": "twap",
+        "params": {
+            "high_col": "high",
+            "low_col": "low",
+            "close_col": "close",
+            "windows": [2, 3],
+        },
+        "transforms": {
+            "ratio": {
+                "enabled": True,
+                "items": [
+                    {
+                        "numerator_col": "close",
+                        "denominator_col": "twap_2",
+                        "output_col": "close_over_twap_2",
+                        "subtract": 1.0,
+                    }
+                ],
+            }
+        },
+    }
+
+    validate_features_block([step])
+    out = apply_feature_steps(_vwap_ohlcv_frame(), [step])
+
+    assert {"twap_2", "twap_3", "close_over_twap_2"}.issubset(out.columns)
+    assert out["twap_2"].iloc[2] == pytest.approx(12.0)
+    assert out["close_over_twap_2"].iloc[2] == pytest.approx(13.0 / 12.0 - 1.0)
 
 
 def test_vwap_feature_step_emits_vwap_and_close_distance() -> None:
@@ -207,6 +251,38 @@ def test_vwap_feature_is_point_in_time_safe_when_future_changes() -> None:
     assert "close_over_vwap_3" not in baseline.columns
 
 
+def test_twap_feature_is_point_in_time_safe_when_future_changes() -> None:
+    baseline = add_twap_features(_vwap_ohlcv_frame(), windows=[3])
+
+    future_changed = _vwap_ohlcv_frame()
+    future_changed.loc[future_changed.index[-1], ["high", "low", "close"]] = [1000.0, 900.0, 950.0]
+    changed = add_twap_features(future_changed, windows=[3])
+
+    pd.testing.assert_series_equal(
+        baseline["twap_3"].iloc[:4],
+        changed["twap_3"].iloc[:4],
+    )
+
+
+def test_twap_feature_supports_stable_output_column_for_single_window() -> None:
+    out = add_twap_features(
+        _vwap_ohlcv_frame(),
+        windows=[3],
+        twap_col="selected_twap",
+    )
+
+    assert "selected_twap" in out.columns
+    assert "twap_3" not in out.columns
+
+
+def test_twap_feature_rejects_derived_distance_outputs() -> None:
+    with pytest.raises(ValueError, match="transforms.ratio"):
+        add_twap_features(_vwap_ohlcv_frame(), windows=[3], add_distance=True)
+
+    with pytest.raises(ValueError, match="transforms.ratio"):
+        add_twap_features(_vwap_ohlcv_frame(), windows=[3], distance_col="selected_twap_distance")
+
+
 def test_vwap_feature_supports_stable_output_columns_for_single_window() -> None:
     out = add_vwap_features(
         _vwap_ohlcv_frame(),
@@ -259,6 +335,11 @@ def test_ppo_feature_rejects_duplicate_output_columns() -> None:
 def test_vwap_config_validation_rejects_invalid_window() -> None:
     with pytest.raises(ConfigValidationError, match="features\\[\\]\\.params\\.windows\\[0\\]"):
         validate_features_block([{"step": "vwap", "params": {"windows": [0]}}])
+
+
+def test_twap_config_validation_rejects_invalid_window() -> None:
+    with pytest.raises(ConfigValidationError, match="features\\[\\]\\.params\\.windows\\[0\\]"):
+        validate_features_block([{"step": "twap", "params": {"windows": [0]}}])
 
 
 def _output_alias_price_frame() -> pd.DataFrame:

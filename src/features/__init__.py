@@ -78,6 +78,7 @@ from .technical import (
     add_schaff_trend_cycle_features,
     add_stochastic_rsi_features,
     add_stochastic_features,
+    add_twap_features,
     add_volume_features,
     add_vwap_features,
 )
@@ -180,6 +181,7 @@ __all__ = [
     "add_roc_features",
     "add_atr_features",
     "add_adx_features",
+    "add_twap_features",
     "add_volume_features",
     "add_vwap_features",
     "add_mfi_features",

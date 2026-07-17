@@ -136,7 +136,7 @@ def test_catalogs_are_inferred_from_processed_snapshot_columns(tmp_path: Path) -
     assert [item["name"] for item in predictions] == ["pred_prob"]
 
 
-def test_feature_catalog_classifies_vwap_as_indicator(tmp_path: Path) -> None:
+def test_feature_catalog_classifies_vwap_and_twap_as_indicators(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
     snapshot_dir = tmp_path / "data" / "processed" / "processed" / "vwap_snapshot"
     snapshot_dir.mkdir(parents=True)
@@ -147,8 +147,8 @@ def test_feature_catalog_classifies_vwap_as_indicator(tmp_path: Path) -> None:
     (snapshot_dir / "dataset.csv").write_text(
         "\n".join(
             [
-                "timestamp,asset,open,high,low,close,volume,vwap_20,close_over_vwap_20",
-                "2024-01-01 00:00:00,XAUUSD,1,2,0.5,1.5,10,1.45,0.034",
+                "timestamp,asset,open,high,low,close,volume,twap_20,vwap_20,close_over_vwap_20",
+                "2024-01-01 00:00:00,XAUUSD,1,2,0.5,1.5,10,1.4,1.45,0.034",
             ]
         ),
         encoding="utf-8",
@@ -158,7 +158,11 @@ def test_feature_catalog_classifies_vwap_as_indicator(tmp_path: Path) -> None:
     dataset_id = "data/processed/processed/vwap_snapshot/dataset.csv"
     features = loader.catalog(source_type="feature", asset="XAUUSD", dataset_id=dataset_id)
 
-    assert {item["name"] for item in features["indicators"]} == {"vwap_20", "close_over_vwap_20"}
+    assert {item["name"] for item in features["indicators"]} == {
+        "twap_20",
+        "vwap_20",
+        "close_over_vwap_20",
+    }
 
 
 def test_discovers_flat_processed_dataset_from_filename(tmp_path: Path) -> None:

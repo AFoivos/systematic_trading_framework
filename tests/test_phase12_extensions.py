@@ -64,6 +64,7 @@ def test_registry_contains_phase12_extensions() -> None:
     assert "roc" in FEATURE_REGISTRY
     assert "atr" in FEATURE_REGISTRY
     assert "adx" in FEATURE_REGISTRY
+    assert "twap" in FEATURE_REGISTRY
     assert "volume_features" not in FEATURE_REGISTRY
     assert "mfi" in FEATURE_REGISTRY
     assert "rsi" in FEATURE_REGISTRY
