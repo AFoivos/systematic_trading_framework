@@ -5,7 +5,7 @@ import re
 from typing import Any
 
 from src.intraday import validate_intraday_normalization_policy
-from src.targets.regression import REGRESSION_TARGET_HORIZON_CONTRACTS
+from src.targets.regression import REGRESSION_TARGET_HORIZON_CONTRACTS, REGRESSION_TARGET_KINDS
 from src.utils.config_kinds import (
     FEATURE_KINDS,
     MODEL_KINDS,
@@ -20,6 +20,7 @@ from src.signals.panel.global_session_relay_laggard import GLOBAL_SESSION_RELAY_
 
 _RL_SINGLE_ASSET_DQN_KINDS = {"dqn_agent"}
 _RL_PORTFOLIO_DQN_KINDS = {"dqn_portfolio_agent"}
+_RL_RISK_PPO_KINDS = {"ppo_risk_agent"}
 _RL_EXTRACTOR_KINDS = {"flatten", "cnn1d", "lstm", "transformer"}
 _RL_MODEL_BACKTEST_KEYS = {"returns_col", "returns_type"}
 _CONFIG_EXTENSION_NAMESPACE_KEYS = {"extensions", "metadata"}
@@ -46,24 +47,8 @@ _FORECASTER_MODEL_KINDS = {
     *_DEEP_FORECASTER_MODEL_KINDS,
     *_FOUNDATION_FORECASTER_MODEL_KINDS,
 }
-_REGRESSION_TARGET_KINDS = {
-    "future_return_regression",
-    "volatility_normalized_future_return",
-    "risk_adjusted_future_return",
-    "r_multiple_regression",
-    "mfe_regression",
-    "mae_regression",
-    "mfe_mae_ratio_regression",
-    "downside_adjusted_future_return",
-    "future_trend_slope",
-    "future_path_efficiency",
-    "excess_return_regression",
-    "residual_return_regression",
-    "future_range_regression",
-    "future_realized_volatility",
-    "future_drawdown_regression",
-}
-_POST_MODEL_TARGET_KINDS = {"path_dependent_r"}
+_REGRESSION_TARGET_KINDS = {"future_return_regression", *REGRESSION_TARGET_KINDS}
+_POST_MODEL_TARGET_KINDS = {"path_dependent_r", "strategy_path_r"}
 _GARCH_OVERLAY_COMPATIBLE_MODEL_KINDS = {
     "elastic_net_clf",
     "lightgbm_clf",
@@ -2143,6 +2128,11 @@ def validate_features_block(features: Any) -> None:
                     _positive_int(params[key], field=f"features[].params.{key}")
             short_horizon = int(params.get("short_horizon", 1))
             medium_horizon = int(params.get("medium_horizon", 4))
+            horizon_unit = str(params.get("horizon_unit", "hours")).strip().lower()
+            if horizon_unit not in {"hours", "bars"}:
+                raise ConfigValidationError(
+                    "features[].params.horizon_unit must be one of: hours, bars."
+                )
             if medium_horizon < short_horizon:
                 raise ConfigValidationError(
                     "features[].params.medium_horizon must be >= features[].params.short_horizon."
@@ -2410,6 +2400,120 @@ def _validate_path_dependent_r_target_block(target: dict[str, Any], *, field_pre
             raise ConfigValidationError(f"{field_prefix}.{key} must be boolean.")
 
 
+def _validate_strategy_path_r_target_block(
+    target: dict[str, Any],
+    *,
+    field_prefix: str = "model.target",
+) -> None:
+    _validate_string_mapping(
+        target.get("outputs"),
+        field=f"{field_prefix}.outputs",
+        allowed_keys=_TARGET_OUTPUT_KEYS,
+    )
+    for key in (
+        "candidate_col",
+        "side_col",
+        "label_col",
+        "fwd_col",
+        "open_col",
+        "high_col",
+        "low_col",
+        "close_col",
+        "volatility_col",
+        "trend_score_col",
+        "bid_open_col",
+        "bid_high_col",
+        "bid_low_col",
+        "bid_close_col",
+        "ask_open_col",
+        "ask_high_col",
+        "ask_low_col",
+        "ask_close_col",
+    ):
+        if key in target and (
+            not isinstance(target[key], str) or not str(target[key]).strip()
+        ):
+            raise ConfigValidationError(f"{field_prefix}.{key} must be a non-empty string.")
+    if str(target.get("entry_price_mode", "next_open")) != "next_open":
+        raise ConfigValidationError(f"{field_prefix}.entry_price_mode must be 'next_open'.")
+    if str(target.get("tie_break", "closest_to_open")) != "closest_to_open":
+        raise ConfigValidationError(f"{field_prefix}.tie_break must be 'closest_to_open'.")
+    for key, default in (
+        ("stop_loss_r", 2.0),
+        ("emergency_profit_r", 8.0),
+        ("trailing_distance_atr", 2.5),
+    ):
+        if _finite_number(target.get(key, default), field=f"{field_prefix}.{key}") <= 0.0:
+            raise ConfigValidationError(f"{field_prefix}.{key} must be > 0.")
+    if _finite_number(
+        target.get("trailing_activation_r", 1.5),
+        field=f"{field_prefix}.trailing_activation_r",
+    ) < 0.0:
+        raise ConfigValidationError(f"{field_prefix}.trailing_activation_r must be >= 0.")
+    _positive_int(
+        target.get("max_holding_bars", 1440),
+        field=f"{field_prefix}.max_holding_bars",
+    )
+    _non_negative_int(
+        target.get("entry_delay_bars", 0),
+        field=f"{field_prefix}.entry_delay_bars",
+    )
+    for key in (
+        "cost_per_unit_turnover",
+        "cost_per_turnover",
+        "slippage_per_unit_turnover",
+        "slippage_per_turnover",
+    ):
+        if key in target and target[key] is not None:
+            if _finite_number(target[key], field=f"{field_prefix}.{key}") < 0.0:
+                raise ConfigValidationError(f"{field_prefix}.{key} must be >= 0.")
+    for key in ("strict_bid_ask", "allow_partial_horizon", "enforce_single_position"):
+        if key in target and not isinstance(target.get(key), bool):
+            raise ConfigValidationError(f"{field_prefix}.{key} must be boolean.")
+
+
+def _validate_trade_evaluation_target_block(
+    target: dict[str, Any],
+    *,
+    field_prefix: str = "model.target",
+) -> None:
+    _validate_path_dependent_r_target_block(target, field_prefix=field_prefix)
+    for key in (
+        "label_col",
+        "fwd_col",
+        "target_col",
+        "risk_distance_col",
+        "stop_price_col",
+        "take_profit_price_col",
+    ):
+        if key in target and target[key] is not None:
+            if not isinstance(target[key], str) or not target[key].strip():
+                raise ConfigValidationError(f"{field_prefix}.{key} must be a non-empty string.")
+    max_holding = target.get("max_holding_bars", target.get("max_holding", 24))
+    if max_holding is None:
+        raise ConfigValidationError(
+            f"{field_prefix}.max_holding_bars must be a positive integer for supervised trade evaluation."
+        )
+    _positive_int(max_holding, field=f"{field_prefix}.max_holding_bars")
+    if "strict_path_validation" in target and not isinstance(target.get("strict_path_validation"), bool):
+        raise ConfigValidationError(f"{field_prefix}.strict_path_validation must be boolean.")
+    if target.get("kind") == "trade_mfe_mae_regression":
+        selection = str(target.get("target_col", "mfe_r"))
+        configured_outputs = {
+            "mfe",
+            "mfe_r",
+            "mae",
+            "mae_r",
+            str(target.get("mfe_r_col", "target_mfe_r")),
+            str(target.get("mae_r_col", "target_mae_r")),
+        }
+        if selection not in configured_outputs:
+            raise ConfigValidationError(
+                f"{field_prefix}.target_col must select mfe_r or mae_r for "
+                "target.kind='trade_mfe_mae_regression'."
+            )
+
+
 def validate_model_block(model: dict[str, Any]) -> None:
     if "kind" not in model:
         raise ConfigValidationError("model.kind is required.")
@@ -2465,18 +2569,25 @@ def validate_model_block(model: dict[str, Any]) -> None:
                 allowed_keys=_TARGET_OUTPUT_KEYS,
             )
             target_kind = target_for_validation.get("kind", "forward_return")
-            if target_kind not in {"r_multiple", "candidate_expected_r", "path_dependent_r"}:
+            if target_kind not in {
+                "r_multiple",
+                "candidate_expected_r",
+                "path_dependent_r",
+                "strategy_path_r",
+            }:
                 raise ConfigValidationError(
                     "model.kind='none' currently supports only model.target.kind='r_multiple' or "
-                    "'candidate_expected_r' or 'path_dependent_r' "
+                    "'candidate_expected_r', 'path_dependent_r', or 'strategy_path_r' "
                     "for target-only diagnostics."
                 )
             if target_kind == "r_multiple":
                 _validate_r_multiple_target_block(target_for_validation)
             elif target_kind == "candidate_expected_r":
                 _validate_candidate_expected_r_target_block(target_for_validation)
-            else:
+            elif target_kind == "path_dependent_r":
                 _validate_path_dependent_r_target_block(target_for_validation)
+            else:
+                _validate_strategy_path_r_target_block(target_for_validation)
         return
 
     if model["kind"] != "none":
@@ -2526,9 +2637,13 @@ def validate_model_block(model: dict[str, Any]) -> None:
                 raise ConfigValidationError(
                     f"model.target.kind must be one of: '{allowed_targets}'."
                 )
-            if target_kind == "path_dependent_r":
+            if target_kind in _POST_MODEL_TARGET_KINDS:
                 raise ConfigValidationError(
-                    "model.target.kind='path_dependent_r' is post-model only; configure it as top-level target."
+                    f"model.target.kind='{target_kind}' is post-model only; configure it as top-level target."
+                )
+            if target_kind == "target_before_stop_probability" and model["kind"] not in _CLASSIFIER_MODEL_KINDS:
+                raise ConfigValidationError(
+                    "model.target.kind='target_before_stop_probability' is supported only for classifiers."
                 )
             if model["kind"] in _FOUNDATION_FORECASTER_MODEL_KINDS and target_kind not in {
                 "forward_return",
@@ -2655,6 +2770,12 @@ def validate_model_block(model: dict[str, Any]) -> None:
                         raise ConfigValidationError("model.target.clip must be a [low, high] pair.")
                     if float(clip[0]) >= float(clip[1]):
                         raise ConfigValidationError("model.target.clip must satisfy low < high.")
+            if target_kind in {
+                "expected_realized_r",
+                "target_before_stop_probability",
+                "trade_mfe_mae_regression",
+            }:
+                _validate_trade_evaluation_target_block(target)
             quantiles = target.get("quantiles")
             if quantiles is not None:
                 if not isinstance(quantiles, (list, tuple)) or len(quantiles) != 2:
@@ -3000,6 +3121,88 @@ def validate_model_block(model: dict[str, Any]) -> None:
                 if value < 0:
                     raise ConfigValidationError(f"model.env.reward.{key} must be >= 0.")
 
+            if model["kind"] in _RL_RISK_PPO_KINDS:
+                if (action_space or "discrete") != "discrete":
+                    raise ConfigValidationError("ppo_risk_agent requires model.env.action_space='discrete'.")
+                _positive_int(
+                    env_cfg.get("lookback_window", env_cfg.get("window_size", 32)),
+                    field="model.env.lookback_window",
+                )
+                for key in ("atr_column", "open_column", "high_column", "low_column", "close_column"):
+                    if key in env_cfg and (
+                        not isinstance(env_cfg[key], str) or not str(env_cfg[key]).strip()
+                    ):
+                        raise ConfigValidationError(f"model.env.{key} must be a non-empty string.")
+                risk_parameter_defaults = {
+                    "atr_multipliers": (1.0, 1.5, 2.0),
+                    "take_profit_r_multiples": (1.0, 2.0, 3.0),
+                }
+                for key, default_values in risk_parameter_defaults.items():
+                    values = env_cfg.get(key, default_values)
+                    if not isinstance(values, (list, tuple)) or not values:
+                        raise ConfigValidationError(f"model.env.{key} must be a non-empty list.")
+                    for idx, raw_value in enumerate(values):
+                        value = _finite_number(raw_value, field=f"model.env.{key}[{idx}]")
+                        if value <= 0.0:
+                            raise ConfigValidationError(f"model.env.{key}[{idx}] must be > 0.")
+                initial_equity = _finite_number(
+                    env_cfg.get("initial_equity", 100_000.0),
+                    field="model.env.initial_equity",
+                )
+                if initial_equity <= 0.0:
+                    raise ConfigValidationError("model.env.initial_equity must be > 0.")
+                risk_fraction = _finite_number(
+                    env_cfg.get("risk_fraction", 0.01),
+                    field="model.env.risk_fraction",
+                )
+                if not 0.0 < risk_fraction <= 1.0:
+                    raise ConfigValidationError("model.env.risk_fraction must be in (0,1].")
+                max_leverage = _finite_number(
+                    env_cfg.get("max_leverage", 3.0),
+                    field="model.env.max_leverage",
+                )
+                if max_leverage <= 0.0:
+                    raise ConfigValidationError("model.env.max_leverage must be > 0.")
+                if env_cfg.get("max_notional") is not None:
+                    max_notional = _finite_number(
+                        env_cfg["max_notional"],
+                        field="model.env.max_notional",
+                    )
+                    if max_notional <= 0.0:
+                        raise ConfigValidationError(
+                            "model.env.max_notional must be > 0 when provided."
+                        )
+                for key in ("transaction_cost_bps", "slippage_bps"):
+                    value = _finite_number(env_cfg.get(key, 0.0), field=f"model.env.{key}")
+                    if value < 0.0:
+                        raise ConfigValidationError(f"model.env.{key} must be >= 0.")
+                if env_cfg.get("max_holding_bars") is not None:
+                    _positive_int(env_cfg["max_holding_bars"], field="model.env.max_holding_bars")
+                risk_reward_cfg = dict(reward_cfg or {})
+                for key in (
+                    "realized_pnl_r_multiple",
+                    "unrealized_pnl_weight",
+                    "holding_penalty",
+                ):
+                    value = _finite_number(risk_reward_cfg.get(key, 0.0), field=f"model.env.reward.{key}")
+                    if value < 0.0:
+                        raise ConfigValidationError(f"model.env.reward.{key} must be >= 0.")
+                gate_cfg = env_cfg.get("consistency_gate", {}) or {}
+                if not isinstance(gate_cfg, dict):
+                    raise ConfigValidationError("model.env.consistency_gate must be a mapping.")
+                profitable_ratio = _finite_number(
+                    gate_cfg.get("minimum_profitable_fold_ratio", 0.5),
+                    field="model.env.consistency_gate.minimum_profitable_fold_ratio",
+                )
+                if not 0.0 <= profitable_ratio <= 1.0:
+                    raise ConfigValidationError(
+                        "model.env.consistency_gate.minimum_profitable_fold_ratio must be in [0,1]."
+                    )
+                _finite_number(
+                    gate_cfg.get("minimum_median_test_return", 0.0),
+                    field="model.env.consistency_gate.minimum_median_test_return",
+                )
+
             if model["kind"] in (_RL_SINGLE_ASSET_DQN_KINDS | _RL_PORTFOLIO_DQN_KINDS):
                 resolved_action_space = action_space or "discrete"
                 if resolved_action_space != "discrete":
@@ -3058,7 +3261,7 @@ def validate_model_block(model: dict[str, Any]) -> None:
                         "DQN agents do not accept PPO-only model.params keys: "
                         + ", ".join(bad_keys)
                     )
-            if model["kind"] in {"ppo_agent", "ppo_portfolio_agent"}:
+            if model["kind"] in {"ppo_agent", "ppo_portfolio_agent", "ppo_risk_agent"}:
                 bad_keys = sorted(set(params) & _DQN_ONLY_RL_PARAM_KEYS)
                 if bad_keys:
                     raise ConfigValidationError(
@@ -3067,6 +3270,20 @@ def validate_model_block(model: dict[str, Any]) -> None:
                     )
             if "total_timesteps" in params:
                 _positive_int(params["total_timesteps"], field="model.params.total_timesteps")
+            if model["kind"] in _RL_RISK_PPO_KINDS:
+                if "checkpoint_interval" in params:
+                    _positive_int(params["checkpoint_interval"], field="model.params.checkpoint_interval")
+                checkpoint_penalty = _finite_number(
+                    params.get("checkpoint_drawdown_penalty", 0.0),
+                    field="model.params.checkpoint_drawdown_penalty",
+                )
+                if checkpoint_penalty < 0.0:
+                    raise ConfigValidationError("model.params.checkpoint_drawdown_penalty must be >= 0.")
+                for key in ("artifact_dir", "run_name"):
+                    if key in params and (
+                        not isinstance(params[key], str) or not str(params[key]).strip()
+                    ):
+                        raise ConfigValidationError(f"model.params.{key} must be a non-empty string.")
             if "policy" in params and not isinstance(params["policy"], str):
                 raise ConfigValidationError("model.params.policy must be a string.")
             if "device" in params and not isinstance(params["device"], str):
@@ -3136,9 +3353,37 @@ def validate_model_block(model: dict[str, Any]) -> None:
     if max_folds is not None:
         _positive_int(max_folds, field="model.split.max_folds")
 
+    if model["kind"] in _RL_RISK_PPO_KINDS:
+        if method != "walk_forward":
+            raise ConfigValidationError("ppo_risk_agent requires model.split.method='walk_forward'.")
+        if train_size is None:
+            raise ConfigValidationError("ppo_risk_agent requires fixed model.split.train_size.")
+        _positive_int(split.get("validation_size"), field="model.split.validation_size")
+        train_tail_size = _positive_int(
+            split.get("train_tail_size", split.get("validation_size")),
+            field="model.split.train_tail_size",
+        )
+        if train_tail_size > int(train_size):
+            raise ConfigValidationError("model.split.train_tail_size must be <= model.split.train_size.")
+        if expanding:
+            raise ConfigValidationError("ppo_risk_agent requires model.split.expanding=false.")
+
     if method == "purged":
         _non_negative_int(split.get("purge_bars", 0), field="model.split.purge_bars")
         _non_negative_int(split.get("embargo_bars", 0), field="model.split.embargo_bars")
+        target_kind = str(target.get("kind", "forward_return"))
+        if target_kind in {
+            "expected_realized_r",
+            "target_before_stop_probability",
+            "trade_mfe_mae_regression",
+        }:
+            target_horizon = int(target.get("max_holding_bars", target.get("max_holding", 24)))
+            purge_bars = int(split.get("purge_bars", target_horizon))
+            if purge_bars < target_horizon:
+                raise ConfigValidationError(
+                    "model.split.purge_bars must be >= model.target.max_holding_bars "
+                    "for supervised trade-evaluation targets."
+                )
     if "synchronize_assets" in split and not isinstance(split["synchronize_assets"], bool):
         raise ConfigValidationError("model.split.synchronize_assets must be boolean.")
 
@@ -3161,7 +3406,10 @@ def validate_standalone_target_block(target: Any) -> None:
             f"target.kind must be one of: '{allowed_targets}'."
         )
     if target_kind in _POST_MODEL_TARGET_KINDS:
-        _validate_path_dependent_r_target_block(target_cfg, field_prefix="target")
+        if target_kind == "strategy_path_r":
+            _validate_strategy_path_r_target_block(target_cfg, field_prefix="target")
+        else:
+            _validate_path_dependent_r_target_block(target_cfg, field_prefix="target")
         return
     validate_model_block(
         {
@@ -3538,6 +3786,49 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
                 raise ConfigValidationError(
                     "signals.params.mode must be one of: long_only, short_only, long_short."
                 )
+    if signals["kind"] in {"matb_candidate", "matb_meta_filter"}:
+        allowed = {"candidate_col", "side_col", "signal_col", "mode"}
+        if signals["kind"] == "matb_meta_filter":
+            allowed |= {
+                "probability_col",
+                "expected_r_col",
+                "oos_col",
+                "minimum_probability",
+                "minimum_expected_r",
+            }
+        unknown = sorted(set(params) - allowed)
+        if unknown:
+            raise ConfigValidationError(
+                f"signals.params for {signals['kind']} has unsupported keys: {unknown}."
+            )
+        for key in allowed & {
+            "candidate_col",
+            "side_col",
+            "signal_col",
+            "probability_col",
+            "expected_r_col",
+            "oos_col",
+        }:
+            if key in params and params[key] is not None and (
+                not isinstance(params[key], str) or not params[key].strip()
+            ):
+                raise ConfigValidationError(f"signals.params.{key} must be a non-empty string or null.")
+        mode = str(params.get("mode", "long_short"))
+        if mode not in {"long_only", "short_only", "long_short"}:
+            raise ConfigValidationError(
+                "signals.params.mode must be one of: long_only, short_only, long_short."
+            )
+        if signals["kind"] == "matb_meta_filter":
+            probability = _finite_number(
+                params.get("minimum_probability", 0.55),
+                field="signals.params.minimum_probability",
+            )
+            if not 0.0 < probability < 1.0:
+                raise ConfigValidationError("signals.params.minimum_probability must be in (0,1).")
+            _finite_number(
+                params.get("minimum_expected_r", 0.10),
+                field="signals.params.minimum_expected_r",
+            )
     if signals["kind"] == "manual_long_model_filter":
         for key in (
             "prob_col",
@@ -3979,7 +4270,102 @@ def validate_backtest_block(backtest: dict[str, Any]) -> None:
                 "backtest.engine='portfolio_barrier' uses vertical_barrier_bars and requires min_holding_bars=0."
             )
         _validate_portfolio_barrier_dynamic_exit(backtest.get("dynamic_exit", {}) or {})
+        _validate_portfolio_barrier_strategy_path(backtest)
         _validate_correlation_guard(backtest.get("correlation_guard", {}) or {})
+
+
+def _validate_portfolio_barrier_strategy_path(backtest: dict[str, Any]) -> None:
+    raw = backtest.get("strategy_path", {}) or {}
+    if not isinstance(raw, dict):
+        raise ConfigValidationError("backtest.strategy_path must be a mapping when provided.")
+    if not raw:
+        return
+    allowed = {
+        "kind",
+        "entry_price_mode",
+        "entry_delay_bars",
+        "stop_loss_atr",
+        "stop_loss_r",
+        "emergency_profit_r",
+        "trailing_activation_r",
+        "trailing_distance_atr",
+        "max_holding_bars",
+        "tie_break",
+        "strict_bid_ask",
+        "allow_partial_horizon",
+        "trend_score_col",
+        "bid_open_col",
+        "bid_high_col",
+        "bid_low_col",
+        "bid_close_col",
+        "ask_open_col",
+        "ask_high_col",
+        "ask_low_col",
+        "ask_close_col",
+    }
+    unknown = sorted(set(raw) - allowed)
+    if unknown:
+        raise ConfigValidationError(
+            f"backtest.strategy_path has unsupported keys: {unknown}. Allowed keys: {sorted(allowed)}."
+        )
+    kind = str(raw.get("kind", "none"))
+    if kind not in {"none", "matb"}:
+        raise ConfigValidationError("backtest.strategy_path.kind must be 'none' or 'matb'.")
+    if kind == "none":
+        return
+    if str(raw.get("entry_price_mode", "next_open")) != "next_open":
+        raise ConfigValidationError("backtest.strategy_path.entry_price_mode must be 'next_open'.")
+    if str(backtest.get("entry_price_mode", "next_open")) != "next_open":
+        raise ConfigValidationError(
+            "backtest.entry_price_mode must be 'next_open' when strategy_path.kind='matb'."
+        )
+    if str(raw.get("tie_break", "closest_to_open")) != "closest_to_open":
+        raise ConfigValidationError("backtest.strategy_path.tie_break must be 'closest_to_open'.")
+    if str(backtest.get("tie_break", "closest_to_open")) != "closest_to_open":
+        raise ConfigValidationError(
+            "backtest.tie_break must be 'closest_to_open' when strategy_path.kind='matb'."
+        )
+    for key, default in (
+        ("stop_loss_atr", raw.get("stop_loss_r", 2.0)),
+        ("emergency_profit_r", 8.0),
+        ("trailing_distance_atr", 2.5),
+    ):
+        if _finite_number(raw.get(key, default), field=f"backtest.strategy_path.{key}") <= 0.0:
+            raise ConfigValidationError(f"backtest.strategy_path.{key} must be > 0.")
+    if _finite_number(
+        raw.get("trailing_activation_r", 1.5),
+        field="backtest.strategy_path.trailing_activation_r",
+    ) < 0.0:
+        raise ConfigValidationError("backtest.strategy_path.trailing_activation_r must be >= 0.")
+    _positive_int(
+        raw.get("max_holding_bars", 1440),
+        field="backtest.strategy_path.max_holding_bars",
+    )
+    _non_negative_int(
+        raw.get("entry_delay_bars", 0),
+        field="backtest.strategy_path.entry_delay_bars",
+    )
+    for key in ("strict_bid_ask", "allow_partial_horizon"):
+        if key in raw and not isinstance(raw.get(key), bool):
+            raise ConfigValidationError(f"backtest.strategy_path.{key} must be boolean.")
+    for key in (
+        "trend_score_col",
+        "bid_open_col",
+        "bid_high_col",
+        "bid_low_col",
+        "bid_close_col",
+        "ask_open_col",
+        "ask_high_col",
+        "ask_low_col",
+        "ask_close_col",
+    ):
+        if key in raw and (not isinstance(raw[key], str) or not raw[key].strip()):
+            raise ConfigValidationError(f"backtest.strategy_path.{key} must be a non-empty string.")
+    dynamic_exit = dict(backtest.get("dynamic_exit", {}) or {})
+    if bool(dynamic_exit.get("enabled", False)):
+        raise ConfigValidationError(
+            "backtest.dynamic_exit and backtest.strategy_path.kind='matb' cannot both be enabled."
+        )
 
 
 def _validate_portfolio_barrier_dynamic_exit(dynamic_exit: Any) -> None:
@@ -4528,10 +4914,168 @@ def _require_barrier_parity(left_path: str, left_value: Any, right_path: str, ri
 def _validate_portfolio_barrier_parity(cfg: dict[str, Any]) -> None:
     model = dict(cfg.get("model", {}) or {})
     target = dict(model.get("target", {}) or {})
+    backtest = dict(cfg.get("backtest", {}) or {})
+    strategy_path = dict(backtest.get("strategy_path", {}) or {})
+    if str(strategy_path.get("kind", "none")) == "matb":
+        top_target = _flatten_target_cfg_for_validation(dict(cfg.get("target", {}) or {}))
+        model_target = _flatten_target_cfg_for_validation(target)
+        if str(top_target.get("kind", "none")) == "strategy_path_r":
+            path_target = top_target
+            target_prefix = "target"
+        elif str(model_target.get("kind", "none")) == "strategy_path_r":
+            path_target = model_target
+            target_prefix = "model.target"
+        else:
+            raise ConfigValidationError(
+                "backtest.strategy_path.kind='matb' requires a strategy_path_r target "
+                "at target or model.target so target/backtest parity can be audited."
+            )
+        risk = dict(cfg.get("risk", {}) or {})
+        comparisons = [
+            (
+                f"{target_prefix}.entry_price_mode",
+                path_target.get("entry_price_mode", "next_open"),
+                "backtest.strategy_path.entry_price_mode",
+                strategy_path.get("entry_price_mode", "next_open"),
+            ),
+            (
+                f"{target_prefix}.entry_delay_bars",
+                path_target.get("entry_delay_bars", 0),
+                "backtest.strategy_path.entry_delay_bars",
+                strategy_path.get("entry_delay_bars", 0),
+            ),
+            (
+                f"{target_prefix}.stop_loss_r",
+                path_target.get("stop_loss_r", path_target.get("stop_loss_atr", 2.0)),
+                "backtest.strategy_path.stop_loss_atr",
+                strategy_path.get("stop_loss_atr", strategy_path.get("stop_loss_r", 2.0)),
+            ),
+            (
+                f"{target_prefix}.emergency_profit_r",
+                path_target.get("emergency_profit_r", 8.0),
+                "backtest.strategy_path.emergency_profit_r",
+                strategy_path.get("emergency_profit_r", 8.0),
+            ),
+            (
+                f"{target_prefix}.trailing_activation_r",
+                path_target.get("trailing_activation_r", 1.5),
+                "backtest.strategy_path.trailing_activation_r",
+                strategy_path.get("trailing_activation_r", 1.5),
+            ),
+            (
+                f"{target_prefix}.trailing_distance_atr",
+                path_target.get("trailing_distance_atr", 2.5),
+                "backtest.strategy_path.trailing_distance_atr",
+                strategy_path.get("trailing_distance_atr", 2.5),
+            ),
+            (
+                f"{target_prefix}.max_holding_bars",
+                path_target.get("max_holding_bars", 1440),
+                "backtest.strategy_path.max_holding_bars",
+                strategy_path.get("max_holding_bars", 1440),
+            ),
+            (
+                f"{target_prefix}.tie_break",
+                path_target.get("tie_break", "closest_to_open"),
+                "backtest.strategy_path.tie_break",
+                strategy_path.get("tie_break", "closest_to_open"),
+            ),
+            (
+                f"{target_prefix}.strict_bid_ask",
+                path_target.get("strict_bid_ask", True),
+                "backtest.strategy_path.strict_bid_ask",
+                strategy_path.get("strict_bid_ask", True),
+            ),
+            (
+                f"{target_prefix}.allow_partial_horizon",
+                path_target.get("allow_partial_horizon", False),
+                "backtest.strategy_path.allow_partial_horizon",
+                strategy_path.get("allow_partial_horizon", False),
+            ),
+            (
+                f"{target_prefix}.volatility_col",
+                path_target.get("volatility_col", "matb_atr"),
+                "backtest.volatility_col",
+                backtest.get("volatility_col", "matb_atr"),
+            ),
+            (
+                f"{target_prefix}.trend_score_col",
+                path_target.get("trend_score_col", "matb_trend_score"),
+                "backtest.strategy_path.trend_score_col",
+                strategy_path.get("trend_score_col", "matb_trend_score"),
+            ),
+            (
+                f"{target_prefix}.cost_per_unit_turnover",
+                path_target.get("cost_per_unit_turnover", path_target.get("cost_per_turnover", 0.0)),
+                "risk.cost_per_turnover",
+                risk.get("cost_per_turnover", 0.0),
+            ),
+            (
+                f"{target_prefix}.slippage_per_unit_turnover",
+                path_target.get(
+                    "slippage_per_unit_turnover",
+                    path_target.get("slippage_per_turnover", 0.0),
+                ),
+                "risk.slippage_per_turnover",
+                risk.get("slippage_per_turnover", 0.0),
+            ),
+        ]
+        for column_key, default in (
+            ("open_col", "open"),
+            ("high_col", "high"),
+            ("low_col", "low"),
+            ("close_col", "close"),
+        ):
+            comparisons.append(
+                (
+                    f"{target_prefix}.{column_key}",
+                    path_target.get(column_key, default),
+                    f"backtest.{column_key}",
+                    backtest.get(column_key, default),
+                )
+            )
+        for column_key, default in (
+            ("bid_open_col", "bid_open"),
+            ("bid_high_col", "bid_high"),
+            ("bid_low_col", "bid_low"),
+            ("bid_close_col", "bid_close"),
+            ("ask_open_col", "ask_open"),
+            ("ask_high_col", "ask_high"),
+            ("ask_low_col", "ask_low"),
+            ("ask_close_col", "ask_close"),
+        ):
+            comparisons.append(
+                (
+                    f"{target_prefix}.{column_key}",
+                    path_target.get(column_key, default),
+                    f"backtest.strategy_path.{column_key}",
+                    strategy_path.get(column_key, default),
+                )
+            )
+        for left_path, left_value, right_path, right_value in comparisons:
+            _require_barrier_parity(left_path, left_value, right_path, right_value)
+        _require_barrier_parity(
+            "backtest.strategy_path.stop_loss_atr",
+            strategy_path.get("stop_loss_atr", strategy_path.get("stop_loss_r", 2.0)),
+            "backtest.stop_barrier_r",
+            backtest.get("stop_barrier_r", 1.0),
+        )
+        _require_barrier_parity(
+            "backtest.strategy_path.emergency_profit_r",
+            strategy_path.get("emergency_profit_r", 8.0),
+            "backtest.profit_barrier_r",
+            backtest.get("profit_barrier_r", 1.4),
+        )
+        _require_barrier_parity(
+            "backtest.strategy_path.max_holding_bars",
+            strategy_path.get("max_holding_bars", 1440),
+            "backtest.vertical_barrier_bars",
+            backtest.get("vertical_barrier_bars", 4),
+        )
+        return
     if str(target.get("kind", "none")) != "directional_triple_barrier":
         return
 
-    backtest = dict(cfg.get("backtest", {}) or {})
     signals = dict(cfg.get("signals", {}) or {})
     signal_params = dict(signals.get("params", {}) or {})
 

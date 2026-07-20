@@ -24,6 +24,7 @@ JOIN_CONFIG = STRATEGY_ROOT / "01_adaptive_inventory_microprice_bybit_join.yaml"
 IMPROVE_CONFIG = STRATEGY_ROOT / "01_adaptive_inventory_microprice_bybit_improve.yaml"
 KRAKEN_CONFIG = STRATEGY_ROOT / "01_adaptive_inventory_microprice.yaml"
 LOW_CHURN_CONFIG = EXECUTION_ROOT / "bybit_demo_market_making_low_churn.yaml"
+CONTINUOUS_CONFIG = EXECUTION_ROOT / "bybit_demo_market_making_continuous.yaml"
 
 
 def _yaml(path: Path) -> dict[str, Any]:
@@ -215,3 +216,17 @@ def test_no_bybit_tuning_config_enables_order_submission() -> None:
         execution = _yaml(path)["execution"]
         assert execution["mode"] == "research_smoke"
         assert execution["allow_order_submission"] is False
+
+
+def test_continuous_bybit_config_is_explicitly_demo_submit_and_low_churn() -> None:
+    config = _yaml(CONTINUOUS_CONFIG)
+    execution = config["execution"]
+
+    assert execution["environment"] == "demo"
+    assert execution["venue"] == "bybit"
+    assert execution["mode"] == "demo_submit"
+    assert execution["allow_order_submission"] is True
+    assert execution["rest_url"] == "https://api-demo.bybit.com"
+    assert config["rate_limits"]["minimum_quote_lifetime_ms"] == 3000
+    assert config["rate_limits"]["maximum_cancel_rate_per_minute"] == 20
+    assert config["risk"]["maximum_session_loss"] == 2.0

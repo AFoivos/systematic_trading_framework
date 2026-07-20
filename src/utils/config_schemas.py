@@ -504,6 +504,7 @@ class BacktestConfig:
     max_holding_bars: int | None = None
     asset_params: dict[str, Any] = field(default_factory=dict)
     dynamic_exit: dict[str, Any] = field(default_factory=dict)
+    strategy_path: dict[str, Any] = field(default_factory=dict)
     dynamic_exits: dict[str, Any] = field(default_factory=dict)
     partial_exits: dict[str, Any] = field(default_factory=dict)
     allow_short: bool = False
@@ -541,6 +542,7 @@ class BacktestConfig:
             "max_holding_bars",
             "asset_params",
             "dynamic_exit",
+            "strategy_path",
             "dynamic_exits",
             "partial_exits",
             "allow_short",
@@ -599,6 +601,7 @@ class BacktestConfig:
             max_holding_bars=int(max_holding_bars) if max_holding_bars is not None else None,
             asset_params=dict(data.get("asset_params", {}) or {}),
             dynamic_exit=dict(data.get("dynamic_exit", {}) or {}),
+            strategy_path=dict(data.get("strategy_path", {}) or {}),
             dynamic_exits=dict(data.get("dynamic_exits", {}) or {}),
             partial_exits=dict(data.get("partial_exits", {}) or {}),
             allow_short=bool(data.get("allow_short", False)),
@@ -647,6 +650,7 @@ class BacktestConfig:
             "max_holding_bars": self.max_holding_bars,
             "asset_params": dict(self.asset_params),
             "dynamic_exit": dict(self.dynamic_exit),
+            "strategy_path": dict(self.strategy_path),
             "dynamic_exits": dict(self.dynamic_exits),
             "partial_exits": dict(self.partial_exits),
             "allow_short": self.allow_short,

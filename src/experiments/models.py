@@ -26,6 +26,7 @@ from src.models.rl import (
     train_dqn_portfolio_agent,
     train_ppo_agent,
     train_ppo_portfolio_agent,
+    train_ppo_risk_agent,
 )
 from src.experiments.support.tsfresh_extrema_feature_discovery import (
     train_tsfresh_extrema_feature_discovery,
@@ -48,6 +49,7 @@ __all__ = [
     "train_patchtst_forecaster",
     "train_ppo_agent",
     "train_ppo_portfolio_agent",
+    "train_ppo_risk_agent",
     "train_sarimax_forecaster",
     "train_timesfm_1p0_200m_forecaster",
     "train_timesfm_2p5_200m_forecaster",

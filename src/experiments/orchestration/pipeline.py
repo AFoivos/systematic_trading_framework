@@ -53,7 +53,7 @@ from src.src_data.storage import asset_frames_to_long_frame
 LoadAssetFramesFn = Callable[[dict[str, object]], tuple[dict[str, pd.DataFrame], dict[str, object]]]
 SaveProcessedFn = Callable[..., dict[str, object] | None]
 _RUN_DIR_TZ = ZoneInfo("Europe/Athens")
-_POST_MODEL_TARGET_KINDS = {"path_dependent_r"}
+_POST_MODEL_TARGET_KINDS = {"path_dependent_r", "strategy_path_r"}
 
 
 def _flatten_target_kind(target_cfg: dict[str, object]) -> str:
@@ -287,6 +287,9 @@ def run_experiment_pipeline(
             )
 
         is_portfolio = portfolio_enabled
+        rl_environment_is_authoritative = (
+            str(model_meta.get("performance_source", "")) == "rl_environment"
+        )
         portfolio_weights: pd.DataFrame | None = None
         portfolio_diagnostics: pd.DataFrame | None = None
         portfolio_meta: dict[str, object] = {}
@@ -321,26 +324,36 @@ def run_experiment_pipeline(
                 periods_per_year=cfg["backtest"].get("periods_per_year", 252),
                 backtest_cfg=dict(cfg.get("backtest", {}) or {}),
             )
-            forecast_baselines = build_forecast_baseline_diagnostics(
-                asset_frames[asset],
-                cfg=cfg,
-                model_meta=model_meta,
-            )
-            threshold_grid = build_forecast_threshold_grid_diagnostics(
-                asset_frames[asset],
-                cfg=cfg,
-                model_meta=model_meta,
-            )
-            fold_backtests = build_fold_backtest_diagnostics(
-                asset_frames[asset],
-                cfg=cfg,
-                model_meta=model_meta,
-            )
-            regime_performance = build_regime_performance_diagnostics(
-                asset_frames[asset],
-                cfg=cfg,
-                model_meta=model_meta,
-            )
+            # Generic signal diagnostics replay signal_rl through a different execution model.
+            # They are intentionally disabled when the RL environment owns the trade ledger.
+            if rl_environment_is_authoritative:
+                forecast_baselines = {}
+                threshold_grid = {}
+                fold_backtests = {}
+                regime_performance = {}
+                evaluation = dict(evaluation)
+                evaluation["performance_source"] = "rl_environment"
+            else:
+                forecast_baselines = build_forecast_baseline_diagnostics(
+                    asset_frames[asset],
+                    cfg=cfg,
+                    model_meta=model_meta,
+                )
+                threshold_grid = build_forecast_threshold_grid_diagnostics(
+                    asset_frames[asset],
+                    cfg=cfg,
+                    model_meta=model_meta,
+                )
+                fold_backtests = build_fold_backtest_diagnostics(
+                    asset_frames[asset],
+                    cfg=cfg,
+                    model_meta=model_meta,
+                )
+                regime_performance = build_regime_performance_diagnostics(
+                    asset_frames[asset],
+                    cfg=cfg,
+                    model_meta=model_meta,
+                )
             if any((forecast_baselines, threshold_grid, fold_backtests, regime_performance)):
                 evaluation = dict(evaluation)
                 if forecast_baselines:
@@ -364,11 +377,15 @@ def run_experiment_pipeline(
             evaluation=evaluation,
         )
 
-        robustness = build_robustness_diagnostics(
-            asset_frames,
-            cfg=cfg,
-            performance=performance,
-            is_portfolio=is_portfolio,
+        robustness = (
+            {}
+            if rl_environment_is_authoritative
+            else build_robustness_diagnostics(
+                asset_frames,
+                cfg=cfg,
+                performance=performance,
+                is_portfolio=is_portfolio,
+            )
         )
         if robustness:
             evaluation = dict(evaluation)

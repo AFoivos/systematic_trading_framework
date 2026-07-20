@@ -42,6 +42,7 @@ def should_apply_post_signal_target(model_cfg: dict[str, Any]) -> bool:
         "directional_triple_barrier",
         "r_multiple",
         "path_dependent_r",
+        "strategy_path_r",
         "candidate_expected_r",
     }
 

@@ -298,3 +298,45 @@ def test_chronos2_ethusd_experiment_config_loads_without_model_download() -> Non
     assert cfg["signals"]["params"]["forecast_col"] == "pred_ret"
     assert cfg["logging"]["save_model"] is False
     assert cfg["logging"]["install_model"] is False
+
+
+@pytest.mark.parametrize(
+    ("filename", "model_kind", "use_features", "source_col"),
+    [
+        (
+            "btcusd_1m_chronos_2_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid.yaml",
+            "chronos_2_forecaster",
+            True,
+            "close_ret",
+        ),
+        (
+            "btcusd_1m_chronos_bolt_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid.yaml",
+            "chronos_bolt_forecaster",
+            False,
+            "close",
+        ),
+    ],
+)
+def test_btcusd_foundation_experiment_configs_preserve_feature_contracts(
+    filename: str,
+    model_kind: str,
+    use_features: bool,
+    source_col: str,
+) -> None:
+    config_path = Path("config/experiments/foundation_alpha/BEST/ethusd") / filename
+    cfg = load_experiment_config(config_path)
+    model = cfg["model"]
+
+    assert model["kind"] == model_kind
+    assert model["use_features"] is use_features
+    assert model["params"]["source_col"] == source_col
+    assert model["params"]["prediction_length"] == 24
+    assert cfg["strategy"]["name"] == config_path.stem
+    assert cfg["data"]["storage"]["dataset_id"] == config_path.stem
+
+    if model_kind == "chronos_2_forecaster":
+        assert model["params"]["freq"] == "1min"
+        assert "close_ret" in model["feature_cols"]
+        assert len(model["feature_cols"]) > 1
+    else:
+        assert not model.get("feature_cols")

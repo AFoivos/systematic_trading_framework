@@ -1,0 +1,187 @@
+{
+  "family": "matb",
+  "declared_before_backtest": true,
+  "parameter_fishing_prohibited": true,
+  "trial_count": 27,
+  "axes": {
+    "trend_threshold": [
+      0.1,
+      0.2,
+      0.3
+    ],
+    "donchian_lookback_days": [
+      15,
+      20,
+      30
+    ],
+    "stop_multiplier_atr": [
+      1.5,
+      2,
+      2.5
+    ]
+  },
+  "trials": [
+    {
+      "trial_id": "matb_declared_01",
+      "trend_threshold": 0.1,
+      "donchian_lookback_days": 15,
+      "stop_multiplier_atr": 1.5
+    },
+    {
+      "trial_id": "matb_declared_02",
+      "trend_threshold": 0.1,
+      "donchian_lookback_days": 15,
+      "stop_multiplier_atr": 2
+    },
+    {
+      "trial_id": "matb_declared_03",
+      "trend_threshold": 0.1,
+      "donchian_lookback_days": 15,
+      "stop_multiplier_atr": 2.5
+    },
+    {
+      "trial_id": "matb_declared_04",
+      "trend_threshold": 0.1,
+      "donchian_lookback_days": 20,
+      "stop_multiplier_atr": 1.5
+    },
+    {
+      "trial_id": "matb_declared_05",
+      "trend_threshold": 0.1,
+      "donchian_lookback_days": 20,
+      "stop_multiplier_atr": 2
+    },
+    {
+      "trial_id": "matb_declared_06",
+      "trend_threshold": 0.1,
+      "donchian_lookback_days": 20,
+      "stop_multiplier_atr": 2.5
+    },
+    {
+      "trial_id": "matb_declared_07",
+      "trend_threshold": 0.1,
+      "donchian_lookback_days": 30,
+      "stop_multiplier_atr": 1.5
+    },
+    {
+      "trial_id": "matb_declared_08",
+      "trend_threshold": 0.1,
+      "donchian_lookback_days": 30,
+      "stop_multiplier_atr": 2
+    },
+    {
+      "trial_id": "matb_declared_09",
+      "trend_threshold": 0.1,
+      "donchian_lookback_days": 30,
+      "stop_multiplier_atr": 2.5
+    },
+    {
+      "trial_id": "matb_declared_10",
+      "trend_threshold": 0.2,
+      "donchian_lookback_days": 15,
+      "stop_multiplier_atr": 1.5
+    },
+    {
+      "trial_id": "matb_declared_11",
+      "trend_threshold": 0.2,
+      "donchian_lookback_days": 15,
+      "stop_multiplier_atr": 2
+    },
+    {
+      "trial_id": "matb_declared_12",
+      "trend_threshold": 0.2,
+      "donchian_lookback_days": 15,
+      "stop_multiplier_atr": 2.5
+    },
+    {
+      "trial_id": "matb_declared_13",
+      "trend_threshold": 0.2,
+      "donchian_lookback_days": 20,
+      "stop_multiplier_atr": 1.5
+    },
+    {
+      "trial_id": "matb_declared_14",
+      "trend_threshold": 0.2,
+      "donchian_lookback_days": 20,
+      "stop_multiplier_atr": 2
+    },
+    {
+      "trial_id": "matb_declared_15",
+      "trend_threshold": 0.2,
+      "donchian_lookback_days": 20,
+      "stop_multiplier_atr": 2.5
+    },
+    {
+      "trial_id": "matb_declared_16",
+      "trend_threshold": 0.2,
+      "donchian_lookback_days": 30,
+      "stop_multiplier_atr": 1.5
+    },
+    {
+      "trial_id": "matb_declared_17",
+      "trend_threshold": 0.2,
+      "donchian_lookback_days": 30,
+      "stop_multiplier_atr": 2
+    },
+    {
+      "trial_id": "matb_declared_18",
+      "trend_threshold": 0.2,
+      "donchian_lookback_days": 30,
+      "stop_multiplier_atr": 2.5
+    },
+    {
+      "trial_id": "matb_declared_19",
+      "trend_threshold": 0.3,
+      "donchian_lookback_days": 15,
+      "stop_multiplier_atr": 1.5
+    },
+    {
+      "trial_id": "matb_declared_20",
+      "trend_threshold": 0.3,
+      "donchian_lookback_days": 15,
+      "stop_multiplier_atr": 2
+    },
+    {
+      "trial_id": "matb_declared_21",
+      "trend_threshold": 0.3,
+      "donchian_lookback_days": 15,
+      "stop_multiplier_atr": 2.5
+    },
+    {
+      "trial_id": "matb_declared_22",
+      "trend_threshold": 0.3,
+      "donchian_lookback_days": 20,
+      "stop_multiplier_atr": 1.5
+    },
+    {
+      "trial_id": "matb_declared_23",
+      "trend_threshold": 0.3,
+      "donchian_lookback_days": 20,
+      "stop_multiplier_atr": 2
+    },
+    {
+      "trial_id": "matb_declared_24",
+      "trend_threshold": 0.3,
+      "donchian_lookback_days": 20,
+      "stop_multiplier_atr": 2.5
+    },
+    {
+      "trial_id": "matb_declared_25",
+      "trend_threshold": 0.3,
+      "donchian_lookback_days": 30,
+      "stop_multiplier_atr": 1.5
+    },
+    {
+      "trial_id": "matb_declared_26",
+      "trend_threshold": 0.3,
+      "donchian_lookback_days": 30,
+      "stop_multiplier_atr": 2
+    },
+    {
+      "trial_id": "matb_declared_27",
+      "trend_threshold": 0.3,
+      "donchian_lookback_days": 30,
+      "stop_multiplier_atr": 2.5
+    }
+  ]
+}

@@ -4,6 +4,8 @@ from typing import Any
 
 from .envs import PortfolioTradingEnv, RLRewardConfig, SingleAssetTradingEnv
 from .portfolio import train_dqn_portfolio_agent, train_ppo_portfolio_agent
+from .risk_env import RiskRewardConfig, RiskTradeConfig, SingleAssetRiskTradingEnv
+from .risk_pipeline import train_ppo_risk_agent
 from .single_asset import train_dqn_agent, train_ppo_agent
 
 
@@ -105,13 +107,17 @@ def __getattr__(name: str):
 __all__ = [
     "PortfolioTradingEnv",
     "RLRewardConfig",
+    "RiskRewardConfig",
+    "RiskTradeConfig",
     "SequenceFeatureExtractor",
     "SingleAssetTradingEnv",
+    "SingleAssetRiskTradingEnv",
     "build_policy_kwargs",
     "make_vec_env",
     "train_dqn_agent",
     "train_dqn_portfolio_agent",
     "train_ppo_agent",
     "train_ppo_portfolio_agent",
+    "train_ppo_risk_agent",
     "train_sb3_model",
 ]

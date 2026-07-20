@@ -70,6 +70,16 @@ def test_authentication_requires_token() -> None:
         OandaExecution(_config(api_token="", api_token_env="MISSING_OANDA_TOKEN"))
 
 
+def test_account_id_can_be_loaded_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TEST_OANDA_ACCOUNT_ID", "101-001-env")
+
+    config = OandaExecution(
+        _config(account_id="", account_id_env="TEST_OANDA_ACCOUNT_ID")
+    ).config
+
+    assert config.account_id == "101-001-env"
+
+
 def test_connect_uses_token_auth_and_loads_account_info() -> None:
     transport = FakeOandaTransport(
         [{"account": {"id": "101-001-123", "balance": "10000", "NAV": "10025", "marginUsed": "50"}}]

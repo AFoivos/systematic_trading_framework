@@ -1,23 +1,23 @@
 strategy:
   name: lab_07_multi_horizon_panel_chronos_bolt_h48
-  timeframe: 30m
-  assets: [SPX500]
+  timeframe: 1m
+  assets: [BTCUSD]
   description: >
     Forecast-first long-horizon panel proxy. The current runner accepts one
     target horizon per config, so this 48-bar Chronos-Bolt run is intended to
     sit beside the h6/h24 labs for horizon robustness comparison.
 data:
   source: dukascopy_csv
-  interval: 30m
+  interval: 1m
   start: null
   end: null
   alignment: inner
-  symbol: SPX500
+  symbol: BTCUSD
   pit:
     timestamp_alignment: {source_timezone: UTC, output_timezone: UTC, normalize_daily: false, duplicate_policy: last}
     corporate_actions: {policy: none, adj_close_col: adj_close}
     universe_snapshot: {inactive_policy: raise}
-  storage: {mode: cached_only, dataset_id: lab_07_multi_horizon_panel_chronos_bolt_h48, save_raw: false, save_processed: true, load_path: data/raw/dukascopy_30m_clean/spx500_30m.csv, raw_dir: data/raw, processed_dir: data/processed}
+  storage: {mode: cached_only, dataset_id: lab_07_multi_horizon_panel_chronos_bolt_h48, save_raw: false, save_processed: true, load_path: data/raw/dukascopy_30m_clean/btcusd_1m.csv, raw_dir: data/raw, processed_dir: data/processed}
 features:
 - step: returns
   params: {log: false, col_name: close_ret}
@@ -34,7 +34,7 @@ model:
   kind: chronos_bolt_forecaster
   outputs: {pred_ret_col: pred_ret, pred_is_oos_col: pred_is_oos}
   target: {kind: future_return_regression, price_col: close, returns_col: close_ret, returns_type: simple, horizon_bars: 48, fwd_col: target_future_return_h48, label_col: target_future_return_h48}
-  split: {method: walk_forward, train_size: 12000, test_size: 256, step_size: 256, expanding: true, max_folds: 1, purge_bars: 48, embargo_bars: 48}
+  split: {method: walk_forward, train_size: 12000, test_size: 256, step_size: 256, expanding: true, max_folds: 5, purge_bars: 48, embargo_bars: 48}
   params: {model_id: amazon/chronos-bolt-tiny, source_col: close, source_kind: price, lookback: 768, min_context: 192, prediction_length: 48, quantiles: [0.1, 0.5, 0.9]}
 signals:
   kind: forecast_threshold

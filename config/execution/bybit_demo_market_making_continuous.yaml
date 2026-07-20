@@ -1,0 +1,43 @@
+execution:
+  environment: demo
+  venue: bybit
+  category: linear
+  symbol: BTCUSDT
+  mode: demo_submit
+  allow_order_submission: true
+  account_type: UNIFIED
+  rest_url: https://api-demo.bybit.com
+  private_websocket_url: wss://stream-demo.bybit.com/v5/private
+  quote_refresh_interval_ms: 1000
+  volatility_lookback_events: 120
+
+market_data:
+  public_websocket_url: wss://stream.bybit.com/v5/public/linear
+  orderbook_depth: 50
+  stale_book_ms: 2000
+
+risk:
+  maximum_inventory_order_multiple: 4
+  maximum_position_value: 600.0
+  maximum_session_loss: 2.0
+  maximum_allowed_spread_bps: 25.0
+  maximum_recent_volatility_bps: 20.0
+  maximum_consecutive_api_errors: 3
+  maximum_private_stream_silence_seconds: 30
+
+rate_limits:
+  minimum_quote_lifetime_ms: 3000
+  minimum_reprice_ticks: 3
+  maximum_quote_age_ms: 15000
+  maximum_cancel_rate_per_minute: 20
+  maximum_requests_per_second: 5
+
+session:
+  reporting_interval_seconds: 7200
+  reconciliation_interval_seconds: 60
+  aligned_windows: true
+  flatten_at_boundary: false
+
+logging:
+  output_dir: logs/experiments/market_making/bybit_demo
+  raw_orderbook_rotation_bytes: 67108864

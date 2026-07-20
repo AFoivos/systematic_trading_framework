@@ -1,0 +1,358 @@
+strategy:
+  name: EURUSD M30 Downside-Shock Raw Candidate Baseline
+  version: 2
+  symbol: EURUSD
+  timeframe: M30
+  direction: long_only
+  description: >
+    Independent causal EURUSD 30m mean-reversion strategy. It creates broad
+    long candidates after statistically extreme downside shocks away from a
+    trailing EMA. Two separate regressors predict maximum favorable excursion
+    and maximum adverse excursion in R units before execution.
+
+data:
+  source: dukascopy_csv
+  interval: 30m
+  start: null
+  end: null
+  alignment: inner
+  symbol: EURUSD
+  pit:
+    timestamp_alignment:
+      source_timezone: UTC
+      output_timezone: UTC
+      normalize_daily: false
+      duplicate_policy: last
+    corporate_actions:
+      policy: none
+      adj_close_col: adj_close
+    universe_snapshot:
+      inactive_policy: raise
+  storage:
+    mode: cached_only
+    dataset_id: eurusd_m30_downside_shock_mfe_mae_v1
+    save_raw: false
+    save_processed: true
+    load_path: data/raw/dukascopy_30m_clean/eurusd_30m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed/eurusd_m30_downside_shock_mfe_mae
+
+features:
+- step: returns
+  params:
+    log: true
+    col_name: close_logret
+- step: trend
+  params:
+    price_col: close
+    sma_windows: []
+    ema_spans: [24, 72]
+    add_ratios: false
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: close
+        denominator_col: close_ema_24
+        output_col: close_over_ema_24
+        subtract: 1.0
+      - numerator_col: close
+        denominator_col: close_ema_72
+        output_col: close_over_ema_72
+        subtract: 1.0
+- step: atr
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    windows: [24]
+    window: 24
+    method: wilder
+    atr_col: atr_24
+    add_over_price: false
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: atr_24
+        denominator_col: close
+        output_col: atr_over_price_24
+- step: volatility
+  params:
+    returns_col: close_logret
+    rolling_windows: [48, 192]
+    ewma_spans: []
+    annualization_factor: null
+- step: regime_context
+  params:
+    price_col: close
+    returns_col: close_logret
+    vol_short_window: 48
+    vol_long_window: 192
+    trend_fast_span: 24
+    trend_slow_span: 72
+    vol_ratio_high_threshold: 1.25
+    vol_ratio_low_threshold: 0.80
+- step: bollinger
+  params:
+    price_col: close
+    window: 48
+    n_std: 2.0
+- step: rsi
+  params:
+    price_col: close
+    windows: [4, 14, 28]
+    method: wilder
+- step: roc
+  params:
+    price_col: close
+    windows: [2, 4, 8, 16]
+- step: lags
+  params:
+    cols: [close_logret]
+    lags: [1, 2, 4, 8]
+- step: session_context
+  params:
+    timezone: UTC
+    add_cyclical_time: true
+    include_weekend_flag: true
+- step: shock_context
+  params:
+    price_col: close
+    high_col: high
+    low_col: low
+    returns_col: close_logret
+    ema_col: close_ema_24
+    atr_col: atr_24
+    short_horizon: 2
+    medium_horizon: 8
+    horizon_unit: bars
+    vol_window: 96
+    ret_z_threshold: 1.75
+    atr_mult_threshold: 1.25
+    distance_from_mean_threshold: 0.85
+    post_shock_active_bars: 1
+    use_log_returns: true
+
+model_stages:
+- name: mfe_regressor
+  stage: 1
+  kind: lightgbm_regressor
+  feature_cols: &trade_features
+  - shock_ret_z_2b
+  - shock_ret_z_8b
+  - shock_atr_multiple_2b
+  - shock_atr_multiple_8b
+  - shock_distance_ema
+  - shock_strength
+  - bars_since_shock
+  - close_over_ema_24
+  - close_over_ema_72
+  - regime_vol_ratio_48_192
+  - regime_absret_z_48_192
+  - regime_trend_ratio_24_72
+  - bb_percent_b_48_2.0
+  - bb_width_48_2.0
+  - close_rsi_4
+  - close_rsi_14
+  - close_rsi_28
+  - roc_2
+  - roc_4
+  - roc_8
+  - roc_16
+  - vol_rolling_48
+  - vol_rolling_192
+  - atr_over_price_24
+  - lag_close_logret_1
+  - lag_close_logret_2
+  - lag_close_logret_4
+  - lag_close_logret_8
+  - hour_sin_24
+  - hour_cos_24
+  - day_of_week_sin_7
+  - day_of_week_cos_7
+  target: &mfe_target
+    kind: trade_mfe_mae_regression
+    target_col: mfe_r
+    candidate_col: shock_down_candidate
+    side_col: shock_side_contrarian
+    open_col: open
+    high_col: high
+    low_col: low
+    close_col: close
+    volatility_col: atr_over_price_24
+    entry_price_mode: next_open
+    stop_mode: volatility_stop
+    take_profit_r: 2.0
+    stop_loss_r: 1.0
+    max_holding_bars: 24
+    cost_per_unit_turnover: 0.00006
+    slippage_per_unit_turnover: 0.00002
+    tie_break: conservative
+    allow_partial_horizon: false
+    strict_path_validation: true
+  split: &purged_split
+    method: purged
+    train_size: 35040
+    test_size: 4380
+    step_size: 4380
+    expanding: true
+    max_folds: 8
+    purge_bars: 32
+    embargo_bars: 32
+  params: &lgbm_params
+    n_estimators: 300
+    learning_rate: 0.03
+    num_leaves: 15
+    max_depth: 5
+    min_child_samples: 40
+    subsample: 0.85
+    colsample_bytree: 0.85
+    reg_alpha: 0.25
+    reg_lambda: 2.0
+    random_state: 7
+    n_jobs: 1
+    verbosity: -1
+  preprocessing: {scaler: none}
+  calibration: {}
+  runtime: {}
+  env: {}
+  use_features: true
+  pred_ret_col: pred_mfe_r
+  pred_prob_col: pred_mfe_positive_prob
+  pred_is_oos_col: pred_mfe_is_oos
+- name: mae_regressor
+  stage: 2
+  kind: lightgbm_regressor
+  feature_cols: *trade_features
+  target:
+    <<: *mfe_target
+    target_col: mae_r
+  split: *purged_split
+  params: *lgbm_params
+  preprocessing: {scaler: none}
+  calibration: {}
+  runtime: {}
+  env: {}
+  use_features: true
+  pred_ret_col: pred_mae_r
+  pred_prob_col: pred_mae_positive_prob
+  pred_is_oos_col: pred_mae_is_oos
+
+signals:
+  kind: forecast_threshold_candidate
+  params:
+    forecast_col: shock_down_candidate
+    pred_is_oos_col: pred_mfe_is_oos
+    signal_col: signal_eurusd_shock_reversion
+    upper: 1.0
+    lower: -999.0
+    inclusive: true
+    mode: long_only
+    activation_filters: []
+    candidate_col: accepted_shock_candidate
+    side_col: accepted_shock_side
+    strength_col: accepted_raw_shock
+    threshold_distance_col: accepted_raw_shock_margin
+
+target: {}
+
+validation:
+  method: purged_walk_forward
+  purge_bars: 32
+  embargo_bars: 32
+
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: false
+
+risk:
+  cost_per_turnover: 0.00006
+  slippage_per_turnover: 0.00002
+  target_vol: null
+  max_leverage: 1.0
+  sizing: {}
+  dd_guard:
+    enabled: false
+  portfolio_guard: {}
+  drawdown_sizing: {}
+  vol_col: null
+
+backtest:
+  engine: manual_barrier
+  signal_col: signal_eurusd_shock_reversion
+  returns_col: close_logret
+  returns_type: log
+  subset: full
+  periods_per_year: 12096
+  missing_return_policy: raise_if_exposed
+  allow_short: false
+  stop_mode: volatility_stop
+  vol_col: atr_over_price_24
+  open_col: open
+  high_col: high
+  low_col: low
+  close_col: close
+  take_profit_r: 2.0
+  stop_loss_r: 1.0
+  risk_per_trade: 0.015
+  max_holding_bars: 24
+  dynamic_exits: {enabled: false}
+  partial_exits: {enabled: false}
+
+portfolio:
+  enabled: false
+  construction: signal_weights
+  long_short: false
+  gross_target: 1.0
+
+monitoring:
+  enabled: false
+  psi_threshold: 0.2
+  n_bins: 10
+
+diagnostics:
+  enabled: true
+  model:
+    enabled: true
+  trade_path:
+    enabled: true
+  robustness:
+    enabled: true
+    cost_multipliers: [1.0, 2.0, 3.0]
+    entry_delay_bars: [1, 2]
+    walk_forward_frequency: YE
+
+execution:
+  enabled: false
+  mode: paper
+  capital: 100000.0
+  price_col: close
+
+logging:
+  enabled: true
+  run_name: eurusd_m30_downside_shock_raw_v2
+  output_dir: logs/experiments/eurusd_m30_downside_shock_mfe_mae
+  save_model: false
+  stage_tails:
+    enabled: true
+    stdout: true
+    report: true
+    limit: 8
+    max_columns: 32
+    max_assets: 1
+  execution_source_audit:
+    enabled: true
+
+evaluation:
+  strict_oos_only: true
+
+research_metadata:
+  family: eurusd_m30_downside_shock_mfe_mae
+  strategy_type: ml_selected_contrarian_shock_reversion
+  supervised_target: trade_mfe_mae_regression
+  model_contract: two_separate_regressors
+  candidate_hypothesis: extreme_downside_shocks_may_reverse_before_continuing

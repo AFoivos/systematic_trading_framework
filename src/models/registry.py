@@ -31,6 +31,7 @@ _SINGLE_ASSET_MODEL_COMPONENTS: tuple[tuple[str, SingleAssetModelFn], ...] = (
     ("timesfm_1p0_200m_forecaster", lazy_callable("src.models.forecasting.base", "train_timesfm_1p0_200m_forecaster")),
     ("tsfresh_extrema_feature_discovery", lazy_callable("src.experiments.support.tsfresh_extrema_feature_discovery", "train_tsfresh_extrema_feature_discovery")),
     ("ppo_agent", lazy_callable("src.models.rl.single_asset", "train_ppo_agent")),
+    ("ppo_risk_agent", lazy_callable("src.models.rl.risk_pipeline", "train_ppo_risk_agent")),
     ("dqn_agent", lazy_callable("src.models.rl.single_asset", "train_dqn_agent")),
 )
 
@@ -59,7 +60,9 @@ MODEL_REGISTRY: Mapping[str, ModelFn] = build_registry(
 SINGLE_ASSET_MODEL_KINDS = registry_names(SINGLE_ASSET_MODEL_REGISTRY)
 PORTFOLIO_MODEL_KINDS = registry_names(PORTFOLIO_MODEL_REGISTRY)
 MODEL_KINDS = registry_names(MODEL_REGISTRY)
-RL_MODEL_KINDS = frozenset({"dqn_agent", "dqn_portfolio_agent", "ppo_agent", "ppo_portfolio_agent"})
+RL_MODEL_KINDS = frozenset(
+    {"dqn_agent", "dqn_portfolio_agent", "ppo_agent", "ppo_portfolio_agent", "ppo_risk_agent"}
+)
 
 
 def get_model_fn(name: str) -> ModelFn:

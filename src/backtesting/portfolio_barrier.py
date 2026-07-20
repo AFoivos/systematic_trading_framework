@@ -14,10 +14,71 @@ from src.evaluation.metrics import (
 from src.portfolio import PortfolioConstraints, PortfolioPerformance
 from src.portfolio.construction import compute_weight_transition_accounting
 from src.targets.directional_triple_barrier import resolve_directional_barrier_double_touch
+from src.utils.trade_path import compute_trade_pnl, simulate_strategy_path_trade_outcome
 
 _ALLOWED_ENTRY_PRICE_MODES = frozenset({"current_close", "next_open"})
 _ALLOWED_TIE_BREAKS = frozenset({"closest_to_open", "profit", "stop"})
 _ALLOWED_EVENT_TIME_REMAP_POLICIES = frozenset({"next_aligned", "skip"})
+
+
+def _validate_strategy_path_config(config: Mapping[str, Any] | None) -> dict[str, Any]:
+    cfg = dict(config or {})
+    if not cfg:
+        return {"kind": "none", "enabled": False}
+    kind = str(cfg.get("kind", "none"))
+    if kind in {"", "none"}:
+        return {"kind": "none", "enabled": False}
+    if kind != "matb":
+        raise ValueError("portfolio_barrier strategy_path.kind must be 'none' or 'matb'.")
+    entry_price_mode = str(cfg.get("entry_price_mode", "next_open"))
+    tie_break = str(cfg.get("tie_break", "closest_to_open"))
+    if entry_price_mode != "next_open":
+        raise ValueError("portfolio_barrier MATB strategy_path requires entry_price_mode='next_open'.")
+    if tie_break != "closest_to_open":
+        raise ValueError("portfolio_barrier MATB strategy_path requires tie_break='closest_to_open'.")
+    entry_delay_bars = cfg.get("entry_delay_bars", 0)
+    max_holding_bars = cfg.get("max_holding_bars", 1440)
+    if isinstance(entry_delay_bars, bool) or int(entry_delay_bars) < 0:
+        raise ValueError("portfolio_barrier strategy_path.entry_delay_bars must be >= 0.")
+    if isinstance(max_holding_bars, bool) or int(max_holding_bars) <= 0:
+        raise ValueError("portfolio_barrier strategy_path.max_holding_bars must be > 0.")
+    trailing_activation_r = float(cfg.get("trailing_activation_r", 1.5))
+    if not np.isfinite(trailing_activation_r) or trailing_activation_r < 0.0:
+        raise ValueError(
+            "portfolio_barrier strategy_path.trailing_activation_r must be finite and >= 0."
+        )
+    return {
+        "kind": "matb",
+        "enabled": True,
+        "entry_price_mode": entry_price_mode,
+        "entry_delay_bars": int(entry_delay_bars),
+        "stop_loss_atr": _positive_float(
+            cfg.get("stop_loss_atr", cfg.get("stop_loss_r", 2.0)),
+            field="strategy_path.stop_loss_atr",
+        ),
+        "emergency_profit_r": _positive_float(
+            cfg.get("emergency_profit_r", 8.0),
+            field="strategy_path.emergency_profit_r",
+        ),
+        "trailing_activation_r": trailing_activation_r,
+        "trailing_distance_atr": _positive_float(
+            cfg.get("trailing_distance_atr", 2.5),
+            field="strategy_path.trailing_distance_atr",
+        ),
+        "max_holding_bars": int(max_holding_bars),
+        "tie_break": tie_break,
+        "strict_bid_ask": bool(cfg.get("strict_bid_ask", True)),
+        "allow_partial_horizon": bool(cfg.get("allow_partial_horizon", False)),
+        "trend_score_col": str(cfg.get("trend_score_col", "matb_trend_score")),
+        "bid_open_col": str(cfg.get("bid_open_col", "bid_open")),
+        "bid_high_col": str(cfg.get("bid_high_col", "bid_high")),
+        "bid_low_col": str(cfg.get("bid_low_col", "bid_low")),
+        "bid_close_col": str(cfg.get("bid_close_col", "bid_close")),
+        "ask_open_col": str(cfg.get("ask_open_col", "ask_open")),
+        "ask_high_col": str(cfg.get("ask_high_col", "ask_high")),
+        "ask_low_col": str(cfg.get("ask_low_col", "ask_low")),
+        "ask_close_col": str(cfg.get("ask_close_col", "ask_close")),
+    }
 
 
 def _positive_float(value: Any, *, field: str) -> float:
@@ -369,6 +430,99 @@ def _simulate_barrier_event(
     }
 
 
+def _simulate_strategy_path_event(
+    frame: pd.DataFrame,
+    *,
+    signal_idx: int,
+    side: float,
+    open_col: str,
+    high_col: str,
+    low_col: str,
+    close_col: str,
+    volatility_col: str,
+    strategy_path: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    """Adapt the shared MATB simulator to the portfolio event contract."""
+    cfg = dict(strategy_path)
+
+    def _array(column: str) -> np.ndarray:
+        return pd.to_numeric(frame[column], errors="coerce").to_numpy(dtype=float)
+
+    quote_columns = {
+        "bid_opens": str(cfg["bid_open_col"]),
+        "bid_highs": str(cfg["bid_high_col"]),
+        "bid_lows": str(cfg["bid_low_col"]),
+        "bid_closes": str(cfg["bid_close_col"]),
+        "ask_opens": str(cfg["ask_open_col"]),
+        "ask_highs": str(cfg["ask_high_col"]),
+        "ask_lows": str(cfg["ask_low_col"]),
+        "ask_closes": str(cfg["ask_close_col"]),
+    }
+    quote_presence = {key: column in frame.columns for key, column in quote_columns.items()}
+    if any(quote_presence.values()) and not all(quote_presence.values()) and bool(cfg["strict_bid_ask"]):
+        missing = [quote_columns[key] for key, present in quote_presence.items() if not present]
+        raise KeyError(f"portfolio_barrier MATB strict bid/ask execution is missing columns: {missing}")
+    quotes = {
+        key: _array(column) if all(quote_presence.values()) else None
+        for key, column in quote_columns.items()
+    }
+    outcome = simulate_strategy_path_trade_outcome(
+        opens=_array(open_col),
+        highs=_array(high_col),
+        lows=_array(low_col),
+        closes=_array(close_col),
+        volatility=_array(volatility_col),
+        trend_score=_array(str(cfg["trend_score_col"])),
+        signal_idx=int(signal_idx),
+        side=side,
+        entry_price_mode=str(cfg["entry_price_mode"]),
+        entry_delay_bars=int(cfg["entry_delay_bars"]),
+        stop_loss_atr=float(cfg["stop_loss_atr"]),
+        emergency_profit_r=float(cfg["emergency_profit_r"]),
+        trailing_activation_r=float(cfg["trailing_activation_r"]),
+        trailing_distance_atr=float(cfg["trailing_distance_atr"]),
+        max_holding_bars=int(cfg["max_holding_bars"]),
+        tie_break=str(cfg["tie_break"]),
+        strict_bid_ask=bool(cfg["strict_bid_ask"]),
+        allow_partial_horizon=bool(cfg["allow_partial_horizon"]),
+        **quotes,
+    )
+    if not bool(outcome["valid"]):
+        return None
+    entry_idx = int(outcome["entry_idx"])
+    exit_idx = int(outcome["exit_idx"])
+    return {
+        "signal_idx": int(signal_idx),
+        "entry_idx": entry_idx,
+        "exit_idx": exit_idx,
+        "signal_time": frame.index[signal_idx],
+        "entry_time": frame.index[entry_idx],
+        "exit_time": frame.index[exit_idx],
+        "entry_price": float(outcome["entry_price"]),
+        "exit_price": float(outcome["exit_price"]),
+        "atr": float(_array(volatility_col)[signal_idx]),
+        "risk_distance": float(outcome["risk_distance"]),
+        "take_profit_price": float(outcome["emergency_profit_price"]),
+        "stop_loss_price": float(outcome["initial_stop_price"]),
+        "effective_stop_price": float(outcome["effective_stop_price"]),
+        "hit_type": str(outcome["hit_type"]),
+        "exit_reason": str(outcome["exit_reason"]),
+        "bars_held": int(outcome["bars_held"]),
+        "hit_step": int(outcome["hit_step"]),
+        "max_favorable_r": float(outcome["max_favorable_r"]),
+        "max_adverse_r": float(outcome["max_adverse_r"]),
+        "time_to_mfe": int(outcome["time_to_mfe"]),
+        "time_to_mae": int(outcome["time_to_mae"]),
+        "dynamic_exit_signal_time": pd.NaT,
+        "dynamic_exit_execution_time": pd.NaT,
+        "dynamic_exit_reason": pd.NA,
+        "exit_at_open": bool(outcome["exit_at_open"]),
+        "gap_exit": bool(outcome["gap_exit"]),
+        "execution_source": str(outcome["execution_source"]),
+        "trailing_activated": bool(outcome["trailing_activated"]),
+    }
+
+
 def _mark_to_market_trade_path(
     *,
     frame: pd.DataFrame,
@@ -423,32 +577,22 @@ def _realized_trade_pnl(
     cost_per_turnover: float,
     slippage_per_turnover: float,
 ) -> dict[str, float]:
-    size = abs(float(weight))
-    slip = float(slippage_per_turnover)
-    if side > 0.0:
-        entry_after_slippage = entry_price * (1.0 + slip)
-        exit_after_slippage = exit_price * (1.0 - slip)
-        gross_return = size * (exit_price / entry_price - 1.0)
-        gross_after_slippage = size * (exit_after_slippage / entry_after_slippage - 1.0)
-    else:
-        entry_after_slippage = entry_price * (1.0 - slip)
-        exit_after_slippage = exit_price * (1.0 + slip)
-        gross_return = size * (1.0 - exit_price / entry_price)
-        gross_after_slippage = size * (1.0 - exit_after_slippage / entry_after_slippage)
-
-    slippage_cost = max(float(gross_return - gross_after_slippage), 0.0)
-    fixed_cost = size * 2.0 * float(cost_per_turnover)
-    total_cost = fixed_cost + slippage_cost
-    net_return = gross_return - total_cost
-    risk_capital = max(size * float(risk_distance) / float(entry_price), 1e-12)
-    realized_r = net_return / risk_capital
+    shared = compute_trade_pnl(
+        side=side,
+        weight=weight,
+        entry_price=entry_price,
+        exit_price=exit_price,
+        risk_distance=risk_distance,
+        cost_per_unit_turnover=cost_per_turnover,
+        slippage_per_unit_turnover=slippage_per_turnover,
+    )
     return {
-        "gross_return": float(gross_return),
-        "net_return": float(net_return),
-        "cost": float(total_cost),
-        "fixed_cost": float(fixed_cost),
-        "slippage": float(slippage_cost),
-        "realized_r": float(realized_r),
+        "gross_return": float(shared["gross_return"]),
+        "net_return": float(shared["net_return"]),
+        "cost": float(shared["cost"]),
+        "fixed_cost": float(shared["fixed_cost"]),
+        "slippage": float(shared["slippage"]),
+        "realized_r": float(shared["net_r"]),
     }
 
 
@@ -677,6 +821,7 @@ def run_portfolio_barrier_backtest(
     event_time_remap_policy: str = "skip",
     max_cost_r: float | None = None,
     dynamic_exit: Mapping[str, Any] | None = None,
+    strategy_path: Mapping[str, Any] | None = None,
     correlation_guard: Mapping[str, Any] | None = None,
     liquidate_at_end: bool = False,
 ) -> tuple[PortfolioPerformance, pd.DataFrame, pd.DataFrame, dict[str, Any]]:
@@ -724,6 +869,13 @@ def run_portfolio_barrier_backtest(
     if max_cost_r is not None:
         max_cost_r = _positive_float(max_cost_r, field="max_cost_r")
     dynamic_exit_cfg = _validate_dynamic_exit_config(dynamic_exit)
+    strategy_path_cfg = _validate_strategy_path_config(strategy_path)
+    if bool(strategy_path_cfg.get("enabled", False)) and bool(dynamic_exit_cfg.get("enabled", False)):
+        raise ValueError("portfolio_barrier strategy_path and dynamic_exit cannot both be enabled.")
+    if bool(strategy_path_cfg.get("enabled", False)) and entry_price_mode != "next_open":
+        raise ValueError(
+            "portfolio_barrier MATB strategy_path requires top-level entry_price_mode='next_open'."
+        )
     correlation_guard_cfg = _validate_correlation_guard_config(correlation_guard)
 
     asset_params_by_asset = {str(k): dict(v or {}) for k, v in dict(asset_params or {}).items()}
@@ -754,11 +906,23 @@ def run_portfolio_barrier_backtest(
         params = dict(asset_params_by_asset.get(asset, {}) or {})
         asset_volatility_col = str(params.get("volatility_col", params.get("vol_col", volatility_col)))
         asset_required_columns = [asset_volatility_col]
+        if bool(strategy_path_cfg.get("enabled", False)):
+            asset_required_columns.append(str(strategy_path_cfg["trend_score_col"]))
         if params.get("max_spread_points") is not None:
+            default_bid_col = (
+                str(strategy_path_cfg["bid_open_col"])
+                if bool(strategy_path_cfg.get("enabled", False))
+                else "bid_open"
+            )
+            default_ask_col = (
+                str(strategy_path_cfg["ask_open_col"])
+                if bool(strategy_path_cfg.get("enabled", False))
+                else "ask_open"
+            )
             asset_required_columns.extend(
                 [
-                    str(params.get("spread_bid_col", "bid_open")),
-                    str(params.get("spread_ask_col", "ask_open")),
+                    str(params.get("spread_bid_col", default_bid_col)),
+                    str(params.get("spread_ask_col", default_ask_col)),
                 ]
             )
             _positive_float(params.get("point_size"), field=f"asset_params.{asset}.point_size")
@@ -1110,23 +1274,36 @@ def run_portfolio_barrier_backtest(
             trade_dynamic_exit = _resolve_dynamic_exit_for_trade(
                 dynamic_exit_cfg, side=side, module=signal_module
             )
-            event = _simulate_barrier_event(
-                frame,
-                signal_idx=signal_idx,
-                side=side,
-                open_col=open_col,
-                high_col=high_col,
-                low_col=low_col,
-                close_col=close_col,
-                volatility_col=asset_volatility_col,
-                entry_price_mode=entry_price_mode,
-                profit_barrier_r=asset_profit_barrier_r,
-                stop_barrier_r=asset_stop_barrier_r,
-                vertical_barrier_bars=asset_vertical_barrier_bars,
-                tie_break=tie_break,
-                asset=asset,
-                dynamic_exit=trade_dynamic_exit,
-            )
+            if bool(strategy_path_cfg.get("enabled", False)):
+                event = _simulate_strategy_path_event(
+                    frame,
+                    signal_idx=signal_idx,
+                    side=side,
+                    open_col=open_col,
+                    high_col=high_col,
+                    low_col=low_col,
+                    close_col=close_col,
+                    volatility_col=asset_volatility_col,
+                    strategy_path=strategy_path_cfg,
+                )
+            else:
+                event = _simulate_barrier_event(
+                    frame,
+                    signal_idx=signal_idx,
+                    side=side,
+                    open_col=open_col,
+                    high_col=high_col,
+                    low_col=low_col,
+                    close_col=close_col,
+                    volatility_col=asset_volatility_col,
+                    entry_price_mode=entry_price_mode,
+                    profit_barrier_r=asset_profit_barrier_r,
+                    stop_barrier_r=asset_stop_barrier_r,
+                    vertical_barrier_bars=asset_vertical_barrier_bars,
+                    tie_break=tie_break,
+                    asset=asset,
+                    dynamic_exit=trade_dynamic_exit,
+                )
             if event is None:
                 skipped_tail += 1
                 continue
@@ -1136,7 +1313,39 @@ def run_portfolio_barrier_backtest(
             asset_max_spread: float | None = None
             execution_entry_price = float(event["entry_price"])
             execution_exit_price = float(event["exit_price"])
-            if asset_max_spread_raw is not None:
+            if asset_max_spread_raw is not None and event.get("execution_source") == "bid_ask":
+                asset_max_spread = _positive_float(
+                    asset_max_spread_raw,
+                    field=f"asset_params.{asset}.max_spread_points",
+                )
+                point_size = _positive_float(
+                    params.get("point_size"),
+                    field=f"asset_params.{asset}.point_size",
+                )
+                entry_row = frame.iloc[int(event["entry_idx"])]
+                exit_row = frame.iloc[int(event["exit_idx"])]
+                bid_col = str(params.get("spread_bid_col", strategy_path_cfg["bid_open_col"]))
+                ask_col = str(params.get("spread_ask_col", strategy_path_cfg["ask_open_col"]))
+                try:
+                    entry_bid = float(entry_row[bid_col])
+                    entry_ask = float(entry_row[ask_col])
+                    exit_bid = float(exit_row[bid_col])
+                    exit_ask = float(exit_row[ask_col])
+                except (KeyError, TypeError, ValueError):
+                    skipped_invalid_spread += 1
+                    continue
+                if not all(
+                    np.isfinite(value) and value > 0.0
+                    for value in (entry_bid, entry_ask, exit_bid, exit_ask)
+                ) or entry_ask < entry_bid or exit_ask < exit_bid:
+                    skipped_invalid_spread += 1
+                    continue
+                spread_points = float((entry_ask - entry_bid) / point_size)
+                exit_spread_points = float((exit_ask - exit_bid) / point_size)
+                if spread_points > asset_max_spread:
+                    skipped_spread_filter += 1
+                    continue
+            elif asset_max_spread_raw is not None:
                 asset_max_spread = _positive_float(
                     asset_max_spread_raw,
                     field=f"asset_params.{asset}.max_spread_points",
@@ -1281,6 +1490,7 @@ def run_portfolio_barrier_backtest(
             )
             trade = {
                 "asset": asset,
+                "asset_group": group if group is not None else "ungrouped",
                 "signal_time": event["signal_time"],
                 "signal_timestamp": event["signal_time"],
                 "raw_signal_time": event["signal_time"],
@@ -1316,7 +1526,7 @@ def run_portfolio_barrier_backtest(
                 "stop_loss_price": float(event["stop_loss_price"]),
                 "exit_reason": event["exit_reason"],
                 "hit_type": event["hit_type"],
-                "hit_step": int(event["bars_held"]),
+                "hit_step": int(event.get("hit_step", event["bars_held"])),
                 "bars_held": int(event["bars_held"]),
                 "max_favorable_r": float(event["max_favorable_r"]),
                 "max_adverse_r": float(event["max_adverse_r"]),
@@ -1327,6 +1537,7 @@ def run_portfolio_barrier_backtest(
                 "realized_r": pnl["realized_r"],
                 "trade_r": pnl["realized_r"],
                 "risk_fraction": cost_filter_stats["risk_fraction"],
+                "risk_contribution": abs(float(weight)) * cost_filter_stats["risk_fraction"],
                 "estimated_cost": cost_filter_stats["estimated_cost"],
                 "estimated_cost_r": cost_filter_stats["estimated_cost_r"],
                 "max_cost_r": asset_max_cost_r,
@@ -1335,6 +1546,10 @@ def run_portfolio_barrier_backtest(
                 "exit_spread_points": exit_spread_points,
                 "max_spread_points": asset_max_spread,
                 "observed_spread_cost": float(raw_price_pnl["gross_return"] - pnl["gross_return"]),
+                "execution_source": event.get("execution_source", "midpoint_adjusted"),
+                "spread_embedded_in_gross_return": bool(event.get("execution_source") == "bid_ask"),
+                "trailing_activated": bool(event.get("trailing_activated", False)),
+                "effective_stop_price": event.get("effective_stop_price", event["stop_loss_price"]),
                 "cost": pnl["cost"],
                 "fixed_cost": pnl["fixed_cost"],
                 "slippage": pnl["slippage"],
@@ -1485,6 +1700,46 @@ def run_portfolio_barrier_backtest(
         },
         index=weights.index,
     )
+    for group_name in sorted(set(asset_groups.values())):
+        group_assets = [
+            asset for asset in weights.columns if asset_groups.get(str(asset)) == group_name
+        ]
+        if not group_assets:
+            continue
+        diagnostics[f"group_{group_name}_gross_exposure"] = (
+            weights[group_assets].abs().sum(axis=1).astype(float)
+        )
+        diagnostics[f"group_{group_name}_net_exposure"] = (
+            weights[group_assets].sum(axis=1).astype(float)
+        )
+
+    if trades_df.empty:
+        pnl_contribution_by_asset: dict[str, float] = {}
+        pnl_contribution_by_group: dict[str, float] = {}
+        risk_contribution_by_asset: dict[str, float] = {}
+        risk_contribution_by_group: dict[str, float] = {}
+    else:
+        numeric_net = pd.to_numeric(trades_df["net_return"], errors="coerce").fillna(0.0)
+        numeric_risk = pd.to_numeric(
+            trades_df.get("risk_contribution", pd.Series(0.0, index=trades_df.index)),
+            errors="coerce",
+        ).fillna(0.0)
+        pnl_contribution_by_asset = {
+            str(key): float(value)
+            for key, value in numeric_net.groupby(trades_df["asset"].astype(str)).sum().items()
+        }
+        pnl_contribution_by_group = {
+            str(key): float(value)
+            for key, value in numeric_net.groupby(trades_df["asset_group"].astype(str)).sum().items()
+        }
+        risk_contribution_by_asset = {
+            str(key): float(value)
+            for key, value in numeric_risk.groupby(trades_df["asset"].astype(str)).sum().items()
+        }
+        risk_contribution_by_group = {
+            str(key): float(value)
+            for key, value in numeric_risk.groupby(trades_df["asset_group"].astype(str)).sum().items()
+        }
 
     performance = PortfolioPerformance(
         equity_curve=equity_curve,
@@ -1553,6 +1808,17 @@ def run_portfolio_barrier_backtest(
         "max_cost_r": max_cost_r,
         "asset_params": dict(asset_params_by_asset),
         "asset_groups": dict(asset_groups),
+        "pnl_contribution_by_asset": pnl_contribution_by_asset,
+        "pnl_contribution_by_group": pnl_contribution_by_group,
+        "risk_contribution_by_asset": risk_contribution_by_asset,
+        "risk_contribution_by_group": risk_contribution_by_group,
+        "portfolio_limit_rejections": {
+            "no_capacity": int(skipped_no_capacity),
+            "max_open_trades": int(skipped_max_open_trades),
+            "group_max_open_trades": int(skipped_group_max_open_trades),
+            "group_exposure_cap": int(skipped_group_cap),
+            "turnover_limit": int(skipped_turnover_limit),
+        },
         "trade_count": int(len(trades_df)),
         "skipped_no_capacity": int(skipped_no_capacity),
         "skipped_tail": int(skipped_tail),
@@ -1580,6 +1846,7 @@ def run_portfolio_barrier_backtest(
         "ignored_open_signals": int(ignored_open_signals),
         "oos_filtered": bool(oos_mask is not None),
         "dynamic_exit": dict(dynamic_exit_cfg),
+        "strategy_path": dict(strategy_path_cfg),
         "correlation_guard": {
             **dict(correlation_guard_cfg),
             "checked": int(correlation_guard_checked),

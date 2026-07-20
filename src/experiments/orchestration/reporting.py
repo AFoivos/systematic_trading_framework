@@ -1762,6 +1762,19 @@ def compute_subset_metrics(
     )
 
 
+def _fold_test_boundaries(fold: dict[str, Any]) -> tuple[int, int]:
+    boundary_source = fold
+    if "test_start" not in boundary_source or "test_end" not in boundary_source:
+        boundary_source = _safe_meta_dict(fold.get("split_boundaries"))
+    missing = [key for key in ("test_start", "test_end") if key not in boundary_source]
+    if missing:
+        raise KeyError(
+            "Fold metadata must provide test_start and test_end either at the top level "
+            "or under split_boundaries."
+        )
+    return int(boundary_source["test_start"]), int(boundary_source["test_end"])
+
+
 def build_fold_backtest_summaries(
     *,
     source_index: pd.Index,
@@ -1774,8 +1787,7 @@ def build_fold_backtest_summaries(
 ) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for fold in folds:
-        start = int(fold["test_start"])
-        end = int(fold["test_end"])
+        start, end = _fold_test_boundaries(fold)
         fold_index = source_index[start:end]
         mask = pd.Series(net_returns.index.isin(fold_index), index=net_returns.index)
         summary = compute_subset_metrics(
@@ -1814,8 +1826,7 @@ def build_portfolio_fold_backtest_summaries(
             continue
         for fold in list(meta.get("folds", []) or []):
             fold_id = int(fold.get("fold", -1))
-            start = int(fold["test_start"])
-            end = int(fold["test_end"])
+            start, end = _fold_test_boundaries(fold)
             fold_index = frame.index[start:end]
             entry = by_fold.setdefault(
                 fold_id,

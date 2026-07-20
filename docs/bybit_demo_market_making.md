@@ -20,6 +20,22 @@ It never uses production private REST, production private WebSocket, or WebSocke
 
 ## Environment variables
 
+Συμπλήρωσε τα Bybit πεδία στο τοπικό `.env` του repository. Το αρχείο
+αγνοείται από Git και από το Docker build context, ενώ το `docker-compose.yml`
+περνά ρητά μόνο τα αναμενόμενα environment variables στο `app` container.
+
+```dotenv
+BYBIT_EXECUTION_ENV=demo
+BYBIT_DEMO_API_KEY=<Demo Trading API key>
+BYBIT_DEMO_API_SECRET=<Demo Trading API secret>
+BYBIT_DEMO_REST_URL=https://api-demo.bybit.com
+BYBIT_DEMO_PRIVATE_WS_URL=wss://stream-demo.bybit.com/v5/private
+BYBIT_PUBLIC_WS_URL=wss://stream.bybit.com/v5/public/linear
+```
+
+Τα παρακάτω PowerShell exports παραμένουν εναλλακτική για process-local
+overrides· οι ήδη ορισμένες process variables υπερισχύουν του `.env`.
+
 ```powershell
 $env:BYBIT_EXECUTION_ENV = "demo"
 
@@ -183,6 +199,30 @@ docker compose run --rm `
   --aligned-windows `
   --cancel-all-on-exit
 ```
+
+## Continuous Demo submission
+
+Το dedicated config `config/execution/bybit_demo_market_making_continuous.yaml`
+είναι το μόνο tracked execution config που έχει σκόπιμα
+`mode: demo_submit` και `allow_order_submission: true`. Χρησιμοποιεί τα
+low-churn rate limits, session-loss όριο 2 USDT και συνεχίζει χωρίς χρονικό όριο
+μέχρι `Ctrl+C` ή safety stop:
+
+```bash
+docker compose run --rm app \
+  python scripts/run_bybit_demo_market_making.py \
+  --config config/execution/bybit_demo_market_making_continuous.yaml \
+  --strategy-config config/market_making/strategies/01_adaptive_inventory_microprice_bybit_join.yaml \
+  --mode demo_submit \
+  --aligned-windows \
+  --cancel-all-on-exit
+```
+
+Πριν από το πρώτο continuous run, βάλε προσωρινά
+`RUN_BYBIT_DEMO_INTEGRATION_TESTS=1` στο `.env` και τρέξε το opt-in integration
+test. Μετά επανάφερέ το σε `0`. Μην εκκινείς δεύτερο instance και μην κάνεις
+force-kill: το graceful shutdown ακυρώνει Demo orders και κάνει τελικό
+reconciliation.
 
 ## Safe shutdown
 

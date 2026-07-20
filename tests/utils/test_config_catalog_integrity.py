@@ -118,8 +118,15 @@ _LEGACY_FEATURE_CONFIGS = (
     "config/experiments/ema_rms_ppo_vwap/best_long_only/vwap_rms_cross_ema50_regime_3atr_no_time_exit_BEST_all11_xgboost_meta_v3.yaml",
     "config/lab/feature_signal_target_lab.yaml",
 )
+_NON_EXPERIMENT_YAML_CONFIGS = {
+    Path("config/experiments/matb/acceptance_gates.yaml"),
+}
 _TRACKED_EXPERIMENT_CONFIGS = tuple(
-    sorted(Path("config/experiments").rglob("*.yaml"))
+    sorted(
+        path
+        for path in Path("config/experiments").rglob("*.yaml")
+        if path not in _NON_EXPERIMENT_YAML_CONFIGS
+    )
     + sorted(Path("config/lab").rglob("*.yaml"))
 )
 

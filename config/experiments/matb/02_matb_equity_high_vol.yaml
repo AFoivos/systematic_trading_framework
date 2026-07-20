@@ -1,0 +1,219 @@
+strategy:
+  name: matb_equity_high_vol
+  timeframe: 30m
+
+data:
+  source: dukascopy_csv
+  interval: 30m
+  alignment: outer
+  symbols: [SPX500, US100, GER40, NIKKEI225]
+  pit:
+    timestamp_alignment:
+      source_timezone: UTC
+      output_timezone: UTC
+      normalize_daily: false
+      duplicate_policy: raise
+    corporate_actions: {policy: none}
+  storage:
+    mode: cached_only
+    save_raw: false
+    save_processed: false
+    load_paths:
+      SPX500: data/raw/dukascopy_30m_clean/spx500_30m.csv
+      US100: data/raw/dukascopy_30m_clean/us100_30m.csv
+      GER40: data/raw/dukascopy_30m_clean/ger40_30m.csv
+      NIKKEI225: data/raw/dukascopy_30m_clean/nikkei225_30m.csv
+
+features:
+  - step: returns
+    params: {log: false, col_name: close_ret}
+  - step: multi_asset_trend_breakout
+    params:
+      bars_per_day: 48
+      atr_window: 48
+      short_vol_days: 5
+      long_vol_days: 60
+      momentum_days: [5, 20, 60]
+      donchian_days: 20
+      spread_median_days: 20
+      decision_hours_utc: [3, 7, 11, 15, 19, 23]
+      expected_bar_minutes: 30
+      maximum_gap_multiple: 1.5
+      trend_threshold: 0.20
+      maximum_breakout_distance_atr: 0.50
+      minimum_channel_width_atr: 4.0
+      minimum_volatility_ratio: 0.50
+      maximum_volatility_ratio: 2.50
+      maximum_spread_to_median: 2.0
+  - step: volatility_regime
+    params:
+      vol_col: matb_vol_short
+      regime_window: 2880
+      method: percentile
+      lower_quantile: 0.33
+      upper_quantile: 0.67
+      output_col: matb_volatility_regime
+
+model: {kind: none}
+
+signals:
+  kind: regime_filtered
+  params:
+    base_signal_col: matb_side
+    regime_col: matb_volatility_regime
+    active_value: 2.0
+    signal_col: signal_side
+
+target:
+  kind: strategy_path_r
+  params: &matb_trade_path
+    candidate_col: matb_candidate
+    side_col: matb_side
+    open_col: open
+    high_col: high
+    low_col: low
+    close_col: close
+    volatility_col: matb_atr
+    trend_score_col: matb_trend_score
+    entry_price_mode: next_open
+    entry_delay_bars: 0
+    stop_loss_r: 2.0
+    emergency_profit_r: 8.0
+    trailing_activation_r: 1.5
+    trailing_distance_atr: 2.5
+    max_holding_bars: 1440
+    tie_break: closest_to_open
+    strict_bid_ask: true
+    allow_partial_horizon: false
+    enforce_single_position: true
+    cost_per_unit_turnover: 0.00002
+    slippage_per_unit_turnover: 0.00001
+
+risk:
+  cost_per_turnover: 0.00002
+  slippage_per_turnover: 0.00001
+  target_vol: null
+  max_leverage: 1.25
+  dd_guard: {enabled: false}
+  sizing: {}
+  portfolio_guard:
+    enabled: true
+    max_open_trades: 2
+    group_max_open_trades:
+      equity_indices: 2
+    kill_switch_max_drawdown: 0.08
+    equity_source: mark_to_market
+
+backtest:
+  engine: portfolio_barrier
+  signal_col: signal_side
+  returns_col: close_ret
+  returns_type: simple
+  missing_return_policy: raise_if_exposed
+  subset: full
+  periods_per_year: 365
+  annualization_mode: calendar_daily
+  open_col: open
+  high_col: high
+  low_col: low
+  close_col: close
+  volatility_col: matb_atr
+  entry_price_mode: next_open
+  allow_short: true
+  profit_barrier_r: 8.0
+  stop_barrier_r: 2.0
+  vertical_barrier_bars: 1440
+  tie_break: closest_to_open
+  min_holding_bars: 0
+  event_time_remap_policy: skip
+  max_cost_r: null
+  dynamic_exit: {}
+  strategy_path:
+    kind: matb
+    entry_price_mode: next_open
+    entry_delay_bars: 0
+    stop_loss_atr: 2.0
+    emergency_profit_r: 8.0
+    trailing_activation_r: 1.5
+    trailing_distance_atr: 2.5
+    max_holding_bars: 1440
+    tie_break: closest_to_open
+    strict_bid_ask: true
+    allow_partial_horizon: false
+    trend_score_col: matb_trend_score
+  asset_params:
+    SPX500: {risk_per_trade: 0.002}
+    US100: {risk_per_trade: 0.002}
+    GER40: {risk_per_trade: 0.002}
+    NIKKEI225: {risk_per_trade: 0.002}
+
+portfolio:
+  enabled: true
+  construction: signal_weights
+  gross_target: 1.25
+  long_short: true
+  asset_groups:
+    SPX500: equity_indices
+    US100: equity_indices
+    GER40: equity_indices
+    NIKKEI225: equity_indices
+  constraints:
+    min_weight: -1.0
+    max_weight: 1.0
+    max_gross_leverage: 1.25
+    target_net_exposure: 0.0
+    enforce_target_net_exposure: false
+    turnover_limit: null
+    group_max_exposure:
+      equity_indices: 0.55
+
+monitoring: {enabled: false, psi_threshold: 0.2, n_bins: 10}
+
+diagnostics:
+  enabled: true
+  robustness:
+    enabled: true
+    cost_multipliers: [1.0, 2.0, 3.0, 5.0]
+    entry_delay_bars: [1, 2]
+    walk_forward_frequency: YE
+    strict_no_remap: true
+
+execution: {enabled: false, mode: paper, capital: 100000.0, price_col: close}
+
+logging:
+  enabled: true
+  run_name: 02_matb_equity_high_vol
+  output_dir: logs/experiments/matb
+  stage_tails: {enabled: false, stdout: false, report: false}
+  execution_source_audit:
+    enabled: true
+
+runtime:
+  seed: 7
+  deterministic: true
+  threads: 1
+
+validation:
+  pit_hardening: true
+  data_quality_audit: true
+  target_backtest_parity_required: true
+
+research_metadata:
+  family: matb
+  strategy_type: deterministic_equity_indices_high_vol_breakout
+  timeframe: 30m
+  decision_frequency: 4h
+  new_hypothesis_from_rejected_baseline: true
+  volatility_filter:
+    feature: volatility_regime
+    method: percentile
+    source_col: matb_vol_short
+    regime_window_bars: 2880
+    active_regime: 2
+  early_failure_exit:
+    status: NOT_IMPLEMENTED_IN_This_YAML
+    reason: The shared MATB trade-path does not yet support time-based MFE failure exits.
+    intended_rule: after 4 bars, exit next open if MFE < 0.3R
+  historical_holdout_note: >-
+    The 2024 onward pseudo-holdout is not fully pristine. This is a new
+    predeclared research hypothesis and requires separate evaluation.

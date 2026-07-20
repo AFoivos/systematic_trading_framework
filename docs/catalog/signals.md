@@ -899,3 +899,25 @@ signals:
 Leakage policy: `pred_is_oos_col` should refer to the meta-model prediction
 mask, not the primary model mask. Primary predictions must already be OOS before
 candidate construction and meta-feature construction.
+
+## `matb_candidate`
+
+Μετατρέπει τα deterministic `matb_candidate`/`matb_side` σε `0`, `+1`, `-1`.
+Υποστηρίζει `long_only`, `short_only`, `long_short` και δεν κρατά state. Το
+default output name είναι `signal_side` μέσω `signal_col`.
+
+## `matb_meta_filter`
+
+Κρατά αποκλειστικά την ήδη καθορισμένη deterministic πλευρά όταν ισχύουν όλα:
+
+```text
+matb_candidate == 1
+matb_pred_is_oos == 1
+matb_pred_success_prob >= 0.55
+matb_pred_ev_r >= 0.10
+```
+
+NaN prediction, non-candidate row ή in-sample/OOS-false row μένει flat. Το
+signal δεν επιτρέπεται να δημιουργήσει κατεύθυνση. Στο αρχικό MATB audit το ML
+sample gate απέτυχε, συνεπώς αυτό το signal παραμένει διαθέσιμο και tested αλλά
+δεν ενεργοποιείται στο deterministic config.

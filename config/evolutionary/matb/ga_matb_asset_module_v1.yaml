@@ -1,0 +1,215 @@
+schema_version: 1
+
+metadata:
+  description: >-
+    Initial smoke/research NSGA-II budget for MATB asset-universe and structural
+    volatility-regime module selection. This is a 16-candidate integration smoke search.
+    Increase the budget only after validation, tests and artifact inspection.
+  budget_class: initial_smoke_research
+  final_holdout_policy: forbidden_in_fitness_and_winner_selection
+  drawdown_metric_note: actual_mtm_max_drawdown_not_target_vol_normalized
+
+search:
+  name: ga_matb_asset_module_v1
+  family: matb
+  backend: optuna_nsga2
+  seed: 42
+  population_size: 8
+  generations: 2
+  crossover_probability: 0.90
+  mutation_probability: 0.10
+  storage: sqlite:///logs/evolutionary/matb/ga_matb_asset_module_v1/study.db
+  resume: true
+  duplicate_policy: reuse
+
+base_experiment:
+  config: config/experiments/matb/00_matb_deterministic.yaml
+
+genome:
+  decoder: matb_asset_module_v1
+  decoder_version: 1
+  decoder_params:
+    asset_genes:
+      SPX500: include_spx500
+      US100: include_us100
+      GER40: include_ger40
+      NIKKEI225: include_nikkei225
+      XAUUSD: include_xauusd
+      XAGUSD: include_xagusd
+      USOIL: include_usoil
+      BRENT: include_brent
+      EURUSD: include_eurusd
+      ETHUSD: include_ethusd
+    asset_groups:
+      SPX500: equity_indices
+      US100: equity_indices
+      GER40: equity_indices
+      NIKKEI225: equity_indices
+      XAUUSD: metals
+      XAGUSD: metals
+      USOIL: energy
+      BRENT: energy
+      EURUSD: fx
+      ETHUSD: crypto
+    module_gene: use_high_volatility_regime_filter
+  genes:
+    include_spx500: {type: bool}
+    include_us100: {type: bool}
+    include_ger40: {type: bool}
+    include_nikkei225: {type: bool}
+    include_xauusd: {type: bool}
+    include_xagusd: {type: bool}
+    include_usoil: {type: bool}
+    include_brent: {type: bool}
+    include_eurusd: {type: bool}
+    include_ethusd: {type: bool}
+    use_high_volatility_regime_filter: {type: bool}
+  constraints:
+    - kind: enabled_count
+      genes:
+        - include_spx500
+        - include_us100
+        - include_ger40
+        - include_nikkei225
+        - include_xauusd
+        - include_xagusd
+        - include_usoil
+        - include_brent
+        - include_eurusd
+        - include_ethusd
+      minimum: 4
+      maximum: 10
+    - kind: decoded_list_length
+      path: data.symbols
+      minimum: 4
+    - kind: any_enabled
+      genes:
+        - include_spx500
+        - include_us100
+        - include_ger40
+        - include_nikkei225
+        - include_xauusd
+        - include_xagusd
+        - include_usoil
+        - include_brent
+        - include_eurusd
+  seed_candidates:
+    - name: full_deterministic_baseline
+      genome:
+        include_spx500: true
+        include_us100: true
+        include_ger40: true
+        include_nikkei225: true
+        include_xauusd: true
+        include_xagusd: true
+        include_usoil: true
+        include_brent: true
+        include_eurusd: true
+        include_ethusd: true
+        use_high_volatility_regime_filter: false
+    - name: equity_high_vol_exact
+      genome:
+        include_spx500: true
+        include_us100: true
+        include_ger40: true
+        include_nikkei225: true
+        include_xauusd: false
+        include_xagusd: false
+        include_usoil: false
+        include_brent: false
+        include_eurusd: false
+        include_ethusd: false
+        use_high_volatility_regime_filter: true
+    - name: diversified_non_crypto
+      genome:
+        include_spx500: true
+        include_us100: false
+        include_ger40: false
+        include_nikkei225: false
+        include_xauusd: true
+        include_xagusd: false
+        include_usoil: true
+        include_brent: false
+        include_eurusd: true
+        include_ethusd: false
+        use_high_volatility_regime_filter: false
+    - name: diversified_with_crypto
+      genome:
+        include_spx500: false
+        include_us100: true
+        include_ger40: false
+        include_nikkei225: false
+        include_xauusd: false
+        include_xagusd: true
+        include_usoil: false
+        include_brent: true
+        include_eurusd: true
+        include_ethusd: true
+        use_high_volatility_regime_filter: true
+
+fitness:
+  mode: weighted_sum
+  direction: maximize
+  failure_score: -1000000000000.0
+  evaluation_policy:
+    # MATB v1 is deterministic (model.kind=none), so it has no fitted-model OOS
+    # mask. Fitness is allowed only on the development timeline plus required
+    # calendar walk-forward robustness; final holdout paths remain forbidden.
+    allowed_scopes: [timeline]
+    require_walk_forward: true
+    forbidden_metric_tokens: [final_holdout, holdout]
+  components:
+    - {name: development_mtm_sharpe, metric_path: evaluation.primary_summary.mtm_sharpe, weight: 1.00, transform: identity, missing_policy: reject}
+    - {name: median_fold_sharpe, metric_path: derived.walk_forward_median_sharpe, weight: 0.30, transform: identity, missing_policy: reject}
+    - {name: positive_fold_ratio, metric_path: evaluation.robustness.walk_forward.positive_fold_ratio, weight: 0.30, transform: identity, missing_policy: reject}
+    - {name: fold_sharpe_dispersion, metric_path: evaluation.robustness.walk_forward.std_fold_sharpe, weight: -0.40, transform: abs, missing_policy: reject}
+    - {name: cost_x2_return, metric_path: evaluation.robustness.cost_stress.cost_x2.cumulative_return, weight: 0.20, transform: identity, missing_policy: reject}
+    - {name: delay_1_return, metric_path: evaluation.robustness.entry_delay.delay_1_bars.cumulative_return, weight: 0.15, transform: identity, missing_policy: reject}
+    - {name: drawdown, metric_path: evaluation.primary_summary.mtm_max_drawdown, weight: -0.50, transform: abs, missing_policy: reject}
+    - {name: asset_concentration, metric_path: derived.maximum_asset_pnl_share, weight: -0.25, transform: identity, missing_policy: reject}
+    - {name: group_concentration, metric_path: derived.maximum_group_pnl_share, weight: -0.20, transform: identity, missing_policy: reject}
+    - {name: structural_complexity, metric_path: derived.matb_complexity, weight: -0.10, transform: identity, missing_policy: reject}
+  hard_constraints:
+    - {name: finite_objective, metric_path: evaluation.primary_summary.mtm_sharpe, operator: finite, missing_policy: reject}
+    - {name: minimum_candidates, metric_path: derived.matb_candidate_count, operator: ge, threshold: 100, missing_policy: reject}
+    - {name: completed_trades_per_year, metric_path: derived.completed_trades_per_year, operator: ge, threshold: 5, missing_policy: reject}
+    - {name: active_calendar_folds, metric_path: evaluation.robustness.walk_forward.fold_count, operator: ge, threshold: 2, missing_policy: reject}
+    - {name: viability_maximum_mtm_drawdown, metric_path: evaluation.primary_summary.mtm_max_drawdown, operator: ge, threshold: -0.25, missing_policy: reject}
+
+promotion:
+  enabled: true
+  gates:
+    - {name: minimum_mtm_sharpe, metric_path: evaluation.primary_summary.mtm_sharpe, operator: ge, threshold: 0.50, missing_policy: fail}
+    - {name: positive_median_fold_sharpe, metric_path: derived.walk_forward_median_sharpe, operator: gt, threshold: 0.0, missing_policy: fail}
+    - {name: positive_fold_ratio, metric_path: evaluation.robustness.walk_forward.positive_fold_ratio, operator: ge, threshold: 0.60, missing_policy: fail}
+    - {name: cost_x2_positive, metric_path: evaluation.robustness.cost_stress.cost_x2.cumulative_return, operator: gt, threshold: 0.0, missing_policy: fail}
+    - {name: delay_1_retention, metric_path: derived.delay_1_retention_ratio, operator: ge, threshold: 0.60, missing_policy: fail}
+    - {name: maximum_asset_pnl_share, metric_path: derived.maximum_asset_pnl_share, operator: le, threshold: 0.30, missing_policy: fail}
+    - {name: maximum_group_pnl_share, metric_path: derived.maximum_group_pnl_share, operator: le, threshold: 0.50, missing_policy: fail}
+    - {name: maximum_actual_mtm_drawdown_not_target_vol_normalized, metric_path: evaluation.primary_summary.mtm_max_drawdown, operator: ge, threshold: -0.10, missing_policy: fail}
+    - {name: completed_trades_per_year, metric_path: derived.completed_trades_per_year, operator: ge, threshold: 60, missing_policy: fail}
+    - {name: minimum_candidates, metric_path: derived.matb_candidate_count, operator: ge, threshold: 800, missing_policy: fail}
+
+execution:
+  logging_enabled: false
+  save_candidate_configs: true
+  save_failed_candidates: true
+  candidate_output_dir: candidate_configs
+  maximum_parallel_workers: 1
+
+artifacts:
+  output_dir: logs/evolutionary/matb/ga_matb_asset_module_v1
+  save_evaluations: true
+  save_generation_summary: true
+  save_feature_frequency: false
+  save_gate_frequency: false
+  save_asset_frequency: true
+  save_group_frequency: true
+  save_module_frequency: true
+  save_best_candidates: true
+  save_pareto_front: false
+  frequency_analysis:
+    enabled: true
+    elite_fraction: 0.10
+    elite_minimum_candidates: 5
+    include_final_generation: true

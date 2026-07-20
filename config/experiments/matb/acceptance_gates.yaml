@@ -1,0 +1,31 @@
+deterministic_baseline_kill_gates:
+  total_candidates: {operator: ">=", threshold: 800}
+  completed_portfolio_trades_per_year: {operator: ">=", threshold: 60}
+  net_oos_sharpe: {operator: ">=", threshold: 0.50}
+  median_fold_sharpe: {operator: ">", threshold: 0.0}
+  positive_fold_ratio: {operator: ">=", threshold: 0.60}
+  cost_x2_cumulative_return: {operator: ">", threshold: 0.0}
+  delay_1_retention_ratio: {operator: ">=", threshold: 0.60}
+  maximum_asset_pnl_share: {operator: "<=", threshold: 0.30}
+  maximum_group_pnl_share: {operator: "<=", threshold: 0.50}
+  max_drawdown_at_8pct_target_vol: {operator: "<=", threshold: 0.10}
+
+ml_sample_gates:
+  total_candidate_events: {operator: ">=", threshold: 1500}
+  training_events_per_fold: {operator: ">=", threshold: 300}
+  long_events: {operator: ">=", threshold: 150}
+  short_events: {operator: ">=", threshold: 150}
+  groups_with_at_least_100_events: {operator: ">=", threshold: 4}
+  maximum_training_asset_share: {operator: "<=", threshold: 0.45}
+  maximum_training_group_share: {operator: "<=", threshold: 0.45}
+  target_classes_per_training_fold: {operator: "==", threshold: [0, 1]}
+
+ml_kill_gates:
+  brier_improves_base_rate: {operator: "==", threshold: true}
+  calibration_slope: {operator: between, threshold: [0.70, 1.30]}
+  calibration_intercept_material_bias: {operator: "==", threshold: false}
+  accepted_trade_expected_r_improvement: {operator: ">", threshold: 0.0}
+  sharpe_improvement_ratio: {operator: ">=", threshold: 0.15}
+  improvement_survives_cost_x2: {operator: "==", threshold: true}
+  improvement_survives_delay_1: {operator: "==", threshold: true}
+  accepted_event_concentration_passes: {operator: "==", threshold: true}

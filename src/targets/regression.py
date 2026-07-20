@@ -43,6 +43,8 @@ REGRESSION_TARGET_KINDS = frozenset(
         "future_range_regression",
         "future_realized_volatility",
         "future_drawdown_regression",
+        "expected_realized_r",
+        "trade_mfe_mae_regression",
     }
 )
 

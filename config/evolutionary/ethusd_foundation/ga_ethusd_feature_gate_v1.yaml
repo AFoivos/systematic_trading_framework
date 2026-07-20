@@ -1,0 +1,232 @@
+schema_version: 1
+
+metadata:
+  description: >-
+    Initial smoke/research NSGA-II budget for ETHUSD feature-family and activation-gate
+    selection. This is a 16-candidate integration smoke search. Increase the budget only
+    after validation, tests and artifact inspection.
+  budget_class: initial_smoke_research
+  final_holdout_policy: forbidden_in_fitness_and_winner_selection
+
+search:
+  name: ga_ethusd_feature_gate_v1
+  family: ethusd_foundation
+  backend: optuna_nsga2
+  seed: 42
+  population_size: 8
+  generations: 2
+  crossover_probability: 0.90
+  mutation_probability: 0.10
+  storage: sqlite:///logs/evolutionary/ethusd_foundation/ga_ethusd_feature_gate_v1/study.db
+  resume: true
+  duplicate_policy: reuse
+
+base_experiment:
+  config: config/experiments/foundation_alpha/BEST/ethusd/BEST_ethusd_30m_lightgbm_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid.yaml
+
+genome:
+  decoder: ethusd_feature_gate_v1
+  decoder_version: 1
+  decoder_params:
+    feature_families:
+      returns_lags:
+        - close_ret
+        - lag_close_ret_1
+        - lag_close_ret_2
+        - lag_close_ret_4
+        - lag_close_ret_8
+        - lag_close_ret_16
+        - lag_close_ret_24
+        - lag_close_ret_48
+      medium_returns:
+        - ret_1
+        - ret_4
+        - ret_8
+        - ret_16
+        - ret_24
+        - ret_48
+        - rolling_return_24
+        - rolling_return_48
+      volatility_atr:
+        - vol_rolling_24
+        - vol_rolling_48
+        - vol_rolling_96
+        - vol_rolling_192
+        - atr_48
+        - atr_over_price_48
+        - atr_pct
+        - atr_pct_rank_192
+      bollinger_range:
+        - close_over_bb_upper_192
+        - close_over_bb_mid_192
+        - bollinger_percent_b
+        - bollinger_bandwidth
+        - bollinger_bandwidth_rank_192
+      ema_trend:
+        - ema_trend_48_192
+        - ema_alignment_score
+        - distance_from_ema24_atr
+        - distance_from_ema96_atr
+      ehlers_trend:
+        - mama_minus_fama_over_atr
+        - close_minus_decycler_over_atr
+        - instantaneous_trendline_slope_over_atr
+        - decycler_slope_over_atr
+        - frama_slope_over_atr
+        - supersmoother_slope_over_atr
+      ehlers_cycle:
+        - roofing_filter_over_atr
+        - dominant_cycle_phase_normalized
+      candle_structure:
+        - body_ratio
+        - upper_wick_ratio
+        - lower_wick_ratio
+        - close_location
+        - range_to_atr
+    family_genes:
+      returns_lags: use_returns_lags
+      medium_returns: use_medium_returns
+      volatility_atr: use_volatility_atr
+      bollinger_range: use_bollinger_range
+      ema_trend: use_ema_trend
+      ehlers_trend: use_ehlers_trend
+      ehlers_cycle: use_ehlers_cycle
+      candle_structure: use_candle_structure
+    threshold_genes:
+      upper: forecast_upper
+      lower: forecast_lower
+    gate_genes:
+      atr_lower: atr_percentile_lower
+      atr_upper: atr_percentile_upper
+      range_to_atr_lower: range_to_atr_lower
+      bollinger_bandwidth_rank_lower: bollinger_bandwidth_rank_lower
+  genes:
+    use_returns_lags: {type: bool}
+    use_medium_returns: {type: bool}
+    use_volatility_atr: {type: bool}
+    use_bollinger_range: {type: bool}
+    use_ema_trend: {type: bool}
+    use_ehlers_trend: {type: bool}
+    use_ehlers_cycle: {type: bool}
+    use_candle_structure: {type: bool}
+    forecast_upper:
+      type: categorical
+      choices: [0.35, 0.50, 0.70, 0.85, 1.00, 1.25]
+    forecast_lower:
+      type: categorical
+      choices: [-0.35, -0.50, -0.70, -0.85, -1.00, -1.25]
+    atr_percentile_lower:
+      type: categorical
+      choices: [disabled, 0.10, 0.20, 0.30, 0.40, 0.80]
+    atr_percentile_upper:
+      type: categorical
+      choices: [disabled, 0.70, 0.85, 0.95]
+    range_to_atr_lower:
+      type: categorical
+      choices: [disabled, 0.75, 1.00, 1.25]
+    bollinger_bandwidth_rank_lower:
+      type: categorical
+      choices: [disabled, 0.20, 0.40, 0.60]
+  constraints:
+    - kind: enabled_count
+      genes:
+        - use_returns_lags
+        - use_medium_returns
+        - use_volatility_atr
+        - use_bollinger_range
+        - use_ema_trend
+        - use_ehlers_trend
+        - use_ehlers_cycle
+        - use_candle_structure
+      minimum: 3
+      maximum: 8
+    - kind: decoded_list_length
+      path: model.feature_cols
+      minimum: 12
+    - kind: ordered_pair
+      lower_gene: atr_percentile_lower
+      upper_gene: atr_percentile_upper
+      relation: lt
+      ignore_values: [disabled]
+  seed_candidates:
+    - name: full_baseline
+      genome:
+        use_returns_lags: true
+        use_medium_returns: true
+        use_volatility_atr: true
+        use_bollinger_range: true
+        use_ema_trend: true
+        use_ehlers_trend: true
+        use_ehlers_cycle: true
+        use_candle_structure: true
+        forecast_upper: 0.35
+        forecast_lower: -0.35
+        atr_percentile_lower: 0.20
+        atr_percentile_upper: 0.85
+        range_to_atr_lower: 1.00
+        bollinger_bandwidth_rank_lower: 0.40
+    - name: deduplicated_volatility_trend
+      genome:
+        use_returns_lags: true
+        use_medium_returns: false
+        use_volatility_atr: true
+        use_bollinger_range: false
+        use_ema_trend: true
+        use_ehlers_trend: true
+        use_ehlers_cycle: true
+        use_candle_structure: false
+        forecast_upper: 0.50
+        forecast_lower: -0.50
+        atr_percentile_lower: 0.20
+        atr_percentile_upper: 0.85
+        range_to_atr_lower: disabled
+        bollinger_bandwidth_rank_lower: 0.40
+
+fitness:
+  mode: weighted_sum
+  direction: maximize
+  failure_score: -1000000000000.0
+  evaluation_policy:
+    allowed_scopes: [strict_oos_only]
+    require_walk_forward: true
+    forbidden_metric_tokens: [final_holdout, holdout]
+  components:
+    - {name: oos_sharpe, metric_path: evaluation.primary_summary.sharpe, weight: 1.00, transform: identity, missing_policy: reject}
+    - {name: positive_fold_ratio, metric_path: derived.fold_positive_ratio, weight: 0.30, transform: identity, missing_policy: reject}
+    - {name: median_fold_sharpe, metric_path: derived.fold_median_sharpe, weight: 0.20, transform: identity, missing_policy: reject}
+    - {name: fold_sharpe_dispersion, metric_path: derived.fold_sharpe_std, weight: -0.50, transform: abs, missing_policy: reject}
+    - {name: worst_fold_return, metric_path: derived.worst_fold_cumulative_return, weight: -0.75, transform: abs, missing_policy: reject}
+    - {name: drawdown, metric_path: evaluation.primary_summary.max_drawdown, weight: -0.35, transform: abs, missing_policy: reject}
+    - {name: feature_complexity, metric_path: genome.complexity, weight: -0.03, transform: identity, missing_policy: reject}
+  hard_constraints:
+    - {name: strict_oos_scope, metric_path: evaluation.scope, operator: eq, threshold: strict_oos_only, missing_policy: reject}
+    - {name: finite_objective, metric_path: evaluation.primary_summary.sharpe, operator: finite, missing_policy: reject}
+    - {name: oos_rows_present, metric_path: evaluation.oos_rows, operator: ge, threshold: 1, missing_policy: reject}
+    - {name: completed_round_trips, metric_path: derived.round_trip_count, operator: ge, threshold: 100, missing_policy: reject}
+    - {name: active_folds, metric_path: derived.active_fold_count, operator: ge, threshold: 5, missing_policy: reject}
+    - {name: positive_folds, metric_path: derived.fold_positive_ratio, operator: ge, threshold: 0.50, missing_policy: reject}
+    - {name: maximum_drawdown, metric_path: evaluation.primary_summary.max_drawdown, operator: ge, threshold: -0.35, missing_policy: reject}
+
+execution:
+  logging_enabled: false
+  save_candidate_configs: true
+  save_failed_candidates: true
+  candidate_output_dir: candidate_configs
+  maximum_parallel_workers: 1
+
+artifacts:
+  output_dir: logs/evolutionary/ethusd_foundation/ga_ethusd_feature_gate_v1
+  save_evaluations: true
+  save_generation_summary: true
+  save_feature_frequency: true
+  save_gate_frequency: true
+  save_asset_frequency: false
+  save_group_frequency: false
+  save_module_frequency: false
+  save_best_candidates: true
+  save_pareto_front: false
+  frequency_analysis:
+    enabled: true
+    elite_fraction: 0.10
+    elite_minimum_candidates: 5
+    include_final_generation: true

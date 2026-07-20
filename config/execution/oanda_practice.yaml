@@ -2,7 +2,7 @@ execution:
   broker: oanda
   oanda:
     environment: practice
-    account_id: YOUR_ACCOUNT_ID
+    account_id_env: OANDA_ACCOUNT_ID
     api_token_env: OANDA_API_TOKEN
     request_timeout: 30
     reconnect: true

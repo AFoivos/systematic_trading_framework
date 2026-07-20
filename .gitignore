@@ -79,7 +79,10 @@ celerybeat.pid
 
 *.sage.py
 
+# Local credentials. Keep the template tracked, never the populated files.
 .env
+.env.*
+!.env.example
 .envrc
 .venv
 env/
@@ -144,12 +147,20 @@ tests/*
 !tests/execution/*.py
 !tests/backtesting/
 !tests/backtesting/*.py
+!tests/models/
+!tests/models/*.py
+!tests/targets/
+!tests/targets/*.py
 !tests/panel/
 !tests/panel/*.py
 !tests/scripts/
 !tests/scripts/*.py
 !tests/utils/
 !tests/utils/*.py
+!tests/experiments/
+tests/experiments/*
+!tests/experiments/evolutionary/
+!tests/experiments/evolutionary/*.py
 !tests/trade_path/
 !tests/trade_path/*.py
 # Keep market-making regression tests tracked.

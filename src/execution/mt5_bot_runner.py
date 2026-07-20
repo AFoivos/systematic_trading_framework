@@ -27,6 +27,7 @@ from src.execution.mt5_symbol_mapper import MT5SymbolMapper
 from src.experiments.orchestration.feature_stage import apply_feature_steps, apply_signal_step
 from src.models.artifacts import load_model_bundle, predict_with_model_bundle
 from src.utils.config import load_experiment_config
+from src.utils.dotenv import load_project_dotenv
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -906,6 +907,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    load_project_dotenv(PROJECT_ROOT / ".env")
     parser = build_arg_parser()
     args = parser.parse_args(argv)
     if args.once and args.loop:

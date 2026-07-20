@@ -6,6 +6,7 @@ from src.execution.broker_base import BrokerBase
 from src.execution.dry_run_execution import DryRunExecution
 from src.execution.mt5_execution import MT5Execution
 from src.execution.oanda_execution import OandaExecution
+from src.utils.dotenv import load_project_dotenv
 
 
 def create_execution_engine(config: Mapping[str, Any]) -> BrokerBase:
@@ -18,6 +19,7 @@ def create_execution_engine(config: Mapping[str, Any]) -> BrokerBase:
         A concrete BrokerBase implementation.
     """
 
+    load_project_dotenv()
     execution_cfg = dict(config.get("execution", config) or {})
     broker = str(execution_cfg.get("broker") or execution_cfg.get("mode") or "mt5").lower()
     if broker == "dry_run" or str(execution_cfg.get("mode", "")).lower() == "dry_run":

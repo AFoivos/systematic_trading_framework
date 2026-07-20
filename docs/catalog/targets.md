@@ -838,3 +838,33 @@ target:
     cost_per_turnover: 0.0001
     slippage_per_turnover: 0.0
 ```
+
+### `strategy_path_r`
+
+Path-identical long/short event target για deterministic MATB candidates. Καλεί
+την ίδια `simulate_strategy_path_trade_outcome` που καλεί ο opt-in MATB κλάδος
+του `portfolio_barrier`.
+
+Execution/exit convention:
+
+- signal στο close, entry στο επόμενο διαθέσιμο open,
+- long entry σε `ask_open`, short entry σε `bid_open`,
+- midpoint fallback μόνο όταν λείπει ολόκληρο το bid/ask OHLC set,
+- frozen initial risk `2 * ATR48` στο signal timestamp,
+- emergency cap 8R,
+- trailing activation σε MFE 1,5R και monotone distance `2.5 * current ATR48`,
+- trend flip γνωστό στο close και εκτέλεση στο επόμενο executable open,
+- maximum holding 1.440 bars,
+- same-bar tie `closest_to_open`,
+- ένα ανοικτό target event ανά asset.
+
+Outputs στα candidate rows: `matb_net_trade_r`, `matb_gross_trade_r`,
+`matb_trade_return`, `matb_gross_trade_return`, entry/exit timestamps και
+prices, `matb_exit_reason`, `matb_bars_held`, MFE/MAE, transaction cost R,
+event availability, execution source και binary positive-R label. Οι υπόλοιπες
+rows παραμένουν NaN, άρα δεν μετατρέπονται σε αρνητικά labels.
+
+Config validation απαιτεί structural και cost/slippage parity με το MATB
+`portfolio_barrier` path. Synthetic regression diagnostics ελέγχουν R equality
+με absolute tolerance `1e-12` για stop, trailing, trend flip, max holding,
+emergency cap, bid/ask, gap και same-bar tie.

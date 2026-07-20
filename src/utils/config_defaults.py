@@ -145,7 +145,13 @@ def default_model_block(model: dict[str, Any]) -> dict[str, Any]:
             target.setdefault("returns_type", "simple")
         model["target"] = target
     kind = str(model.get("kind", "none"))
-    if kind not in {"ppo_agent", "dqn_agent", "ppo_portfolio_agent", "dqn_portfolio_agent"}:
+    if kind not in {
+        "ppo_agent",
+        "dqn_agent",
+        "ppo_portfolio_agent",
+        "dqn_portfolio_agent",
+        "ppo_risk_agent",
+    }:
         return model
 
     env = dict(model.get("env", {}) or {})
@@ -157,12 +163,37 @@ def default_model_block(model: dict[str, Any]) -> dict[str, Any]:
         env["max_signal_abs"] = env["max_position"]
     env.setdefault("max_signal_abs", 1.0)
 
+    if kind == "ppo_risk_agent":
+        env.setdefault("action_space", "discrete")
+        env.setdefault("lookback_window", env["window_size"])
+        env.setdefault("atr_column", "atr_14")
+        env.setdefault("atr_multipliers", [1.0, 1.5, 2.0])
+        env.setdefault("take_profit_r_multiples", [1.0, 2.0, 3.0])
+        env.setdefault("initial_equity", 100_000.0)
+        env.setdefault("risk_fraction", 0.01)
+        env.setdefault("transaction_cost_bps", 0.0)
+        env.setdefault("slippage_bps", 0.0)
+        env.setdefault("max_holding_bars", None)
+        env.setdefault("max_leverage", 3.0)
+        env.setdefault("max_notional", None)
+        env.setdefault(
+            "consistency_gate",
+            {
+                "minimum_profitable_fold_ratio": 0.5,
+                "minimum_median_test_return": 0.0,
+            },
+        )
+
     reward = dict(env.get("reward", {}) or {})
     reward.setdefault("cost_per_turnover", 0.0)
     reward.setdefault("slippage_per_turnover", 0.0)
     reward.setdefault("inventory_penalty", 0.0)
     reward.setdefault("drawdown_penalty", 0.0)
     reward.setdefault("switching_penalty", 0.0)
+    if kind == "ppo_risk_agent":
+        reward.setdefault("realized_pnl_r_multiple", 1.0)
+        reward.setdefault("unrealized_pnl_weight", 0.0)
+        reward.setdefault("holding_penalty", 0.0)
     env["reward"] = reward
     model["env"] = env
     return model
@@ -264,6 +295,7 @@ def default_backtest_block(
         backtest.setdefault("event_time_remap_policy", "skip")
         backtest.setdefault("max_cost_r", None)
         backtest.setdefault("annualization_mode", "fixed_periods")
+        backtest.setdefault("strategy_path", {})
     else:
         backtest.setdefault("allow_short", False)
     return backtest

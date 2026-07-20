@@ -15,6 +15,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.market_making.live_engine import BybitLiveMarketMakingEngine
+from src.utils.dotenv import load_project_dotenv
 
 
 def load_yaml(path: str | Path) -> dict[str, Any]:
@@ -30,6 +31,7 @@ def load_yaml(path: str | Path) -> dict[str, Any]:
 
 
 async def run(args: argparse.Namespace) -> tuple[Path, ...]:
+    load_project_dotenv(PROJECT_ROOT / ".env")
     config = deepcopy(load_yaml(args.config))
     strategy_config = load_yaml(args.strategy_config)
     session = config.setdefault("session", {})

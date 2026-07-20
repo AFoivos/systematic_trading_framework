@@ -13,6 +13,7 @@ from .forward_return import build_forward_return_target
 from .future_return_regression import build_future_return_regression_target
 from .path_dependent_r import build_path_dependent_r_target
 from .r_multiple import build_r_multiple_target
+from .strategy_path_r import build_strategy_path_r_target
 from .regression import (
     build_downside_adjusted_future_return_target,
     build_excess_return_regression_target,
@@ -30,6 +31,11 @@ from .regression import (
     build_volatility_normalized_future_return_target,
 )
 from .triple_barrier import build_triple_barrier_target
+from .trade_evaluation import (
+    build_expected_realized_r_target,
+    build_target_before_stop_probability_target,
+    build_trade_mfe_mae_regression_target,
+)
 
 TargetBuilder = Callable[[pd.DataFrame, dict[str, Any] | None], tuple[pd.DataFrame, str, str, dict[str, Any]]]
 
@@ -55,7 +61,11 @@ _TARGET_COMPONENTS: tuple[tuple[str, TargetBuilder], ...] = (
     ("directional_triple_barrier", build_directional_triple_barrier_target),
     ("r_multiple", build_r_multiple_target),
     ("path_dependent_r", build_path_dependent_r_target),
+    ("strategy_path_r", build_strategy_path_r_target),
     ("candidate_expected_r", build_candidate_expected_r_target),
+    ("expected_realized_r", build_expected_realized_r_target),
+    ("target_before_stop_probability", build_target_before_stop_probability_target),
+    ("trade_mfe_mae_regression", build_trade_mfe_mae_regression_target),
 )
 
 

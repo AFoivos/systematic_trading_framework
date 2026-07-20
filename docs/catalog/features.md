@@ -1122,3 +1122,26 @@ Manual long-only condition builder. Είναι διαθέσιμο και ως fe
 Σημείωση leakage: επειδή αυτά γράφουν signal/candidate columns, πρέπει να
 επιβεβαιώνεται ότι το backtest/model χρησιμοποιεί next-bar execution ή άλλο
 ρητό execution lag.
+
+## multi_asset_trend_breakout
+
+Causal 30-minute feature/candidate builder για τη στρατηγική MATB.
+
+- ATR: gap-aware Wilder ATR 48 bars (`matb_atr`, `matb_atr_pct`). Το previous
+  close συμμετέχει στο true range μόνο όταν το προηγούμενο timestamp απέχει
+  έως 1,5× το αναμενόμενο 30-minute interval.
+- Volatility: EWMA standard deviations log returns 5d/60d και ο λόγος τους.
+- Momentum: 5d/20d/60d log momentum διαιρεμένο με
+  `matb_vol_long * sqrt(horizon_bars)`, clipped σε `[-3, 3]`.
+- Channel: prior-only Donchian 20d με
+  `high.shift(1).rolling(960).max()` και συμμετρικό low.
+- Events: μόνο crossing, όχι κάθε bar έξω από το channel.
+- Decision bars: `03:30`, `07:30`, `11:30`, `15:30`, `19:30`, `23:30` UTC.
+- Spread: `spread_bps / shift(1).rolling(960).median()`. Αν λείπει η spread
+  στήλη, το αποτέλεσμα μένει NaN και καταγράφεται στο
+  `df.attrs["matb_feature_audit"]`· δεν γίνεται zero imputation.
+- Candidate outputs: `matb_long_candidate`, `matb_short_candidate`,
+  `matb_candidate`, `matb_side`, `matb_direction`.
+
+Το component δεν κάνει fit και διατηρεί ακριβώς index και row count. Τα
+candidate rows προορίζονται αποκλειστικά για next-open execution.

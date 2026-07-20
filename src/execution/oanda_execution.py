@@ -120,6 +120,10 @@ class OandaConfig:
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any]) -> "OandaConfig":
         cfg = dict(raw)
+        account_id = str(cfg.get("account_id") or "")
+        account_id_env = cfg.get("account_id_env")
+        if not account_id and account_id_env:
+            account_id = str(os.getenv(str(account_id_env)) or "")
         token = str(cfg.get("api_token") or "")
         token_env = cfg.get("api_token_env")
         if not token and token_env:
@@ -127,7 +131,7 @@ class OandaConfig:
         symbols = _parse_symbol_mappings(cfg.get("symbols"))
         return cls(
             environment=str(cfg.get("environment", "practice")).lower(),
-            account_id=str(cfg.get("account_id") or ""),
+            account_id=account_id,
             api_token=token,
             request_timeout=float(cfg.get("request_timeout", 30)),
             reconnect=bool(cfg.get("reconnect", True)),
@@ -158,7 +162,7 @@ class OandaExecution(BrokerBase):
         if self.config.environment not in _ENVIRONMENT_URLS:
             raise ValueError("oanda.environment must be 'practice' or 'live'.")
         if not self.config.account_id:
-            raise AuthenticationError("oanda.account_id is required.")
+            raise AuthenticationError("oanda.account_id or oanda.account_id_env is required.")
         if not self.config.api_token:
             raise AuthenticationError("oanda.api_token or oanda.api_token_env is required.")
 

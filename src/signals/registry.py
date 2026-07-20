@@ -25,6 +25,8 @@ from .forecast_threshold_hysteresis_signal import forecast_threshold_hysteresis_
 from .forecast_vol_adjusted_signal import forecast_vol_adjusted_signal
 from .indicator_model_adaptive_pullback import indicator_model_adaptive_pullback_signal
 from .manual_long_model_filter_signal import manual_long_model_filter_signal
+from .matb_candidate_signal import matb_candidate_signal
+from .matb_meta_filter_signal import matb_meta_filter_signal
 from .meta_probability_side_signal import meta_probability_side_signal
 from .momentum_strategy import momentum_strategy
 from .orb_candidate_side_signal import orb_candidate_side_signal
@@ -69,6 +71,8 @@ _SIGNAL_COMPONENTS: tuple[tuple[str, SignalFn], ...] = (
     ("ema_stoch_rsi_pullback", ema_stoch_rsi_pullback_signal),
     ("indicator_model_adaptive_pullback", indicator_model_adaptive_pullback_signal),
     ("manual_long_model_filter", manual_long_model_filter_signal),
+    ("matb_candidate", matb_candidate_signal),
+    ("matb_meta_filter", matb_meta_filter_signal),
     ("dense_return_forecast", dense_return_forecast_signal),
     ("forecast_threshold", forecast_threshold_signal),
     ("forecast_threshold_candidate", forecast_threshold_candidate_signal),

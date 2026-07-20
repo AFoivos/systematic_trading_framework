@@ -33,6 +33,7 @@ from .lags import add_lagged_features
 from .macro import add_macro_context_features
 from .mama import add_mama
 from .multi_timeframe import add_multi_timeframe_features
+from .multi_asset_trend_breakout import add_multi_asset_trend_breakout_features
 from .opening_range_breakout import add_opening_range_breakout_features
 from .order_flow_imbalance import add_order_flow_imbalance
 from .parkinson_volatility import add_parkinson_volatility
@@ -106,6 +107,7 @@ _FEATURE_COMPONENTS: tuple[tuple[str, FeatureFn], ...] = (
     ("support_resistance_v2", add_support_resistance_v2_features),
     ("macro_context", add_macro_context_features),
     ("multi_timeframe", add_multi_timeframe_features),
+    ("multi_asset_trend_breakout", add_multi_asset_trend_breakout_features),
     ("opening_range_breakout", add_opening_range_breakout_features),
     ("swing_extrema_context", swing_extrema_context),
     ("indicator_pullback", add_indicator_pullback_features),

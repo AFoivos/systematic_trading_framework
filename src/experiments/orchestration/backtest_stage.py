@@ -10,7 +10,7 @@ from src.backtesting.engine import BacktestResult, run_backtest
 from src.backtesting.manual_barrier import run_manual_barrier_backtest
 from src.backtesting.portfolio_barrier import run_portfolio_barrier_backtest
 from src.backtesting.holding import apply_min_holding_bars_to_weights
-from src.evaluation.metrics import compute_backtest_metrics
+from src.evaluation.metrics import compute_backtest_metrics, equity_curve_from_returns
 from src.evaluation.robustness import (
     calendar_walk_forward_diagnostics,
     cost_multiplier_stress,
@@ -166,6 +166,90 @@ def _build_ftmo_sized_exposures(
     return out
 
 
+def _build_rl_environment_backtest_result(
+    asset: str,
+    df: pd.DataFrame,
+    *,
+    cfg: dict[str, Any],
+    model_meta: dict[str, Any],
+) -> BacktestResult:
+    """Adapt authoritative RL environment outputs to the shared reporting contract.
+
+    This function deliberately does not call ``run_backtest``. The PPO risk environment has
+    already executed next-open fills, barriers, reversals, sizing, slippage, and transaction
+    costs. ``signal_rl`` is therefore diagnostic only; replaying it through the generic
+    signal engine would replace the actual RL trade path with a different strategy.
+    """
+    column_map = dict(model_meta.get("rl_environment_columns", {}) or {})
+    required_keys = {
+        "net_return",
+        "position_leverage",
+        "transaction_cost_return",
+    }
+    missing_keys = sorted(required_keys - set(column_map))
+    if missing_keys:
+        raise ValueError(f"RL environment metadata is missing performance columns: {missing_keys}")
+    missing_columns = sorted(
+        str(column_map[key]) for key in required_keys if str(column_map[key]) not in df.columns
+    )
+    if missing_columns:
+        raise KeyError(f"RL environment output is missing authoritative columns: {missing_columns}")
+
+    pred_is_oos_col = str(model_meta.get("pred_is_oos_col") or "pred_is_oos")
+    if pred_is_oos_col not in df.columns:
+        raise KeyError(f"RL environment output is missing OOS mask column '{pred_is_oos_col}'.")
+    net_return_col = str(column_map["net_return"])
+    mask = df[pred_is_oos_col].fillna(False).astype(bool) & df[net_return_col].notna()
+    if not bool(mask.any()):
+        raise ValueError("RL environment produced no finite held-out returns for reporting.")
+
+    returns = pd.to_numeric(df.loc[mask, net_return_col], errors="raise").astype(float)
+    costs = pd.to_numeric(
+        df.loc[mask, str(column_map["transaction_cost_return"])],
+        errors="raise",
+    ).fillna(0.0).astype(float)
+    # Costs are already embedded in `returns`; adding them back yields a reporting-only gross
+    # attribution while leaving net PnL exactly equal to the environment equity path.
+    gross_returns = (returns + costs).astype(float)
+    positions = pd.to_numeric(
+        df.loc[mask, str(column_map["position_leverage"])],
+        errors="raise",
+    ).fillna(0.0).astype(float)
+    turnover = positions.diff().fillna(positions).abs().astype(float)
+    periods_per_year = int(cfg["backtest"].get("periods_per_year", 252))
+    summary = compute_backtest_metrics(
+        net_returns=returns,
+        periods_per_year=periods_per_year,
+        turnover=turnover,
+        costs=costs,
+        gross_returns=gross_returns,
+        annualization_mode=str(cfg["backtest"].get("annualization_mode") or "fixed_periods"),
+    )
+    trades: list[dict[str, Any]] = []
+    for fold_record in list(model_meta.get("folds", []) or []):
+        fold = int(dict(fold_record or {}).get("fold", len(trades)))
+        for raw_trade in list(dict(fold_record or {}).get("trades", []) or []):
+            trade = dict(raw_trade or {})
+            trade.setdefault("asset", asset)
+            trade.setdefault("fold", fold)
+            trades.append(trade)
+    trade_frame = pd.DataFrame(trades)
+    equity_curve = equity_curve_from_returns(returns)
+    return BacktestResult(
+        equity_curve=equity_curve,
+        returns=returns,
+        gross_returns=gross_returns,
+        costs=costs,
+        positions=positions,
+        turnover=turnover,
+        summary=summary,
+        trades=trade_frame,
+        mark_to_market_returns=returns,
+        mark_to_market_equity_curve=equity_curve,
+        mark_to_market_summary=dict(summary),
+    )
+
+
 def run_single_asset_backtest(
     asset: str,
     df: pd.DataFrame,
@@ -173,6 +257,14 @@ def run_single_asset_backtest(
     cfg: dict[str, Any],
     model_meta: dict[str, Any],
 ) -> BacktestResult:
+    if str(model_meta.get("performance_source", "")) == "rl_environment":
+        return _build_rl_environment_backtest_result(
+            asset,
+            df,
+            cfg=cfg,
+            model_meta=model_meta,
+        )
+
     backtest_cfg = cfg["backtest"]
     risk_cfg = cfg["risk"]
     signal_col = backtest_cfg["signal_col"]
@@ -357,6 +449,7 @@ def run_portfolio_backtest(
             event_time_remap_policy=str(backtest_cfg.get("event_time_remap_policy") or "skip"),
             max_cost_r=backtest_cfg.get("max_cost_r"),
             dynamic_exit=dict(backtest_cfg.get("dynamic_exit", {}) or {}),
+            strategy_path=dict(backtest_cfg.get("strategy_path", {}) or {}),
             correlation_guard=dict(backtest_cfg.get("correlation_guard", {}) or {}),
             liquidate_at_end=bool(backtest_cfg.get("liquidate_at_end", False)),
         )
@@ -592,6 +685,26 @@ def _run_portfolio_delay_stress(
     cfg: dict[str, Any],
     delay_bars: int,
 ) -> dict[str, float]:
+    strategy_path = dict(cfg.get("backtest", {}).get("strategy_path", {}) or {})
+    if str(strategy_path.get("kind", "none")) == "matb":
+        delayed_cfg = deepcopy(cfg)
+        delayed_cfg["backtest"] = dict(delayed_cfg.get("backtest", {}) or {})
+        delayed_path = dict(delayed_cfg["backtest"].get("strategy_path", {}) or {})
+        delayed_path["entry_delay_bars"] = int(delayed_path.get("entry_delay_bars", 0)) + int(
+            delay_bars
+        )
+        delayed_cfg["backtest"]["strategy_path"] = delayed_path
+        performance, _, _, _ = run_portfolio_backtest(asset_frames, cfg=delayed_cfg)
+        returns = (
+            performance.mark_to_market_returns
+            if performance.mark_to_market_returns is not None
+            else performance.net_returns
+        )
+        return summarize_returns(
+            returns,
+            periods_per_year=int(delayed_cfg["backtest"].get("periods_per_year", 252)),
+        )
+
     signal_col = str(cfg["backtest"]["signal_col"])
     delayed_frames: dict[str, pd.DataFrame] = {}
     for asset, frame in sorted(asset_frames.items()):

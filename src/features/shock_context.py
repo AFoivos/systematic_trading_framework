@@ -153,6 +153,7 @@ def add_shock_context_features(
     atr_window: int = 24,
     short_horizon: int = 1,
     medium_horizon: int = 4,
+    horizon_unit: str = "hours",
     vol_window: int = 24,
     ret_z_threshold: float = 2.0,
     atr_mult_threshold: float = 1.5,
@@ -249,6 +250,9 @@ def add_shock_context_features(
         raise ValueError("medium_horizon must be a positive integer.")
     if int(medium_horizon) < int(short_horizon):
         raise ValueError("medium_horizon must be >= short_horizon.")
+    resolved_horizon_unit = str(horizon_unit).strip().lower()
+    if resolved_horizon_unit not in {"hours", "bars"}:
+        raise ValueError("horizon_unit must be one of: hours, bars.")
     if int(vol_window) <= 1:
         raise ValueError("vol_window must be > 1.")
     if int(ema_window) <= 1:
@@ -290,16 +294,22 @@ def add_shock_context_features(
     )
     atr_safe = atr_series.astype(float).where(atr_series.astype(float) > 0.0, other=np.nan)
 
-    short_suffix = f"{int(short_horizon)}h"
-    medium_suffix = f"{int(medium_horizon)}h"
-    short_horizon_bars = _hour_horizon_to_bars(
-        out.index,
-        horizon_hours=int(short_horizon),
-    )
-    medium_horizon_bars = _hour_horizon_to_bars(
-        out.index,
-        horizon_hours=int(medium_horizon),
-    )
+    if resolved_horizon_unit == "bars":
+        short_suffix = f"{int(short_horizon)}b"
+        medium_suffix = f"{int(medium_horizon)}b"
+        short_horizon_bars = int(short_horizon)
+        medium_horizon_bars = int(medium_horizon)
+    else:
+        short_suffix = f"{int(short_horizon)}h"
+        medium_suffix = f"{int(medium_horizon)}h"
+        short_horizon_bars = _hour_horizon_to_bars(
+            out.index,
+            horizon_hours=int(short_horizon),
+        )
+        medium_horizon_bars = _hour_horizon_to_bars(
+            out.index,
+            horizon_hours=int(medium_horizon),
+        )
 
     shock_ret_short = _compute_horizon_return(
         returns,

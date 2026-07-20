@@ -13,6 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.venues.kraken.futures_demo import KrakenFuturesDemoAdapter
+from src.utils.dotenv import load_project_dotenv
 
 
 def load_config(path: str) -> dict[str, Any]:
@@ -21,6 +22,7 @@ def load_config(path: str) -> dict[str, Any]:
 
 
 async def run(config: dict[str, Any]) -> None:
+    load_project_dotenv(PROJECT_ROOT / ".env")
     execution = config.get("execution", {})
     if execution.get("mode") != "kraken_futures_demo":
         raise SystemExit("Kraken demo runner requires execution.mode: kraken_futures_demo.")

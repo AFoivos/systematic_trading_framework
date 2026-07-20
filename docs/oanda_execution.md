@@ -23,7 +23,7 @@ execution:
   broker: oanda
   oanda:
     environment: practice
-    account_id: YOUR_ACCOUNT_ID
+    account_id_env: OANDA_ACCOUNT_ID
     api_token_env: OANDA_API_TOKEN
     request_timeout: 30
     reconnect: true
@@ -31,13 +31,15 @@ execution:
     min_request_interval: 0.1
 ```
 
-Το token αποθηκεύεται εκτός YAML:
+Το account ID και το token αποθηκεύονται στο τοπικό `.env`:
 
 ```bash
-export OANDA_API_TOKEN="..."
+OANDA_ACCOUNT_ID=...
+OANDA_API_TOKEN=...
 ```
 
-Το `account_id` είναι υποχρεωτικό. Αν λείπει token ή account id, ο adapter
+Το `account_id_env` δείχνει στο environment variable που περιέχει το account
+ID. Αν λείπει token ή account id, ο adapter
 αποτυγχάνει πριν από σύνδεση.
 
 ## Symbol mapping
