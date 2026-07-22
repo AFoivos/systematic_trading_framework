@@ -170,7 +170,7 @@ model:
     threads: 1
     seed_torch: true
   preprocessing:
-    scaler: robust
+    scaler: standard
 signals:
   kind: none
   params: {}

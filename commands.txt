@@ -60,7 +60,7 @@ python -m src.experiments.runner docs/examples/minimal_experiment.yaml
 Το αντίστοιχο Docker command:
 
 ```bash
-docker compose run --rm app python -m src.experiments.runner config/experiments/rl/btcusd_1m_ppo_risk_sanity.yaml
+docker compose run --rm app python -m src.experiments.runner config/experiments/rl/btcusd_1m_ppo_direction_baseline_v2_gross_robust.yaml
 docker compose run --rm app python -m src.experiments.runner config/experiments/foundation_alpha/BEST/ethusd/btcusd_1m_chronos_2_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid.yaml
 ```bash
 python -m src.experiments.runner config/experiments/lab/feature_signal_target_lab.yaml
