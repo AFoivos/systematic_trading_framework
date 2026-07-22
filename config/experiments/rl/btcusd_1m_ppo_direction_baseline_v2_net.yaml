@@ -1,0 +1,229 @@
+data:
+  source: dukascopy_csv
+  interval: 1m
+  start: null
+  end: null
+  alignment: inner
+  symbol: BTCUSD
+  pit:
+    timestamp_alignment:
+      source_timezone: UTC
+      output_timezone: UTC
+      normalize_daily: false
+      duplicate_policy: last
+    corporate_actions:
+      policy: none
+      adj_close_col: adj_close
+    universe_snapshot:
+      inactive_policy: raise
+  storage:
+    mode: cached_only
+    dataset_id: btcusd_1m_ppo_direction_baseline_v2
+    save_raw: false
+    save_processed: true
+    load_path: data/raw/dukascopy_30m_clean/btcusd_1m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed
+features:
+- step: returns
+  enabled: true
+  params:
+    log: false
+    col_name: close_ret
+- step: trend
+  enabled: true
+  params:
+    price_col: close
+    sma_windows: []
+    ema_spans:
+    - 40
+    add_ratios: false
+- step: atr
+  enabled: true
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    window: 28
+    method: wilder
+    add_over_price: false
+  transforms:
+    difference:
+      enabled: true
+      items:
+      - source_col: close
+        reference_col: close_ema_40
+        output_col: close_minus_ema_40
+      - source_col: high
+        reference_col: low
+        output_col: candle_range
+    ratio:
+      enabled: true
+      items:
+      - numerator_col: atr_28
+        denominator_col: close
+        output_col: atr_over_close_28
+      - numerator_col: close_minus_ema_40
+        denominator_col: atr_28
+        output_col: close_minus_ema_40_over_atr_28
+      - numerator_col: candle_range
+        denominator_col: atr_28
+        output_col: candle_range_over_atr_28
+- step: rsi
+  enabled: true
+  params:
+    price_col: close
+    windows:
+    - 28
+    method: wilder
+- step: session_context
+  enabled: true
+  params:
+    timezone: UTC
+    add_cyclical_time: true
+    include_weekend_flag: false
+model:
+  kind: ppo_risk_agent
+  feature_cols:
+  - close_ret
+  - atr_over_close_28
+  - close_rsi_28
+  - close_minus_ema_40_over_atr_28
+  - candle_range_over_atr_28
+  - hour_sin_24
+  - hour_cos_24
+  signal_col: signal_rl
+  action_col: action_rl
+  pred_is_oos_col: pred_is_oos
+  target:
+    kind: forward_return
+    price_col: close
+    horizon: 1
+    returns_col: close_ret
+    returns_type: simple
+  split:
+    method: walk_forward
+    train_size: 30000
+    validation_size: 5000
+    test_size: 5000
+    train_tail_size: 5000
+    step_size: 5000
+    expanding: false
+    max_folds: 5
+  env:
+    action_space: discrete
+    execution_lag_bars: 1
+    window_size: 64
+    lookback_window: 64
+    max_signal_abs: 1.0
+    atr_column: atr_28
+    open_column: open
+    high_column: high
+    low_column: low
+    close_column: close
+    atr_multipliers:
+    - 1.5
+    take_profit_r_multiples:
+    - 2.0
+    initial_equity: 100000.0
+    risk_fraction: 0.005
+    max_leverage: 1.0
+    max_notional: null
+    transaction_cost_bps: 1.0
+    slippage_bps: 0.5
+    max_holding_bars: 120
+    reward:
+      realized_pnl_r_multiple: 1.0
+      unrealized_pnl_weight: 0.02
+      holding_penalty: 0.001
+      drawdown_penalty: 0.1
+    consistency_gate:
+      minimum_profitable_fold_ratio: 0.6
+      minimum_median_test_return: 0.0
+    action_mode: directional
+    opposite_signal_mode: close
+    minimum_holding_bars: 3
+    stop_cooldown_bars: 5
+  params:
+    policy: MlpPolicy
+    total_timesteps: 300000
+    checkpoint_interval: 30000
+    checkpoint_drawdown_penalty: 1.0
+    learning_rate: 0.0003
+    n_steps: 512
+    batch_size: 128
+    gamma: 0.99
+    gae_lambda: 0.95
+    clip_range: 0.2
+    ent_coef: 0.0
+    vf_coef: 0.5
+    max_grad_norm: 0.5
+    device: cpu
+    extractor:
+      kind: flatten
+    artifact_dir: logs/rl
+    run_name: btcusd_1m_ppo_direction_baseline_v2_net
+  runtime:
+    seed: 7
+    repro_mode: strict
+    deterministic: true
+    threads: 1
+    seed_torch: true
+signals:
+  kind: none
+  params: {}
+runtime:
+  seed: 7
+  repro_mode: strict
+  deterministic: true
+  threads: 1
+  seed_torch: true
+risk:
+  cost_per_turnover: 0.0
+  slippage_per_turnover: 0.0
+  target_vol: null
+  max_leverage: 1.0
+  dd_guard:
+    enabled: false
+    max_drawdown: 0.2
+    rearm_drawdown: 0.1
+    cooloff_bars: 48
+  vol_col: null
+backtest:
+  returns_col: close_ret
+  signal_col: signal_rl
+  allow_short: true
+  periods_per_year: 525600
+  returns_type: simple
+  missing_return_policy: raise_if_exposed
+  min_holding_bars: 0
+  subset: test
+  vol_col: null
+portfolio:
+  enabled: false
+  construction: signal_weights
+  gross_target: 1.0
+  long_short: true
+  expected_return_col: null
+  covariance_window: 60
+  covariance_rebalance_step: 1
+  risk_aversion: 5.0
+  trade_aversion: 0.0
+  constraints: {}
+  asset_groups: {}
+monitoring:
+  enabled: false
+  psi_threshold: 0.15
+  n_bins: 10
+execution:
+  enabled: false
+  mode: paper
+  capital: 100000.0
+  price_col: close
+  min_trade_notional: 0.0
+  current_weights: {}
+  current_prices: {}
+logging:
+  enabled: true
+  run_name: btcusd_1m_ppo_direction_baseline_v2_net
+  output_dir: logs/experiments

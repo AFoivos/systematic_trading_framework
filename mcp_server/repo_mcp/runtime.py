@@ -17,8 +17,8 @@ from typing import Any, Iterator
 from .scan_policy import DEFAULT_SOURCE_GLOBS, DEFAULT_SOURCE_ROOTS, RepositoryScanPolicy, classify_source_path
 
 
-SERVER_VERSION = "2.1.0"
-IMPLEMENTATION_BUILD_ID = "mcp-fast-20260714-2"
+SERVER_VERSION = "3.0.0"
+IMPLEMENTATION_BUILD_ID = "mcp-repo-full-access-20260720-1"
 SOURCE_INDEX_TTL_SECONDS = 30.0
 
 

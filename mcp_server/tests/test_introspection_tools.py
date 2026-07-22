@@ -227,12 +227,15 @@ def test_server_import_registers_new_tools(monkeypatch: pytest.MonkeyPatch, tmp_
     monkeypatch.setenv("MCP_REPO_ROOT", str(tmp_path))
     monkeypatch.setenv("MCP_CONFIG_PATH", str(tmp_path / "missing-mcp-config.yaml"))
 
+    registered_tools: list[str] = []
+
     class FakeFastMCP:
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             pass
 
         def tool(self, *args: Any, **kwargs: Any) -> Any:
             def decorator(func: Any) -> Any:
+                registered_tools.append(func.__name__)
                 return func
 
             return decorator
@@ -272,6 +275,18 @@ def test_server_import_registers_new_tools(monkeypatch: pytest.MonkeyPatch, tmp_
     assert callable(server.get_code_review_bundle)
     assert callable(server.mcp_health)
     assert callable(server.mcp_diagnostics)
+    assert {
+        "write_file",
+        "apply_patch",
+        "create_directory",
+        "move_path",
+        "delete_path",
+        "import_local_file",
+        "run_command",
+        "run_python",
+        "git_diff",
+        "git_status",
+    } <= set(registered_tools)
 
     _write(tmp_path / "src/module.py", "VALUE = 1\n")
     assert server.read_files(["src/module.py"])["files"][0]["content"].replace("\r\n", "\n") == "VALUE = 1\n"

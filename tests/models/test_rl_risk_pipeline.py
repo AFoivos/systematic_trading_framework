@@ -81,6 +81,104 @@ def test_action_decoding_covers_hold_long_short_and_risk_parameters() -> None:
     assert decode_trade_action(8, **kwargs).take_profit_r_multiple == 3.0
 
 
+def test_directional_action_mode_has_exactly_three_actions() -> None:
+    kwargs = {
+        "atr_multipliers": [1.5],
+        "take_profit_r_multiples": [2.0],
+        "action_mode": "directional",
+    }
+
+    assert decode_trade_action(0, **kwargs).is_hold
+    assert decode_trade_action(1, **kwargs).direction == 1
+    assert decode_trade_action(2, **kwargs).direction == -1
+    with pytest.raises(ValueError, match=r"\[0, 3\)"):
+        decode_trade_action(3, **kwargs)
+
+
+def test_directional_close_mode_closes_first_without_same_bar_reversal() -> None:
+    env = SingleAssetRiskTradingEnv(
+        frame=_price_frame(highs=[100.2] * 5, lows=[99.8] * 5),
+        feature_columns=["feature_x"],
+        atr_column="atr_14",
+        trade_config=RiskTradeConfig(
+            atr_multipliers=(1.5,),
+            take_profit_r_multiples=(2.0,),
+            action_mode="directional",
+            opposite_signal_mode="close",
+        ),
+    )
+    env.reset()
+    env.step(1)
+    assert env.position is not None and env.position.direction == 1
+
+    _, _, _, _, close_info = env.step(2)
+    assert close_info["closed_trade"]["exit_reason"] == "opposite_signal"
+    assert close_info["reversal_opened"] is False
+    assert env.position is None
+
+    env.step(2)
+    assert env.position is not None and env.position.direction == -1
+
+
+def test_minimum_holding_bars_blocks_early_discretionary_exit() -> None:
+    env = SingleAssetRiskTradingEnv(
+        frame=_price_frame(highs=[100.2] * 6, lows=[99.8] * 6),
+        feature_columns=["feature_x"],
+        atr_column="atr_14",
+        trade_config=RiskTradeConfig(
+            atr_multipliers=(1.5,),
+            take_profit_r_multiples=(2.0,),
+            action_mode="directional",
+            opposite_signal_mode="close",
+            minimum_holding_bars=2,
+        ),
+    )
+    env.reset()
+    env.step(1)
+
+    _, _, _, _, rejected = env.step(2)
+    assert rejected["action_rejected_reason"] == "minimum_holding_bars"
+    assert env.position is not None and env.position.direction == 1
+
+    _, _, _, _, accepted = env.step(2)
+    assert accepted["closed_trade"]["exit_reason"] == "opposite_signal"
+    assert env.position is None
+
+
+def test_stop_cooldown_blocks_new_entries_for_configured_bars() -> None:
+    frame = _price_frame(
+        highs=[100.2] * 7,
+        lows=[99.8, 98.5, 99.8, 99.8, 99.8, 99.8, 99.8],
+    )
+    env = SingleAssetRiskTradingEnv(
+        frame=frame,
+        feature_columns=["feature_x"],
+        atr_column="atr_14",
+        trade_config=RiskTradeConfig(
+            atr_multipliers=(1.0,),
+            take_profit_r_multiples=(2.0,),
+            action_mode="directional",
+            opposite_signal_mode="close",
+            stop_cooldown_bars=2,
+        ),
+    )
+    env.reset()
+
+    _, _, _, _, stopped = env.step(1)
+    assert stopped["closed_trade"]["exit_reason"] == "stop_loss"
+    assert stopped["cooldown_bars_remaining"] == 2
+    assert env.position is None
+
+    _, _, _, _, blocked_1 = env.step(1)
+    _, _, _, _, blocked_2 = env.step(1)
+    assert blocked_1["action_rejected_reason"] == "stop_cooldown"
+    assert blocked_2["action_rejected_reason"] == "stop_cooldown"
+
+    _, _, _, _, allowed = env.step(1)
+    assert allowed["action_rejected_reason"] is None
+    assert env.position is not None
+
+
 def test_sl_tp_calculation_is_symmetric_for_long_and_short() -> None:
     long_stop, long_take_profit = calculate_sl_tp(
         entry_price=100.0,

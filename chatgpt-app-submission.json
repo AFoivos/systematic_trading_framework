@@ -4,7 +4,7 @@
   "app_info": {
     "display_name": "Systematic Trading Framework",
     "subtitle": "Inspect trading repo",
-    "description": "Systematic Trading Framework lets ChatGPT inspect a private local research repository for systematic trading work. It supports repository search, file reads, code and symbol lookup, git state inspection, experiment artifact review, configuration reads, log reads, Optuna database inspection, and explicitly confirmed execution of allowlisted repository Python scripts.",
+    "description": "Systematic Trading Framework gives ChatGPT repository-scoped development access to a private systematic-trading research project. It supports bounded inspection and Git review, atomic file and unified-diff edits, safe upload import, repository path management, and explicitly confirmed command or Python execution without a static script allowlist.",
     "category": "DEVELOPER_TOOLS"
   },
   "tools": {
@@ -224,6 +224,102 @@
         "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
       }
     },
+    "write_file": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Atomically creates or replaces one UTF-8 repository file and returns prior/resulting hashes for optimistic concurrency.",
+        "open_world_justification": "Writes only below the canonical mounted repository root and does not update third-party systems.",
+        "destructive_justification": "Normal source edits are local and hash-guardable; protected paths, root escapes, and .git writes are rejected."
+      }
+    },
+    "apply_patch": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": true
+      },
+      "justifications": {
+        "read_only_justification": "Checks or atomically applies a multi-file unified diff and may create, update, or delete repository files.",
+        "open_world_justification": "Applies changes only inside the canonical mounted repository root.",
+        "destructive_justification": "A patch may delete files, so deletion hunks require explicit non-empty confirmation and the complete patch must pass before mutation."
+      }
+    },
+    "create_directory": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Creates repository directories recursively.",
+        "open_world_justification": "Creates directories only below the canonical mounted repository root.",
+        "destructive_justification": "Does not overwrite or delete existing files."
+      }
+    },
+    "move_path": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": true
+      },
+      "justifications": {
+        "read_only_justification": "Moves or renames a repository file or directory.",
+        "open_world_justification": "Both source and destination remain inside the canonical mounted repository root.",
+        "destructive_justification": "Overwrite mode can replace a destination and therefore requires explicit non-empty confirmation."
+      }
+    },
+    "delete_path": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": true
+      },
+      "justifications": {
+        "read_only_justification": "Deletes a repository file or an explicitly recursive repository directory.",
+        "open_world_justification": "Deletes only below the canonical mounted repository root.",
+        "destructive_justification": "Deletion always requires explicit non-empty confirmation and refuses the repository root, .git, and protected secret-like paths."
+      }
+    },
+    "import_local_file": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": true
+      },
+      "justifications": {
+        "read_only_justification": "Atomically copies a regular uploaded file into the repository and returns source and destination hashes.",
+        "open_world_justification": "Reads only configured upload roots such as /mnt/data and writes only inside the mounted repository.",
+        "destructive_justification": "Overwrite mode can replace a destination and therefore requires explicit non-empty confirmation."
+      }
+    },
+    "run_command": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": true
+      },
+      "justifications": {
+        "read_only_justification": "Runs an arbitrary argument-array development command that may create or modify repository artifacts.",
+        "open_world_justification": "Runs as the non-root MCP container user with a working directory constrained to the mounted repository.",
+        "destructive_justification": "Arbitrary execution can mutate repository state and therefore requires explicit non-empty confirmation on every call."
+      }
+    },
+    "run_python": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": true
+      },
+      "justifications": {
+        "read_only_justification": "Runs inline Python or any repository Python file without a static allowlist and may write repository artifacts.",
+        "open_world_justification": "Repository scripts execute as the non-root MCP container user with a repository-constrained working directory.",
+        "destructive_justification": "Python execution can mutate repository state and therefore requires explicit non-empty confirmation on every call."
+      }
+    },
     "execute_approved_python_script": {
       "annotations": {
         "readOnlyHint": false,
@@ -231,7 +327,7 @@
         "destructiveHint": false
       },
       "justifications": {
-        "read_only_justification": "Runs only allowlisted repository Python scripts after an explicit confirmation token, and those scripts may compute outputs or write bounded local artifacts.",
+        "read_only_justification": "Legacy compatibility tool that runs only allowlisted repository Python scripts after explicit confirmation; new clients should use run_python.",
         "open_world_justification": "Execution is limited to local repository scripts and is not designed to publish public internet state or update third-party systems.",
         "destructive_justification": "The tool does not expose delete, overwrite, credential revocation, or irreversible admin operations, and execution is restricted by an allowlist and confirmation token."
       }

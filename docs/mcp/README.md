@@ -1,8 +1,68 @@
 # Systematic Trading Framework MCP server
 
-This server provides bounded source inspection and Git review tools. Normal source
-inspection avoids market data, logs, reports, artifacts, generated models,
-virtual environments, caches, binary files, and sensitive files.
+This server provides repository-scoped development, bounded source inspection,
+and Git review tools. Normal source inspection avoids market data, logs,
+reports, artifacts, generated models, virtual environments, caches, binary
+files, and sensitive files.
+
+## Repository development tools
+
+The write and execution layer is enabled by `full_access` in
+`mcp_server/mcp-config.yaml` and remains bounded to `MCP_REPO_ROOT`:
+
+~~~text
+write_file(path, content, create_parent_dirs=true, expected_sha256=null)
+apply_patch(patch, check_only=false, confirmation=null)
+create_directory(path)
+move_path(source, destination, overwrite=false, confirmation=null)
+delete_path(path, recursive=false, confirmation)
+import_local_file(
+  source_path, destination_path, overwrite=false,
+  create_parent_dirs=true, confirmation=null,
+)
+run_command(
+  command, cwd=".", env=null, timeout_seconds=null,
+  confirmation, max_output_bytes=null,
+)
+run_python(
+  code=null, script_path=null, args=null, cwd=".", env=null,
+  timeout_seconds=null, confirmation, max_output_bytes=null,
+)
+~~~
+
+`write_file` performs a same-directory temporary write plus atomic replace. It
+returns the previous and resulting SHA-256 values; `expected_sha256` rejects a
+stale caller before replacement. `apply_patch` first executes `git apply
+--check`, never uses reject mode, and applies the complete patch only when all
+hunks match. It reports planned/applied changed, created, and deleted paths,
+rejected-hunk diagnostics, and a compact stat. `check_only=true` does not mutate
+the repository.
+
+`import_local_file` accepts only regular files resolving below configured
+`allowed_import_roots` (by default `/mnt/data`). Destinations use the same
+canonical repository path validation and atomic replacement as writes. Device
+files, sockets, directories, missing sources, and symlink escapes are rejected.
+
+`run_command` uses an argument array with `shell=false`; no executable or script
+allowlist is applied. `run_python` requires exactly one of inline `code` or a
+repository-relative `script_path`, so any repository Python script can run
+after confirmation. The older `execute_approved_python_script` tool remains
+registered only for client compatibility.
+
+Every deletion and arbitrary execution requires non-empty confirmation text.
+Patch deletions and overwrite-style move/import operations use the same gate.
+Commands execute as the non-root MCP container user, with a repository-relative
+working directory, bounded timeout, bounded head/tail output capture, exit code,
+stdout/stderr, elapsed time, timeout state, and truncation metadata. Inherited
+environment variables with names containing `TOKEN`, `SECRET`, `PASSWORD`,
+`API_KEY`, or `PRIVATE_KEY` are removed; matching values supplied explicitly are
+redacted from returned command/output fields.
+
+Repository destinations reject absolute paths, traversal, `.git`, protected
+secret-like file names, and symlinks resolving outside the canonical repository
+root. File and output limits are configured with `max_file_bytes` and
+`max_output_bytes`; execution uses `default_timeout_seconds` and
+`max_timeout_seconds`.
 
 ## Fast review workflow
 
@@ -68,7 +128,8 @@ list_changed_paths(
 )
 
 git_diff(
-  path=None, max_bytes=None, paths=None, mode="unified",
+  path=None, staged=false, stat=false, name_only=false,
+  max_bytes=None, paths=None, mode="unified",
   include_untracked=false, context_lines=3, cursor=None,
 )
 
@@ -160,6 +221,7 @@ read_log, read_experiment_result, and read_optuna_database.
 ~~~powershell
 python -m pytest -q mcp_server/tests
 python mcp_server/scripts/benchmark_fast_tools.py
+docker compose exec -T mcp python /workspace/mcp_server/scripts/acceptance_full_access.py
 ~~~
 
 The synthetic benchmark measures health, cold/warm hit-heavy source search,
@@ -177,9 +239,6 @@ and reconnect or refresh the MCP client:
 ~~~powershell
 docker compose up -d --build --force-recreate mcp
 ~~~
-
-This command is documented for the operator to run manually; it is not run by
-the MCP implementation workflow.
 
 After deployment:
 

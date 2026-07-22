@@ -165,6 +165,10 @@ def default_model_block(model: dict[str, Any]) -> dict[str, Any]:
 
     if kind == "ppo_risk_agent":
         env.setdefault("action_space", "discrete")
+        env.setdefault("action_mode", "risk_templates")
+        env.setdefault("opposite_signal_mode", "reverse")
+        env.setdefault("minimum_holding_bars", env.get("min_holding_bars", 0))
+        env.setdefault("stop_cooldown_bars", 0)
         env.setdefault("lookback_window", env["window_size"])
         env.setdefault("atr_column", "atr_14")
         env.setdefault("atr_multipliers", [1.0, 1.5, 2.0])

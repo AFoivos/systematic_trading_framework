@@ -289,10 +289,16 @@ def _legacy_status(records: list[dict[str, Any]], branch: str | None, detached: 
 def git_status(config: ServerConfig) -> dict[str, Any]:
     state = _collect_git_state(config, untracked_mode="normal")
     if not state.ok:
-        return {"status": "", "branch": None, "detached_head": None, "clean": None, "truncated": False, "elapsed_ms": state.elapsed_ms, **_state_fields(state)}
+        return {"status": "", "porcelain": "", "records": [], "branch": None, "detached_head": None, "clean": None, "truncated": False, "elapsed_ms": state.elapsed_ms, **_state_fields(state)}
     branch, detached, branch_error, branch_stderr = _branch_info(config)
     error = branch_error
-    return {"status": _legacy_status(state.records, branch, detached), "branch": branch, "detached_head": detached, "clean": not state.records, "truncated": False, "elapsed_ms": state.elapsed_ms, "git_available": True, "git_worktree_valid": True, "error": error, "stderr": branch_stderr}
+    porcelain_lines = []
+    for record in state.records:
+        if record.get("from_path"):
+            porcelain_lines.append(f"{record['code']} {record['from_path']} -> {record['path']}")
+        else:
+            porcelain_lines.append(f"{record['code']} {record['path']}")
+    return {"status": _legacy_status(state.records, branch, detached), "porcelain": "\n".join(porcelain_lines), "records": state.records, "branch": branch, "detached_head": detached, "clean": not state.records, "truncated": False, "elapsed_ms": state.elapsed_ms, "git_available": True, "git_worktree_valid": True, "error": error, "stderr": branch_stderr}
 
 
 def git_status_map(config: ServerConfig, paths: list[str]) -> tuple[dict[str, str], str | None]:
@@ -312,8 +318,11 @@ def git_path_status(config: ServerConfig, path: str) -> str | None:
     return mapping.get(path)
 
 
-def _diff_paths(config: ServerConfig, safe_paths: list[str]) -> tuple[list[str], GitCommandResult]:
-    args = ["diff", "--no-ext-diff", "--name-only", "-z", "--", *safe_paths]
+def _diff_paths(config: ServerConfig, safe_paths: list[str], staged: bool) -> tuple[list[str], GitCommandResult]:
+    args = ["diff", "--no-ext-diff"]
+    if staged:
+        args.append("--cached")
+    args.extend(["--name-only", "-z", "--", *safe_paths])
     result = _run_git(config, args, timeout_seconds=GIT_DIFF_TIMEOUT_SECONDS, max_output_bytes=1_000_000)
     paths = [part.decode("utf-8", errors="replace").replace("\\", "/") for part in result.stdout.split(b"\0") if part]
     return paths, result
@@ -328,8 +337,12 @@ def _complete_diff_lines(result: GitCommandResult) -> tuple[list[str], bool]:
     return payload.decode("utf-8", errors="strict").splitlines(keepends=True), complete
 
 
-def _tracked_diff_lines(config: ServerConfig, path: str, context: int) -> tuple[list[str], bool, GitCommandResult]:
-    result = _run_git(config, ["diff", "--no-ext-diff", f"--unified={context}", "--", path], timeout_seconds=GIT_DIFF_TIMEOUT_SECONDS, max_output_bytes=GIT_DIFF_REPLAY_LIMIT_BYTES)
+def _tracked_diff_lines(config: ServerConfig, path: str, context: int, staged: bool) -> tuple[list[str], bool, GitCommandResult]:
+    args = ["diff", "--no-ext-diff"]
+    if staged:
+        args.append("--cached")
+    args.extend([f"--unified={context}", "--", path])
+    result = _run_git(config, args, timeout_seconds=GIT_DIFF_TIMEOUT_SECONDS, max_output_bytes=GIT_DIFF_REPLAY_LIMIT_BYTES)
     if result.error or (not result.timed_out and result.returncode not in {0, None}):
         return [], True, result
     try:
@@ -349,21 +362,24 @@ def git_diff(
     include_untracked: bool = False,
     context_lines: int = 3,
     cursor: str | None = None,
+    staged: bool = False,
 ) -> dict[str, Any]:
     if mode not in {"unified", "stat", "name_only"}:
         raise ValueError("mode must be unified, stat, or name_only")
+    if staged and include_untracked:
+        raise ValueError("include_untracked cannot be combined with staged=True")
     requested = list(paths or []) + ([path] if path is not None else [])
     safe_paths = [to_repo_relative(config.repo_root, resolve_repo_path(config.repo_root, value)) for value in requested]
     limit = max(1, min(int(max_bytes or config.max_read_bytes), config.max_read_bytes))
     context = max(0, min(int(context_lines), 100))
-    request_fingerprint = _fingerprint({"paths": safe_paths, "mode": mode, "include_untracked": include_untracked, "context": context})
+    request_fingerprint = _fingerprint({"paths": safe_paths, "mode": mode, "include_untracked": include_untracked, "context": context, "staged": staged})
     runtime = get_runtime(config.repo_root)
     git_state = _collect_git_state(config, untracked_mode="all" if include_untracked else "no", reviewable_only=include_untracked)
     if not git_state.ok:
-        return {"path": safe_paths[0] if len(safe_paths) == 1 else None, "diff": "", "mode": mode, "items": [], "status": "error", "truncated": False, "next_cursor": None, "omitted_paths": [], "elapsed_ms": git_state.elapsed_ms, **_state_fields(git_state)}
-    tracked, names_result = _diff_paths(config, safe_paths)
+        return {"path": safe_paths[0] if len(safe_paths) == 1 else None, "diff": "", "mode": mode, "staged": staged, "items": [], "status": "error", "truncated": False, "next_cursor": None, "omitted_paths": [], "elapsed_ms": git_state.elapsed_ms, **_state_fields(git_state)}
+    tracked, names_result = _diff_paths(config, safe_paths, staged)
     if names_result.error or names_result.timed_out or names_result.returncode not in {0, None}:
-        return {"path": None, "diff": "", "mode": mode, "items": [], "status": "error", "truncated": False, "next_cursor": None, "omitted_paths": [], "elapsed_ms": names_result.elapsed_ms, "git_available": True, "git_worktree_valid": True, "error": _bounded_error(names_result, "git diff failed"), "stderr": names_result.stderr.decode("utf-8", errors="replace")[:4096]}
+        return {"path": None, "diff": "", "mode": mode, "staged": staged, "items": [], "status": "error", "truncated": False, "next_cursor": None, "omitted_paths": [], "elapsed_ms": names_result.elapsed_ms, "git_available": True, "git_worktree_valid": True, "error": _bounded_error(names_result, "git diff failed"), "stderr": names_result.stderr.decode("utf-8", errors="replace")[:4096]}
     entries = [{"kind": "tracked", "path": item} for item in tracked]
     if include_untracked:
         policy = RepositoryScanPolicy()
@@ -393,7 +409,11 @@ def git_diff(
             if entry["kind"] == "untracked":
                 piece = f" untracked: {item_path}\n"
             else:
-                stat_result = _run_git(config, ["diff", "--no-ext-diff", "--stat", "--", item_path], timeout_seconds=GIT_DIFF_TIMEOUT_SECONDS, max_output_bytes=64_000)
+                stat_args = ["diff", "--no-ext-diff"]
+                if staged:
+                    stat_args.append("--cached")
+                stat_args.extend(["--stat", "--", item_path])
+                stat_result = _run_git(config, stat_args, timeout_seconds=GIT_DIFF_TIMEOUT_SECONDS, max_output_bytes=64_000)
                 piece = stat_result.stdout.decode("utf-8", errors="replace")
             if used and used + len(piece.encode("utf-8")) > limit:
                 break
@@ -415,9 +435,9 @@ def git_diff(
             used += len(piece.encode("utf-8"))
             entry_index += 1
             continue
-        lines, complete, diff_result = _tracked_diff_lines(config, item_path, context)
+        lines, complete, diff_result = _tracked_diff_lines(config, item_path, context, staged)
         if diff_result.error or (not diff_result.timed_out and diff_result.returncode not in {0, None}):
-            return {"path": item_path, "diff": "".join(pieces), "mode": mode, "items": items, "status": "error", "truncated": bool(items), "next_cursor": None, "omitted_paths": [entry["path"] for entry in entries[entry_index:]], "elapsed_ms": diff_result.elapsed_ms, "git_available": True, "git_worktree_valid": True, "error": _bounded_error(diff_result, "git diff failed"), "stderr": diff_result.stderr.decode("utf-8", errors="replace")[:4096]}
+            return {"path": item_path, "diff": "".join(pieces), "mode": mode, "staged": staged, "items": items, "status": "error", "truncated": bool(items), "next_cursor": None, "omitted_paths": [entry["path"] for entry in entries[entry_index:]], "elapsed_ms": diff_result.elapsed_ms, "git_available": True, "git_worktree_valid": True, "error": _bounded_error(diff_result, "git diff failed"), "stderr": diff_result.stderr.decode("utf-8", errors="replace")[:4096]}
         selected: list[str] = []
         next_line = line_index
         while next_line < len(lines):
@@ -453,7 +473,7 @@ def git_diff(
     omitted_start = entry_index if line_index == 0 else max(0, entry_index)
     omitted_paths = [entry["path"] for entry in entries[omitted_start:]] if partial else []
     text = "".join(pieces)
-    return {"path": safe_paths[0] if len(safe_paths) == 1 else None, "diff": text if mode == "unified" else "", "mode": mode, "items": items, "output": text if mode != "unified" else None, "status": "partial" if partial else "ok", "truncated": partial, "next_cursor": next_cursor, "omitted_paths": omitted_paths, "elapsed_ms": git_state.elapsed_ms, "git_available": True, "git_worktree_valid": True, "error": None, "stderr": ""}
+    return {"path": safe_paths[0] if len(safe_paths) == 1 else None, "diff": text if mode == "unified" else "", "mode": mode, "staged": staged, "items": items, "output": text if mode != "unified" else None, "status": "partial" if partial else "ok", "truncated": partial, "next_cursor": next_cursor, "omitted_paths": omitted_paths, "elapsed_ms": git_state.elapsed_ms, "git_available": True, "git_worktree_valid": True, "error": None, "stderr": ""}
 
 
 def _review_candidates(records: list[dict[str, Any]], *, include_modified: bool, include_untracked: bool, include_deleted: bool, include_docs: bool, include_tests: bool, include_configs: bool, extensions: list[str] | None) -> tuple[list[dict[str, Any]], list[dict[str, str]], dict[str, int]]:

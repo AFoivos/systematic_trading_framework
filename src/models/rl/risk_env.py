@@ -9,6 +9,8 @@ import pandas as pd
 
 
 _RAW_OHLC_COLUMNS = frozenset({"open", "high", "low", "close"})
+_ACTION_MODES = frozenset({"risk_templates", "directional"})
+_OPPOSITE_SIGNAL_MODES = frozenset({"reverse", "close"})
 
 
 @dataclass(frozen=True)
@@ -26,6 +28,10 @@ class TradeAction:
 class RiskTradeConfig:
     atr_multipliers: tuple[float, ...] = (1.0, 1.5, 2.0)
     take_profit_r_multiples: tuple[float, ...] = (1.0, 2.0, 3.0)
+    action_mode: str = "risk_templates"
+    opposite_signal_mode: str = "reverse"
+    minimum_holding_bars: int = 0
+    stop_cooldown_bars: int = 0
     initial_equity: float = 100_000.0
     risk_fraction: float = 0.01
     transaction_cost_bps: float = 0.0
@@ -42,6 +48,28 @@ class RiskTradeConfig:
             not np.isfinite(v) or v <= 0.0 for v in self.take_profit_r_multiples
         ):
             raise ValueError("take_profit_r_multiples must be a non-empty sequence of finite positive values.")
+        if self.action_mode not in _ACTION_MODES:
+            raise ValueError(f"action_mode must be one of {sorted(_ACTION_MODES)}.")
+        if self.opposite_signal_mode not in _OPPOSITE_SIGNAL_MODES:
+            raise ValueError(
+                f"opposite_signal_mode must be one of {sorted(_OPPOSITE_SIGNAL_MODES)}."
+            )
+        if self.action_mode == "directional" and (
+            len(self.atr_multipliers) != 1 or len(self.take_profit_r_multiples) != 1
+        ):
+            raise ValueError(
+                "directional action_mode requires exactly one ATR multiplier and one take-profit R multiple."
+            )
+        for field_name, value in (
+            ("minimum_holding_bars", self.minimum_holding_bars),
+            ("stop_cooldown_bars", self.stop_cooldown_bars),
+        ):
+            if (
+                isinstance(value, (bool, np.bool_))
+                or not isinstance(value, (int, np.integer))
+                or int(value) < 0
+            ):
+                raise ValueError(f"{field_name} must be a non-negative integer.")
         if not np.isfinite(self.initial_equity) or self.initial_equity <= 0.0:
             raise ValueError("initial_equity must be finite and > 0.")
         if not np.isfinite(self.risk_fraction) or not 0.0 < self.risk_fraction <= 1.0:
@@ -79,6 +107,13 @@ class RiskTradeConfig:
             take_profit_r_multiples=tuple(
                 float(v) for v in cfg.get("take_profit_r_multiples", (1.0, 2.0, 3.0))
             ),
+            action_mode=str(cfg.get("action_mode", "risk_templates")),
+            opposite_signal_mode=str(cfg.get("opposite_signal_mode", "reverse")),
+            minimum_holding_bars=cfg.get(
+                "minimum_holding_bars",
+                cfg.get("min_holding_bars", 0),
+            ),
+            stop_cooldown_bars=cfg.get("stop_cooldown_bars", 0),
             initial_equity=float(cfg.get("initial_equity", 100_000.0)),
             risk_fraction=float(cfg.get("risk_fraction", 0.01)),
             transaction_cost_bps=float(cfg.get("transaction_cost_bps", 0.0)),
@@ -146,12 +181,20 @@ def decode_trade_action(
     *,
     atr_multipliers: Sequence[float],
     take_profit_r_multiples: Sequence[float],
+    action_mode: str = "risk_templates",
 ) -> TradeAction:
-    """Decode hold/long/short plus the configured SL/TP parameter combination."""
+    """Decode the legacy risk-template space or the 3-action directional space."""
     atr_values = tuple(float(v) for v in atr_multipliers)
     tp_values = tuple(float(v) for v in take_profit_r_multiples)
     if not atr_values or not tp_values:
         raise ValueError("atr_multipliers and take_profit_r_multiples must be non-empty.")
+    if action_mode not in _ACTION_MODES:
+        raise ValueError(f"action_mode must be one of {sorted(_ACTION_MODES)}.")
+    if action_mode == "directional" and (len(atr_values) != 1 or len(tp_values) != 1):
+        raise ValueError(
+            "directional action_mode requires exactly one ATR multiplier and one take-profit R multiple."
+        )
+
     raw = np.asarray(action).reshape(-1)
     if raw.size != 1:
         raise ValueError("A risk-managed single-asset action must contain exactly one integer.")
@@ -165,6 +208,15 @@ def decode_trade_action(
     if not np.isfinite(numeric_value) or not numeric_value.is_integer():
         raise ValueError("A risk-managed single-asset action must be a finite integer.")
     value = int(numeric_value)
+
+    if action_mode == "directional":
+        if value < 0 or value >= 3:
+            raise ValueError("Directional action must be in the discrete action space [0, 3).")
+        if value == 0:
+            return TradeAction(0, None, None)
+        direction = 1 if value == 1 else -1
+        return TradeAction(direction, atr_values[0], tp_values[0])
+
     combination_count = len(atr_values) * len(tp_values)
     action_count = 1 + 2 * combination_count
     if value < 0 or value >= action_count:
@@ -306,15 +358,21 @@ class SingleAssetRiskTradingEnv(gym.Env):
         if self.end_step <= self.start_step or self.end_step >= len(frame):
             raise ValueError("end_step must be within frame and > start_step to leave an execution bar.")
 
-        action_count = 1 + 2 * len(self.trade_config.atr_multipliers) * len(
-            self.trade_config.take_profit_r_multiples
+        action_count = (
+            3
+            if self.trade_config.action_mode == "directional"
+            else 1
+            + 2
+            * len(self.trade_config.atr_multipliers)
+            * len(self.trade_config.take_profit_r_multiples)
         )
         self.action_space = gym.spaces.Discrete(action_count)
-        state_feature_count = 4
+        self._include_cooldown_state = self.trade_config.stop_cooldown_bars > 0
+        self._state_feature_count = 4 + int(self._include_cooldown_state)
         self.observation_space = gym.spaces.Box(
             low=-np.inf,
             high=np.inf,
-            shape=(self.lookback_window, len(self.feature_columns) + state_feature_count),
+            shape=(self.lookback_window, len(self.feature_columns) + self._state_feature_count),
             dtype=np.float32,
         )
 
@@ -326,6 +384,7 @@ class SingleAssetRiskTradingEnv(gym.Env):
         self.drawdown = 0.0
         self.cumulative_reward = 0.0
         self.trades: list[dict[str, Any]] = []
+        self._entry_cooldown_until_step = -1
 
     def _timestamp(self, step: int) -> Any:
         return self.frame.index[int(step)]
@@ -373,10 +432,21 @@ class SingleAssetRiskTradingEnv(gym.Env):
             return 0
         return max(int(self.current_step - self.position.entry_step + 1), 0)
 
+    def _completed_holding_bars(self) -> int:
+        if self.position is None:
+            return 0
+        return max(int(self.current_step - self.position.entry_step), 0)
+
+    def _cooldown_bars_remaining(self) -> int:
+        return max(int(self._entry_cooldown_until_step - self.current_step), 0)
+
     def _observation(self) -> np.ndarray:
         start = self.current_step - self.lookback_window + 1
         market_state = self._features[start : self.current_step + 1]
-        state = np.zeros((self.lookback_window, 4), dtype=np.float32)
+        state = np.zeros(
+            (self.lookback_window, self._state_feature_count),
+            dtype=np.float32,
+        )
         direction = float(self.position.direction) if self.position is not None else 0.0
         unrealized_r = self._unrealized_r(raw_exit_price=self._price(self.close_column))
         bars_held = float(self._bars_held())
@@ -386,6 +456,11 @@ class SingleAssetRiskTradingEnv(gym.Env):
         state[:, 1] = float(unrealized_r)
         state[:, 2] = bars_held
         state[:, 3] = float(self.drawdown)
+        if self._include_cooldown_state:
+            state[:, 4] = float(
+                self._cooldown_bars_remaining()
+                / max(int(self.trade_config.stop_cooldown_bars), 1)
+            )
         observation = np.concatenate([market_state, state], axis=1).astype(np.float32, copy=False)
         if not bool(np.isfinite(observation).all()):
             raise RuntimeError("Environment produced a non-finite observation.")
@@ -504,6 +579,11 @@ class SingleAssetRiskTradingEnv(gym.Env):
             "exit_reason": str(reason),
         }
         self.trades.append(trade)
+        if reason == "stop_loss" and self.trade_config.stop_cooldown_bars > 0:
+            self._entry_cooldown_until_step = max(
+                self._entry_cooldown_until_step,
+                int(self.current_step + self.trade_config.stop_cooldown_bars),
+            )
         self.position = None
         return trade
 
@@ -556,21 +636,18 @@ class SingleAssetRiskTradingEnv(gym.Env):
         self.drawdown = 0.0
         self.cumulative_reward = 0.0
         self.trades = []
+        self._entry_cooldown_until_step = -1
         return self._observation(), {"timestamp": self._timestamp(self.current_step)}
 
     def step(self, action: int | np.integer | np.ndarray) -> tuple[np.ndarray, float, bool, bool, dict]:
-        """Execute a close-``t`` decision at open ``t+1`` and reward the resulting bar.
-
-        Opposite actions close the current trade at the next open and, except on the final
-        execution bar, open the opposite trade at that same open. No entry is admitted on
-        ``end_step`` because it would be forced out immediately by end-of-data liquidation.
-        """
+        """Execute a close-t decision at open t+1 and reward the resulting bar."""
         if self.current_step >= self.end_step:
             raise RuntimeError("step() called after the episode terminated; call reset().")
         decoded = decode_trade_action(
             action,
             atr_multipliers=self.trade_config.atr_multipliers,
             take_profit_r_multiples=self.trade_config.take_profit_r_multiples,
+            action_mode=self.trade_config.action_mode,
         )
         raw_action = int(np.asarray(action).reshape(-1)[0])
         decision_step = int(self.current_step)
@@ -591,25 +668,32 @@ class SingleAssetRiskTradingEnv(gym.Env):
         entry_rejected_reason: str | None = None
         opened_position: _OpenPosition | None = None
         closed_trades: list[dict[str, Any]] = []
+        reversal_opened = False
 
-        # Entries, opposite exits, and reversals all share the exact next-open fill.
         if self.position is not None and decoded.direction == -self.position.direction:
-            closed_trades.append(
-                self._close_position(
-                    raw_exit_price=self._price(self.open_column),
-                    reason="opposite_signal",
-                )
-            )
-            if allow_new_entry:
-                opened_position = self._open_position(
-                    decoded,
-                    decision_step=decision_step,
-                    execution_step=execution_step,
-                )
+            if self._completed_holding_bars() < int(self.trade_config.minimum_holding_bars):
+                entry_rejected_reason = "minimum_holding_bars"
             else:
-                entry_rejected_reason = "final_execution_bar"
+                closed_trades.append(
+                    self._close_position(
+                        raw_exit_price=self._price(self.open_column),
+                        reason="opposite_signal",
+                    )
+                )
+                if self.trade_config.opposite_signal_mode == "reverse":
+                    if allow_new_entry:
+                        opened_position = self._open_position(
+                            decoded,
+                            decision_step=decision_step,
+                            execution_step=execution_step,
+                        )
+                        reversal_opened = opened_position is not None
+                    else:
+                        entry_rejected_reason = "final_execution_bar"
         elif self.position is None and not decoded.is_hold:
-            if allow_new_entry:
+            if execution_step <= self._entry_cooldown_until_step:
+                entry_rejected_reason = "stop_cooldown"
+            elif allow_new_entry:
                 opened_position = self._open_position(
                     decoded,
                     decision_step=decision_step,
@@ -651,7 +735,6 @@ class SingleAssetRiskTradingEnv(gym.Env):
             self.reward_config.unrealized_pnl_weight
             * (potential_after - previous_unrealized_r)
         )
-
         holding_penalty = float(
             self.reward_config.holding_penalty if exposed_during_bar else 0.0
         )
@@ -678,6 +761,8 @@ class SingleAssetRiskTradingEnv(gym.Env):
             "execution_lag_bars": int(self.trade_config.execution_lag_bars),
             "action": raw_action,
             "decoded_action": asdict(decoded),
+            "action_mode": self.trade_config.action_mode,
+            "opposite_signal_mode": self.trade_config.opposite_signal_mode,
             "position": int(self.position.direction) if self.position is not None else 0,
             "position_leverage": position_leverage,
             "equity": float(self.equity),
@@ -690,6 +775,11 @@ class SingleAssetRiskTradingEnv(gym.Env):
             "transaction_cost": step_transaction_cost,
             "reward": reward,
             "entry_rejected_reason": entry_rejected_reason,
+            "action_rejected_reason": entry_rejected_reason,
+            "minimum_holding_bars": int(self.trade_config.minimum_holding_bars),
+            "stop_cooldown_bars": int(self.trade_config.stop_cooldown_bars),
+            "cooldown_bars_remaining": self._cooldown_bars_remaining(),
+            "reversal_opened": bool(reversal_opened),
             "closed_trade": closed_trades[-1] if closed_trades else None,
             "closed_trades": tuple(closed_trades),
         }

@@ -3124,6 +3124,24 @@ def validate_model_block(model: dict[str, Any]) -> None:
             if model["kind"] in _RL_RISK_PPO_KINDS:
                 if (action_space or "discrete") != "discrete":
                     raise ConfigValidationError("ppo_risk_agent requires model.env.action_space='discrete'.")
+                action_mode = str(env_cfg.get("action_mode", "risk_templates"))
+                if action_mode not in {"risk_templates", "directional"}:
+                    raise ConfigValidationError(
+                        "model.env.action_mode must be 'risk_templates' or 'directional'."
+                    )
+                opposite_signal_mode = str(env_cfg.get("opposite_signal_mode", "reverse"))
+                if opposite_signal_mode not in {"reverse", "close"}:
+                    raise ConfigValidationError(
+                        "model.env.opposite_signal_mode must be 'reverse' or 'close'."
+                    )
+                _non_negative_int(
+                    env_cfg.get("minimum_holding_bars", env_cfg.get("min_holding_bars", 0)),
+                    field="model.env.minimum_holding_bars",
+                )
+                _non_negative_int(
+                    env_cfg.get("stop_cooldown_bars", 0),
+                    field="model.env.stop_cooldown_bars",
+                )
                 _positive_int(
                     env_cfg.get("lookback_window", env_cfg.get("window_size", 32)),
                     field="model.env.lookback_window",
@@ -3145,6 +3163,14 @@ def validate_model_block(model: dict[str, Any]) -> None:
                         value = _finite_number(raw_value, field=f"model.env.{key}[{idx}]")
                         if value <= 0.0:
                             raise ConfigValidationError(f"model.env.{key}[{idx}] must be > 0.")
+                if action_mode == "directional":
+                    for key, default_values in risk_parameter_defaults.items():
+                        values = env_cfg.get(key, default_values)
+                        if len(values) != 1:
+                            raise ConfigValidationError(
+                                f"model.env.{key} must contain exactly one value "
+                                "when model.env.action_mode='directional'."
+                            )
                 initial_equity = _finite_number(
                     env_cfg.get("initial_equity", 100_000.0),
                     field="model.env.initial_equity",

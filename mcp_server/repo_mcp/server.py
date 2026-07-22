@@ -10,6 +10,8 @@ from .command_tools import git_checkout_new_branch as git_checkout_new_branch_im
 from .command_tools import git_commit as git_commit_impl
 from .command_tools import git_restore as git_restore_impl
 from .command_tools import run_experiment as run_experiment_impl
+from .command_tools import run_command as run_command_impl
+from .command_tools import run_python as run_python_impl
 from .command_tools import run_shell_command as run_shell_command_impl
 from .config import load_config
 from .git_tools import git_current_branch as git_current_branch_impl
@@ -56,7 +58,9 @@ from .repository import stat_files as stat_files_impl
 from .runtime import get_runtime
 from .write_tools import append_file as append_file_impl
 from .write_tools import apply_patch as apply_patch_impl
+from .write_tools import create_directory as create_directory_impl
 from .write_tools import delete_path as delete_path_impl
+from .write_tools import import_local_file as import_local_file_impl
 from .write_tools import move_path as move_path_impl
 from .write_tools import write_file as write_file_impl
 
@@ -141,9 +145,9 @@ def stat_files(paths: list[str], include_git_status: bool = False) -> dict[str, 
 
 
 @mcp.tool(annotations=WRITE_TOOL)
-def write_file(path: str, content: str, create_dirs: bool = True, overwrite: bool = True, confirmation: str | None = None) -> dict[str, Any]:
-    """Use this when editing or creating a repository text file."""
-    return write_file_impl(CONFIG, path=path, content=content, create_dirs=create_dirs, overwrite=overwrite, confirmation=confirmation)
+def write_file(path: str, content: str, create_parent_dirs: bool = True, expected_sha256: str | None = None, create_dirs: bool | None = None, overwrite: bool = True, confirmation: str | None = None) -> dict[str, Any]:
+    """Atomically create or replace a UTF-8 repository file, optionally guarded by its prior SHA-256."""
+    return write_file_impl(CONFIG, path=path, content=content, create_parent_dirs=create_parent_dirs, expected_sha256=expected_sha256, create_dirs=create_dirs, overwrite=overwrite, confirmation=confirmation)
 
 
 @mcp.tool(annotations=WRITE_TOOL)
@@ -152,10 +156,16 @@ def append_file(path: str, content: str, create_dirs: bool = True, confirmation:
     return append_file_impl(CONFIG, path=path, content=content, create_dirs=create_dirs, confirmation=confirmation)
 
 
+@mcp.tool(annotations=DESTRUCTIVE_TOOL)
+def apply_patch(patch: str, check_only: bool = False, confirmation: str | None = None, timeout_seconds: int | None = None) -> dict[str, Any]:
+    """Atomically check or apply a multi-file unified diff; deletion hunks require confirmation."""
+    return apply_patch_impl(CONFIG, patch=patch, check_only=check_only, confirmation=confirmation, timeout_seconds=timeout_seconds)
+
+
 @mcp.tool(annotations=WRITE_TOOL)
-def apply_patch(patch: str, confirmation: str | None = None, timeout_seconds: int | None = None) -> dict[str, Any]:
-    """Use this when applying a unified diff patch to the repository."""
-    return apply_patch_impl(CONFIG, patch=patch, confirmation=confirmation, timeout_seconds=timeout_seconds)
+def create_directory(path: str) -> dict[str, Any]:
+    """Recursively create a directory inside the repository boundary."""
+    return create_directory_impl(CONFIG, path=path)
 
 
 @mcp.tool(annotations=DESTRUCTIVE_TOOL)
@@ -165,9 +175,19 @@ def delete_path(path: str, recursive: bool = False, confirmation: str | None = N
 
 
 @mcp.tool(annotations=WRITE_TOOL)
-def move_path(src: str, dst: str, overwrite: bool = False, confirmation: str | None = None) -> dict[str, Any]:
-    """Use this when moving or renaming a repository file or directory."""
-    return move_path_impl(CONFIG, src=src, dst=dst, overwrite=overwrite, confirmation=confirmation)
+def move_path(source: str | None = None, destination: str | None = None, overwrite: bool = False, confirmation: str | None = None, src: str | None = None, dst: str | None = None) -> dict[str, Any]:
+    """Move or rename a repository path; src/dst remain accepted as compatibility aliases."""
+    source_value = source if source is not None else src
+    destination_value = destination if destination is not None else dst
+    if source_value is None or destination_value is None:
+        raise ValueError("Both source and destination are required")
+    return move_path_impl(CONFIG, source=source_value, destination=destination_value, overwrite=overwrite, confirmation=confirmation)
+
+
+@mcp.tool(annotations=WRITE_TOOL)
+def import_local_file(source_path: str, destination_path: str, overwrite: bool = False, create_parent_dirs: bool = True, confirmation: str | None = None) -> dict[str, Any]:
+    """Atomically import a regular file from an approved upload root such as /mnt/data."""
+    return import_local_file_impl(CONFIG, source_path=source_path, destination_path=destination_path, overwrite=overwrite, create_parent_dirs=create_parent_dirs, confirmation=confirmation)
 
 
 @mcp.tool(annotations=READ_ONLY)
@@ -213,9 +233,10 @@ def git_status() -> dict[str, Any]:
 
 
 @mcp.tool(annotations=READ_ONLY)
-def git_diff(path: str | None = None, max_bytes: int | None = None, paths: list[str] | None = None, mode: str = "unified", include_untracked: bool = False, context_lines: int = 3, cursor: str | None = None) -> dict[str, Any]:
-    """Use this when reading unstaged git diffs for the full repository or one path."""
-    return _measured("git_diff", lambda: git_diff_impl(CONFIG, path=path, max_bytes=max_bytes, paths=paths, mode=mode, include_untracked=include_untracked, context_lines=context_lines, cursor=cursor))
+def git_diff(path: str | None = None, staged: bool = False, stat: bool = False, name_only: bool = False, max_bytes: int | None = None, paths: list[str] | None = None, mode: str = "unified", include_untracked: bool = False, context_lines: int = 3, cursor: str | None = None) -> dict[str, Any]:
+    """Read a bounded staged or unstaged Git diff in unified, stat, or name-only form."""
+    selected_mode = "stat" if stat else "name_only" if name_only else mode
+    return _measured("git_diff", lambda: git_diff_impl(CONFIG, path=path, max_bytes=max_bytes, paths=paths, mode=selected_mode, include_untracked=include_untracked, context_lines=context_lines, cursor=cursor, staged=staged))
 
 
 @mcp.tool(annotations=READ_ONLY)
@@ -326,10 +347,22 @@ def execute_approved_python_script(script: str, args: list[str] | None = None, c
     return execute_approved_python_script_impl(CONFIG, script=script, args=args, confirmation=confirmation, timeout_seconds=timeout_seconds)
 
 
-@mcp.tool(annotations=COMMAND_TOOL)
+@mcp.tool(annotations=DESTRUCTIVE_TOOL)
 def run_shell_command(command: str, cwd: str = ".", timeout_seconds: int | None = None, confirmation: str | None = None, max_output_bytes: int | None = None) -> dict[str, Any]:
     """Use this when running a shell command inside the repository container."""
     return run_shell_command_impl(CONFIG, command=command, cwd=cwd, timeout_seconds=timeout_seconds, confirmation=confirmation, max_output_bytes=max_output_bytes)
+
+
+@mcp.tool(annotations=DESTRUCTIVE_TOOL)
+def run_command(command: list[str], cwd: str = ".", env: dict[str, str] | None = None, timeout_seconds: int | None = None, confirmation: str | None = None, max_output_bytes: int | None = None) -> dict[str, Any]:
+    """Run an arbitrary non-shell argument-array command in the repository after explicit confirmation."""
+    return run_command_impl(CONFIG, command=command, cwd=cwd, env=env, timeout_seconds=timeout_seconds, confirmation=confirmation, max_output_bytes=max_output_bytes)
+
+
+@mcp.tool(annotations=DESTRUCTIVE_TOOL)
+def run_python(code: str | None = None, script_path: str | None = None, args: list[str] | None = None, cwd: str = ".", env: dict[str, str] | None = None, timeout_seconds: int | None = None, confirmation: str | None = None, max_output_bytes: int | None = None) -> dict[str, Any]:
+    """Run Python code or any repository Python file without an allowlist after explicit confirmation."""
+    return run_python_impl(CONFIG, code=code, script_path=script_path, args=args, cwd=cwd, env=env, timeout_seconds=timeout_seconds, confirmation=confirmation, max_output_bytes=max_output_bytes)
 
 
 @mcp.tool(annotations=COMMAND_TOOL)

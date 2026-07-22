@@ -94,17 +94,35 @@ def _trim_causal_warmup(
     return frame.iloc[first_valid:].copy(), first_valid
 
 
-def _fit_train_normalizer(values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def _fit_train_normalizer(
+    values: np.ndarray,
+    *,
+    scaler: str = "standard",
+) -> tuple[np.ndarray, np.ndarray]:
     if values.ndim != 2 or len(values) == 0 or not bool(np.isfinite(values).all()):
         raise ValueError("Normalizer fit requires a non-empty finite 2D training matrix.")
-    mean = values.mean(axis=0, dtype=np.float64)
-    std = values.std(axis=0, dtype=np.float64)
-    std = np.where(std < 1e-8, 1.0, std)
-    return mean.astype(np.float32), std.astype(np.float32)
+    scaler_kind = str(scaler or "standard").strip().lower()
+    if scaler_kind == "standard":
+        center = values.mean(axis=0, dtype=np.float64)
+        scale = values.std(axis=0, dtype=np.float64)
+    elif scaler_kind == "robust":
+        center = np.median(values, axis=0).astype(np.float64, copy=False)
+        q25, q75 = np.percentile(values, [25.0, 75.0], axis=0)
+        scale = np.asarray(q75 - q25, dtype=np.float64)
+    elif scaler_kind == "none":
+        center = np.zeros(values.shape[1], dtype=np.float64)
+        scale = np.ones(values.shape[1], dtype=np.float64)
+    else:
+        raise ValueError(
+            "ppo_risk_agent model.preprocessing.scaler must be one of: "
+            "none, standard, robust."
+        )
+    scale = np.where(np.abs(scale) < 1e-8, 1.0, scale)
+    return center.astype(np.float32), scale.astype(np.float32)
 
 
-def _apply_normalizer(values: np.ndarray, *, mean: np.ndarray, std: np.ndarray) -> np.ndarray:
-    normalized = (values.astype(np.float32, copy=False) - mean) / std
+def _apply_normalizer(values: np.ndarray, *, center: np.ndarray, scale: np.ndarray) -> np.ndarray:
+    normalized = (values.astype(np.float32, copy=False) - center) / scale
     if not bool(np.isfinite(normalized).all()):
         raise ValueError("Feature normalization produced non-finite values.")
     return normalized.astype(np.float32, copy=False)
@@ -313,6 +331,8 @@ def train_ppo_risk_agent(
     env_cfg = dict(model_cfg.get("env", {}) or {})
     split_cfg = dict(model_cfg.get("split", {}) or {})
     runtime_cfg = dict(model_cfg.get("runtime", {}) or {})
+    preprocessing_cfg = dict(model_cfg.get("preprocessing", {}) or {})
+    scaler_kind = str(preprocessing_cfg.get("scaler", "standard") or "standard").strip().lower()
 
     feature_columns = tuple(str(column) for column in (model_cfg.get("feature_cols") or ()))
     if not feature_columns:
@@ -385,11 +405,14 @@ def train_ppo_risk_agent(
     for fold in folds:
         fold_dir = artifact_root / f"fold_{fold.fold:03d}"
         train_values = feature_values[fold.train_start : fold.train_end]
-        normalizer_mean, normalizer_std = _fit_train_normalizer(train_values)
+        normalizer_center, normalizer_scale = _fit_train_normalizer(
+            train_values,
+            scaler=scaler_kind,
+        )
         normalized_values = _apply_normalizer(
             feature_values,
-            mean=normalizer_mean,
-            std=normalizer_std,
+            center=normalizer_center,
+            scale=normalizer_scale,
         )
         normalized_frame = frame.copy()
         normalized_frame.loc[:, feature_columns] = normalized_values
@@ -480,9 +503,14 @@ def train_ppo_risk_agent(
                 "fit_split": "train",
                 "fit_start": int(fold.train_start),
                 "fit_end": int(fold.train_end),
+                "scaler": scaler_kind,
                 "feature_columns": list(feature_columns),
-                "mean": normalizer_mean.tolist(),
-                "std": normalizer_std.tolist(),
+                "center": normalizer_center.tolist(),
+                "scale": normalizer_scale.tolist(),
+                "mean": normalizer_center.tolist() if scaler_kind == "standard" else None,
+                "std": normalizer_scale.tolist() if scaler_kind == "standard" else None,
+                "median": normalizer_center.tolist() if scaler_kind == "robust" else None,
+                "iqr": normalizer_scale.tolist() if scaler_kind == "robust" else None,
             },
             "selected_checkpoint": selection.checkpoint,
             "checkpoint_step": int(selection.step),
@@ -542,6 +570,10 @@ def train_ppo_risk_agent(
         "algorithm": "ppo",
         "feature_cols": list(feature_columns),
         "feature_columns": list(feature_columns),
+        "preprocessing": {
+            "scaler": scaler_kind,
+            "train_only": True,
+        },
         "signal_col": signal_col,
         "action_col": action_col,
         "pred_is_oos_col": pred_is_oos_col,

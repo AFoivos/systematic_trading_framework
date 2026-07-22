@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import os
 import re
+import signal
 import subprocess
+import sys
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +19,16 @@ from .security import (
 )
 
 
+_SECRET_KEY_RE = re.compile(
+    r"(?:TOKEN|SECRET|PASSWORD|API_KEY|PRIVATE_KEY)",
+    flags=re.IGNORECASE,
+)
+_SECRET_ASSIGNMENT_RE = re.compile(
+    r"(?i)(\b[A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY|PRIVATE_KEY)[A-Z0-9_]*\b\s*[=:]\s*)"
+    r"(?:\"[^\"]*\"|'[^']*'|[^\s,;}]*)"
+)
+
+
 def _require_full_access(config: ServerConfig, capability: str, confirmation: str | None) -> None:
     full = config.full_access
     allowed = {
@@ -22,25 +37,25 @@ def _require_full_access(config: ServerConfig, capability: str, confirmation: st
     }.get(capability, False)
     if not full.enabled or not allowed:
         raise PermissionError(f"Full-access {capability} operations are disabled in MCP config")
-    if full.require_confirmation and confirmation != full.confirmation_token:
-        raise PermissionError(f"Full-access {capability} operations require confirmation='{full.confirmation_token}'")
+    if full.require_confirmation and not (confirmation or "").strip():
+        raise PermissionError(
+            f"Full-access {capability} operations require a non-empty confirmation describing the user's explicit request"
+        )
 
 
 def _timeout(config: ServerConfig, timeout_seconds: int | None) -> int:
     requested = timeout_seconds or config.full_access.default_timeout_seconds
-    return max(1, min(requested, config.full_access.max_timeout_seconds))
+    return max(1, min(int(requested), config.full_access.max_timeout_seconds))
 
 
 def _max_output(config: ServerConfig, max_output_bytes: int | None = None) -> int:
-    return max(1, min(max_output_bytes or config.full_access.max_output_bytes, config.full_access.max_output_bytes))
-
-
-def _truncate_text(text: str, max_bytes: int) -> tuple[str, bool]:
-    encoded = text.encode("utf-8")
-    if len(encoded) <= max_bytes:
-        return text, False
-    truncated = encoded[-max_bytes:].decode("utf-8", errors="replace")
-    return truncated, True
+    return max(
+        1,
+        min(
+            int(max_output_bytes or config.full_access.max_output_bytes),
+            config.full_access.max_output_bytes,
+        ),
+    )
 
 
 def _resolve_cwd(config: ServerConfig, cwd: str) -> tuple[Path, str]:
@@ -52,52 +67,267 @@ def _resolve_cwd(config: ServerConfig, cwd: str) -> tuple[Path, str]:
     return resolved, "." if resolved == config.repo_root else to_repo_relative(config.repo_root, resolved)
 
 
-def _run(
+def _validate_arguments(command: list[str]) -> list[str]:
+    if not isinstance(command, list) or not command:
+        raise ValueError("command must be a non-empty argument array")
+    normalized: list[str] = []
+    for index, value in enumerate(command):
+        if not isinstance(value, str):
+            raise TypeError(f"command[{index}] must be a string")
+        if "\0" in value:
+            raise ValueError(f"command[{index}] contains a NUL byte")
+        normalized.append(value)
+    if not normalized[0]:
+        raise ValueError("command executable must not be empty")
+    return normalized
+
+
+def _subprocess_environment(extra: dict[str, str] | None) -> tuple[dict[str, str], set[str]]:
+    redacted_values = {
+        value
+        for key, value in os.environ.items()
+        if _SECRET_KEY_RE.search(key) and value
+    }
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if not _SECRET_KEY_RE.search(key)
+    }
+    for key, value in (extra or {}).items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            raise TypeError("env keys and values must be strings")
+        if not key or "=" in key or "\0" in key or "\0" in value:
+            raise ValueError(f"Invalid environment entry: {key!r}")
+        environment[key] = value
+        if _SECRET_KEY_RE.search(key) and value:
+            redacted_values.add(value)
+    return environment, redacted_values
+
+
+def _redact_text(value: str, redacted_values: set[str]) -> str:
+    result = value
+    for secret in sorted(redacted_values, key=len, reverse=True):
+        if len(secret) >= 4:
+            result = result.replace(secret, "<redacted>")
+    return _SECRET_ASSIGNMENT_RE.sub(r"\1<redacted>", result)
+
+
+def _redact_command(command: list[str] | str, redacted_values: set[str]) -> list[str] | str:
+    if isinstance(command, str):
+        return _redact_text(command, redacted_values)
+    return [_redact_text(value, redacted_values) for value in command]
+
+
+class _BoundedCapture:
+    def __init__(self, limit: int) -> None:
+        self.limit = limit
+        self.head_limit = max(1, limit // 2)
+        self.tail_limit = max(0, limit - self.head_limit)
+        self.head = bytearray()
+        self.tail = bytearray()
+        self.total_bytes = 0
+
+    def add(self, chunk: bytes) -> None:
+        self.total_bytes += len(chunk)
+        available = max(0, self.head_limit - len(self.head))
+        if available:
+            self.head.extend(chunk[:available])
+            chunk = chunk[available:]
+        if chunk and self.tail_limit:
+            self.tail.extend(chunk)
+            if len(self.tail) > self.tail_limit:
+                del self.tail[: len(self.tail) - self.tail_limit]
+
+    @property
+    def truncated(self) -> bool:
+        return self.total_bytes > self.limit
+
+    def text(self) -> str:
+        if not self.truncated:
+            return bytes(self.head + self.tail).decode("utf-8", errors="replace")
+        omitted = self.total_bytes - len(self.head) - len(self.tail)
+        marker = f"\n... <{omitted} bytes omitted> ...\n".encode("utf-8")
+        return bytes(self.head + marker + self.tail).decode("utf-8", errors="replace")
+
+
+def _drain(stream: Any, capture: _BoundedCapture) -> None:
+    try:
+        while chunk := stream.read(64 * 1024):
+            capture.add(chunk)
+    finally:
+        stream.close()
+
+
+def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except (AttributeError, ProcessLookupError, PermissionError):
+        process.kill()
+
+
+def _run_process(
     config: ServerConfig,
-    args: list[str],
+    command: list[str] | str,
+    *,
+    cwd: Path,
+    relative_cwd: str,
+    env: dict[str, str] | None = None,
     timeout_seconds: int | None = None,
     max_output_bytes: int | None = None,
-    cwd: Path | None = None,
+    shell: bool = False,
 ) -> dict[str, Any]:
     limit = _max_output(config, max_output_bytes)
+    effective_timeout = _timeout(config, timeout_seconds)
+    environment, redacted_values = _subprocess_environment(env)
+    started = time.perf_counter()
     try:
-        proc = subprocess.run(
-            args,
-            cwd=cwd or config.repo_root,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=_timeout(config, timeout_seconds),
+        process = subprocess.Popen(
+            command,
+            cwd=cwd,
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            shell=shell,
+            start_new_session=True,
         )
-        stdout, stdout_truncated = _truncate_text(proc.stdout, limit)
-        stderr, stderr_truncated = _truncate_text(proc.stderr, limit)
+    except OSError as exc:
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
         return {
-            "command": args,
-            "return_code": proc.returncode,
-            "stdout": stdout,
-            "stderr": stderr,
-            "timed_out": False,
-            "stdout_truncated": stdout_truncated,
-            "stderr_truncated": stderr_truncated,
-        }
-    except subprocess.TimeoutExpired as exc:
-        stdout_text = exc.stdout or ""
-        stderr_text = exc.stderr or ""
-        if isinstance(stdout_text, bytes):
-            stdout_text = stdout_text.decode("utf-8", errors="replace")
-        if isinstance(stderr_text, bytes):
-            stderr_text = stderr_text.decode("utf-8", errors="replace")
-        stdout, stdout_truncated = _truncate_text(stdout_text, limit)
-        stderr, stderr_truncated = _truncate_text(stderr_text, limit)
-        return {
-            "command": args,
+            "success": False,
+            "command": _redact_command(command, redacted_values),
+            "cwd": relative_cwd,
+            "exit_code": None,
             "return_code": None,
-            "stdout": stdout,
-            "stderr": stderr,
-            "timed_out": True,
-            "stdout_truncated": stdout_truncated,
-            "stderr_truncated": stderr_truncated,
+            "stdout": "",
+            "stderr": "",
+            "elapsed_ms": elapsed_ms,
+            "timed_out": False,
+            "truncated": False,
+            "stdout_truncated": False,
+            "stderr_truncated": False,
+            "stdout_total_bytes": 0,
+            "stderr_total_bytes": 0,
+            "timeout_seconds": effective_timeout,
+            "error": {"code": "process_start_failed", "message": str(exc)},
         }
+
+    assert process.stdout is not None
+    assert process.stderr is not None
+    stdout_capture = _BoundedCapture(limit)
+    stderr_capture = _BoundedCapture(limit)
+    stdout_thread = threading.Thread(target=_drain, args=(process.stdout, stdout_capture), daemon=True)
+    stderr_thread = threading.Thread(target=_drain, args=(process.stderr, stderr_capture), daemon=True)
+    stdout_thread.start()
+    stderr_thread.start()
+    timed_out = False
+    try:
+        process.wait(timeout=effective_timeout)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        _terminate_process_group(process)
+        process.wait()
+    stdout_thread.join(timeout=2)
+    stderr_thread.join(timeout=2)
+
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
+    exit_code = None if timed_out else process.returncode
+    success = exit_code == 0 and not timed_out
+    stdout = _redact_text(stdout_capture.text(), redacted_values)
+    stderr = _redact_text(stderr_capture.text(), redacted_values)
+    if timed_out:
+        error = {
+            "code": "command_timed_out",
+            "message": f"Command exceeded timeout_seconds={effective_timeout}",
+        }
+    elif exit_code != 0:
+        error = {
+            "code": "nonzero_exit",
+            "message": f"Command exited with code {exit_code}",
+        }
+    else:
+        error = None
+    return {
+        "success": success,
+        "command": _redact_command(command, redacted_values),
+        "cwd": relative_cwd,
+        "exit_code": exit_code,
+        "return_code": exit_code,
+        "stdout": stdout,
+        "stderr": stderr,
+        "elapsed_ms": elapsed_ms,
+        "timed_out": timed_out,
+        "truncated": stdout_capture.truncated or stderr_capture.truncated,
+        "stdout_truncated": stdout_capture.truncated,
+        "stderr_truncated": stderr_capture.truncated,
+        "stdout_total_bytes": stdout_capture.total_bytes,
+        "stderr_total_bytes": stderr_capture.total_bytes,
+        "timeout_seconds": effective_timeout,
+        "error": error,
+    }
+
+
+def run_command(
+    config: ServerConfig,
+    command: list[str],
+    cwd: str = ".",
+    env: dict[str, str] | None = None,
+    timeout_seconds: int | None = None,
+    confirmation: str | None = None,
+    max_output_bytes: int | None = None,
+) -> dict[str, Any]:
+    """Run an arbitrary argument-array command inside the repository boundary."""
+    _require_full_access(config, "shell", confirmation)
+    arguments = _validate_arguments(command)
+    cwd_path, relative_cwd = _resolve_cwd(config, cwd)
+    return _run_process(
+        config,
+        arguments,
+        cwd=cwd_path,
+        relative_cwd=relative_cwd,
+        env=env,
+        timeout_seconds=timeout_seconds,
+        max_output_bytes=max_output_bytes,
+        shell=False,
+    )
+
+
+def run_python(
+    config: ServerConfig,
+    code: str | None = None,
+    script_path: str | None = None,
+    args: list[str] | None = None,
+    cwd: str = ".",
+    env: dict[str, str] | None = None,
+    timeout_seconds: int | None = None,
+    confirmation: str | None = None,
+    max_output_bytes: int | None = None,
+) -> dict[str, Any]:
+    if (code is None) == (script_path is None):
+        raise ValueError("Exactly one of code or script_path must be supplied")
+    safe_args = [str(value) for value in (args or [])]
+    if code is not None:
+        if len(code.encode("utf-8")) > config.full_access.max_file_bytes:
+            raise ValueError("Python code exceeds configured max_file_bytes")
+        command = [sys.executable, "-c", code, *safe_args]
+    else:
+        assert script_path is not None
+        resolved = resolve_repo_path(config.repo_root, script_path)
+        if not resolved.is_file() or resolved.suffix.lower() != ".py":
+            raise FileNotFoundError(f"Repository Python script not found: {script_path}")
+        command = [sys.executable, resolved.as_posix(), *safe_args]
+    result = run_command(
+        config,
+        command,
+        cwd=cwd,
+        env=env,
+        timeout_seconds=timeout_seconds,
+        confirmation=confirmation,
+        max_output_bytes=max_output_bytes,
+    )
+    result["script_path"] = script_path
+    result["execution_mode"] = "code" if code is not None else "script"
+    return result
 
 
 def run_shell_command(
@@ -108,50 +338,39 @@ def run_shell_command(
     confirmation: str | None = None,
     max_output_bytes: int | None = None,
 ) -> dict[str, Any]:
+    """Backward-compatible shell-string execution with the same confirmation gate."""
     _require_full_access(config, "shell", confirmation)
-    cwd_path, rel_cwd = _resolve_cwd(config, cwd)
-    limit = _max_output(config, max_output_bytes)
-    try:
-        proc = subprocess.run(
-            command,
-            shell=True,
-            cwd=cwd_path,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=_timeout(config, timeout_seconds),
-        )
-        stdout, stdout_truncated = _truncate_text(proc.stdout, limit)
-        stderr, stderr_truncated = _truncate_text(proc.stderr, limit)
-        return {
-            "command": command,
-            "cwd": rel_cwd,
-            "return_code": proc.returncode,
-            "stdout": stdout,
-            "stderr": stderr,
-            "timed_out": False,
-            "stdout_truncated": stdout_truncated,
-            "stderr_truncated": stderr_truncated,
-        }
-    except subprocess.TimeoutExpired as exc:
-        stdout_text = exc.stdout or ""
-        stderr_text = exc.stderr or ""
-        if isinstance(stdout_text, bytes):
-            stdout_text = stdout_text.decode("utf-8", errors="replace")
-        if isinstance(stderr_text, bytes):
-            stderr_text = stderr_text.decode("utf-8", errors="replace")
-        stdout, stdout_truncated = _truncate_text(stdout_text, limit)
-        stderr, stderr_truncated = _truncate_text(stderr_text, limit)
-        return {
-            "command": command,
-            "cwd": rel_cwd,
-            "return_code": None,
-            "stdout": stdout,
-            "stderr": stderr,
-            "timed_out": True,
-            "stdout_truncated": stdout_truncated,
-            "stderr_truncated": stderr_truncated,
-        }
+    if not isinstance(command, str) or not command.strip():
+        raise ValueError("command must be a non-empty shell string")
+    cwd_path, relative_cwd = _resolve_cwd(config, cwd)
+    return _run_process(
+        config,
+        command,
+        cwd=cwd_path,
+        relative_cwd=relative_cwd,
+        timeout_seconds=timeout_seconds,
+        max_output_bytes=max_output_bytes,
+        shell=True,
+    )
+
+
+def _run(
+    config: ServerConfig,
+    args: list[str],
+    timeout_seconds: int | None = None,
+    max_output_bytes: int | None = None,
+    cwd: Path | None = None,
+) -> dict[str, Any]:
+    effective_cwd = cwd or config.repo_root
+    relative_cwd = "." if effective_cwd == config.repo_root else to_repo_relative(config.repo_root, effective_cwd)
+    return _run_process(
+        config,
+        _validate_arguments(args),
+        cwd=effective_cwd,
+        relative_cwd=relative_cwd,
+        timeout_seconds=timeout_seconds,
+        max_output_bytes=max_output_bytes,
+    )
 
 
 def _recent_run_dirs(config: ServerConfig) -> set[str]:
@@ -188,16 +407,13 @@ def run_experiment(
     before = _recent_run_dirs(config)
     result = _run(
         config,
-        ["python", "-m", "src.experiments.runner", rel],
+        [sys.executable, "-m", "src.experiments.runner", rel],
         timeout_seconds=timeout_seconds,
     )
     after = _recent_run_dirs(config)
     return {
+        **result,
         "config_path": rel,
-        "return_code": result["return_code"],
-        "stdout": result["stdout"],
-        "stderr": result["stderr"],
-        "timed_out": result["timed_out"],
         "created_run_dir": _newest_created_run(before, after, config),
     }
 

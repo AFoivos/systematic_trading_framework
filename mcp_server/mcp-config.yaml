@@ -10,10 +10,15 @@ limits:
 full_access:
   enabled: true
   require_confirmation: true
+  # Retained for older clients. New destructive/execution tools require any
+  # non-empty confirmation text describing the user's explicit request.
   confirmation_token: RUN_FULL_ACCESS_REPOSITORY_ACTION
   max_output_bytes: 200000
+  max_file_bytes: 10000000
   default_timeout_seconds: 300
   max_timeout_seconds: 3600
+  allowed_import_roots:
+    - /mnt/data
   allow_shell: true
   allow_write: true
   allow_delete: true

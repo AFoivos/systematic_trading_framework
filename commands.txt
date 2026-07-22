@@ -60,10 +60,8 @@ python -m src.experiments.runner docs/examples/minimal_experiment.yaml
 Το αντίστοιχο Docker command:
 
 ```bash
-docker compose run --rm app python -m src.experiments.runner config/lab/07_multi_horizon_panel_chronos_bolt_h48.yaml
-docker compose run --rm app python -m src.experiments.runner config/experiments/ema_rms_ppo_vwap/best_long_only/btcusd_1m_vwap_rms_cross_ema50_regime_3atr_no_time_exit_BEST.yaml
-Το οπτικό feature/signal/target lab:
-
+docker compose run --rm app python -m src.experiments.runner config/experiments/rl/btcusd_1m_ppo_risk_sanity.yaml
+docker compose run --rm app python -m src.experiments.runner config/experiments/foundation_alpha/BEST/ethusd/btcusd_1m_chronos_2_h24_structured_tail_alpha_v3_7_ehlers_trend_hybrid.yaml
 ```bash
 python -m src.experiments.runner config/experiments/lab/feature_signal_target_lab.yaml
 ```

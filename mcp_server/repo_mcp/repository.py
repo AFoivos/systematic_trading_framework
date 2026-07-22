@@ -276,7 +276,9 @@ def read_file(config: ServerConfig, path: str, start_line: int | None = None, ma
     if max_lines is not None:
         selected = selected[: max(max_lines, 0)]
         line_truncated = start + len(selected) < len(lines) or byte_truncated
-    return {"path": to_repo_relative(config.repo_root, file_path), "size_bytes": file_path.stat().st_size, "start_line": start + 1, "line_count": len(selected), "total_lines": len(lines), "truncated": byte_truncated or line_truncated, "text": "\n".join(selected)}
+    returned_text = "\n".join(selected)
+    full_sha256 = hashlib.sha256(file_path.read_bytes()).hexdigest() if not byte_truncated else None
+    return {"path": to_repo_relative(config.repo_root, file_path), "size_bytes": file_path.stat().st_size, "start_line": start + 1, "line_count": len(selected), "total_lines": len(lines), "truncated": byte_truncated or line_truncated, "text": returned_text, "sha256": full_sha256, "returned_content_sha256": hashlib.sha256(returned_text.encode("utf-8")).hexdigest()}
 
 
 def read_files(config: ServerConfig, paths: list[str], start_line: int | None = None, max_lines_per_file: int = 500, max_bytes_per_file: int = 100_000, total_max_bytes: int = 1_000_000) -> dict[str, Any]:
