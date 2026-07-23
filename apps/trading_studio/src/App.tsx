@@ -1,33 +1,56 @@
-import { useMemo, useState, type DragEvent, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type DragEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+  type RefObject
+} from "react";
+import {
+  createNode,
+  executeStudioDocument,
+  loadStoredDocument,
+  newId,
+  nodeSubtitle,
+  previewRows,
+  saveStoredDocument,
+  serializeStudioYaml,
+  validateStudioDocument,
+  type FeatureConfig,
+  type Helper,
+  type NodeKind,
+  type Normalization,
+  type PreviewRow,
+  type StudioDocument,
+  type StudioNode,
+  type StudioRunResult,
+  type ValidationIssue
+} from "./studio";
 
-type NodeKind = "data" | "feature" | "target" | "model" | "signal" | "backtest";
 type InspectorTab = "base" | "normalizations" | "helpers" | "outputs";
 type BottomTab = "preview" | "validation" | "results";
+type CanvasMode = "select" | "pan";
 
-interface StudioNode {
-  id: string;
-  kind: NodeKind;
-  title: string;
-  subtitle: string;
-  x: number;
-  y: number;
+interface HistoryState {
+  past: StudioDocument[];
+  present: StudioDocument;
+  future: StudioDocument[];
 }
 
-interface Normalization {
-  id: string;
-  kind: string;
-  window: number;
-  shift: number;
-  enabled: boolean;
+interface ValidationState {
+  issues: ValidationIssue[];
+  checkedAt: string;
 }
 
-interface Helper {
-  id: string;
-  kind: "slope" | "ratio";
-  left: string;
-  right: string;
-  window?: number;
-}
+type RunState =
+  | { status: "idle" }
+  | { status: "running"; startedAt: string }
+  | { status: "failed"; error: string }
+  | { status: "completed"; result: StudioRunResult };
 
 const palette = [
   { section: "Data", items: [["Dataset", "data"], ["Data loader", "data"], ["Data join", "data"]] },
@@ -38,15 +61,6 @@ const palette = [
   { section: "Backtest", items: [["Backtest", "backtest"]] },
   { section: "Evaluation", items: [["Evaluator", "backtest"], ["Custom metric", "backtest"]] }
 ] as const;
-
-const initialNodes: StudioNode[] = [
-  { id: "dataset", kind: "data", title: "SPX500 30m", subtitle: "Dataset", x: 18, y: 172 },
-  { id: "volatility", kind: "feature", title: "Volatility", subtitle: "1 normalization · 2 helpers", x: 145, y: 160 },
-  { id: "target", kind: "target", title: "Forward return", subtitle: "Target · horizon 8", x: 272, y: 172 },
-  { id: "model", kind: "model", title: "LightGBM", subtitle: "Model · walk-forward", x: 399, y: 172 },
-  { id: "signal", kind: "signal", title: "Probability threshold", subtitle: "Signal · 0.60 / 0.40", x: 526, y: 172 },
-  { id: "backtest", kind: "backtest", title: "Backtest", subtitle: "Costs · slippage", x: 653, y: 172 }
-];
 
 const kindMeta: Record<NodeKind, { color: string; mark: string }> = {
   data: { color: "#1fa866", mark: "D" },
@@ -62,61 +76,161 @@ function Icon({ children }: { children: ReactNode }) {
 }
 
 function TopBar({
+  experimentName,
+  renaming,
+  renameDraft,
+  saveStatus,
+  running,
+  libraryCollapsed,
+  onOpenRename,
+  onRenameDraft,
+  onCommitRename,
+  onCancelRename,
+  onToggleLibrary,
   onYaml,
   onValidate,
-  onRun,
-  running
+  onRun
 }: {
+  experimentName: string;
+  renaming: boolean;
+  renameDraft: string;
+  saveStatus: string;
+  running: boolean;
+  libraryCollapsed: boolean;
+  onOpenRename: () => void;
+  onRenameDraft: (value: string) => void;
+  onCommitRename: () => void;
+  onCancelRename: () => void;
+  onToggleLibrary: () => void;
   onYaml: () => void;
   onValidate: () => void;
   onRun: () => void;
-  running: boolean;
 }) {
   return (
     <header className="topbar">
-      <div className="brand"><Icon>≡</Icon><strong>Trading Studio</strong></div>
-      <div className="experiment-name">SPX500 Momentum Research <button className="icon-button" aria-label="Rename experiment">✎</button></div>
-      <div className="autosave"><span /> Autosaved just now</div>
+      <div className="brand">
+        <button
+          type="button"
+          className="menu-button"
+          aria-label={libraryCollapsed ? "Open component library" : "Close component library"}
+          aria-controls="component-library"
+          aria-expanded={!libraryCollapsed}
+          title={libraryCollapsed ? "Open Components" : "Close Components"}
+          onClick={onToggleLibrary}
+        >
+          <Icon>☰</Icon>
+        </button>
+        <strong>Trading Studio</strong>
+      </div>
+      {renaming ? (
+        <form
+          className="rename-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onCommitRename();
+          }}
+        >
+          <label>
+            <span className="sr-only">Experiment name</span>
+            <input
+              aria-label="Experiment name"
+              autoFocus
+              value={renameDraft}
+              onChange={(event) => onRenameDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") onCancelRename();
+              }}
+            />
+          </label>
+          <button type="submit" aria-label="Save experiment name">✓</button>
+          <button type="button" aria-label="Cancel rename" onClick={onCancelRename}>×</button>
+        </form>
+      ) : (
+        <div className="experiment-name">
+          <span>{experimentName}</span>
+          <button className="icon-button" aria-label="Rename experiment" onClick={onOpenRename}>✎</button>
+        </div>
+      )}
+      <div className="autosave" aria-live="polite"><span /> {saveStatus}</div>
       <div className="top-actions">
         <button className="dark-button" onClick={onYaml}>&lt;/&gt; YAML</button>
         <button className="dark-button" onClick={onValidate}>✓ Validate</button>
-        <button className="run-button" onClick={onRun} disabled={running}>{running ? "Running…" : "▶ Run"}</button>
+        <button className="run-button" onClick={onRun} disabled={running}>
+          {running ? "Running…" : "▶ Run preview"}
+        </button>
       </div>
     </header>
   );
 }
 
-function ComponentLibrary({ query, onQuery }: { query: string; onQuery: (value: string) => void }) {
+function ComponentLibrary({
+  query,
+  collapsed,
+  searchInputRef,
+  onQuery,
+  onToggleCollapsed,
+  onAdd
+}: {
+  query: string;
+  collapsed: boolean;
+  searchInputRef: RefObject<HTMLInputElement>;
+  onQuery: (value: string) => void;
+  onToggleCollapsed: () => void;
+  onAdd: (kind: NodeKind, label: string) => void;
+}) {
+  if (collapsed) {
+    return (
+      <aside id="component-library" className="library collapsed">
+        <button className="library-expand" aria-label="Expand component library" onClick={onToggleCollapsed}>»</button>
+      </aside>
+    );
+  }
   return (
-    <aside className="library">
-      <div className="panel-heading"><strong>Components</strong><button className="icon-button">«</button></div>
+    <aside id="component-library" className="library">
+      <div className="panel-heading">
+        <strong>Components</strong>
+        <button className="icon-button" aria-label="Collapse component library" onClick={onToggleCollapsed}>«</button>
+      </div>
       <label className="search">
-        <input value={query} onChange={(event) => onQuery(event.target.value)} placeholder="Search components…" />
-        <span>⌕</span>
+        <span className="sr-only">Search components</span>
+        <input
+          ref={searchInputRef}
+          value={query}
+          onChange={(event) => onQuery(event.target.value)}
+          placeholder="Search components…"
+        />
+        <span aria-hidden="true">⌕</span>
       </label>
       <div className="library-scroll">
         {palette.map((group) => {
-          const items = group.items.filter(([label]) => label.toLowerCase().includes(query.toLowerCase()));
+          const items = group.items.filter(([label]) => label.toLowerCase().includes(query.trim().toLowerCase()));
           if (!items.length) return null;
           return (
             <section className="palette-group" key={group.section}>
               <h2>{group.section}</h2>
               {items.map(([label, kind]) => (
                 <button
+                  type="button"
                   className="palette-item"
                   draggable
                   key={`${group.section}-${label}`}
+                  onClick={() => onAdd(kind, label)}
                   onDragStart={(event) => {
+                    event.dataTransfer.effectAllowed = "copy";
                     event.dataTransfer.setData("application/x-studio-kind", kind);
                     event.dataTransfer.setData("text/plain", label);
                   }}
+                  title={`Click or drag to add ${label}`}
                 >
-                  <span>{label}</span><span className="grip">⠿</span>
+                  <span>{label}</span><span className="grip" aria-hidden="true">⠿</span>
                 </button>
               ))}
             </section>
           );
         })}
+        {!palette.some((group) => group.items.some(([label]) => label.toLowerCase().includes(query.trim().toLowerCase()))) ? (
+          <p className="empty-library">No components match “{query}”.</p>
+        ) : null}
       </div>
     </aside>
   );
@@ -125,75 +239,310 @@ function ComponentLibrary({ query, onQuery }: { query: string; onQuery: (value: 
 function PipelineNode({
   node,
   selected,
-  onSelect
+  draggable,
+  zoom,
+  onSelect,
+  onMove,
+  onDelete
 }: {
   node: StudioNode;
   selected: boolean;
+  draggable: boolean;
+  zoom: number;
   onSelect: () => void;
+  onMove: (x: number, y: number) => void;
+  onDelete: () => void;
 }) {
   const meta = kindMeta[node.kind];
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const dragGestureRef = useRef<{
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+    nextX: number;
+    nextY: number;
+  } | null>(null);
+
+  const finishDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const gesture = dragGestureRef.current;
+    if (!gesture) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    dragGestureRef.current = null;
+    onMove(Math.round(gesture.nextX), Math.round(gesture.nextY));
+  };
+
   return (
-    <button
+    <div
+      ref={wrapperRef}
       className={`pipeline-node ${selected ? "selected" : ""}`}
-      style={{ left: node.x, top: node.y, "--node-color": meta.color } as React.CSSProperties}
-      onClick={onSelect}
+      style={{ left: node.x, top: node.y, "--node-color": meta.color } as CSSProperties}
+      data-node-id={node.id}
     >
-      <span className="node-valid">✓</span>
-      <span className="node-mark">{meta.mark}</span>
-      <span className="node-copy"><small>{node.subtitle}</small><strong>{node.title}</strong></span>
+      <button
+        type="button"
+        className="node-select"
+        onClick={onSelect}
+        aria-label={`Select ${node.title} ${node.kind} node`}
+        onPointerDown={(event) => {
+          if (!draggable || event.button !== 0) return;
+          event.currentTarget.setPointerCapture(event.pointerId);
+          dragGestureRef.current = {
+            startX: event.clientX,
+            startY: event.clientY,
+            originX: node.x,
+            originY: node.y,
+            nextX: node.x,
+            nextY: node.y
+          };
+          onSelect();
+        }}
+        onPointerMove={(event) => {
+          const gesture = dragGestureRef.current;
+          const wrapper = wrapperRef.current;
+          if (!gesture || !wrapper) return;
+          gesture.nextX = Math.max(0, gesture.originX + (event.clientX - gesture.startX) / zoom);
+          gesture.nextY = Math.max(0, gesture.originY + (event.clientY - gesture.startY) / zoom);
+          wrapper.style.left = `${gesture.nextX}px`;
+          wrapper.style.top = `${gesture.nextY}px`;
+        }}
+        onPointerUp={finishDrag}
+        onPointerCancel={finishDrag}
+      >
+        <span className="node-valid">✓</span>
+        <span className="node-mark">{meta.mark}</span>
+        <span className="node-copy"><small>{nodeSubtitle(node)}</small><strong>{node.title}</strong></span>
+      </button>
       {node.kind !== "data" ? <span className="port input-port" /> : null}
       {node.kind !== "backtest" ? <span className="port output-port" /> : null}
-      <span className="node-menu">•••</span>
-    </button>
+      <button
+        type="button"
+        className="node-delete"
+        aria-label={`Delete ${node.title}`}
+        onClick={(event) => {
+          event.stopPropagation();
+          onDelete();
+        }}
+      >
+        ×
+      </button>
+    </div>
   );
 }
 
 function Canvas({
   nodes,
   selectedId,
+  canUndo,
+  canRedo,
   onSelect,
-  onDropNode
+  onAddNode,
+  onMoveNode,
+  onDeleteNode,
+  onUndo,
+  onRedo,
+  onFocusSearch
 }: {
   nodes: StudioNode[];
-  selectedId: string;
-  onSelect: (id: string) => void;
-  onDropNode: (node: StudioNode) => void;
+  selectedId: string | null;
+  canUndo: boolean;
+  canRedo: boolean;
+  onSelect: (id: string | null) => void;
+  onAddNode: (node: StudioNode) => void;
+  onMoveNode: (id: string, x: number, y: number) => void;
+  onDeleteNode: (id: string) => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  onFocusSearch: () => void;
 }) {
-  const ordered = [...nodes].sort((a, b) => a.x - b.x);
+  const [mode, setMode] = useState<CanvasMode>("select");
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const canvasRef = useRef<HTMLElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const panGestureRef = useRef<{
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+    nextX: number;
+    nextY: number;
+  } | null>(null);
+
+  const ordered = useMemo(() => [...nodes].sort((left, right) => left.x - right.x || left.y - right.y), [nodes]);
+  const transform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`;
+
+  const setViewport = (nextZoom: number, nextPan = pan) => {
+    const boundedZoom = Math.min(1.75, Math.max(0.5, nextZoom));
+    setZoom(boundedZoom);
+    setPan(nextPan);
+  };
+
+  const fitNodes = () => {
+    const stage = stageRef.current;
+    if (!stage || !nodes.length) {
+      setViewport(1, { x: 0, y: 0 });
+      return;
+    }
+    const minX = Math.min(...nodes.map((node) => node.x));
+    const minY = Math.min(...nodes.map((node) => node.y));
+    const maxX = Math.max(...nodes.map((node) => node.x + 112));
+    const maxY = Math.max(...nodes.map((node) => node.y + 120));
+    const availableWidth = Math.max(240, stage.clientWidth - 80);
+    const availableHeight = Math.max(180, stage.clientHeight - 80);
+    const nextZoom = Math.min(1.5, Math.max(0.5, Math.min(availableWidth / (maxX - minX), availableHeight / (maxY - minY))));
+    setViewport(nextZoom, {
+      x: (stage.clientWidth - (maxX - minX) * nextZoom) / 2 - minX * nextZoom,
+      y: (stage.clientHeight - (maxY - minY) * nextZoom) / 2 - minY * nextZoom
+    });
+  };
+
+  const finishPan = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const gesture = panGestureRef.current;
+    if (!gesture) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    panGestureRef.current = null;
+    setPan({ x: gesture.nextX, y: gesture.nextY });
+  };
+
   return (
-    <main
-      className="canvas"
-      onDragOver={(event) => event.preventDefault()}
-      onDrop={(event) => {
-        event.preventDefault();
-        const kind = event.dataTransfer.getData("application/x-studio-kind") as NodeKind;
-        const label = event.dataTransfer.getData("text/plain");
-        if (!kind) return;
-        const bounds = event.currentTarget.getBoundingClientRect();
-        onDropNode({
-          id: `${kind}-${Date.now()}`,
-          kind,
-          title: label,
-          subtitle: kind[0].toUpperCase() + kind.slice(1),
-          x: Math.max(16, event.clientX - bounds.left - 78),
-          y: Math.max(74, event.clientY - bounds.top - 48)
-        });
-      }}
-    >
+    <main ref={canvasRef} className="canvas">
       <div className="canvas-toolbar">
-        <button className="tool active">↖</button><button className="tool">✋</button><button className="tool">⌕</button>
-        <span className="zoom">− &nbsp; 100% &nbsp; +</span><button className="tool">⛶</button>
-        <span className="toolbar-spacer" /><button className="tool">↶</button><button className="tool">↷</button>
+        <button
+          type="button"
+          className={`tool ${mode === "select" ? "active" : ""}`}
+          aria-label="Select and move nodes"
+          aria-pressed={mode === "select"}
+          onClick={() => setMode("select")}
+        >
+          ↖
+        </button>
+        <button
+          type="button"
+          className={`tool ${mode === "pan" ? "active" : ""}`}
+          aria-label="Pan canvas"
+          aria-pressed={mode === "pan"}
+          onClick={() => setMode("pan")}
+        >
+          ✋
+        </button>
+        <button type="button" className="tool" aria-label="Focus component search" onClick={onFocusSearch}>⌕</button>
+        <div className="zoom" aria-label={`Canvas zoom ${Math.round(zoom * 100)} percent`}>
+          <button type="button" aria-label="Zoom out" onClick={() => setViewport(zoom - 0.1)}>−</button>
+          <button type="button" aria-label="Reset zoom" onClick={() => setViewport(1, { x: 0, y: 0 })}>
+            {Math.round(zoom * 100)}%
+          </button>
+          <button type="button" aria-label="Zoom in" onClick={() => setViewport(zoom + 0.1)}>+</button>
+        </div>
+        <button type="button" className="tool" aria-label="Fit pipeline to canvas" onClick={fitNodes}>⛶</button>
+        <button
+          type="button"
+          className="tool"
+          aria-label="Enter canvas fullscreen"
+          onClick={() => {
+            void canvasRef.current?.requestFullscreen?.().catch(() => undefined);
+          }}
+        >
+          ⤢
+        </button>
+        <span className="toolbar-spacer" />
+        <button type="button" className="tool" aria-label="Undo" disabled={!canUndo} onClick={onUndo}>↶</button>
+        <button type="button" className="tool" aria-label="Redo" disabled={!canRedo} onClick={onRedo}>↷</button>
       </div>
-      <div className="canvas-stage">
-        <svg className="connections" aria-hidden="true">
-          {ordered.slice(0, -1).map((node, index) => {
-            const next = ordered[index + 1];
-            return <line key={`${node.id}-${next.id}`} x1={node.x + 112} y1={node.y + 60} x2={next.x} y2={next.y + 60} />;
-          })}
-        </svg>
-        {nodes.map((node) => <PipelineNode key={node.id} node={node} selected={node.id === selectedId} onSelect={() => onSelect(node.id)} />)}
-        <div className="minimap">{nodes.map((node) => <span key={node.id} style={{ left: `${node.x / 12}px`, top: `${node.y / 12}px` }} />)}</div>
+      <div
+        ref={stageRef}
+        className={`canvas-stage ${mode === "pan" ? "panning" : ""}`}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) onSelect(null);
+        }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = event.dataTransfer.types.includes("application/x-studio-node-id") ? "move" : "copy";
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          const bounds = event.currentTarget.getBoundingClientRect();
+          const rawOffset = event.dataTransfer.getData("application/x-studio-offset");
+          let offset = { x: 56, y: 60 };
+          if (rawOffset) {
+            try {
+              const parsed = JSON.parse(rawOffset) as { x?: unknown; y?: unknown };
+              if (typeof parsed.x === "number" && typeof parsed.y === "number") offset = { x: parsed.x, y: parsed.y };
+            } catch {
+              // Keep the centered default for malformed drag metadata.
+            }
+          }
+          const x = Math.max(0, (event.clientX - bounds.left - pan.x) / zoom - offset.x);
+          const y = Math.max(0, (event.clientY - bounds.top - pan.y) / zoom - offset.y);
+          const nodeId = event.dataTransfer.getData("application/x-studio-node-id");
+          if (nodeId) {
+            onMoveNode(nodeId, Math.round(x), Math.round(y));
+            return;
+          }
+          const kind = event.dataTransfer.getData("application/x-studio-kind") as NodeKind;
+          const label = event.dataTransfer.getData("text/plain");
+          if (kind && label) onAddNode(createNode(kind, label, Math.round(x), Math.round(y)));
+        }}
+        onPointerDown={(event) => {
+          if (mode !== "pan" || (event.target as Element).closest(".pipeline-node")) return;
+          event.currentTarget.setPointerCapture(event.pointerId);
+          panGestureRef.current = {
+            startX: event.clientX,
+            startY: event.clientY,
+            originX: pan.x,
+            originY: pan.y,
+            nextX: pan.x,
+            nextY: pan.y
+          };
+        }}
+        onPointerMove={(event) => {
+          const gesture = panGestureRef.current;
+          const content = contentRef.current;
+          if (!gesture || !content) return;
+          gesture.nextX = gesture.originX + event.clientX - gesture.startX;
+          gesture.nextY = gesture.originY + event.clientY - gesture.startY;
+          content.style.transform = `translate(${gesture.nextX}px, ${gesture.nextY}px) scale(${zoom})`;
+        }}
+        onPointerUp={finishPan}
+        onPointerCancel={finishPan}
+      >
+        <div ref={contentRef} className="canvas-content" style={{ transform }}>
+          <svg className="connections" aria-hidden="true">
+            {ordered.slice(0, -1).map((node, index) => {
+              const next = ordered[index + 1];
+              return <line key={`${node.id}-${next.id}`} x1={node.x + 112} y1={node.y + 60} x2={next.x} y2={next.y + 60} />;
+            })}
+          </svg>
+          {nodes.map((node) => (
+            <PipelineNode
+              key={node.id}
+              node={node}
+              selected={node.id === selectedId}
+              draggable={mode === "select"}
+              zoom={zoom}
+              onSelect={() => onSelect(node.id)}
+              onMove={(x, y) => onMoveNode(node.id, x, y)}
+              onDelete={() => onDeleteNode(node.id)}
+            />
+          ))}
+        </div>
+        <div className="minimap" aria-hidden="true">
+          {nodes.map((node) => (
+            <span
+              key={node.id}
+              style={{
+                left: `${Math.min(134, Math.max(1, node.x / 6))}px`,
+                top: `${Math.min(60, Math.max(1, node.y / 6))}px`,
+                borderColor: kindMeta[node.kind].color
+              }}
+            />
+          ))}
+        </div>
       </div>
     </main>
   );
@@ -203,90 +552,388 @@ function Field({ label, children, hint }: { label: string; children: ReactNode; 
   return <label className="field"><span>{label}{hint ? <em title={hint}>i</em> : null}</span>{children}</label>;
 }
 
+function RollingWindowsInput({
+  value,
+  onCommit
+}: {
+  value: number[];
+  onCommit: (windows: number[]) => void;
+}) {
+  const serializedValue = value.join(", ");
+  const [draft, setDraft] = useState(serializedValue);
+  useEffect(() => setDraft(serializedValue), [serializedValue]);
+
+  const commit = () => {
+    const windows = draft
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .map(Number);
+    onCommit(windows);
+  };
+
+  return (
+    <input
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur();
+      }}
+    />
+  );
+}
+
+function moveById<T extends { id: string }>(items: T[], sourceId: string, targetId: string): T[] {
+  const sourceIndex = items.findIndex((item) => item.id === sourceId);
+  const targetIndex = items.findIndex((item) => item.id === targetId);
+  if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return items;
+  const next = [...items];
+  const [source] = next.splice(sourceIndex, 1);
+  next.splice(targetIndex, 0, source);
+  return next;
+}
+
+function moveAtIndex<T>(items: T[], index: number, offset: -1 | 1): T[] {
+  const target = index + offset;
+  if (target < 0 || target >= items.length) return items;
+  const next = [...items];
+  [next[index], next[target]] = [next[target], next[index]];
+  return next;
+}
+
 function NestedBlock({
+  id,
+  listType,
   title,
   enabled,
+  index,
+  count,
   onToggle,
   onRemove,
+  onMove,
+  onReorder,
   children
 }: {
+  id: string;
+  listType: "normalization" | "helper";
   title: string;
   enabled: boolean;
+  index: number;
+  count: number;
   onToggle: () => void;
   onRemove: () => void;
+  onMove: (offset: -1 | 1) => void;
+  onReorder: (sourceId: string, targetId: string) => void;
   children: ReactNode;
 }) {
   return (
-    <div className="nested-block">
-      <div className="nested-head"><span className="grip">⠿</span><strong>{title}</strong><button className={`switch ${enabled ? "on" : ""}`} onClick={onToggle}><span /></button><button className="icon-button" onClick={onRemove} aria-label={`Remove ${title}`}>⌫</button></div>
-      {enabled ? <div className="nested-body">{children}</div> : null}
+    <div
+      className="nested-block"
+      data-list-id={id}
+      onDragOver={(event) => {
+        if (event.dataTransfer.types.includes("application/x-studio-list-id")) event.preventDefault();
+      }}
+      onDrop={(event) => {
+        const sourceType = event.dataTransfer.getData("application/x-studio-list-type");
+        const sourceId = event.dataTransfer.getData("application/x-studio-list-id");
+        if (sourceType === listType && sourceId) {
+          event.preventDefault();
+          onReorder(sourceId, id);
+        }
+      }}
+    >
+      <div className="nested-head">
+        <span
+          className="grip draggable-grip"
+          aria-label={`Drag ${title} to reorder`}
+          draggable
+          role="img"
+          onDragStart={(event) => {
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("application/x-studio-list-type", listType);
+            event.dataTransfer.setData("application/x-studio-list-id", id);
+          }}
+        >
+          ⠿
+        </span>
+        <strong>{title}</strong>
+        <span className="row-actions">
+          <button type="button" className="icon-button" aria-label={`Move ${title} up`} disabled={index === 0} onClick={() => onMove(-1)}>↑</button>
+          <button type="button" className="icon-button" aria-label={`Move ${title} down`} disabled={index === count - 1} onClick={() => onMove(1)}>↓</button>
+          <button
+            type="button"
+            className={`switch ${enabled ? "on" : ""}`}
+            aria-label={`${enabled ? "Disable" : "Enable"} ${title}`}
+            aria-pressed={enabled}
+            onClick={onToggle}
+          >
+            <span />
+          </button>
+          <button type="button" className="icon-button remove-action" onClick={onRemove} aria-label={`Remove ${title}`}>⌫</button>
+        </span>
+      </div>
+      {enabled ? <div className="nested-body">{children}</div> : <p className="disabled-note">Disabled</p>}
     </div>
   );
 }
 
 function FeatureInspector({
+  node,
   tab,
   setTab,
-  normalizations,
-  setNormalizations,
-  helpers,
-  setHelpers
+  onUpdate
 }: {
+  node: StudioNode & { feature: FeatureConfig };
   tab: InspectorTab;
   setTab: (tab: InspectorTab) => void;
-  normalizations: Normalization[];
-  setNormalizations: (items: Normalization[]) => void;
-  helpers: Helper[];
-  setHelpers: (items: Helper[]) => void;
+  onUpdate: (node: StudioNode) => void;
 }) {
+  const feature = node.feature;
+  const updateFeature = (next: FeatureConfig) => onUpdate({ ...node, feature: next });
+  const updateNormalization = (id: string, update: (item: Normalization) => Normalization) => {
+    updateFeature({
+      ...feature,
+      normalizations: feature.normalizations.map((item) => item.id === id ? update(item) : item)
+    });
+  };
+  const updateHelper = (id: string, update: (item: Helper) => Helper) => {
+    updateFeature({
+      ...feature,
+      helpers: feature.helpers.map((item) => item.id === id ? update(item) : item)
+    });
+  };
+
   return (
     <>
-      <nav className="inspector-tabs">
-        {(["base", "normalizations", "helpers", "outputs"] as const).map((item) => <button className={tab === item ? "active" : ""} onClick={() => setTab(item)} key={item}>{item[0].toUpperCase() + item.slice(1)}</button>)}
+      <nav className="inspector-tabs" aria-label="Feature inspector sections">
+        {(["base", "normalizations", "helpers", "outputs"] as const).map((item) => (
+          <button
+            type="button"
+            className={tab === item ? "active" : ""}
+            onClick={() => setTab(item)}
+            aria-pressed={tab === item}
+            key={item}
+          >
+            {item[0].toUpperCase() + item.slice(1)}
+          </button>
+        ))}
       </nav>
       <div className="inspector-scroll">
         {tab === "base" ? (
           <section className="inspector-section">
             <div className="section-title"><h2>Feature parameters</h2></div>
-            <Field label="Feature kind"><select><option>volatility</option><option>trend</option><option>momentum</option></select></Field>
-            <Field label="Rolling windows (bars)" hint="One or more windows can be emitted"><input defaultValue="96, 252" /></Field>
-            <Field label="Returns column"><select><option>close_ret</option><option>close_logret</option></select></Field>
-            <Field label="Annualization factor"><input defaultValue="auto" /></Field>
-            <Field label="Enabled"><select><option>true</option><option>false</option></select></Field>
+            <Field label="Feature kind">
+              <select
+                value={feature.kind}
+                onChange={(event) => updateFeature({ ...feature, kind: event.target.value as FeatureConfig["kind"] })}
+              >
+                <option value="volatility">volatility</option>
+                <option value="trend">trend</option>
+                <option value="momentum">momentum</option>
+              </select>
+            </Field>
+            <Field label="Rolling windows (bars)" hint="Comma-separated positive integer windows">
+              <RollingWindowsInput
+                value={feature.rollingWindows}
+                onCommit={(rollingWindows) => updateFeature({ ...feature, rollingWindows })}
+              />
+            </Field>
+            <Field label="Returns column">
+              <input value={feature.returnsCol} onChange={(event) => updateFeature({ ...feature, returnsCol: event.target.value })} />
+            </Field>
+            <Field label="Annualization factor">
+              <select
+                value={feature.annualizationFactor}
+                onChange={(event) => updateFeature({ ...feature, annualizationFactor: event.target.value })}
+              >
+                <option value="auto">auto</option>
+                <option value="252">252</option>
+                <option value="8760">8760</option>
+                <option value="12096">12096</option>
+              </select>
+            </Field>
+            <Field label="Enabled">
+              <button
+                type="button"
+                className={`wide-switch ${feature.enabled ? "on" : ""}`}
+                aria-pressed={feature.enabled}
+                onClick={() => updateFeature({ ...feature, enabled: !feature.enabled })}
+              >
+                {feature.enabled ? "Enabled" : "Disabled"}
+              </button>
+            </Field>
           </section>
         ) : null}
         {tab === "normalizations" ? (
           <section className="inspector-section">
-            <div className="section-title"><h2>Normalizations</h2><button onClick={() => setNormalizations([...normalizations, { id: crypto.randomUUID(), kind: "rolling_zscore", window: 96, shift: 1, enabled: true }])}>＋ Add normalization</button></div>
-            {normalizations.map((item, index) => (
-              <NestedBlock key={item.id} title={`${index + 1} · ${item.kind}`} enabled={item.enabled} onToggle={() => setNormalizations(normalizations.map((next) => next.id === item.id ? { ...next, enabled: !next.enabled } : next))} onRemove={() => setNormalizations(normalizations.filter((next) => next.id !== item.id))}>
-                <Field label="Method"><select value={item.kind} onChange={(event) => setNormalizations(normalizations.map((next) => next.id === item.id ? { ...next, kind: event.target.value } : next))}><option>rolling_zscore</option><option>range_position</option><option>rolling_clip</option></select></Field>
+            <div className="section-title">
+              <h2>Normalizations</h2>
+              <button
+                type="button"
+                onClick={() => updateFeature({
+                  ...feature,
+                  normalizations: [
+                    ...feature.normalizations,
+                    { id: newId("norm"), kind: "rolling_zscore", window: 96, shift: 1, enabled: true }
+                  ]
+                })}
+              >
+                ＋ Add normalization
+              </button>
+            </div>
+            {feature.normalizations.map((item, index) => (
+              <NestedBlock
+                key={item.id}
+                id={item.id}
+                listType="normalization"
+                title={`${index + 1} · ${item.kind}`}
+                enabled={item.enabled}
+                index={index}
+                count={feature.normalizations.length}
+                onToggle={() => updateNormalization(item.id, (current) => ({ ...current, enabled: !current.enabled }))}
+                onRemove={() => updateFeature({ ...feature, normalizations: feature.normalizations.filter((current) => current.id !== item.id) })}
+                onMove={(offset) => updateFeature({ ...feature, normalizations: moveAtIndex(feature.normalizations, index, offset) })}
+                onReorder={(sourceId, targetId) => updateFeature({ ...feature, normalizations: moveById(feature.normalizations, sourceId, targetId) })}
+              >
+                <Field label="Method">
+                  <select
+                    value={item.kind}
+                    onChange={(event) => updateNormalization(item.id, (current) => ({
+                      ...current,
+                      kind: event.target.value as Normalization["kind"]
+                    }))}
+                  >
+                    <option value="rolling_zscore">rolling_zscore</option>
+                    <option value="range_position">range_position</option>
+                    <option value="rolling_clip">rolling_clip</option>
+                  </select>
+                </Field>
                 <div className="field-row">
-                  <Field label="Window"><input type="number" value={item.window} onChange={(event) => setNormalizations(normalizations.map((next) => next.id === item.id ? { ...next, window: Number(event.target.value) } : next))} /></Field>
-                  <Field label="Shift"><input type="number" value={item.shift} onChange={(event) => setNormalizations(normalizations.map((next) => next.id === item.id ? { ...next, shift: Number(event.target.value) } : next))} /></Field>
+                  <Field label="Window">
+                    <input
+                      type="number"
+                      min="2"
+                      step="1"
+                      value={item.window}
+                      onChange={(event) => updateNormalization(item.id, (current) => ({ ...current, window: Number(event.target.value) }))}
+                    />
+                  </Field>
+                  <Field label="Shift">
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={item.shift}
+                      onChange={(event) => updateNormalization(item.id, (current) => ({ ...current, shift: Number(event.target.value) }))}
+                    />
+                  </Field>
                 </div>
               </NestedBlock>
             ))}
+            {!feature.normalizations.length ? <p className="empty-section">No normalizations configured.</p> : null}
           </section>
         ) : null}
         {tab === "helpers" ? (
           <section className="inspector-section">
-            <div className="section-title"><h2>Helpers / transforms</h2><button onClick={() => setHelpers([...helpers, { id: crypto.randomUUID(), kind: "slope", left: "vol_rolling_96", right: "", window: 8 }])}>＋ Add helper</button></div>
-            {helpers.map((item, index) => (
-              <NestedBlock key={item.id} title={`${index + 1} · ${item.kind}`} enabled onToggle={() => undefined} onRemove={() => setHelpers(helpers.filter((next) => next.id !== item.id))}>
-                <Field label="Helper kind"><select value={item.kind} onChange={(event) => setHelpers(helpers.map((next) => next.id === item.id ? { ...next, kind: event.target.value as Helper["kind"] } : next))}><option>slope</option><option>ratio</option></select></Field>
-                <Field label={item.kind === "ratio" ? "Numerator column" : "Source column"}><input value={item.left} onChange={(event) => setHelpers(helpers.map((next) => next.id === item.id ? { ...next, left: event.target.value } : next))} /></Field>
-                {item.kind === "ratio" ? <Field label="Denominator column"><input value={item.right} onChange={(event) => setHelpers(helpers.map((next) => next.id === item.id ? { ...next, right: event.target.value } : next))} /></Field> : <Field label="Window"><input type="number" value={item.window} /></Field>}
+            <div className="section-title">
+              <h2>Helpers / transforms</h2>
+              <button
+                type="button"
+                onClick={() => updateFeature({
+                  ...feature,
+                  helpers: [
+                    ...feature.helpers,
+                    { id: newId("helper"), kind: "slope", left: "vol_rolling_96", right: "", window: 8, enabled: true }
+                  ]
+                })}
+              >
+                ＋ Add helper
+              </button>
+            </div>
+            {feature.helpers.map((item, index) => (
+              <NestedBlock
+                key={item.id}
+                id={item.id}
+                listType="helper"
+                title={`${index + 1} · ${item.kind}`}
+                enabled={item.enabled}
+                index={index}
+                count={feature.helpers.length}
+                onToggle={() => updateHelper(item.id, (current) => ({ ...current, enabled: !current.enabled }))}
+                onRemove={() => updateFeature({ ...feature, helpers: feature.helpers.filter((current) => current.id !== item.id) })}
+                onMove={(offset) => updateFeature({ ...feature, helpers: moveAtIndex(feature.helpers, index, offset) })}
+                onReorder={(sourceId, targetId) => updateFeature({ ...feature, helpers: moveById(feature.helpers, sourceId, targetId) })}
+              >
+                <Field label="Helper kind">
+                  <select
+                    value={item.kind}
+                    onChange={(event) => {
+                      const kind = event.target.value as Helper["kind"];
+                      updateHelper(item.id, (current) => ({
+                        ...current,
+                        kind,
+                        right: kind === "ratio" ? current.right || "close" : "",
+                        window: kind === "slope" ? current.window ?? 8 : undefined
+                      }));
+                    }}
+                  >
+                    <option value="slope">slope</option>
+                    <option value="ratio">ratio</option>
+                  </select>
+                </Field>
+                <Field label={item.kind === "ratio" ? "Numerator column" : "Source column"}>
+                  <input value={item.left} onChange={(event) => updateHelper(item.id, (current) => ({ ...current, left: event.target.value }))} />
+                </Field>
+                {item.kind === "ratio" ? (
+                  <Field label="Denominator column">
+                    <input value={item.right} onChange={(event) => updateHelper(item.id, (current) => ({ ...current, right: event.target.value }))} />
+                  </Field>
+                ) : (
+                  <Field label="Window">
+                    <input
+                      type="number"
+                      min="2"
+                      step="1"
+                      value={item.window ?? 8}
+                      onChange={(event) => updateHelper(item.id, (current) => ({ ...current, window: Number(event.target.value) }))}
+                    />
+                  </Field>
+                )}
               </NestedBlock>
             ))}
-            <p className="section-note">Helpers run in this order. Drag rows to reorder in the production workflow.</p>
+            {!feature.helpers.length ? <p className="empty-section">No helpers configured.</p> : null}
+            <p className="section-note">Helpers execute in the displayed order. Drag the grip or use the arrow buttons to reorder.</p>
           </section>
         ) : null}
         {tab === "outputs" ? (
           <section className="inspector-section">
             <div className="section-title"><h2>Generated outputs</h2></div>
-            {["vol_rolling_96", "vol_rolling_96__zscore", "vol_slope_8", "vol_slope_over_close"].map((output) => <div className="output-row" key={output}><code>{output}</code><span>numeric</span></div>)}
-            <button className="secondary-wide">＋ Add output mapping</button>
+            {feature.outputs.map((output, index) => (
+              <div className="output-row" key={index}>
+                <input
+                  aria-label={`Output ${index + 1}`}
+                  value={output}
+                  onChange={(event) => {
+                    const outputs = [...feature.outputs];
+                    outputs[index] = event.target.value;
+                    updateFeature({ ...feature, outputs });
+                  }}
+                />
+                <span className="output-actions">
+                  <button type="button" className="icon-button" aria-label={`Move output ${index + 1} up`} disabled={index === 0} onClick={() => updateFeature({ ...feature, outputs: moveAtIndex(feature.outputs, index, -1) })}>↑</button>
+                  <button type="button" className="icon-button" aria-label={`Move output ${index + 1} down`} disabled={index === feature.outputs.length - 1} onClick={() => updateFeature({ ...feature, outputs: moveAtIndex(feature.outputs, index, 1) })}>↓</button>
+                  <button type="button" className="icon-button remove-action" aria-label={`Remove output ${index + 1}`} onClick={() => updateFeature({ ...feature, outputs: feature.outputs.filter((_, outputIndex) => outputIndex !== index) })}>⌫</button>
+                </span>
+              </div>
+            ))}
+            <button
+              type="button"
+              className="secondary-wide"
+              onClick={() => updateFeature({ ...feature, outputs: [...feature.outputs, `feature_output_${feature.outputs.length + 1}`] })}
+            >
+              ＋ Add output mapping
+            </button>
           </section>
         ) : null}
       </div>
@@ -298,120 +945,708 @@ function Inspector({
   selected,
   tab,
   setTab,
-  normalizations,
-  setNormalizations,
-  helpers,
-  setHelpers
+  onUpdate,
+  onDuplicate,
+  onDelete
 }: {
   selected?: StudioNode;
   tab: InspectorTab;
   setTab: (tab: InspectorTab) => void;
-  normalizations: Normalization[];
-  setNormalizations: (items: Normalization[]) => void;
-  helpers: Helper[];
-  setHelpers: (items: Helper[]) => void;
+  onUpdate: (node: StudioNode) => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
 }) {
+  const meta = selected ? kindMeta[selected.kind] : kindMeta.feature;
   return (
     <aside className="inspector">
-      <div className="inspector-heading"><span className="inspector-mark">ƒx</span><div><small>{selected?.kind ?? "component"}</small><strong>{selected?.title ?? "Select a component"}</strong></div><span className="heading-actions">⧉ &nbsp; ⌫</span></div>
-      {selected?.kind === "feature" ? <FeatureInspector tab={tab} setTab={setTab} normalizations={normalizations} setNormalizations={setNormalizations} helpers={helpers} setHelpers={setHelpers} /> : (
+      <div className="inspector-heading">
+        <span className="inspector-mark" style={{ color: meta.color }}>{selected ? meta.mark : "◇"}</span>
+        <div><small>{selected?.kind ?? "component"}</small><strong>{selected?.title ?? "Select a component"}</strong></div>
+        {selected ? (
+          <span className="heading-actions">
+            <button type="button" className="icon-button" aria-label={`Duplicate ${selected.title}`} onClick={onDuplicate}>⧉</button>
+            <button type="button" className="icon-button remove-action" aria-label={`Delete selected ${selected.title}`} onClick={onDelete}>⌫</button>
+          </span>
+        ) : null}
+      </div>
+      {selected?.kind === "feature" && selected.feature ? (
+        <FeatureInspector
+          node={selected as StudioNode & { feature: FeatureConfig }}
+          tab={tab}
+          setTab={setTab}
+          onUpdate={onUpdate}
+        />
+      ) : (
         <div className="generic-inspector">
-          <h2>{selected?.subtitle}</h2>
-          <Field label="Kind"><input value={selected?.kind ?? ""} readOnly /></Field>
-          <Field label="Name"><input value={selected?.title ?? ""} readOnly /></Field>
-          <p>Select the feature node to configure nested normalizations, helpers and outputs.</p>
+          {selected ? (
+            <>
+              <h2>{selected.subtitle}</h2>
+              <Field label="Kind"><input value={selected.kind} readOnly /></Field>
+              <Field label="Name">
+                <input value={selected.title} onChange={(event) => onUpdate({ ...selected, title: event.target.value })} />
+              </Field>
+              <Field label="Description">
+                <input value={selected.subtitle} onChange={(event) => onUpdate({ ...selected, subtitle: event.target.value })} />
+              </Field>
+              <p>Drag the node on the canvas to reposition it. Delete/Backspace removes the selected node.</p>
+            </>
+          ) : (
+            <div className="empty-inspector">
+              <h2>No component selected</h2>
+              <p>Select a pipeline node to edit it, or add a component from the library.</p>
+            </div>
+          )}
         </div>
       )}
     </aside>
   );
 }
 
-const previewRows = [
-  ["2024-05-10 13:00", "5257.75", "5261.25", "5252.25", "5257.00", "0.00317", "-0.8123", "0.0132"],
-  ["2024-05-10 13:30", "5257.00", "5260.50", "5251.75", "5255.75", "-0.00024", "-0.8451", "0.0204"],
-  ["2024-05-10 14:00", "5255.75", "5262.25", "5255.25", "5261.25", "0.00105", "-0.7649", "0.0278"],
-  ["2024-05-10 14:30", "5261.25", "5264.00", "5256.25", "5263.50", "0.00043", "-0.7432", "0.0312"]
+function formatCell(value: string | number, column: string): string {
+  if (typeof value === "string") return value;
+  if (column === "open" || column === "high" || column === "low" || column === "close") return value.toFixed(2);
+  return value.toFixed(5).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+type PreviewSeriesKey = "close" | "returns" | "vol_96_z" | "slope_8";
+
+interface PreviewSeriesDefinition {
+  key: PreviewSeriesKey;
+  label: string;
+  color: string;
+  value: (row: PreviewRow) => number;
+  format: (value: number) => string;
+}
+
+const PREVIEW_SERIES: PreviewSeriesDefinition[] = [
+  {
+    key: "close",
+    label: "Close price",
+    color: "#2878f6",
+    value: (row) => row.close,
+    format: (value) => value.toFixed(2)
+  },
+  {
+    key: "returns",
+    label: "Bar return",
+    color: "#16a05d",
+    value: (row) => row.returns,
+    format: (value) => `${(value * 100).toFixed(3)}%`
+  },
+  {
+    key: "vol_96_z",
+    label: "Volatility z-score",
+    color: "#7457e8",
+    value: (row) => row.vol_96_z,
+    format: (value) => value.toFixed(4)
+  },
+  {
+    key: "slope_8",
+    label: "Volatility slope",
+    color: "#e77824",
+    value: (row) => row.slope_8,
+    format: (value) => value.toFixed(4)
+  }
 ];
 
-function BottomDrawer({ tab, setTab, validationStamp, hasResults }: { tab: BottomTab; setTab: (tab: BottomTab) => void; validationStamp: string; hasResults: boolean }) {
+function PreviewSeriesChart({ series }: { series: PreviewSeriesDefinition }) {
+  const width = 760;
+  const height = 116;
+  const padX = 22;
+  const padY = 14;
+  const values = previewRows.map(series.value);
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  const span = maximum - minimum || 1;
+  const points = values.map((value, index) => {
+    const x = values.length === 1
+      ? width / 2
+      : padX + (index / (values.length - 1)) * (width - padX * 2);
+    const y = padY + ((maximum - value) / span) * (height - padY * 2);
+    return { x, y, value };
+  });
+  return (
+    <article className="preview-series-chart">
+      <header>
+        <span className="series-name"><i style={{ background: series.color }} />{series.label}</span>
+        <span>
+          latest <strong>{series.format(values[values.length - 1])}</strong>
+          <small>{series.format(minimum)} – {series.format(maximum)}</small>
+        </span>
+      </header>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={`${series.label} preview chart from ${previewRows[0]?.timestamp} to ${previewRows[previewRows.length - 1]?.timestamp}`}
+      >
+        {[0.25, 0.5, 0.75].map((ratio) => (
+          <line
+            key={ratio}
+            className="chart-grid-line"
+            x1={padX}
+            x2={width - padX}
+            y1={height * ratio}
+            y2={height * ratio}
+          />
+        ))}
+        <polyline
+          fill="none"
+          stroke={series.color}
+          strokeWidth="3"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+          points={points.map(({ x, y }) => `${x},${y}`).join(" ")}
+        />
+        {points.map(({ x, y, value }, index) => (
+          <circle key={`${previewRows[index].timestamp}-${value}`} cx={x} cy={y} r="4" fill={series.color}>
+            <title>{previewRows[index].timestamp}: {series.format(value)}</title>
+          </circle>
+        ))}
+      </svg>
+      <footer>
+        <span>{previewRows[0]?.timestamp}</span>
+        <span>{previewRows[previewRows.length - 1]?.timestamp}</span>
+      </footer>
+    </article>
+  );
+}
+
+function BottomDrawer({
+  tab,
+  validation,
+  runState,
+  setTab,
+  onOpenResults
+}: {
+  tab: BottomTab;
+  validation: ValidationState | null;
+  runState: RunState;
+  setTab: (tab: BottomTab) => void;
+  onOpenResults: () => void;
+}) {
+  const errors = validation?.issues.filter((issue) => issue.level === "error").length ?? 0;
+  const columns = ["timestamp", "open", "high", "low", "close", "returns", "vol_96_z", "slope_8"] as const;
   return (
     <section className="bottom-drawer">
-      <nav className="bottom-tabs">
-        {(["preview", "validation", "results"] as const).map((item) => <button key={item} onClick={() => setTab(item)} className={tab === item ? "active" : ""}>{item[0].toUpperCase() + item.slice(1)}{item === "validation" ? <span className="count">0</span> : null}</button>)}
-        <span className="drawer-spacer" /><span>Rows <select><option>100</option><option>500</option></select></span><span>↻ Live <i /></span>
+      <nav className="bottom-tabs" aria-label="Preview, validation and run results">
+        {(["preview", "validation", "results"] as const).map((item) => (
+          <button
+            type="button"
+            key={item}
+            onClick={() => setTab(item)}
+            className={tab === item ? "active" : ""}
+            aria-pressed={tab === item}
+          >
+            {item[0].toUpperCase() + item.slice(1)}
+            {item === "validation" && validation ? <span className={`count ${errors ? "error" : ""}`}>{errors}</span> : null}
+          </button>
+        ))}
+        <span className="drawer-spacer" />
+        <span>{previewRows.length} preview rows</span>
+        <span>Local deterministic preview <i /></span>
       </nav>
       {tab === "preview" ? (
-        <div className="table-wrap"><table><thead><tr>{["timestamp", "open", "high", "low", "close", "returns", "vol_96_z", "slope_8"].map((h) => <th key={h}>{h}</th>)}</tr></thead><tbody>{previewRows.map((row) => <tr key={row[0]}>{row.map((cell) => <td key={cell}>{cell}</td>)}</tr>)}</tbody></table></div>
+        <div className="table-wrap">
+          <table>
+            <thead><tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr></thead>
+            <tbody>
+              {previewRows.map((row) => (
+                <tr key={row.timestamp}>
+                  {columns.map((column) => <td key={column}>{formatCell(row[column], column)}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : null}
-      {tab === "validation" ? <div className="validation-view"><strong>✓ Validation passed</strong><span>Schema, dependencies, leakage and execution checks completed {validationStamp}.</span></div> : null}
-      {tab === "results" ? <div className="results-view">{hasResults ? <><strong>Run completed</strong><span>4 folds · 1,248 OOS rows · artifacts ready for comparison</span><button>Open full results</button></> : <><strong>No run yet</strong><span>Validate the experiment and start a run to populate results.</span></>}</div> : null}
+      {tab === "validation" ? (
+        <div className="validation-view">
+          {!validation ? (
+            <div className="empty-result"><strong>Not validated</strong><span>Run validation after editing the pipeline.</span></div>
+          ) : validation.issues.length === 0 ? (
+            <div className="empty-result success"><strong>✓ Validation passed</strong><span>Pipeline order, fields and temporal-causality checks passed at {validation.checkedAt}.</span></div>
+          ) : (
+            <div className="issue-list">
+              <div className="issue-summary">
+                <strong>{errors ? `Validation failed · ${errors} error${errors === 1 ? "" : "s"}` : "Validation passed with warnings"}</strong>
+                <span>Checked at {validation.checkedAt}</span>
+              </div>
+              <ul>
+                {validation.issues.map((issue) => (
+                  <li className={issue.level} key={issue.id}><strong>{issue.level}</strong><span>{issue.message}</span></li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      ) : null}
+      {tab === "results" ? (
+        <div className="results-view" aria-live="polite">
+          {runState.status === "idle" ? (
+            <div className="empty-result"><strong>No run yet</strong><span>Validate the experiment and start a local Studio run.</span></div>
+          ) : null}
+          {runState.status === "running" ? (
+            <div className="empty-result running-result"><strong>Preparing preview analytics…</strong><span>Validating the Studio document and summarizing the deterministic sample.</span></div>
+          ) : null}
+          {runState.status === "failed" ? (
+            <div className="empty-result error-result"><strong>Run blocked</strong><span>{runState.error}</span></div>
+          ) : null}
+          {runState.status === "completed" ? (
+            <>
+              <div className="result-copy">
+                <strong>Preview analytics ready</strong>
+                <span>
+                  {runState.result.previewRowCount} bars · {PREVIEW_SERIES.length} chart series · {runState.result.outputColumns.length} configured outputs
+                </span>
+              </div>
+              <button type="button" onClick={onOpenResults}>Open metrics &amp; chart</button>
+            </>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }
 
 function YamlModal({ onClose, yaml }: { onClose: () => void; yaml: string }) {
-  return <div className="modal-backdrop" onMouseDown={onClose}><section className="yaml-modal" onMouseDown={(event) => event.stopPropagation()}><header><div><small>Canonical experiment document</small><h2>YAML preview</h2></div><button className="icon-button" onClick={onClose}>×</button></header><pre>{yaml}</pre><footer><span>Visual graph and YAML are synchronized.</span><button onClick={() => navigator.clipboard?.writeText(yaml)}>Copy YAML</button></footer></section></div>;
+  const [copyStatus, setCopyStatus] = useState("Copy YAML");
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+  return (
+    <div className="modal-backdrop" onMouseDown={onClose}>
+      <section
+        className="yaml-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="yaml-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header>
+          <div><small>Synchronized Studio document</small><h2 id="yaml-title">YAML preview</h2></div>
+          <button type="button" className="icon-button" autoFocus onClick={onClose} aria-label="Close YAML preview">×</button>
+        </header>
+        <pre>{yaml}</pre>
+        <footer>
+          <span>Every visible node and feature setting is represented.</span>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(yaml);
+                setCopyStatus("Copied");
+              } catch {
+                setCopyStatus("Copy failed");
+              }
+            }}
+          >
+            {copyStatus}
+          </button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function ResultsModal({ result, onClose }: { result: StudioRunResult; onClose: () => void }) {
+  const [visibleSeries, setVisibleSeries] = useState<Set<PreviewSeriesKey>>(
+    () => new Set(["close", "vol_96_z", "slope_8"])
+  );
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+  const selectedSeries = PREVIEW_SERIES.filter((series) => visibleSeries.has(series.key));
+  const toggleSeries = (key: PreviewSeriesKey) => {
+    setVisibleSeries((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+  const metrics = result.previewMetrics;
+  const durationLabel = metrics.durationMinutes >= 60
+    ? `${Math.floor(metrics.durationMinutes / 60)}h ${metrics.durationMinutes % 60}m`
+    : `${metrics.durationMinutes}m`;
+  const signedCloseChange = `${metrics.closeChangePct >= 0 ? "+" : ""}${metrics.closeChangePct.toFixed(3)}%`;
+  return (
+    <div className="modal-backdrop" onMouseDown={onClose}>
+      <section
+        className="results-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="results-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header>
+          <div><small>Deterministic local data sample</small><h2 id="results-title">Preview results</h2></div>
+          <button type="button" className="icon-button" autoFocus onClick={onClose} aria-label="Close run results">×</button>
+        </header>
+        <section className="preview-scope-note" aria-label="Preview execution scope">
+          <strong>Preview analytics — not an OOS backtest</strong>
+          <span>
+            These values come from the visible {result.previewRowCount}-row sample. Sharpe, PnL, drawdown and trade metrics
+            are intentionally not calculated until Studio is connected to the framework runner.
+          </span>
+        </section>
+        <section className="result-section metrics-section">
+          <div className="result-section-heading">
+            <div><h3>Sample metrics</h3><span>{metrics.startTimestamp} → {metrics.endTimestamp}</span></div>
+            <code title={result.runId}>{result.runId}</code>
+          </div>
+          <div className="results-grid preview-metrics-grid">
+            <div><span>Preview bars</span><strong>{result.previewRowCount}</strong><small>Bundled deterministic rows</small></div>
+            <div><span>Sample window</span><strong>{durationLabel}</strong><small>First to last timestamp</small></div>
+            <div>
+              <span>Close change</span>
+              <strong className={metrics.closeChangePct >= 0 ? "positive-metric" : "negative-metric"}>{signedCloseChange}</strong>
+              <small>First close → last close</small>
+            </div>
+            <div><span>Mean |bar return|</span><strong>{metrics.meanAbsoluteReturnPct.toFixed(3)}%</strong><small>Descriptive, not annualized</small></div>
+            <div><span>Missing values</span><strong>{metrics.missingValueCount}</strong><small>Across preview fields</small></div>
+            <div><span>Warnings</span><strong>{result.warnings.length}</strong><small>Canvas/validation warnings</small></div>
+          </div>
+        </section>
+        <section className="result-section chart-section">
+          <div className="result-section-heading">
+            <div><h3>Series explorer</h3><span>Select exactly which preview series are visible.</span></div>
+            <span>{selectedSeries.length}/{PREVIEW_SERIES.length} visible</span>
+          </div>
+          <div className="series-selector" aria-label="Visible preview chart series">
+            {PREVIEW_SERIES.map((series) => (
+              <label key={series.key} className={visibleSeries.has(series.key) ? "selected" : ""}>
+                <input
+                  type="checkbox"
+                  checked={visibleSeries.has(series.key)}
+                  onChange={() => toggleSeries(series.key)}
+                />
+                <i style={{ background: series.color }} />
+                <span>{series.label}</span>
+              </label>
+            ))}
+          </div>
+          <div className="preview-chart-stack" aria-live="polite">
+            {selectedSeries.length ? (
+              selectedSeries.map((series) => <PreviewSeriesChart key={series.key} series={series} />)
+            ) : (
+              <div className="empty-chart-selection">
+                <strong>No visible series</strong>
+                <span>Select one or more series above to display the chart.</span>
+              </div>
+            )}
+          </div>
+        </section>
+        <section className="result-section configured-output-section">
+          <div className="result-section-heading">
+            <div><h3>Configured output mappings</h3><span>Columns requested by the visual feature configuration.</span></div>
+            <span>{result.outputColumns.length} outputs</span>
+          </div>
+          {result.outputColumns.length ? (
+            <div className="output-chips">{result.outputColumns.map((output) => <code key={output}>{output}</code>)}</div>
+          ) : <p>No output mappings are enabled.</p>}
+        </section>
+        {result.warnings.length ? (
+          <section className="result-section warnings">
+            <h3>Warnings</h3>
+            <ul>{result.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
+          </section>
+        ) : null}
+      </section>
+    </div>
+  );
+}
+
+function StatusBar({
+  validation,
+  runState
+}: {
+  validation: ValidationState | null;
+  runState: RunState;
+}) {
+  const errorCount = validation?.issues.filter((issue) => issue.level === "error").length ?? 0;
+  const validationLabel = !validation
+    ? "Not validated"
+    : errorCount
+      ? `${errorCount} validation error${errorCount === 1 ? "" : "s"}`
+      : validation.issues.length
+        ? "Validation passed with warnings"
+        : "Validation passed";
+  const runLabel = runState.status === "completed"
+    ? `Last run: ${new Date(runState.result.completedAt).toLocaleTimeString()}`
+    : runState.status === "running"
+      ? "Run in progress"
+      : runState.status === "failed"
+        ? "Last run blocked"
+        : "Last run: not started";
+  return (
+    <footer className={`statusbar ${errorCount ? "has-errors" : ""}`}>
+      <span><i /> {validationLabel}</span>
+      <span>{runLabel}</span>
+      <span className="status-spacer" />
+      <span>Engine: local Studio preview</span>
+      <span>Config: visual + YAML</span>
+    </footer>
+  );
 }
 
 export function App() {
+  const [history, setHistory] = useState<HistoryState>(() => ({
+    past: [],
+    present: loadStoredDocument(),
+    future: []
+  }));
+  const [selectedId, setSelectedId] = useState<string | null>("volatility");
   const [query, setQuery] = useState("");
-  const [nodes, setNodes] = useState(initialNodes);
-  const [selectedId, setSelectedId] = useState("volatility");
+  const [libraryCollapsed, setLibraryCollapsed] = useState(false);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("normalizations");
   const [bottomTab, setBottomTab] = useState<BottomTab>("preview");
-  const [normalizations, setNormalizations] = useState<Normalization[]>([{ id: "norm-1", kind: "rolling_zscore", window: 252, shift: 1, enabled: true }]);
-  const [helpers, setHelpers] = useState<Helper[]>([
-    { id: "helper-1", kind: "slope", left: "vol_rolling_96", right: "", window: 8 },
-    { id: "helper-2", kind: "ratio", left: "vol_slope_8", right: "close" }
-  ]);
+  const [validation, setValidation] = useState<ValidationState | null>(null);
+  const [runState, setRunState] = useState<RunState>({ status: "idle" });
   const [yamlOpen, setYamlOpen] = useState(false);
-  const [validationStamp, setValidationStamp] = useState("just now");
-  const [running, setRunning] = useState(false);
-  const [hasResults, setHasResults] = useState(false);
-  const selected = nodes.find((node) => node.id === selectedId);
+  const [resultsOpen, setResultsOpen] = useState(false);
+  const [saveStatus, setSaveStatus] = useState("Saved locally");
+  const [renaming, setRenaming] = useState(false);
+  const [renameDraft, setRenameDraft] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const runTokenRef = useRef(0);
 
-  const yaml = useMemo(() => `name: spx500_momentum_research
-dataset:
-  id: spx500_30m
-features:
-  - step: volatility
-    enabled: true
-    params:
-      returns_col: close_ret
-      rolling_windows: [96, 252]
-    normalizations:
-${normalizations.map((item) => `      ${item.kind}:
-        params: { window: ${item.window}, shift: ${item.shift} }`).join("\n")}
-    transforms:
-${helpers.map((item) => `      ${item.kind}:
-        params: { source_col: ${item.left}${item.right ? `, denominator_col: ${item.right}` : ""} }`).join("\n")}
-model:
-  kind: lightgbm_clf
-  split: { method: walk_forward }
-signals:
-  kind: probability_threshold
-`, [helpers, normalizations]);
+  const studioDocument = history.present;
+  const selected = studioDocument.nodes.find((node) => node.id === selectedId);
+  const yaml = useMemo(() => serializeStudioYaml(studioDocument), [studioDocument]);
+
+  const invalidateDerivedState = useCallback(() => {
+    runTokenRef.current += 1;
+    setValidation(null);
+    setRunState({ status: "idle" });
+    setResultsOpen(false);
+  }, []);
+
+  const commitDocument = useCallback((change: (current: StudioDocument) => StudioDocument) => {
+    setHistory((current) => {
+      const next = change(current.present);
+      if (next === current.present) return current;
+      return { past: [...current.past, current.present], present: next, future: [] };
+    });
+    invalidateDerivedState();
+  }, [invalidateDerivedState]);
+
+  const updateNode = useCallback((node: StudioNode) => {
+    commitDocument((current) => ({
+      ...current,
+      nodes: current.nodes.map((item) => item.id === node.id ? node : item)
+    }));
+  }, [commitDocument]);
+
+  const deleteNode = useCallback((id: string) => {
+    commitDocument((current) => ({ ...current, nodes: current.nodes.filter((node) => node.id !== id) }));
+    setSelectedId((current) => current === id ? null : current);
+  }, [commitDocument]);
+
+  const undo = useCallback(() => {
+    setHistory((current) => {
+      if (!current.past.length) return current;
+      const previous = current.past[current.past.length - 1];
+      return {
+        past: current.past.slice(0, -1),
+        present: previous,
+        future: [current.present, ...current.future]
+      };
+    });
+    invalidateDerivedState();
+  }, [invalidateDerivedState]);
+
+  const redo = useCallback(() => {
+    setHistory((current) => {
+      if (!current.future.length) return current;
+      const [next, ...future] = current.future;
+      return {
+        past: [...current.past, current.present],
+        present: next,
+        future
+      };
+    });
+    invalidateDerivedState();
+  }, [invalidateDerivedState]);
+
+  const deleteSelected = useCallback(() => {
+    if (selectedId) deleteNode(selectedId);
+  }, [deleteNode, selectedId]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isEditing = target?.matches("input, textarea, select, [contenteditable='true']");
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        if (event.shiftKey) redo();
+        else undo();
+        return;
+      }
+      if (!isEditing && (event.key === "Delete" || event.key === "Backspace")) {
+        event.preventDefault();
+        deleteSelected();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [deleteSelected, redo, undo]);
+
+  useEffect(() => {
+    setSaveStatus("Saving…");
+    const timeout = window.setTimeout(() => {
+      setSaveStatus(saveStoredDocument(studioDocument) ? "Saved locally just now" : "Local save unavailable");
+    }, 250);
+    return () => window.clearTimeout(timeout);
+  }, [studioDocument]);
+
+  const addNode = (node: StudioNode) => {
+    commitDocument((current) => ({ ...current, nodes: [...current.nodes, node] }));
+    setSelectedId(node.id);
+  };
+
+  const addFromPalette = (kind: NodeKind, label: string) => {
+    const index = studioDocument.nodes.length;
+    addNode(createNode(kind, label, 24 + (index % 5) * 128, 60 + Math.floor(index / 5) * 138));
+  };
+
+  const duplicateSelected = () => {
+    if (!selected) return;
+    const copy: StudioNode = {
+      ...selected,
+      id: newId(selected.kind),
+      title: `${selected.title} copy`,
+      x: selected.x + 28,
+      y: selected.y + 28,
+      feature: selected.feature
+        ? {
+          ...selected.feature,
+          normalizations: selected.feature.normalizations.map((item) => ({ ...item, id: newId("norm") })),
+          helpers: selected.feature.helpers.map((item) => ({ ...item, id: newId("helper") })),
+          outputs: [...selected.feature.outputs]
+        }
+        : undefined
+    };
+    addNode(copy);
+  };
+
+  const performValidation = (): ValidationIssue[] => {
+    const issues = validateStudioDocument(studioDocument);
+    setValidation({ issues, checkedAt: new Date().toLocaleTimeString() });
+    setBottomTab("validation");
+    return issues;
+  };
 
   const run = () => {
-    setRunning(true);
+    const issues = validateStudioDocument(studioDocument);
+    setValidation({ issues, checkedAt: new Date().toLocaleTimeString() });
+    const errors = issues.filter((issue) => issue.level === "error");
+    if (errors.length) {
+      setRunState({ status: "failed", error: errors.map((issue) => issue.message).join(" ") });
+      setBottomTab("validation");
+      return;
+    }
+    const token = runTokenRef.current + 1;
+    runTokenRef.current = token;
+    const startedAtMs = Date.now();
+    setRunState({ status: "running", startedAt: new Date(startedAtMs).toISOString() });
     setBottomTab("results");
     window.setTimeout(() => {
-      setRunning(false);
-      setHasResults(true);
-    }, 900);
+      if (runTokenRef.current !== token) return;
+      try {
+        const result = executeStudioDocument(studioDocument, startedAtMs, Date.now());
+        setRunState({ status: "completed", result });
+        setResultsOpen(true);
+      } catch (error) {
+        setRunState({ status: "failed", error: error instanceof Error ? error.message : String(error) });
+      }
+    }, 0);
   };
 
   return (
     <div className="app">
-      <TopBar onYaml={() => setYamlOpen(true)} onValidate={() => { setValidationStamp("just now"); setBottomTab("validation"); }} onRun={run} running={running} />
-      <div className="workspace">
-        <ComponentLibrary query={query} onQuery={setQuery} />
-        <Canvas nodes={nodes} selectedId={selectedId} onSelect={setSelectedId} onDropNode={(node) => { setNodes((current) => [...current, node]); setSelectedId(node.id); }} />
-        <Inspector selected={selected} tab={inspectorTab} setTab={setInspectorTab} normalizations={normalizations} setNormalizations={setNormalizations} helpers={helpers} setHelpers={setHelpers} />
-        <BottomDrawer tab={bottomTab} setTab={setBottomTab} validationStamp={validationStamp} hasResults={hasResults} />
+      <TopBar
+        experimentName={studioDocument.name}
+        renaming={renaming}
+        renameDraft={renameDraft}
+        saveStatus={saveStatus}
+        running={runState.status === "running"}
+        libraryCollapsed={libraryCollapsed}
+        onOpenRename={() => {
+          setRenameDraft(studioDocument.name);
+          setRenaming(true);
+        }}
+        onRenameDraft={setRenameDraft}
+        onCommitRename={() => {
+          commitDocument((current) => ({ ...current, name: renameDraft.trim() }));
+          setRenaming(false);
+        }}
+        onCancelRename={() => setRenaming(false)}
+        onToggleLibrary={() => setLibraryCollapsed((current) => !current)}
+        onYaml={() => setYamlOpen(true)}
+        onValidate={() => {
+          performValidation();
+        }}
+        onRun={run}
+      />
+      <div className={`workspace ${libraryCollapsed ? "library-collapsed" : ""}`}>
+        <ComponentLibrary
+          query={query}
+          collapsed={libraryCollapsed}
+          searchInputRef={searchInputRef}
+          onQuery={setQuery}
+          onToggleCollapsed={() => setLibraryCollapsed((current) => !current)}
+          onAdd={addFromPalette}
+        />
+        <Canvas
+          nodes={studioDocument.nodes}
+          selectedId={selectedId}
+          canUndo={history.past.length > 0}
+          canRedo={history.future.length > 0}
+          onSelect={setSelectedId}
+          onAddNode={addNode}
+          onMoveNode={(id, x, y) => {
+            const node = studioDocument.nodes.find((item) => item.id === id);
+            if (node) updateNode({ ...node, x, y });
+            setSelectedId(id);
+          }}
+          onDeleteNode={deleteNode}
+          onUndo={undo}
+          onRedo={redo}
+          onFocusSearch={() => {
+            if (libraryCollapsed) setLibraryCollapsed(false);
+            window.setTimeout(() => searchInputRef.current?.focus(), 0);
+          }}
+        />
+        <Inspector
+          selected={selected}
+          tab={inspectorTab}
+          setTab={setInspectorTab}
+          onUpdate={updateNode}
+          onDuplicate={duplicateSelected}
+          onDelete={deleteSelected}
+        />
+        <BottomDrawer
+          tab={bottomTab}
+          validation={validation}
+          runState={runState}
+          setTab={setBottomTab}
+          onOpenResults={() => setResultsOpen(true)}
+        />
       </div>
-      <footer className="statusbar"><span><i /> Validation passed</span><span>Last run: {hasResults ? "just now" : "not started"}</span><span className="status-spacer" /><span>Engine: v2.1.0</span><span>Config: visual + YAML</span></footer>
+      <StatusBar validation={validation} runState={runState} />
       {yamlOpen ? <YamlModal yaml={yaml} onClose={() => setYamlOpen(false)} /> : null}
+      {resultsOpen && runState.status === "completed" ? (
+        <ResultsModal result={runState.result} onClose={() => setResultsOpen(false)} />
+      ) : null}
     </div>
   );
 }
