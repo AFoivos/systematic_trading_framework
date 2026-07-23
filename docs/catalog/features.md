@@ -25,8 +25,9 @@ diagnostic/research column δεν πρέπει να μπει σε model features
   z-scores και rolling aggregations δηλώνονται ως helpers στο YAML.
 - Τα παλιά helper-equivalent steps `lags`, `return_momentum`,
   `vol_normalized_momentum`, `volume_features`, `zscore_momentum`,
-  τα legacy rolling-R2/trend-quality steps, `trend_slope_volatility` και
-  `volatility_of_volatility` δεν είναι canonical feature registry entries.
+  τα legacy rolling-R2/trend-quality steps, `price_momentum`,
+  `trend_slope_volatility` και `volatility_of_volatility` δεν είναι canonical
+  feature registry entries.
   Νέα configs πρέπει να τα εκφράζουν με `transforms` / `normalizations`.
 
 ## Γλωσσάρι τεχνικών όρων
@@ -767,7 +768,9 @@ Instantaneous trendline του Ehlers με προαιρετική trigger line.
 
 Fisher Transform σε rolling-normalized τιμή.
 
-- Έξοδοι: `fisher_transform_{window}` και optional `{col}_signal`.
+- Raw έξοδος: `fisher_transform_{window}`.
+- Το παλιό `{col}_signal` ήταν απλό lag μιας περιόδου και πλέον δηλώνεται με
+  `transforms.lag`.
 - Τύπος: rolling min/max normalization σε `[-1, 1]`, clipping, μετά Fisher mapping.
 - Χρησιμότητα: oscillator με πιο Gaussian-like tails για threshold/crossing logic.
 - Θεωρία: η Fisher transform τονίζει extreme normalized moves.
@@ -797,7 +800,9 @@ Ehlers sinewave και lead-sinewave από dominant phase.
 
 Ehlers Cyber Cycle oscillator.
 
-- Έξοδοι: `cyber_cycle` και optional `{col}_trigger`.
+- Raw έξοδος: `cyber_cycle`.
+- Το παλιό `{col}_trigger` ήταν απλό lag μιας περιόδου και πλέον δηλώνεται με
+  `transforms.lag`.
 - Χρησιμότητα: cycle component after smoothing, χρήσιμο για short-term turning points.
 - Θεωρία: αφαιρεί trend-like movement και κρατά high-frequency cyclic component.
 - Αιτιότητα: recursive filter και trigger as lagged cycle value.
@@ -962,7 +967,10 @@ main feature registry· εφαρμόζεται ως `transforms.rolling_linear_r
 
 Rolling μεταβλητότητα της μεταβλητότητας.
 
-- Έξοδοι: `volatility_of_volatility_{volatility_col}_{window}` και optional mean, ratio, rising/high flags.
+- Compatibility-only raw έξοδος:
+  `volatility_of_volatility_{volatility_col}_{window}`.
+- Mean, ratio και rising/high flags δηλώνονται αποκλειστικά με
+  `rolling_mean`, `ratio`, `rising_flag` και `threshold_flag`.
 - Τύπος: rolling standard deviation/variation of an existing volatility column.
 - Χρησιμότητα: regime instability, risk model confidence και volatility expansion diagnostics.
 - Θεωρία: όταν η volatility itself είναι volatile, fixed thresholds/position sizing γίνονται λιγότερο stable.
@@ -1145,3 +1153,7 @@ Causal 30-minute feature/candidate builder για τη στρατηγική MATB
 
 Το component δεν κάνει fit και διατηρεί ακριβώς index και row count. Τα
 candidate rows προορίζονται αποκλειστικά για next-open execution.
+- Raw έξοδος: `yang_zhang_vol_{window}` ή `output_col`.
+- Rolling mean, ratio, rising και high-volatility regime flags δεν παράγονται
+  πλέον από τον builder. Χρησιμοποίησε `rolling_mean`, `ratio`,
+  `rising_flag` και `threshold_flag`.

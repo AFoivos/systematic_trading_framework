@@ -1,0 +1,1743 @@
+_meta:
+  purpose: Non-runnable YAML declaration reference for lab experiments.
+  generated_by: scripts/generate_lab_component_yaml_reference.py
+  usage:
+  - Copy only the components you want into a real config.
+  - 'Set enabled: true only in the copied experiment.'
+  - Replace <required> placeholders before validation.
+  - For nested model/target/signal contracts follow the linked catalog.
+  catalogs:
+    features: docs/catalog/features.md
+    helpers_and_normalizations: docs/catalog/helpers.md
+    models: docs/catalog/models.md
+    signals: docs/catalog/signals.md
+    targets: docs/catalog/targets.md
+features:
+  canonical:
+  - step: returns
+    enabled: false
+    params:
+      log: false
+      col_name: null
+  - step: impulse_12_96
+    enabled: false
+    params:
+      close_col: close
+      returns_col: close_ret
+      return_bars: 12
+      volatility_window: 96
+      output_col: impulse_12_96
+  - step: volatility
+    enabled: false
+    params:
+      returns_col: close_logret
+      rolling_windows:
+      - 10
+      - 20
+      - 60
+      ewma_spans:
+      - 10
+      - 20
+      annualization_factor: 252.0
+      inplace: false
+  - step: trend
+    enabled: false
+    params:
+      price_col: close
+      sma_windows:
+      - 20
+      - 50
+      - 200
+      ema_spans:
+      - 20
+      - 50
+      sma_col_template: null
+      ema_col_template: null
+      add_ratios: false
+      inplace: false
+  - step: trend_regime
+    enabled: false
+    params:
+      price_col: close
+      fast_span: 20
+      slow_span: 50
+      neutral_threshold: 0.0
+      output_col: null
+      method: ema
+      base_sma_for_sign: null
+      short_sma: null
+      long_sma: null
+  - step: bollinger
+    enabled: false
+    params:
+      price_col: close
+      window: 20
+      n_std: 2.0
+      inplace: false
+  - step: macd
+    enabled: false
+    params:
+      price_col: close
+      fast: 12
+      slow: 26
+      signal: 9
+      inplace: false
+  - step: ppo
+    enabled: false
+    params:
+      price_col: close
+      fast: 12
+      slow: 26
+      signal: 9
+      ppo_col: null
+      ppo_signal_col: null
+      ppo_hist_col: null
+      inplace: false
+  - step: roc
+    enabled: false
+    params:
+      price_col: close
+      windows:
+      - 10
+      - 20
+      window: null
+      output_col: null
+      inplace: false
+  - step: atr
+    enabled: false
+    params:
+      high_col: high
+      low_col: low
+      close_col: close
+      window: 14
+      windows: null
+      method: wilder
+      add_over_price: false
+      atr_col: null
+      over_price_col: null
+      inplace: false
+  - step: adx
+    enabled: false
+    params:
+      high_col: high
+      low_col: low
+      close_col: close
+      window: 14
+      windows: null
+      inplace: false
+  - step: twap
+    enabled: false
+    params:
+      high_col: high
+      low_col: low
+      close_col: close
+      window: 20
+      windows: null
+      add_distance: false
+      twap_col: null
+      distance_col: null
+      inplace: false
+  - step: vwap
+    enabled: false
+    params:
+      high_col: high
+      low_col: low
+      close_col: close
+      volume_col: volume
+      window: 20
+      windows: null
+      add_distance: false
+      vwap_col: null
+      distance_col: null
+      inplace: false
+  - step: mfi
+    enabled: false
+    params:
+      high_col: high
+      low_col: low
+      close_col: close
+      volume_col: volume
+      window: 14
+      inplace: false
+  - step: rsi
+    enabled: false
+    params:
+      price_col: close
+      windows:
+      - 14
+      method: wilder
+      inplace: false
+  - step: stochastic
+    enabled: false
+    params:
+      price_col: close
+      high_col: high
+      low_col: low
+      window: 14
+      smooth: 3
+      inplace: false
+  - step: stochastic_rsi
+    enabled: false
+    params:
+      price_col: close
+      rsi_period: 14
+      stoch_period: 14
+      k_period: 3
+      d_period: 3
+      oversold: 0.2
+      overbought: 0.8
+      prefix: stoch_rsi
+      method: wilder
+      inplace: false
+  - step: session_context
+    enabled: false
+    params:
+      timezone: UTC
+      add_cyclical_time: true
+      include_weekend_flag: true
+      sessions: null
+  - step: regime_context
+    enabled: false
+    params:
+      price_col: close
+      returns_col: close_ret
+      vol_short_window: 24
+      vol_long_window: 168
+      trend_fast_span: 24
+      trend_slow_span: 72
+      vol_ratio_high_threshold: 1.25
+      vol_ratio_low_threshold: 0.85
+      vol_window_pairs: null
+  - step: shock_context
+    enabled: false
+    params:
+      price_col: close
+      high_col: high
+      low_col: low
+      returns_col: close_logret
+      ema_col: null
+      ema_window: 24
+      atr_col: null
+      atr_window: 24
+      short_horizon: 1
+      medium_horizon: 4
+      horizon_unit: hours
+      vol_window: 24
+      ret_z_threshold: 2.0
+      atr_mult_threshold: 1.5
+      distance_from_mean_threshold: 1.0
+      post_shock_active_bars: 1
+      use_log_returns: true
+      inplace: false
+  - step: support_resistance
+    enabled: false
+    params:
+      price_col: close
+      high_col: high
+      low_col: low
+      windows:
+      - 24
+      - 72
+      - 168
+      atr_col: null
+      atr_window: 24
+      include_pct_distance: false
+      include_atr_distance: false
+      inplace: false
+  - step: support_resistance_v2
+    enabled: false
+    params:
+      price_col: close
+      high_col: high
+      low_col: low
+      atr_col: null
+      atr_window: 24
+      pivot_left_window: 24
+      pivot_confirm_bars: 6
+      touch_tolerance_atr: 0.25
+      breakout_tolerance_atr: 0.05
+      retest_expiry_bars: 24
+      inplace: false
+  - step: macro_context
+    enabled: false
+    params:
+      columns: <required>
+      availability_lag: 1
+      lags:
+      - 1
+      - 24
+      pct_change_periods:
+      - 1
+      - 24
+      zscore_window: 168
+      ema_spans: []
+      allow_missing: false
+  - step: multi_timeframe
+    enabled: false
+    params:
+      base_interval_minutes: 30
+      timeframes:
+      - 1h
+      - 4h
+      price_col: close
+      high_col: high
+      low_col: low
+      open_col: open
+      volume_col: volume
+      returns_col: close_logret
+      timezone: UTC
+      shift_to_last_closed: true
+      timestamp_convention: bar_close
+      timestamp_col: timestamp
+      asset_col: asset
+      volatility_window: 12
+      trend_ema_span: 8
+      trend_sma_window: 20
+      atr_window: 14
+      adx_window: 14
+      regime_short_window: 12
+      regime_long_window: 48
+  - step: multi_asset_trend_breakout
+    enabled: false
+    params:
+      open_col: open
+      high_col: high
+      low_col: low
+      close_col: close
+      spread_col: spread_bps
+      bars_per_day: 48
+      atr_window: 48
+      short_vol_days: 5
+      long_vol_days: 60
+      momentum_days:
+      - 5
+      - 20
+      - 60
+      donchian_days: 20
+      spread_median_days: 20
+      decision_hours_utc:
+      - 3
+      - 7
+      - 11
+      - 15
+      - 19
+      - 23
+      expected_bar_minutes: 30
+      maximum_gap_multiple: 1.5
+      trend_threshold: 0.2
+      maximum_breakout_distance_atr: 0.5
+      minimum_channel_width_atr: 4.0
+      minimum_volatility_ratio: 0.5
+      maximum_volatility_ratio: 2.5
+      maximum_spread_to_median: 2.0
+  - step: opening_range_breakout
+    enabled: false
+    params:
+      sessions: null
+      enabled_sessions: null
+      asset_session_map: null
+      asset_alias_map: null
+      timestamp_col: timestamp
+      timezone_input: UTC
+      price_col: close
+      open_col: open
+      high_col: high
+      low_col: low
+      close_col: close
+      atr_col: atr_24
+      volatility_col: vol_rolling_24
+      min_range_atr: 0.4
+      max_range_atr: 2.5
+      breakout_buffer_atr: 0.1
+      post_breakout_active_bars: 3
+      max_breakouts_per_session: 1
+      use_close_breakout: true
+      allow_reversal_same_session: false
+      opening_range_bars: null
+      use_extended_trade_until: false
+      asset_col: asset
+      asset: null
+  - step: swing_extrema_context
+    enabled: false
+    params:
+      high_col: high
+      low_col: low
+      close_col: close
+      normalizer_col: mtf_1h_atr
+      normalizer_mode: price
+      left_bars: 3
+      right_bars: 3
+      near_high_threshold_atr: 0.25
+      near_low_threshold_atr: 0.25
+      overextended_long_threshold_atr: 2.0
+      include_research_labels: false
+      research_label_lead_bars: 3
+      prefix: swing
+  - step: indicator_pullback
+    enabled: false
+    params:
+      asset: null
+      asset_vocab: null
+      asset_aliases: null
+      open_col: open
+      high_col: high
+      low_col: low
+      close_col: close
+      ema_fast_period: 20
+      ema_mid_period: 50
+      ema_slow_period: 100
+      ema_fast_col: null
+      ema_mid_col: null
+      ema_slow_col: null
+      atr_period: 14
+      atr_col: null
+      atr_pct_col: atr_pct
+      atr_pct_rank_window: 100
+      macd_hist_col: macd_hist
+      rsi_period: 14
+      rsi_col: null
+      stoch_k_col: stoch_rsi_k
+      stoch_d_col: stoch_rsi_d
+      bollinger_bandwidth_col: bollinger_bandwidth
+      bollinger_percent_b_col: bollinger_percent_b
+      realized_vol_windows:
+      - 10
+      - 20
+      return_windows:
+      - 1
+      - 2
+      - 3
+      - 6
+      rolling_return_windows:
+      - 4
+      - 8
+      bb_bandwidth_rank_window: 100
+      include_asset_id: true
+      inplace: false
+  - step: ehlers_ml_long_candidate
+    enabled: false
+    params:
+      amplitude_col: hilbert_amplitude
+      cycle_period_col: dominant_cycle_period
+      roofing_col: roofing_filter
+      mama_col: mama
+      fama_col: fama
+      close_col: close
+      decycler_col: decycler
+      instantaneous_trendline_col: instantaneous_trendline
+      frama_col: frama
+      supersmoother_col: supersmoother
+      dominant_cycle_phase_col: dominant_cycle_phase
+      dominant_cycle_phase_unit: degrees
+      atr_col: null
+      amplitude_lookback: 128
+      amplitude_min_quantile: 0.5
+      min_cycle_period: 8.0
+      max_cycle_period: 60.0
+      slope_bars: 1
+      candidate_col: ehlers_ml_candidate
+      side_col: signal_side
+  - step: trend_vwap_pullback_candidate
+    enabled: false
+    params:
+      stage: 8
+      timezone: America/New_York
+      session_open: 09:30
+      session_close: '16:00'
+      timestamp_convention: bar_start
+  - step: mama
+    enabled: false
+    params:
+      price_col: close
+      fast_limit: 0.5
+      slow_limit: 0.05
+      output_col: null
+  - step: fama
+    enabled: false
+    params:
+      price_col: close
+      fast_limit: 0.5
+      slow_limit: 0.05
+      output_col: null
+  - step: dominant_cycle_period
+    enabled: false
+    params:
+      price_col: close
+      output_col: null
+  - step: dominant_cycle_phase
+    enabled: false
+    params:
+      price_col: close
+      output_col: null
+      unit: degrees
+  - step: instantaneous_trendline
+    enabled: false
+    params:
+      price_col: close
+      alpha: 0.07
+      output_col: null
+      trigger_col: null
+      add_trigger: true
+  - step: fisher_transform
+    enabled: false
+    params:
+      price_col: close
+      window: 10
+      clip: 0.999
+      output_col: null
+      signal_col: null
+      add_signal: false
+  - step: inverse_fisher_transform
+    enabled: false
+    params:
+      input_col: close
+      window: 10
+      scale: 1.0
+      normalize: true
+      output_col: null
+  - step: sinewave_indicator
+    enabled: false
+    params:
+      price_col: close
+      lead_degrees: 45.0
+      output_col: null
+      lead_output_col: null
+  - step: cyber_cycle
+    enabled: false
+    params:
+      price_col: close
+      alpha: 0.07
+      output_col: null
+      trigger_col: null
+      add_trigger: false
+  - step: decycler
+    enabled: false
+    params:
+      price_col: close
+      period: 60
+      output_col: null
+  - step: decycler_oscillator
+    enabled: false
+    params:
+      price_col: close
+      fast_period: 30
+      slow_period: 60
+      output_col: null
+  - step: laguerre_rsi
+    enabled: false
+    params:
+      price_col: close
+      gamma: 0.5
+      output_col: null
+      as_percent: false
+  - step: frama
+    enabled: false
+    params:
+      price_col: close
+      high_col: high
+      low_col: low
+      window: 16
+      fast_period: 4
+      slow_period: 300
+      output_col: null
+      alpha_col: null
+      fractal_dimension_col: null
+      add_diagnostics: false
+  - step: center_of_gravity
+    enabled: false
+    params:
+      price_col: close
+      window: 10
+      output_col: null
+  - step: even_better_sinewave
+    enabled: false
+    params:
+      price_col: close
+      duration: 40
+      smoothing_period: 10
+      power_window: 3
+      output_col: null
+  - step: autocorrelation_periodogram
+    enabled: false
+    params:
+      price_col: close
+      min_period: 10
+      max_period: 48
+      window: 96
+      output_col: null
+      power_col: null
+      add_power: false
+  - step: homodyne_discriminator
+    enabled: false
+    params:
+      price_col: close
+      use_smoothed_period: false
+      output_col: null
+  - step: parkinson_volatility
+    enabled: false
+    params:
+      high_col: high
+      low_col: low
+      window: 20
+      output_col: null
+  - step: garman_klass_volatility
+    enabled: false
+    params:
+      open_col: open
+      high_col: high
+      low_col: low
+      close_col: close
+      window: 20
+      output_col: null
+  - step: yang_zhang_volatility
+    enabled: false
+    params:
+      open_col: open
+      high_col: high
+      low_col: low
+      close_col: close
+      window: 20
+      regime_window: null
+      high_vol_mult: 1.0
+      output_col: null
+      rolling_mean_col: null
+      ratio_col: null
+      rising_col: null
+      high_vol_regime_col: null
+  - step: hurst_exponent
+    enabled: false
+    params:
+      price_col: close
+      window: 128
+      min_lag: 2
+      max_lag: null
+      output_col: null
+  - step: fractal_dimension
+    enabled: false
+    params:
+      price_col: close
+      window: 128
+      output_col: null
+  - step: volatility_regime
+    enabled: false
+    params:
+      vol_col: null
+      price_col: close
+      returns_col: null
+      vol_window: 20
+      regime_window: 100
+      method: ratio
+      lower_quantile: 0.33
+      upper_quantile: 0.67
+      output_col: null
+  - step: hmm_regime
+    enabled: false
+    params:
+      feature_cols: null
+      price_col: close
+      returns_col: null
+      n_states: 2
+      mode: expanding
+      train_size: null
+      min_train_size: null
+      refit_interval: 1
+      covariance_type: diag
+      n_iter: 100
+      random_state: 0
+      output_col: null
+      include_probabilities: false
+      probability_prefix: hmm_regime_prob
+      standardize: false
+      standardize_eps: 1.0e-12
+  - step: hilbert_transform
+    enabled: false
+    params:
+      price_col: close
+      window: 64
+      amplitude_col: null
+      phase_col: null
+      instantaneous_frequency_col: null
+      dominant_cycle_col: null
+      cycle_ok_col: null
+      amplitude_rising_col: null
+      min_cycle: 10
+      max_cycle: 48
+      amplitude_slope_bars: 3
+      add_derived: false
+  - step: roofing_filter
+    enabled: false
+    params:
+      price_col: close
+      high_pass_period: 48
+      low_pass_period: 10
+      output_col: null
+  - step: schaff_trend_cycle
+    enabled: false
+    params:
+      price_col: close
+      fast: 23
+      slow: 50
+      cycle: 10
+      smooth: 3
+      long_cross_level: 25.0
+      short_cross_level: 75.0
+      stc_col: stc
+      stc_signal_col: stc_signal
+      cross_up_col: null
+      cross_down_col: null
+      rising_col: null
+      falling_col: null
+      inplace: false
+  - step: supersmoother
+    enabled: false
+    params:
+      price_col: close
+      period: 10
+      output_col: null
+  - step: shannon_entropy
+    enabled: false
+    params:
+      source_col: close
+      window: 64
+      bins: 10
+      normalize: true
+      output_col: null
+  - step: permutation_entropy
+    enabled: false
+    params:
+      source_col: close
+      window: 64
+      order: 3
+      delay: 1
+      normalize: true
+      output_col: null
+  - step: vpin
+    enabled: false
+    params:
+      buy_volume_col: buy_volume
+      sell_volume_col: sell_volume
+      signed_volume_col: null
+      volume_col: volume
+      window: 50
+      bucket_volume: null
+      output_col: null
+  - step: order_flow_imbalance
+    enabled: false
+    params:
+      buy_volume_col: buy_volume
+      sell_volume_col: sell_volume
+      bid_price_col: null
+      ask_price_col: null
+      bid_size_col: null
+      ask_size_col: null
+      window: 1
+      normalize: false
+      output_col: null
+  - step: scalp_microstructure_proxy
+    enabled: false
+    params:
+      open_col: open
+      high_col: high
+      low_col: low
+      close_col: close
+      volume_col: volume
+      bid_open_col: bid_open
+      bid_high_col: bid_high
+      bid_low_col: bid_low
+      bid_close_col: bid_close
+      ask_open_col: ask_open
+      ask_high_col: ask_high
+      ask_low_col: ask_low
+      ask_close_col: ask_close
+      spread_close_col: spread_close
+      spread_bps_col: spread_bps
+      eps: 1.0e-12
+      mid_open_col: mid_open
+      mid_high_col: mid_high
+      mid_low_col: mid_low
+      mid_close_col: mid_close
+      bid_ask_spread_abs_col: bid_ask_spread_abs
+      bid_ask_spread_bps_col: bid_ask_spread_bps
+      spread_bps_change_col: spread_bps_change
+      bar_range_col: bar_range
+      bar_body_col: bar_body
+      close_pos_in_bar_col: close_pos_in_bar
+      body_to_range_col: body_to_range
+      upper_wick_col: upper_wick
+      lower_wick_col: lower_wick
+      candle_pressure_col: candle_pressure
+      signed_volume_proxy_col: signed_volume_proxy
+      buy_volume_proxy_col: buy_volume_proxy
+      sell_volume_proxy_col: sell_volume_proxy
+      ofi_proxy_norm_1_col: ofi_proxy_norm_1
+  compatibility_only:
+  - step: lags
+    enabled: false
+    params:
+      cols: <required>
+      lags:
+      - 1
+      - 2
+      - 5
+      prefix: lag
+    status: compatibility_only
+  - step: return_momentum
+    enabled: false
+    params:
+      returns_col: close_logret
+      windows:
+      - 5
+      - 20
+      - 60
+      inplace: false
+    status: compatibility_only
+  - step: vol_normalized_momentum
+    enabled: false
+    params:
+      returns_col: close_logret
+      vol_col: vol_rolling_20
+      vol_window: null
+      windows:
+      - 5
+      - 20
+      - 60
+      eps: 1.0e-08
+      inplace: false
+    status: compatibility_only
+  - step: volume_features
+    enabled: false
+    params:
+      volume_col: volume
+      atr_col: null
+      high_col: high
+      low_col: low
+      close_col: close
+      atr_window: 14
+      vol_z_window: 20
+      inplace: false
+    status: compatibility_only
+  - step: price_momentum
+    enabled: false
+    params:
+      price_col: close
+      windows:
+      - 5
+      - 20
+      - 60
+      inplace: false
+    status: compatibility_only
+  - step: trend_slope_volatility
+    enabled: false
+    params:
+      price_col: close
+      volatility_col: null
+      window: 96
+      annualize: false
+      periods_per_year: null
+      slope_col: null
+      volatility_used_col: null
+      slope_vol_ratio_col: null
+      positive_col: null
+      rising_col: null
+      strong_trend_col: null
+      strong_threshold: 1.0
+    status: compatibility_only
+  - step: volatility_of_volatility
+    enabled: false
+    params:
+      volatility_col: <required>
+      window: 96
+      mean_window: null
+      output_col: null
+      mean_col: null
+      ratio_col: null
+      rising_col: null
+      high_vov_col: null
+      high_vov_mult: 1.0
+    status: compatibility_only
+  - step: ehlers_semiscalp_long
+    enabled: false
+    params: {}
+    status: compatibility_only
+    parameters_note: See docs/catalog/features.md for dynamic **params.
+  - step: ehlers_decycler_continuation
+    enabled: false
+    params: {}
+    status: compatibility_only
+    parameters_note: See docs/catalog/features.md for dynamic **params.
+  - step: ema_stoch_rsi_pullback
+    enabled: false
+    params: {}
+    status: compatibility_only
+    parameters_note: See docs/catalog/features.md for dynamic **params.
+  - step: indicator_model_adaptive_pullback
+    enabled: false
+    params: {}
+    status: compatibility_only
+    parameters_note: See docs/catalog/features.md for dynamic **params.
+  - step: roc_long_only_conditions
+    enabled: false
+    params: {}
+    status: compatibility_only
+    parameters_note: See docs/catalog/features.md for dynamic **params.
+  - step: quote_flow_scalp_router
+    enabled: false
+    params: {}
+    status: compatibility_only
+    parameters_note: See docs/catalog/features.md for dynamic **params.
+  - step: vwap_rms_ema_cross_long
+    enabled: false
+    params: {}
+    status: compatibility_only
+    parameters_note: See docs/catalog/features.md for dynamic **params.
+helpers:
+  declaration_note: Place these under features[].transforms; params may also be expressed as items when
+    the same helper is applied more than once.
+  transforms:
+    between_flag:
+      enabled: false
+      params:
+        source_col: null
+        source_selector: null
+        output_col: null
+        lower: <required>
+        upper: <required>
+        inclusive: both
+        inplace: false
+    crossing_flag:
+      enabled: false
+      params:
+        source_col: null
+        source_selector: null
+        output_col: null
+        threshold: 0.0
+        direction: up
+        inplace: false
+    difference:
+      enabled: false
+      params:
+        source_col: null
+        source_selector: null
+        reference_col: null
+        output_col: null
+        periods: 1
+        inplace: false
+    lag:
+      enabled: false
+      params:
+        source_col: null
+        source_selector: null
+        output_col: null
+        lag: 1
+        prefix: lag
+        inplace: false
+    ratio:
+      enabled: false
+      params:
+        numerator_col: null
+        numerator_selector: null
+        denominator_col: null
+        denominator_selector: null
+        output_col: null
+        eps: 1.0e-08
+        subtract: 0.0
+        denominator_offset: 0.0
+        inplace: false
+    reciprocal:
+      enabled: false
+      params:
+        source_col: null
+        source_selector: null
+        output_col: null
+        eps: 1.0e-12
+        use_abs: false
+        inplace: false
+    rolling_clip:
+      enabled: false
+      params:
+        source_col: null
+        source_selector: null
+        output_col: null
+        window: 2520
+        lower_q: 0.01
+        upper_q: 0.99
+        shift: 1
+        inplace: false
+    rolling_linear_regression:
+      enabled: false
+      params:
+        source_col: null
+        source_selector: null
+        window: 96
+        slope_col: null
+        intercept_col: null
+        r2_col: null
+        inplace: false
+    rolling_mean:
+      enabled: false
+      params:
+        source_col: null
+        source_selector: null
+        output_col: null
+        window: 20
+        min_periods: null
+        shift: 0
+        inplace: false
+    rolling_std:
+      enabled: false
+      params:
+        source_col: null
+        source_selector: null
+        output_col: null
+        window: 20
+        min_periods: null
+        shift: 0
+        ddof: 0
+        inplace: false
+    rolling_sum:
+      enabled: false
+      params:
+        source_col: null
+        source_selector: null
+        output_col: null
+        window: 20
+        min_periods: null
+        shift: 0
+        inplace: false
+    rolling_zscore:
+      enabled: false
+      params:
+        source_col: null
+        source_selector: null
+        output_col: null
+        window: 2520
+        shift: 1
+        ddof: 0
+        inplace: false
+    rms:
+      enabled: false
+      params:
+        source_col: null
+        source_selector: null
+        output_col: null
+        output_prefix: null
+        window: 48
+        shift: 0
+        inplace: false
+    rising_flag:
+      enabled: false
+      params:
+        source_col: null
+        source_selector: null
+        output_col: null
+        periods: 1
+        inplace: false
+    slope:
+      enabled: false
+      params:
+        source_col: null
+        source_selector: null
+        output_col: null
+        window: 2
+        shift: 0
+        inplace: false
+    threshold_flag:
+      enabled: false
+      params:
+        source_col: null
+        source_selector: null
+        output_col: null
+        threshold: 0.0
+        op: gt
+        use_abs: false
+        inplace: false
+normalizations:
+  declaration_note: Place these under features[].normalizations. They execute before features[].transforms.
+  items:
+    returns:
+      enabled: false
+      params:
+        close_col: close
+        windows:
+        - 1
+        - 4
+        - 8
+        - 20
+        - 48
+        log_returns: true
+        inplace: false
+    atr_distances:
+      enabled: false
+      params:
+        atr_col: atr_14
+        pairs: <required>
+        inplace: false
+    atr_scaled_distance:
+      enabled: false
+      params:
+        base_col: <required>
+        ref_col: <required>
+        atr_col: <required>
+        output_col: null
+        eps: 1.0e-12
+        inplace: false
+    range_position:
+      enabled: false
+      params:
+        value_col: close
+        high_col: high
+        low_col: low
+        window: 20
+        output_col: null
+        clip: true
+        inplace: false
+    realized_vol_percentile:
+      enabled: false
+      params:
+        volatility_col: <required>
+        window: 252
+        min_periods: null
+        output_col: null
+        shift_window: true
+        inplace: false
+    robust_zscore:
+      enabled: false
+      params:
+        source_col: <required>
+        window: 252
+        min_periods: null
+        output_col: null
+        shift_stats: true
+        mad_scale: 1.4826
+        inplace: false
+    rolling_beta_residual:
+      enabled: false
+      params:
+        asset_return_col: <required>
+        benchmark_return_col: <required>
+        window: 252
+        min_periods: null
+        residual_col: null
+        beta_col: null
+        alpha_col: null
+        shift_stats: true
+        eps: 1.0e-12
+        inplace: false
+    rolling_percent_rank:
+      enabled: false
+      params:
+        source_col: <required>
+        window: 252
+        min_periods: null
+        output_col: null
+        shift_window: true
+        inplace: false
+    volatility:
+      enabled: false
+      params:
+        close_col: close
+        atr_col: atr_14
+        add_atr_pct: true
+        add_atr_percentile: true
+        percentile_window: 252
+        inplace: false
+    volatility_scaled_return:
+      enabled: false
+      params:
+        return_col: <required>
+        volatility_col: <required>
+        output_col: null
+        eps: 1.0e-12
+        inplace: false
+    volume_relative:
+      enabled: false
+      params:
+        volume_col: volume
+        window: 96
+        min_periods: null
+        output_col: null
+        zscore_col: null
+        shift_stats: true
+        eps: 1.0e-12
+        inplace: false
+    rolling_zscores:
+      enabled: false
+      params:
+        columns: <required>
+        window: 96
+        min_periods: null
+        shift_stats: true
+        inplace: false
+models:
+- kind: elastic_net_clf
+  enabled: false
+  params: {}
+  parameters_note: Model builders accept a nested config contract. Copy the complete parameter block from
+    docs/catalog/models.md and enable only one entry.
+- kind: lightgbm_clf
+  enabled: false
+  params: {}
+  parameters_note: Model builders accept a nested config contract. Copy the complete parameter block from
+    docs/catalog/models.md and enable only one entry.
+- kind: lightgbm_regressor
+  enabled: false
+  params: {}
+  parameters_note: Model builders accept a nested config contract. Copy the complete parameter block from
+    docs/catalog/models.md and enable only one entry.
+- kind: forecast_candidate_transform
+  enabled: false
+  params: {}
+  parameters_note: Model builders accept a nested config contract. Copy the complete parameter block from
+    docs/catalog/models.md and enable only one entry.
+- kind: logistic_regression_clf
+  enabled: false
+  params: {}
+  parameters_note: Model builders accept a nested config contract. Copy the complete parameter block from
+    docs/catalog/models.md and enable only one entry.
+- kind: xgboost_clf
+  enabled: false
+  params: {}
+  parameters_note: Model builders accept a nested config contract. Copy the complete parameter block from
+    docs/catalog/models.md and enable only one entry.
+- kind: xgboost_regressor
+  enabled: false
+  params: {}
+  parameters_note: Model builders accept a nested config contract. Copy the complete parameter block from
+    docs/catalog/models.md and enable only one entry.
+- kind: event_transformer_encoder
+  enabled: false
+  params: {}
+  parameters_note: Model builders accept a nested config contract. Copy the complete parameter block from
+    docs/catalog/models.md and enable only one entry.
+- kind: sarimax_forecaster
+  enabled: false
+  params: {}
+  parameters_note: Model builders accept a nested config contract. Copy the complete parameter block from
+    docs/catalog/models.md and enable only one entry.
+- kind: garch_forecaster
+  enabled: false
+  params: {}
+  parameters_note: Model builders accept a nested config contract. Copy the complete parameter block from
+    docs/catalog/models.md and enable only one entry.
+- kind: lstm_forecaster
+  enabled: false
+  params: {}
+  parameters_note: Model builders accept a nested config contract. Copy the complete parameter block from
+    docs/catalog/models.md and enable only one entry.
+- kind: patchtst_forecaster
+  enabled: false
+  params: {}
+  parameters_note: Model builders accept a nested config contract. Copy the complete parameter block from
+    docs/catalog/models.md and enable only one entry.
+- kind: tft_forecaster
+  enabled: false
+  params: {}
+  parameters_note: Model builders accept a nested config contract. Copy the complete parameter block from
+    docs/catalog/models.md and enable only one entry.
+- kind: chronos_bolt_forecaster
+  enabled: false
+  params: {}
+  parameters_note: Model builders accept a nested config contract. Copy the complete parameter block from
+    docs/catalog/models.md and enable only one entry.
+- kind: chronos_2_forecaster
+  enabled: false
+  params: {}
+  parameters_note: Model builders accept a nested config contract. Copy the complete parameter block from
+    docs/catalog/models.md and enable only one entry.
+- kind: timesfm_2p5_200m_forecaster
+  enabled: false
+  params: {}
+  parameters_note: Model builders accept a nested config contract. Copy the complete parameter block from
+    docs/catalog/models.md and enable only one entry.
+- kind: timesfm_1p0_200m_forecaster
+  enabled: false
+  params: {}
+  parameters_note: Model builders accept a nested config contract. Copy the complete parameter block from
+    docs/catalog/models.md and enable only one entry.
+- kind: tsfresh_extrema_feature_discovery
+  enabled: false
+  params: {}
+  parameters_note: Model builders accept a nested config contract. Copy the complete parameter block from
+    docs/catalog/models.md and enable only one entry.
+- kind: ppo_agent
+  enabled: false
+  params: {}
+  parameters_note: Model builders accept a nested config contract. Copy the complete parameter block from
+    docs/catalog/models.md and enable only one entry.
+- kind: ppo_risk_agent
+  enabled: false
+  params: {}
+  parameters_note: Model builders accept a nested config contract. Copy the complete parameter block from
+    docs/catalog/models.md and enable only one entry.
+- kind: dqn_agent
+  enabled: false
+  params: {}
+  parameters_note: Model builders accept a nested config contract. Copy the complete parameter block from
+    docs/catalog/models.md and enable only one entry.
+- kind: ppo_portfolio_agent
+  enabled: false
+  params: {}
+  parameters_note: Model builders accept a nested config contract. Copy the complete parameter block from
+    docs/catalog/models.md and enable only one entry.
+- kind: dqn_portfolio_agent
+  enabled: false
+  params: {}
+  parameters_note: Model builders accept a nested config contract. Copy the complete parameter block from
+    docs/catalog/models.md and enable only one entry.
+signals:
+  canonical:
+  - kind: c1_trend_pullback_vwap
+    enabled: false
+    params: {}
+    parameters_note: The callable uses **params; the complete nested contract and example are in docs/catalog/signals.md.
+  - kind: c2_regime_aware_momentum
+    enabled: false
+    params: {}
+    parameters_note: The callable uses **params; the complete nested contract and example are in docs/catalog/signals.md.
+  - kind: ehlers_continuation_long
+    enabled: false
+    params: {}
+    parameters_note: The callable uses **params; the complete nested contract and example are in docs/catalog/signals.md.
+  - kind: ehlers_continuation_short
+    enabled: false
+    params: {}
+    parameters_note: The callable uses **params; the complete nested contract and example are in docs/catalog/signals.md.
+  - kind: ehlers_decycler_continuation
+    enabled: false
+    params: {}
+    parameters_note: The callable uses **params; the complete nested contract and example are in docs/catalog/signals.md.
+  - kind: ehlers_semiscalp_long
+    enabled: false
+    params: {}
+    parameters_note: The callable uses **params; the complete nested contract and example are in docs/catalog/signals.md.
+  - kind: ehlers_trend_pullback_continuation_long
+    enabled: false
+    params: {}
+    parameters_note: The callable uses **params; the complete nested contract and example are in docs/catalog/signals.md.
+  - kind: trend_state
+    enabled: false
+    params:
+      state_col: <required>
+      signal_col: null
+      mode: long_short_hold
+  - kind: ema_rms_ppo_vwap
+    enabled: false
+    params: {}
+    parameters_note: The callable uses **params; the complete nested contract and example are in docs/catalog/signals.md.
+  - kind: eurusd_session_bb_reversion
+    enabled: false
+    params: {}
+    parameters_note: The callable uses **params; the complete nested contract and example are in docs/catalog/signals.md.
+  - kind: probability_threshold
+    enabled: false
+    params:
+      prob_col: <required>
+      signal_col: null
+      upper: 0.55
+      lower: 0.45
+      upper_exit: null
+      lower_exit: null
+      mode: long_short_hold
+      base_signal_col: null
+  - kind: probability_conviction
+    enabled: false
+    params:
+      prob_col: <required>
+      signal_col: null
+      clip: 1.0
+  - kind: probability_vol_adjusted
+    enabled: false
+    params:
+      prob_col: pred_prob
+      vol_col: pred_vol
+      signal_col: null
+      prob_center: 0.5
+      upper: null
+      lower: null
+      vol_target: 0.001
+      clip: 1.0
+      vol_floor: 1.0e-06
+      min_signal_abs: 0.0
+      activation_filters: null
+      top_quantile: null
+      top_quantile_window: null
+      max_trade_rate: null
+  - kind: meta_probability_side
+    enabled: false
+    params:
+      prob_col: pred_prob
+      side_col: primary_side
+      candidate_col: null
+      pred_is_oos_col: null
+      expected_value_col: null
+      signal_col: null
+      threshold: null
+      upper: null
+      min_expected_value_r: null
+      profit_barrier_r: 1.0
+      stop_barrier_r: 1.0
+      clip: 1.0
+      mode: long_short
+  - kind: orb_candidate_side
+    enabled: false
+    params:
+      candidate_col: orb_candidate
+      side_col: orb_side
+      signal_col: signal_orb_side
+      mode: long_short
+  - kind: ppo_adx_stochrsi_trend
+    enabled: false
+    params: {}
+    parameters_note: The callable uses **params; the complete nested contract and example are in docs/catalog/signals.md.
+  - kind: quote_flow_scalp_router
+    enabled: false
+    params: {}
+    parameters_note: The callable uses **params; the complete nested contract and example are in docs/catalog/signals.md.
+  - kind: roc_long_only_conditions
+    enabled: false
+    params:
+      roc_window: 12
+      roc_col: null
+      roc_min: 0.0015
+      vol_short_window: 24
+      vol_long_window: 168
+      regime_vol_ratio_z_col: null
+      vol_z_min: -1.5
+      vol_z_max: 1.75
+      close_z_col: close_z
+      close_z_min: -0.25
+      close_z_max: 2.25
+      close_open_ratio_col: close_open_ratio
+      close_open_ratio_min: 0.0002
+      mtf_1h_col: mtf_1h_trend_score
+      mtf_1h_min: -0.001
+      mtf_4h_col: mtf_4h_trend_score
+      mtf_4h_min: -0.002
+      is_weekend_col: is_weekend
+      macro_condition_col: null
+      min_score_required: 5
+      require_all_conditions: false
+      require_bullish_candle: false
+      required_condition_names: null
+      vol_adjustment_strength: 0.9
+      min_exposure: 0.1
+      max_exposure: 1.0
+      signal_col: null
+      long_signal_col: manual_long_signal
+      score_col: manual_conviction_score
+      all_conditions_col: manual_all_conditions_signal
+      vol_adjusted_col: manual_vol_adjusted_signal
+      short_signal_col: short_signal
+      combined_signal_col: combined_signal
+  - kind: ema_stoch_rsi_pullback
+    enabled: false
+    params: {}
+    parameters_note: The callable uses **params; the complete nested contract and example are in docs/catalog/signals.md.
+  - kind: indicator_model_adaptive_pullback
+    enabled: false
+    params: {}
+    parameters_note: The callable uses **params; the complete nested contract and example are in docs/catalog/signals.md.
+  - kind: manual_long_model_filter
+    enabled: false
+    params:
+      prob_col: pred_prob
+      candidate_col: manual_long_candidate
+      base_signal_col: manual_vol_adjusted_candidate
+      threshold: 0.55
+      gate_col: null
+      gate_cols_any: null
+      min_signal_abs: 0.0
+      expected_value_col: null
+      min_expected_value_r: null
+      profit_barrier_r: 1.0
+      stop_barrier_r: 1.0
+      volatility_col: null
+      round_trip_cost_return: 0.0
+      cost_buffer_r: 0.0
+      signal_col: null
+  - kind: matb_candidate
+    enabled: false
+    params:
+      candidate_col: matb_candidate
+      side_col: matb_side
+      signal_col: signal_side
+      mode: long_short
+  - kind: matb_meta_filter
+    enabled: false
+    params:
+      candidate_col: matb_candidate
+      side_col: matb_side
+      probability_col: matb_pred_success_prob
+      expected_r_col: matb_pred_ev_r
+      oos_col: matb_pred_is_oos
+      minimum_probability: 0.55
+      minimum_expected_r: 0.1
+      signal_col: signal_side
+      mode: long_short
+  - kind: dense_return_forecast
+    enabled: false
+    params:
+      forecast_col: pred_ret
+      signal_col: expected_net_return
+      expected_net_return_col: expected_net_return
+      estimated_cost_col: estimated_round_trip_cost
+      cost_per_turnover: 0.0
+      slippage_per_turnover: 0.0
+      cost_round_trip_mult: 2.0
+      forecast_is_vol_normalized: false
+      volatility_col: atr_14
+      price_col: close
+      volatility_floor: 1.0e-12
+      signed_cost_adjustment: true
+      clip: null
+  - kind: forecast_threshold
+    enabled: false
+    params:
+      forecast_col: pred_ret
+      signal_col: null
+      upper: 0.0
+      lower: null
+      mode: long_short_hold
+      activation_filters: null
+  - kind: forecast_threshold_candidate
+    enabled: false
+    params:
+      forecast_col: pred_ret
+      pred_is_oos_col: pred_is_oos
+      signal_col: null
+      upper: 0.0
+      lower: null
+      mode: long_short
+      activation_filters: null
+      candidate_col: primary_candidate
+      side_col: primary_candidate_side
+      strength_col: primary_candidate_strength
+      threshold_distance_col: primary_candidate_threshold_distance
+      inclusive: false
+  - kind: forecast_threshold_hysteresis
+    enabled: false
+    params:
+      forecast_col: pred_ret
+      signal_col: null
+      long_entry: 0.75
+      long_exit: 0.25
+      short_entry: -0.75
+      short_exit: -0.25
+      cooldown_bars: 0
+      min_holding_bars: 0
+  - kind: forecast_vol_adjusted
+    enabled: false
+    params:
+      forecast_col: pred_ret
+      vol_col: pred_vol
+      signal_col: null
+      clip: 1.0
+      vol_floor: 1.0e-06
+  - kind: rsi
+    enabled: false
+    params:
+      rsi_col: <required>
+      buy_level: 30.0
+      sell_level: 70.0
+      signal_col: null
+      mode: long_short_hold
+  - kind: momentum
+    enabled: false
+    params:
+      momentum_col: <required>
+      long_threshold: 0.0
+      short_threshold: null
+      signal_col: null
+      mode: long_short_hold
+  - kind: stochastic
+    enabled: false
+    params:
+      k_col: <required>
+      buy_level: 20.0
+      sell_level: 80.0
+      signal_col: null
+      mode: long_short_hold
+  - kind: stc_roofing_hilbert
+    enabled: false
+    params: {}
+    parameters_note: The callable uses **params; the complete nested contract and example are in docs/catalog/signals.md.
+  - kind: volatility_regime
+    enabled: false
+    params:
+      vol_col: <required>
+      quantile: 0.5
+      signal_col: null
+      mode: long_short_hold
+  - kind: weekday_prev_daily_return_reversal
+    enabled: false
+    params:
+      close_col: close
+      timestamp_col: timestamp
+      timezone_input: UTC
+      timezone: America/New_York
+      weekday: 3
+      signal_hour: 9
+      signal_minute: 0
+      prev_daily_return_max: -0.0006369942365362478
+      side: 1.0
+      signal_col: null
+      candidate_col: signal_candidate
+      prev_daily_return_col: prev_daily_return
+      local_weekday_col: local_weekday
+      local_hour_col: local_hour
+  - kind: vwap_rms_ema_cross_long_fractal_filter
+    enabled: false
+    params: {}
+    parameters_note: The callable uses **params; the complete nested contract and example are in docs/catalog/signals.md.
+  - kind: vwap_rms_ema_cross_long_hmm_gate
+    enabled: false
+    params: {}
+    parameters_note: The callable uses **params; the complete nested contract and example are in docs/catalog/signals.md.
+  - kind: vwap_rms_ema_cross_long
+    enabled: false
+    params: {}
+    parameters_note: The callable uses **params; the complete nested contract and example are in docs/catalog/signals.md.
+  - kind: regime_filtered
+    enabled: false
+    params:
+      base_signal_col: <required>
+      regime_col: <required>
+      signal_col: null
+      active_value: 1.0
+  deprecated_aliases:
+  - kind: ehlers_continuation_long_signal
+    enabled: false
+    params: {}
+    status: deprecated_alias
+    parameters_note: The callable uses **params; the complete nested contract and example are in docs/catalog/signals.md.
+  - kind: ehlers_continuation_short_signal
+    enabled: false
+    params: {}
+    status: deprecated_alias
+    parameters_note: The callable uses **params; the complete nested contract and example are in docs/catalog/signals.md.
+targets:
+- kind: forward_return
+  enabled: false
+  params: {}
+  parameters_note: Target builders accept a nested config contract. Copy the complete parameter block
+    from docs/catalog/targets.md and enable only one entry.
+- kind: future_return_regression
+  enabled: false
+  params: {}
+  parameters_note: Target builders accept a nested config contract. Copy the complete parameter block
+    from docs/catalog/targets.md and enable only one entry.
+- kind: volatility_normalized_future_return
+  enabled: false
+  params: {}
+  parameters_note: Target builders accept a nested config contract. Copy the complete parameter block
+    from docs/catalog/targets.md and enable only one entry.
+- kind: risk_adjusted_future_return
+  enabled: false
+  params: {}
+  parameters_note: Target builders accept a nested config contract. Copy the complete parameter block
+    from docs/catalog/targets.md and enable only one entry.
+- kind: r_multiple_regression
+  enabled: false
+  params: {}
+  parameters_note: Target builders accept a nested config contract. Copy the complete parameter block
+    from docs/catalog/targets.md and enable only one entry.
+- kind: mfe_regression
+  enabled: false
+  params: {}
+  parameters_note: Target builders accept a nested config contract. Copy the complete parameter block
+    from docs/catalog/targets.md and enable only one entry.
+- kind: mae_regression
+  enabled: false
+  params: {}
+  parameters_note: Target builders accept a nested config contract. Copy the complete parameter block
+    from docs/catalog/targets.md and enable only one entry.
+- kind: mfe_mae_ratio_regression
+  enabled: false
+  params: {}
+  parameters_note: Target builders accept a nested config contract. Copy the complete parameter block
+    from docs/catalog/targets.md and enable only one entry.
+- kind: downside_adjusted_future_return
+  enabled: false
+  params: {}
+  parameters_note: Target builders accept a nested config contract. Copy the complete parameter block
+    from docs/catalog/targets.md and enable only one entry.
+- kind: future_trend_slope
+  enabled: false
+  params: {}
+  parameters_note: Target builders accept a nested config contract. Copy the complete parameter block
+    from docs/catalog/targets.md and enable only one entry.
+- kind: future_path_efficiency
+  enabled: false
+  params: {}
+  parameters_note: Target builders accept a nested config contract. Copy the complete parameter block
+    from docs/catalog/targets.md and enable only one entry.
+- kind: excess_return_regression
+  enabled: false
+  params: {}
+  parameters_note: Target builders accept a nested config contract. Copy the complete parameter block
+    from docs/catalog/targets.md and enable only one entry.
+- kind: residual_return_regression
+  enabled: false
+  params: {}
+  parameters_note: Target builders accept a nested config contract. Copy the complete parameter block
+    from docs/catalog/targets.md and enable only one entry.
+- kind: future_range_regression
+  enabled: false
+  params: {}
+  parameters_note: Target builders accept a nested config contract. Copy the complete parameter block
+    from docs/catalog/targets.md and enable only one entry.
+- kind: future_realized_volatility
+  enabled: false
+  params: {}
+  parameters_note: Target builders accept a nested config contract. Copy the complete parameter block
+    from docs/catalog/targets.md and enable only one entry.
+- kind: future_drawdown_regression
+  enabled: false
+  params: {}
+  parameters_note: Target builders accept a nested config contract. Copy the complete parameter block
+    from docs/catalog/targets.md and enable only one entry.
+- kind: triple_barrier
+  enabled: false
+  params: {}
+  parameters_note: Target builders accept a nested config contract. Copy the complete parameter block
+    from docs/catalog/targets.md and enable only one entry.
+- kind: directional_triple_barrier
+  enabled: false
+  params: {}
+  parameters_note: Target builders accept a nested config contract. Copy the complete parameter block
+    from docs/catalog/targets.md and enable only one entry.
+- kind: r_multiple
+  enabled: false
+  params: {}
+  parameters_note: Target builders accept a nested config contract. Copy the complete parameter block
+    from docs/catalog/targets.md and enable only one entry.
+- kind: path_dependent_r
+  enabled: false
+  params: {}
+  parameters_note: Target builders accept a nested config contract. Copy the complete parameter block
+    from docs/catalog/targets.md and enable only one entry.
+- kind: strategy_path_r
+  enabled: false
+  params: {}
+  parameters_note: Target builders accept a nested config contract. Copy the complete parameter block
+    from docs/catalog/targets.md and enable only one entry.
+- kind: candidate_expected_r
+  enabled: false
+  params: {}
+  parameters_note: Target builders accept a nested config contract. Copy the complete parameter block
+    from docs/catalog/targets.md and enable only one entry.
+- kind: expected_realized_r
+  enabled: false
+  params: {}
+  parameters_note: Target builders accept a nested config contract. Copy the complete parameter block
+    from docs/catalog/targets.md and enable only one entry.
+- kind: target_before_stop_probability
+  enabled: false
+  params: {}
+  parameters_note: Target builders accept a nested config contract. Copy the complete parameter block
+    from docs/catalog/targets.md and enable only one entry.
+- kind: trade_mfe_mae_regression
+  enabled: false
+  params: {}
+  parameters_note: Target builders accept a nested config contract. Copy the complete parameter block
+    from docs/catalog/targets.md and enable only one entry.

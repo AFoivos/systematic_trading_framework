@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 from pandas.testing import assert_series_equal
 
 from src.features.helpers import apply_feature_helpers
@@ -116,20 +117,14 @@ def test_rolling_sum_and_ratio_helpers_replace_vol_normalized_momentum() -> None
 
 def test_volatility_of_volatility_can_be_composed_from_helpers() -> None:
     df = synthetic_ohlcv()
-    legacy = add_volatility_of_volatility(
+    raw = add_volatility_of_volatility(
         df,
         volatility_col="vol",
         window=12,
-        mean_window=8,
         output_col="vov",
-        mean_col="vov_mean",
-        ratio_col="vov_ratio",
-        rising_col="vov_rising",
-        high_vov_col="vov_high",
-        high_vov_mult=1.2,
     )
     helper = apply_feature_helpers(
-        df,
+        raw,
         transforms={
             "rolling_std": {"source_col": "vol", "window": 12, "ddof": 0, "output_col": "vov"},
             "rolling_mean": {"source_col": "vov", "window": 8, "output_col": "vov_mean"},
@@ -139,8 +134,22 @@ def test_volatility_of_volatility_can_be_composed_from_helpers() -> None:
         },
     )
 
-    for column in ["vov", "vov_mean", "vov_ratio", "vov_high", "vov_rising"]:
-        _assert_equal(helper[column], legacy[column])
+    expected_mean = raw["vov"].rolling(8, min_periods=8).mean()
+    _assert_equal(helper["vov_mean"], expected_mean)
+    _assert_equal(helper["vov_ratio"], raw["vov"] / expected_mean)
+    assert {"vov_high", "vov_rising"}.issubset(helper.columns)
+
+
+def test_volatility_of_volatility_rejects_helper_derived_outputs() -> None:
+    df = synthetic_ohlcv()
+    with pytest.raises(ValueError, match="helper-derived"):
+        add_volatility_of_volatility(
+            df,
+            volatility_col="vol",
+            window=12,
+            mean_window=8,
+            mean_col="vov_mean",
+        )
 
 
 def test_trend_slope_volatility_can_be_composed_from_helpers() -> None:

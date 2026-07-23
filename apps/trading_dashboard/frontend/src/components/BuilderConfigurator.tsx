@@ -9,24 +9,8 @@ interface BuilderConfiguratorProps {
   onChange: (steps: TransformStepConfig[]) => void;
 }
 
-const TRANSFORM_KIND_OPTIONS = ["rolling_stat", "rolling_zscore", "rolling_clip", "ratio", "tsfresh_rolling"] as const;
-const NESTED_TRANSFORM_KIND_OPTIONS = ["rolling_stat", "rolling_zscore", "rolling_clip", "tsfresh_rolling"] as const;
-const ROLLING_STAT_MODE_OPTIONS = [
-  "root_mean_square",
-  "mean",
-  "standard_deviation",
-  "variance",
-  "median",
-  "sum_values",
-  "minimum",
-  "maximum",
-  "absolute_maximum",
-  "mad",
-  "iqr",
-  "skew",
-  "kurtosis",
-  "slope"
-] as const;
+const TRANSFORM_KIND_OPTIONS = ["rms", "rolling_mean", "rolling_std", "rolling_sum", "rolling_zscore", "rolling_clip", "slope", "ratio"] as const;
+const NESTED_TRANSFORM_KIND_OPTIONS = ["rms", "rolling_mean", "rolling_std", "rolling_sum", "rolling_zscore", "rolling_clip", "slope"] as const;
 
 type FeatureTransformConfig = Record<string, unknown>;
 
@@ -63,7 +47,7 @@ function defaultParams(builder: BuilderDefinition): Record<string, unknown> {
   }, {});
 }
 
-function transformOutputCol(kind: string, sourceCol: string, mode = "root_mean_square"): string {
+function transformOutputCol(kind: string, sourceCol: string): string {
   if (!sourceCol) {
     return "";
   }
@@ -73,10 +57,13 @@ function transformOutputCol(kind: string, sourceCol: string, mode = "root_mean_s
   if (kind === "rolling_clip") {
     return `${sourceCol}__rolling_clip`;
   }
-  return `${sourceCol}__${mode}`;
+  if (kind === "rms") {
+    return `${sourceCol}__root_mean_square`;
+  }
+  return `${sourceCol}__${kind}`;
 }
 
-function defaultFeatureTransform(kind = "rolling_stat", sourceCol = "close_logret", secondarySourceCol = ""): FeatureTransformConfig {
+function defaultFeatureTransform(kind = "rms", sourceCol = "close_logret", secondarySourceCol = ""): FeatureTransformConfig {
   if (kind === "ratio") {
     const denominatorCol = secondarySourceCol || sourceCol;
     return {
@@ -107,27 +94,16 @@ function defaultFeatureTransform(kind = "rolling_stat", sourceCol = "close_logre
       shift: 1
     };
   }
-  if (kind === "tsfresh_rolling") {
-    return {
-      kind,
-      source_col: sourceCol,
-      output_prefix: sourceCol,
-      window: 48,
-      shift: 0,
-      calculators: ["root_mean_square"]
-    };
-  }
   return {
-    kind: "rolling_stat",
+    kind,
     source_col: sourceCol,
-    mode: "root_mean_square",
     window: 48,
     shift: 0,
-    output_col: transformOutputCol("rolling_stat", sourceCol, "root_mean_square")
+    output_col: transformOutputCol(kind, sourceCol)
   };
 }
 
-function defaultBulkFeatureTransform(kind = "rolling_stat"): FeatureTransformConfig {
+function defaultBulkFeatureTransform(kind = "rms"): FeatureTransformConfig {
   if (kind === "rolling_clip") {
     return {
       kind,
@@ -144,17 +120,8 @@ function defaultBulkFeatureTransform(kind = "rolling_stat"): FeatureTransformCon
       shift: 1
     };
   }
-  if (kind === "tsfresh_rolling") {
-    return {
-      kind,
-      window: 48,
-      shift: 0,
-      calculators: ["root_mean_square"]
-    };
-  }
   return {
-    kind: "rolling_stat",
-    mode: "root_mean_square",
+    kind,
     window: 48,
     shift: 0
   };
@@ -168,20 +135,8 @@ function secondarySourceColumn(sourceColumns?: string[]): string {
   return sourceColumns && sourceColumns.length > 1 ? sourceColumns[1] : "";
 }
 
-function featureTransformsFromParams(params: Record<string, unknown>, sourceColumns?: string[]): FeatureTransformConfig[] {
-  const raw = params.transforms;
-  if (!Array.isArray(raw) || raw.length === 0) {
-    return [defaultFeatureTransform("rolling_stat", preferredSourceColumn(sourceColumns), secondarySourceColumn(sourceColumns))];
-  }
-  return raw.map((item) =>
-    item && typeof item === "object" && !Array.isArray(item)
-      ? { ...item } as FeatureTransformConfig
-      : defaultFeatureTransform("rolling_stat", preferredSourceColumn(sourceColumns), secondarySourceColumn(sourceColumns))
-  );
-}
-
 function bulkFeatureTransform(transform: FeatureTransformConfig): FeatureTransformConfig {
-  const kind = stringValue(transform.kind, "rolling_stat");
+  const kind = stringValue(transform.kind, "rms");
   if (!NESTED_TRANSFORM_KIND_OPTIONS.includes(kind as typeof NESTED_TRANSFORM_KIND_OPTIONS[number])) {
     return defaultBulkFeatureTransform();
   }
@@ -750,7 +705,7 @@ function FeatureTransformsEditor({
       ...transforms,
       applyToAllSourceColumns
         ? defaultBulkFeatureTransform()
-        : defaultFeatureTransform("rolling_stat", preferredSourceColumn(sourceColumnOptions), secondarySourceColumn(sourceColumnOptions))
+        : defaultFeatureTransform("rms", preferredSourceColumn(sourceColumnOptions), secondarySourceColumn(sourceColumnOptions))
     ]);
   };
 
@@ -762,7 +717,7 @@ function FeatureTransformsEditor({
         : [
             applyToAllSourceColumns
               ? defaultBulkFeatureTransform()
-              : defaultFeatureTransform("rolling_stat", preferredSourceColumn(sourceColumnOptions), secondarySourceColumn(sourceColumnOptions))
+              : defaultFeatureTransform("rms", preferredSourceColumn(sourceColumnOptions), secondarySourceColumn(sourceColumnOptions))
           ]
     );
   };
@@ -784,16 +739,14 @@ function FeatureTransformsEditor({
             disabled={sourceColumnOptions.length === 0}
             onChange={(event) => {
               const nextValue = event.target.value;
-              const kind = stringValue(transform.kind, "rolling_stat");
+              const kind = stringValue(transform.kind, "rms");
               const patch: FeatureTransformConfig = { [field]: nextValue };
               if (kind === "ratio") {
                 const numerator = field === "numerator_col" ? nextValue : stringValue(transform.numerator_col);
                 const denominator = field === "denominator_col" ? nextValue : stringValue(transform.denominator_col);
                 patch.output_col = numerator && denominator ? `${numerator}_over_${denominator}` : "";
-              } else if (kind === "tsfresh_rolling") {
-                patch.output_prefix = nextValue;
               } else if (field === "source_col") {
-                patch.output_col = transformOutputCol(kind, nextValue, stringValue(transform.mode, "root_mean_square"));
+                patch.output_col = transformOutputCol(kind, nextValue);
               }
               updateTransform(transformIndex, patch);
             }}
@@ -819,7 +772,7 @@ function FeatureTransformsEditor({
   return (
     <div className="transform-editor">
       {transforms.map((transform, transformIndex) => {
-        const kind = stringValue(transform.kind, "rolling_stat");
+        const kind = stringValue(transform.kind, "rms");
         return (
           <div className="transform-row" key={`transform-${transformIndex}`}>
             <div className="step-card-header">
@@ -855,47 +808,7 @@ function FeatureTransformsEditor({
               <div className="param-grid">
                 {applyToAllSourceColumns ? null : sourceField(transformIndex, transform, "source_col", "source_col")}
 
-                {kind === "rolling_stat" ? (
-                  <label className="field">
-                    <span>mode</span>
-                    <select
-                      value={stringValue(transform.mode, "root_mean_square")}
-                      onChange={(event) =>
-                        updateTransform(transformIndex, {
-                          mode: event.target.value,
-                          ...(applyToAllSourceColumns
-                            ? {}
-                            : { output_col: transformOutputCol("rolling_stat", selectSourceValue(transform.source_col), event.target.value) })
-                        })
-                      }
-                    >
-                      {ROLLING_STAT_MODE_OPTIONS.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : null}
-
-                {kind === "tsfresh_rolling" ? (
-                  <>
-                    {applyToAllSourceColumns ? null : (
-                      <label className="field">
-                        <span>output_prefix</span>
-                        <input value={stringValue(transform.output_prefix)} onChange={(event) => updateTransform(transformIndex, { output_prefix: event.target.value })} />
-                      </label>
-                    )}
-                    <label className="field">
-                      <span>calculators</span>
-                      <textarea
-                        defaultValue={formatValue(transform.calculators ?? ["root_mean_square"])}
-                        rows={2}
-                        onBlur={(event) => updateTransform(transformIndex, { calculators: parseListValue(event.target.value) })}
-                      />
-                    </label>
-                  </>
-                ) : applyToAllSourceColumns ? null : (
+                {applyToAllSourceColumns ? null : (
                   <label className="field">
                     <span>output_col</span>
                     <input value={stringValue(transform.output_col)} onChange={(event) => updateTransform(transformIndex, { output_col: event.target.value })} />
@@ -1000,7 +913,7 @@ export function BuilderConfigurator({ title, sourceType, builders, steps, onChan
           const builder = builderByName.get(step.step);
           const nestedSourceColumns = sourceType === "feature" ? deriveFeatureOutputColumns(step.step, step.params) : [];
           const estimatedOutputs = sourceType === "feature" ? nestedSourceColumns : [];
-          const canUseNestedTransforms = sourceType === "feature" && step.step !== "feature_transforms";
+          const canUseNestedTransforms = sourceType === "feature";
           const nestedTransformsEnabled = Array.isArray(step.params.transforms);
           return (
             <div className="step-card" key={`${step.step}-${index}`}>
@@ -1026,20 +939,13 @@ export function BuilderConfigurator({ title, sourceType, builders, steps, onChan
                   <small>{compactColumnList(estimatedOutputs)}</small>
                 </div>
               ) : null}
-              {step.step === "feature_transforms" ? (
-                <FeatureTransformsEditor
-                  transforms={featureTransformsFromParams(step.params)}
-                  onChange={(transforms) => updateParam(index, "transforms", transforms)}
-                />
-              ) : (
-                <div className="param-grid">
-                  {(builder?.parameters ?? []).map((parameter) => (
-                    <div key={parameter.name}>
-                      {parameterInput(parameter, step.params[parameter.name], (value) => updateParam(index, parameter.name, value))}
-                    </div>
-                  ))}
-                </div>
-              )}
+              <div className="param-grid">
+                {(builder?.parameters ?? []).map((parameter) => (
+                  <div key={parameter.name}>
+                    {parameterInput(parameter, step.params[parameter.name], (value) => updateParam(index, parameter.name, value))}
+                  </div>
+                ))}
+              </div>
               {canUseNestedTransforms ? (
                 <div className="nested-transform-panel">
                   <label className="check-row compact-check">
@@ -1060,6 +966,16 @@ export function BuilderConfigurator({ title, sourceType, builders, steps, onChan
                       onChange={(transforms) => updateParam(index, "transforms", transforms)}
                     />
                   ) : null}
+                  <label className="field">
+                    <span>normalizations (canonical helper list JSON)</span>
+                    <textarea
+                      key={JSON.stringify(step.params.normalizations ?? [])}
+                      defaultValue={formatValue(step.params.normalizations ?? [])}
+                      rows={4}
+                      placeholder='[{"kind":"robust_zscore","source_col":"close_ret","window":96,"output_col":"close_ret_robust_z96"}]'
+                      onBlur={(event) => updateParam(index, "normalizations", parseListValue(event.target.value))}
+                    />
+                  </label>
                 </div>
               ) : null}
               <label className="field">

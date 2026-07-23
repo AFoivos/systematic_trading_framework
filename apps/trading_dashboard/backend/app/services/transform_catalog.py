@@ -27,7 +27,8 @@ PROJECT_ROOT = get_paths().project_root
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.features import TSFRESH_ROLLING_CALCULATORS, add_feature_transforms  # noqa: E402
+from src.features.helpers import apply_feature_helpers  # noqa: E402
+from src.features.helpers.registry import NORMALIZATION_HELPERS, TRANSFORM_HELPERS  # noqa: E402
 from src.features.registry import (  # noqa: E402
     FEATURE_COMPATIBILITY_REGISTRY as EXPERIMENT_FEATURE_COMPATIBILITY_REGISTRY,
     FEATURE_REGISTRY as EXPERIMENT_FEATURE_REGISTRY,
@@ -44,7 +45,6 @@ SignalFn = Callable[..., pd.DataFrame | pd.Series]
 
 FEATURE_REGISTRY: Mapping[str, FeatureFn] = {
     **dict(EXPERIMENT_FEATURE_REGISTRY),
-    "feature_transforms": add_feature_transforms,
     **dict(EXPERIMENT_FEATURE_COMPATIBILITY_REGISTRY),
 }
 
@@ -238,8 +238,8 @@ FEATURE_PARAM_DEFAULTS: dict[str, dict[str, Any]] = {
         "window": 10,
         "clip": 0.999,
         "output_col": "fisher_transform_10",
-        "signal_col": "fisher_transform_10_signal",
-        "add_signal": True,
+        "signal_col": None,
+        "add_signal": False,
     },
     "inverse_fisher_transform": {
         "input_col": "close",
@@ -258,8 +258,8 @@ FEATURE_PARAM_DEFAULTS: dict[str, dict[str, Any]] = {
         "price_col": "close",
         "alpha": 0.07,
         "output_col": "cyber_cycle",
-        "trigger_col": "cyber_cycle_trigger",
-        "add_trigger": True,
+        "trigger_col": None,
+        "add_trigger": False,
     },
     "decycler": {
         "price_col": "close",
@@ -315,18 +315,6 @@ FEATURE_PARAM_DEFAULTS: dict[str, dict[str, Any]] = {
         "price_col": "close",
         "use_smoothed_period": False,
         "output_col": "homodyne_discriminator",
-    },
-    "feature_transforms": {
-        "transforms": [
-            {
-                "kind": "rolling_stat",
-                "source_col": "close_logret",
-                "mode": "root_mean_square",
-                "window": 48,
-                "shift": 0,
-                "output_col": "close_logret__root_mean_square",
-            }
-        ]
     },
     "hmm_regime": {
         "feature_cols": ["close_logret"],
@@ -940,8 +928,8 @@ def _series_response_items(frame: pd.DataFrame, source_type: str, columns: list[
 
 def _step_dict(step: TransformStepConfig) -> dict[str, Any]:
     params = dict(step.params)
-    if step.step != "feature_transforms":
-        params.pop("transforms", None)
+    params.pop("transforms", None)
+    params.pop("normalizations", None)
     payload: dict[str, Any] = {
         "step": step.step,
         "params": params,
@@ -963,21 +951,19 @@ def _signal_step_dict(step: TransformStepConfig) -> dict[str, Any]:
     return payload
 
 
-def _post_feature_transforms(step: TransformStepConfig) -> list[dict[str, object]]:
-    if step.step == "feature_transforms":
-        return []
-    raw = step.params.get("transforms")
+def _post_feature_helpers(step: TransformStepConfig, section: str) -> list[dict[str, object]]:
+    raw = step.params.get(section)
     if raw in (None, ""):
         return []
     if not isinstance(raw, list):
-        raise TypeError(f"{step.step}.params.transforms must be a list of transform mappings.")
+        raise TypeError(f"{step.step}.params.{section} must be a list of helper mappings.")
 
-    transforms: list[dict[str, object]] = []
+    helpers: list[dict[str, object]] = []
     for idx, item in enumerate(raw):
         if not isinstance(item, dict):
-            raise TypeError(f"{step.step}.params.transforms[{idx}] must be a transform mapping.")
-        transforms.append(dict(item))
-    return transforms
+            raise TypeError(f"{step.step}.params.{section}[{idx}] must be a helper mapping.")
+        helpers.append(dict(item))
+    return helpers
 
 
 def _bulk_transform_output_col(kind: str, source_col: str, transform: dict[str, object]) -> str | None:
@@ -985,25 +971,11 @@ def _bulk_transform_output_col(kind: str, source_col: str, transform: dict[str, 
         return f"{source_col}__zscore"
     if kind == "rolling_clip":
         return f"{source_col}__rolling_clip"
-    if kind == "rolling_stat":
-        return f"{source_col}__{_canonical_nested_rolling_stat_mode(transform.get('mode', 'root_mean_square'))}"
+    if kind == "rms":
+        return f"{source_col}__root_mean_square"
+    if kind in {"rolling_mean", "rolling_std", "rolling_sum", "slope"}:
+        return f"{source_col}__{kind}"
     return None
-
-
-_NESTED_ROLLING_STAT_MODE_ALIASES = {
-    "sum": "sum_values",
-    "std": "standard_deviation",
-    "var": "variance",
-    "rms": "root_mean_square",
-    "max": "maximum",
-    "abs_max": "absolute_maximum",
-    "min": "minimum",
-}
-
-
-def _canonical_nested_rolling_stat_mode(mode: object) -> str:
-    normalized = str(mode).strip()
-    return _NESTED_ROLLING_STAT_MODE_ALIASES.get(normalized, normalized)
 
 
 def _bulk_transform_for_source(
@@ -1015,8 +987,11 @@ def _bulk_transform_for_source(
     kind = str(transform.get("kind", ""))
     if kind == "ratio":
         raise ValueError(f"{owner} cannot be applied to all parent feature outputs; ratio requires explicit sources.")
-    if kind not in {"rolling_stat", "rolling_zscore", "rolling_clip", "tsfresh_rolling"}:
-        raise ValueError(f"Unsupported nested feature transform kind: {kind!r}.")
+    if kind not in TRANSFORM_HELPERS:
+        raise ValueError(
+            f"Unsupported feature helper: {kind!r}. "
+            f"Available helpers: {sorted(TRANSFORM_HELPERS)}."
+        )
 
     expanded = dict(transform)
     for key in (
@@ -1035,8 +1010,6 @@ def _bulk_transform_for_source(
     output_col = _bulk_transform_output_col(kind, source_col, expanded)
     if output_col is not None:
         expanded["output_col"] = output_col
-    if kind == "tsfresh_rolling":
-        expanded["output_prefix"] = source_col
     return expanded
 
 
@@ -1083,30 +1056,35 @@ def _expand_post_feature_transforms(
     return expanded
 
 
-def _tsfresh_calculators(value: object) -> list[str]:
-    if value is None:
-        return [str(calculator) for calculator in TSFRESH_ROLLING_CALCULATORS]
-    if isinstance(value, (str, bytes)):
-        return [str(value)]
-    if isinstance(value, Iterable):
-        return [str(calculator) for calculator in value]
-    return [str(value)]
-
-
 def _expected_transform_output_columns(transforms: Iterable[dict[str, object]]) -> list[str]:
     columns: list[str] = []
     for transform in transforms:
         kind = str(transform.get("kind", ""))
-        if kind in {"ratio", "rolling_clip", "rolling_stat", "rolling_zscore"}:
+        if kind in TRANSFORM_HELPERS:
             output_col = transform.get("output_col")
             if isinstance(output_col, str) and output_col:
                 columns.append(output_col)
-        elif kind == "tsfresh_rolling":
-            source_col = transform.get("source_col")
-            output_prefix = transform.get("output_prefix", source_col)
-            if isinstance(output_prefix, str) and output_prefix:
-                columns.extend(f"{output_prefix}__{calculator}" for calculator in _tsfresh_calculators(transform.get("calculators")))
     return columns
+
+
+def _expected_normalization_output_columns(items: Iterable[dict[str, object]]) -> list[str]:
+    return [
+        str(item["output_col"])
+        for item in items
+        if isinstance(item.get("output_col"), str) and str(item["output_col"])
+    ]
+
+
+def _helper_block(items: Iterable[dict[str, object]]) -> dict[str, dict[str, object]]:
+    grouped: dict[str, list[dict[str, object]]] = {}
+    for item in items:
+        kind = str(item.get("kind", "")).strip()
+        params = {key: value for key, value in item.items() if key != "kind"}
+        grouped.setdefault(kind, []).append(params)
+    return {
+        kind: {"items": params}
+        for kind, params in grouped.items()
+    }
 
 
 def _apply_feature_step(
@@ -1115,7 +1093,8 @@ def _apply_feature_step(
     *,
     asset: str | None,
 ) -> tuple[pd.DataFrame, list[str], list[str]]:
-    post_transforms = _post_feature_transforms(step)
+    post_transforms = _post_feature_helpers(step, "transforms")
+    post_normalizations = _post_feature_helpers(step, "normalizations")
     before = list(frame.columns)
     out, prerequisites = call_with_materialized_dependencies(
         frame,
@@ -1128,21 +1107,37 @@ def _apply_feature_step(
         exclude=prerequisites,
     )
     columns = list(feature_columns)
-    if post_transforms:
+    if post_transforms or post_normalizations:
         expanded_transforms = _expand_post_feature_transforms(
             post_transforms,
             feature_step=step.step,
             allowed_columns=feature_columns,
         )
+        invalid_normalizations = [
+            str(item.get("kind", ""))
+            for item in post_normalizations
+            if str(item.get("kind", "")) not in NORMALIZATION_HELPERS
+        ]
+        if invalid_normalizations:
+            raise ValueError(
+                f"Unsupported normalization helper(s): {invalid_normalizations}. "
+                f"Available normalizations: {sorted(NORMALIZATION_HELPERS)}."
+            )
         expected_transform_columns = _expected_transform_output_columns(expanded_transforms)
+        expected_normalization_columns = _expected_normalization_output_columns(post_normalizations)
         before_transforms = list(out.columns)
-        out = add_feature_transforms(out, transforms=expanded_transforms)
+        out = apply_feature_helpers(
+            out,
+            transforms=_helper_block(expanded_transforms),
+            normalizations=_helper_block(post_normalizations),
+            owner=f"dashboard feature {step.step}",
+        )
         columns.extend(
             _configured_output_columns(
                 before=before_transforms,
                 after=out.columns,
                 outputs=None,
-                preferred=expected_transform_columns,
+                preferred=[*expected_normalization_columns, *expected_transform_columns],
             )
         )
     return out, _numeric_columns(out, columns), prerequisites

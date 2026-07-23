@@ -13,7 +13,9 @@
    εκτελείς το πρώτο experiment.
 3. [Οδηγός YAML experiments](yaml_experiments_guide_gr.md): πώς γράφεις
    config-driven experiments με features, helpers, targets, models και signals.
-4. [Project workflow](project_workflow_gr.md): πρακτική ροή εργασίας για data,
+4. [Οδηγός lab experiments](lab_experiments_guide_gr.md): ασφαλές workflow
+   δοκιμών και πλήρες registry-backed YAML reference όλων των components.
+5. [Project workflow](project_workflow_gr.md): πρακτική ροή εργασίας για data,
    research, backtesting, reporting και execution.
 
 ## Για ανάπτυξη και επέκταση

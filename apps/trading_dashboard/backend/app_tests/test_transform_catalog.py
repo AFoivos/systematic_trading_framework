@@ -59,7 +59,7 @@ def test_dashboard_builder_catalogs_track_canonical_registries() -> None:
     assert set(FEATURE_COMPATIBILITY_REGISTRY).issubset(feature_by_name)
     assert set(CANONICAL_SIGNAL_REGISTRY).issubset(signal_by_name)
     assert set(CANONICAL_TARGET_REGISTRY).issubset(target_by_name)
-    assert "feature_transforms" in feature_by_name
+    assert "feature_transforms" not in feature_by_name
     assert "classifier" in target_by_name
     assert transform_catalog.get_feature_fn("trend_regime") is CANONICAL_FEATURE_REGISTRY["trend_regime"]
     assert transform_catalog.get_signal_fn("regime_filtered") is CANONICAL_SIGNAL_REGISTRY["regime_filtered"]
@@ -72,11 +72,7 @@ def test_builder_catalog_exposes_registered_feature_signal_and_target_defaults()
 
     assert "rsi" in feature_by_name
     assert "vwap" in feature_by_name
-    assert {
-        "rolling_r2_trend_quality",
-        "trend_slope_volatility",
-        "volatility_of_volatility",
-    }.isdisjoint(feature_by_name)
+    assert "rolling_r2_trend_quality" not in feature_by_name
     assert feature_by_name["mama"].display_name == "MAMA"
     assert feature_by_name["frama"].display_name == "FRAMA"
     assert feature_by_name["laguerre_rsi"].metadata["category"] == "Ehlers"
@@ -102,19 +98,6 @@ def test_builder_catalog_exposes_registered_feature_signal_and_target_defaults()
     rsi_params = {param.name: param for param in feature_by_name["rsi"].parameters}
     assert rsi_params["windows"].kind == "list"
     assert rsi_params["windows"].default_value == [14]
-
-    transform_params = {param.name: param for param in feature_by_name["feature_transforms"].parameters}
-    assert transform_params["transforms"].kind == "list"
-    assert transform_params["transforms"].default_value == [
-        {
-            "kind": "rolling_stat",
-            "source_col": "close_logret",
-            "mode": "root_mean_square",
-            "window": 48,
-            "shift": 0,
-            "output_col": "close_logret__root_mean_square",
-        }
-    ]
 
     hmm_params = {param.name: param for param in feature_by_name["hmm_regime"].parameters}
     assert hmm_params["feature_cols"].default_value == ["close_logret"]
@@ -241,38 +224,19 @@ def test_transform_series_materializes_missing_target_returns_from_ohlcv(monkeyp
     assert response.steps[0].metadata["materialized_prerequisites"] == ["close_logret"]
 
 
-def test_transform_series_materializes_tsfresh_transform_source_from_ohlcv(monkeypatch) -> None:
+def test_transform_series_rejects_removed_legacy_feature_transforms_step(monkeypatch) -> None:
     _install_fake_loader(monkeypatch, _ohlcv_frame())
 
-    response = transform_catalog.run_transform_series(
-        TransformSeriesRequest(
-            asset="XAUUSD",
-            features=[
-                TransformStepConfig(
-                    step="feature_transforms",
-                    params={
-                        "transforms": [
-                            {
-                                "source_col": "close_logret",
-                                "kind": "tsfresh_rolling",
-                                "window": 4,
-                                "calculators": ["mean", "length"],
-                            }
-                        ]
-                    },
-                ),
-            ],
+    with pytest.raises(KeyError, match="Unknown feature step: feature_transforms"):
+        transform_catalog.run_transform_series(
+            TransformSeriesRequest(
+                asset="XAUUSD",
+                features=[TransformStepConfig(step="feature_transforms")],
+            )
         )
-    )
-
-    assert {series.series_id for series in response.series} == {
-        "close_logret__mean",
-        "close_logret__length",
-    }
-    assert response.steps[0].metadata["materialized_prerequisites"] == ["close_logret"]
 
 
-def test_transform_series_runs_default_rolling_stat_feature_transform(monkeypatch) -> None:
+def test_transform_series_runs_canonical_rms_helper(monkeypatch) -> None:
     _install_fake_loader(monkeypatch, _ohlcv_frame())
 
     response = transform_catalog.run_transform_series(
@@ -280,13 +244,13 @@ def test_transform_series_runs_default_rolling_stat_feature_transform(monkeypatc
             asset="XAUUSD",
             features=[
                 TransformStepConfig(
-                    step="feature_transforms",
+                    step="returns",
                     params={
+                        "log": True,
+                        "col_name": "close_logret",
                         "transforms": [
                             {
-                                "source_col": "close_logret",
-                                "kind": "rolling_stat",
-                                "mode": "root_mean_square",
+                                "kind": "rms",
                                 "window": 4,
                                 "output_col": "close_logret_rms_4",
                             }
@@ -297,8 +261,42 @@ def test_transform_series_runs_default_rolling_stat_feature_transform(monkeypatc
         )
     )
 
-    assert {series.series_id for series in response.series} == {"close_logret_rms_4"}
-    assert response.steps[0].metadata["materialized_prerequisites"] == ["close_logret"]
+    assert {series.series_id for series in response.series} == {
+        "close_logret",
+        "close_logret__root_mean_square",
+    }
+    assert response.steps[0].metadata["materialized_prerequisites"] == []
+
+
+def test_transform_series_runs_canonical_normalization_helper(monkeypatch) -> None:
+    _install_fake_loader(monkeypatch, _ohlcv_frame())
+
+    response = transform_catalog.run_transform_series(
+        TransformSeriesRequest(
+            asset="XAUUSD",
+            features=[
+                TransformStepConfig(
+                    step="returns",
+                    params={
+                        "log": False,
+                        "col_name": "close_ret",
+                        "normalizations": [
+                            {
+                                "kind": "robust_zscore",
+                                "source_col": "close_ret",
+                                "window": 4,
+                                "output_col": "close_ret_robust_z4",
+                            }
+                        ],
+                    },
+                ),
+            ],
+        )
+    )
+
+    assert {"close_ret", "close_ret_robust_z4"} == {
+        series.series_id for series in response.series
+    }
 
 
 def test_transform_series_runs_nested_transform_on_all_parent_feature_outputs(monkeypatch) -> None:
@@ -315,8 +313,7 @@ def test_transform_series_runs_nested_transform_on_all_parent_feature_outputs(mo
                         "ema_spans": [],
                         "transforms": [
                             {
-                                "kind": "rolling_stat",
-                                "mode": "root_mean_square",
+                                "kind": "rms",
                                 "window": 4,
                             }
                         ],
@@ -421,8 +418,7 @@ def test_transform_series_expands_nested_adx_rms_to_all_adx_outputs(monkeypatch)
                         "windows": [4],
                         "transforms": [
                             {
-                                "kind": "rolling_stat",
-                                "mode": "root_mean_square",
+                                "kind": "rms",
                                 "window": 4,
                             }
                         ],
@@ -459,8 +455,7 @@ def test_transform_series_returns_nested_outputs_when_names_already_exist(monkey
                         "windows": [4],
                         "transforms": [
                             {
-                                "kind": "rolling_stat",
-                                "mode": "root_mean_square",
+                                "kind": "rms",
                                 "window": 4,
                             }
                         ],
@@ -497,8 +492,7 @@ def test_transform_series_ignores_legacy_nested_transform_source_for_bulk(monkey
                         "transforms": [
                             {
                                 "source_col": "plus_di_4",
-                                "kind": "rolling_stat",
-                                "mode": "root_mean_square",
+                                "kind": "rms",
                                 "window": 4,
                                 "output_col": "plus_di_4_rms_legacy_ui",
                             }

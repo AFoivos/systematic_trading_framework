@@ -61,49 +61,33 @@ def add_volatility_of_volatility(
     _validate_window(window, field="window")
     if mean_window is not None:
         _validate_window(mean_window, field="mean_window")
-    multiplier = _validate_positive_float(high_vov_mult, field="high_vov_mult")
-    _validate_mean_dependencies(mean_window=mean_window, mean_col=mean_col, ratio_col=ratio_col)
+    _validate_positive_float(high_vov_mult, field="high_vov_mult")
+    requested = {
+        "mean_window": mean_window,
+        "mean_col": mean_col,
+        "ratio_col": ratio_col,
+        "rising_col": rising_col,
+        "high_vov_col": high_vov_col,
+    }
+    enabled = [name for name, value in requested.items() if value is not None]
+    if enabled:
+        raise ValueError(
+            "Volatility-of-volatility derived outputs are helper-derived "
+            f"({', '.join(enabled)} requested). Keep only output_col and use "
+            "transforms.rolling_mean, transforms.ratio, transforms.rising_flag, "
+            "and transforms.threshold_flag."
+        )
 
     vov_name = _resolve_output_col(
         output_col,
         f"volatility_of_volatility_{volatility_col}_{window}",
         field="output_col",
     )
-    for field, value in (("rising_col", rising_col), ("high_vov_col", high_vov_col)):
-        if value is not None:
-            _resolve_output_col(value, "unused", field=field)
-
     out = df.copy()
     volatility = _clean_numeric(out[volatility_col])
     vov = volatility.rolling(window=window, min_periods=window).std(ddof=0)
 
     out[vov_name] = vov
-    vov_mean = None
-    if mean_window is not None and (mean_col is not None or ratio_col is not None):
-        mean_name = _resolve_output_col(
-            mean_col,
-            f"volatility_of_volatility_{volatility_col}_{window}_mean_{mean_window}",
-            field="mean_col",
-        )
-        ratio_name = _resolve_output_col(
-            ratio_col,
-            f"volatility_of_volatility_{volatility_col}_{window}_ratio_{mean_window}",
-            field="ratio_col",
-        )
-        vov_mean = vov.rolling(window=mean_window, min_periods=mean_window).mean()
-        if mean_col is not None:
-            out[mean_name] = vov_mean
-        if ratio_col is not None:
-            out[ratio_name] = vov / vov_mean.where(vov_mean.abs() > 0.0, np.nan)
-
-    if high_vov_col is not None:
-        high_baseline_window = mean_window if mean_window is not None else window
-        vov_high_baseline = vov.rolling(window=high_baseline_window, min_periods=high_baseline_window).mean()
-        out[high_vov_col] = (
-            vov.notna() & vov_high_baseline.notna() & (vov > multiplier * vov_high_baseline)
-        ).astype("int8")
-    if rising_col is not None:
-        out[rising_col] = ((vov > vov.shift(1)) & vov.notna() & vov.shift(1).notna()).astype("int8")
     return out
 
 

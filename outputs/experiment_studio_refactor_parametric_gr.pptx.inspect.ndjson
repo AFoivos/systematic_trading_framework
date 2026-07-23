@@ -1,0 +1,360 @@
+{"kind":"deck","id":"pr/fghjys","name":"Deck"}
+{"kind":"layout","layoutId":"e59a98b9-e43e-45e8-8bfc-ba0983856562","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"c5165324-610b-4a71-b465-517b973c5c5f","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/uvw1o8","slide":1,"title":"PRODUCT REFACTOR","textShapes":5}
+{"kind":"textbox","id":"sh/q94b6tg7","slide":1,"text":"PRODUCT REFACTOR","textPreview":"PRODUCT REFACTOR","textChars":16,"textLines":1,"bbox":[42,42,420,34]}
+{"kind":"textbox","id":"sh/dwva18fy","slide":1,"text":"Experiment Studio","textPreview":"Experiment Studio","textChars":17,"textLines":1,"bbox":[42,180,1000,110]}
+{"kind":"textbox","id":"sh/cvmt83yd","slide":1,"text":"Visual construction, live validation, run and analysis —\nall in one continuous workspace.","textPreview":"Visual construction, live validation, run and analysis — | all in one continuous workspace.","textChars":89,"textLines":2,"bbox":[42,322,850,100]}
+{"kind":"shape","id":"sh/zyxs3ixo","slide":1,"bbox":[42,490,1196,0]}
+{"kind":"textbox","id":"sh/ex4badgj","slide":1,"text":"Πρόταση επανασχεδιασμού για το Systematic Trading Framework","textPreview":"Πρόταση επανασχεδιασμού για το Systematic Trading Framework","textChars":59,"textLines":1,"bbox":[42,530,820,48]}
+{"kind":"textbox","id":"sh/10fa58fu","slide":1,"text":"Ιούλιος 2026","textPreview":"Ιούλιος 2026","textChars":12,"textLines":1,"bbox":[42,602,260,30]}
+{"kind":"notes","id":"nt/uvw1o8","slide":1,"text":""}
+{"kind":"slide","id":"sl/yih8ui","slide":2,"title":"Η σωστή κίνηση είναι νέο Experiment Studio — όχι μεγαλύτερο dashboard","textShapes":9}
+{"kind":"textbox","id":"sh/6dofy1g7","slide":2,"text":"Η σωστή κίνηση είναι νέο Experiment Studio — όχι μεγαλύτερο dashboard","textPreview":"Η σωστή κίνηση είναι νέο Experiment Studio — όχι μεγαλύτερο dashboard","textChars":69,"textLines":1,"bbox":[42,34,1130,76]}
+{"kind":"textbox","id":"sh/tgzetgfi","slide":2,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[1182,660,55,22]}
+{"kind":"textbox","id":"sh/8fqx0byd","slide":2,"text":"ΣΗΜΕΡΑ","textPreview":"ΣΗΜΕΡΑ","textChars":6,"textLines":1,"bbox":[42,170,500,30]}
+{"kind":"textbox","id":"sh/vihwv6xo","slide":2,"text":"YAML → run → artifacts → dashboard","textPreview":"YAML → run → artifacts → dashboard","textChars":34,"textLines":1,"bbox":[42,220,500,90]}
+{"kind":"textbox","id":"sh/uh8f21g3","slide":2,"text":"Η κατασκευή και η κατανόηση του experiment ζουν σε διαφορετικά εργαλεία και διαφορετικές χρονικές στιγμές.","textPreview":"Η κατασκευή και η κατανόηση του experiment ζουν σε διαφορετικά εργαλεία και διαφορετικές χρονικές στιγμές.","textChars":106,"textLines":1,"bbox":[42,335,500,115]}
+{"kind":"textbox","id":"sh/hkzexgfu","slide":2,"text":"ΠΡΟΤΑΣΗ","textPreview":"ΠΡΟΤΑΣΗ","textChars":7,"textLines":1,"bbox":[680,170,500,30]}
+{"kind":"textbox","id":"sh/gjqx4by9","slide":2,"text":"Build → inspect → run → compare","textPreview":"Build → inspect → run → compare","textChars":31,"textLines":1,"bbox":[680,220,500,90]}
+{"kind":"textbox","id":"sh/361wzqx0","slide":2,"text":"Ένας ενιαίος καμβάς γίνεται η κύρια διεπαφή. Το YAML παραμένει canonical, αλλά παράγεται και συγχρονίζεται αυτόματα.","textPreview":"Ένας ενιαίος καμβάς γίνεται η κύρια διεπαφή. Το YAML παραμένει canonical, αλλά παράγεται και συγχρονίζεται αυτόματα.","textChars":116,"textLines":1,"bbox":[680,335,500,115]}
+{"kind":"shape","id":"sh/ilsf6lgf","slide":2,"bbox":[620,165,0,360]}
+{"kind":"shape","id":"sh/w3a9wjat","slide":2,"bbox":[680,520,230,34]}
+{"kind":"textbox","id":"sh/x4ja5oby","slide":2,"text":"REBUILD THE SHELL","textPreview":"REBUILD THE SHELL","textChars":17,"textLines":1,"bbox":[690,527,210,20]}
+{"kind":"notes","id":"nt/yih8ui","slide":2,"text":""}
+{"kind":"slide","id":"sl/b2bbka","slide":3,"title":"Το υπάρχον app έχει καλά primitives, αλλά η ροή παραμένει selector-first","textShapes":13}
+{"kind":"textbox","id":"sh/ydgvahgv","slide":3,"text":"Το υπάρχον app έχει καλά primitives, αλλά η ροή παραμένει selector-first","textPreview":"Το υπάρχον app έχει καλά primitives, αλλά η ροή παραμένει selector-first","textChars":72,"textLines":1,"bbox":[42,34,1130,76]}
+{"kind":"textbox","id":"sh/lg7ulwf6","slide":3,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[1182,660,55,22]}
+{"kind":"textbox","id":"sh/kfydcrel","slide":3,"text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[42,175,50,40]}
+{"kind":"textbox","id":"sh/72pcnmxc","slide":3,"text":"Control panel","textPreview":"Control panel","textChars":13,"textLines":1,"bbox":[42,235,330,40]}
+{"kind":"textbox","id":"sh/m1gvehwr","slide":3,"text":"Dataset, date range, catalogs και builders στοιβάζονται σε μία μεγάλη αριστερή στήλη.","textPreview":"Dataset, date range, catalogs και builders στοιβάζονται σε μία μεγάλη αριστερή στήλη.","textChars":85,"textLines":1,"bbox":[42,292,330,150]}
+{"kind":"textbox","id":"sh/94rupwfi","slide":3,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[447,175,50,40]}
+{"kind":"textbox","id":"sh/83ydgrex","slide":3,"text":"Parameterized series","textPreview":"Parameterized series","textChars":20,"textLines":1,"bbox":[447,235,330,40]}
+{"kind":"textbox","id":"sh/v69wr6x8","slide":3,"text":"Υπάρχει ήδη schema-driven configuration, αλλά όχι οπτική σύνθεση ολόκληρου experiment.","textPreview":"Υπάρχει ήδη schema-driven configuration, αλλά όχι οπτική σύνθεση ολόκληρου experiment.","textChars":86,"textLines":1,"bbox":[447,292,330,150]}
+{"kind":"textbox","id":"sh/u50vi1wn","slide":3,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[852,175,50,40]}
+{"kind":"textbox","id":"sh/wje1o7y5","slide":3,"text":"Results viewer","textPreview":"Results viewer","textChars":14,"textLines":1,"bbox":[852,235,330,40]}
+{"kind":"textbox","id":"sh/hk7ixcfq","slide":3,"text":"Experiments, trades, equity και overlays εμφανίζονται κυρίως αφού υπάρχουν artifacts.","textPreview":"Experiments, trades, equity και overlays εμφανίζονται κυρίως αφού υπάρχουν artifacts.","textChars":85,"textLines":1,"bbox":[852,292,330,150]}
+{"kind":"shape","id":"sh/uhwzmhgz","slide":3,"bbox":[42,510,1196,0]}
+{"kind":"textbox","id":"sh/vi50vmxk","slide":3,"text":"Συμπέρασμα","textPreview":"Συμπέρασμα","textChars":10,"textLines":1,"bbox":[42,548,180,30]}
+{"kind":"textbox","id":"sh/4ny1sryh","slide":3,"text":"Δεν χρειάζεται να πετάξουμε το domain logic· χρειάζεται να αλλάξουμε το interaction model και το app shell.","textPreview":"Δεν χρειάζεται να πετάξουμε το domain logic· χρειάζεται να αλλάξουμε το interaction model και το app shell.","textChars":107,"textLines":1,"bbox":[245,542,930,55]}
+{"kind":"notes","id":"nt/b2bbka","slide":3,"text":""}
+{"kind":"slide","id":"sl/dro53s","slide":4,"title":"Το YAML μετατρέπεται σε οπτικό γράφο χωρίς να χάνει την ακρίβειά του","textShapes":26}
+{"kind":"textbox","id":"sh/ydkbe94v","slide":4,"text":"Το YAML μετατρέπεται σε οπτικό γράφο χωρίς να χάνει την ακρίβειά του","textPreview":"Το YAML μετατρέπεται σε οπτικό γράφο χωρίς να χάνει την ακρίβειά του","textChars":68,"textLines":1,"bbox":[42,34,1130,76]}
+{"kind":"textbox","id":"sh/lgbapo36","slide":4,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[1182,660,55,22]}
+{"kind":"shape","id":"sh/kf2tgjml","slide":4,"bbox":[42,205,202,145]}
+{"kind":"shape","id":"sh/bq9sjul4","slide":4,"bbox":[42,205,7,145]}
+{"kind":"textbox","id":"sh/ap0ba94j","slide":4,"text":"DATA","textPreview":"DATA","textChars":4,"textLines":1,"bbox":[64,220,167,20]}
+{"kind":"textbox","id":"sh/xsbal43a","slide":4,"text":"Dataset","textPreview":"Dataset","textChars":7,"textLines":1,"bbox":[64,246,167,32]}
+{"kind":"textbox","id":"sh/writczmp","slide":4,"text":"source + window","textPreview":"source + window","textChars":15,"textLines":1,"bbox":[64,284,167,55]}
+{"kind":"shape","id":"sh/vmdcvyl8","slide":4,"bbox":[290,205,202,145]}
+{"kind":"shape","id":"sh/ul4bmt43","slide":4,"bbox":[290,205,7,145]}
+{"kind":"textbox","id":"sh/0zuh03ih","slide":4,"text":"FEATURES","textPreview":"FEATURES","textChars":8,"textLines":1,"bbox":[312,220,167,20]}
+{"kind":"textbox","id":"sh/l03i98z2","slide":4,"text":"Pipeline","textPreview":"Pipeline","textChars":8,"textLines":1,"bbox":[312,246,167,32]}
+{"kind":"textbox","id":"sh/yxszyt0b","slide":4,"text":"steps + helpers","textPreview":"steps + helpers","textChars":15,"textLines":1,"bbox":[312,284,167,55]}
+{"kind":"shape","id":"sh/zy107yhw","slide":4,"bbox":[538,205,202,145]}
+{"kind":"shape","id":"sh/cvahw3il","slide":4,"bbox":[538,205,7,145]}
+{"kind":"textbox","id":"sh/dwji5ozq","slide":4,"text":"TARGET","textPreview":"TARGET","textChars":6,"textLines":1,"bbox":[560,220,167,20]}
+{"kind":"textbox","id":"sh/q9szut0f","slide":4,"text":"Label","textPreview":"Label","textChars":5,"textLines":1,"bbox":[560,246,167,32]}
+{"kind":"textbox","id":"sh/ba103yh0","slide":4,"text":"horizon + purge","textPreview":"horizon + purge","textChars":15,"textLines":1,"bbox":[560,284,167,55]}
+{"kind":"shape","id":"sh/o7ahsji9","slide":4,"bbox":[786,205,202,145]}
+{"kind":"shape","id":"sh/p8ji1ozu","slide":4,"bbox":[786,205,7,145]}
+{"kind":"textbox","id":"sh/54by5kri","slide":4,"text":"MODEL","textPreview":"MODEL","textChars":5,"textLines":1,"bbox":[808,220,167,20]}
+{"kind":"textbox","id":"sh/432xwfad","slide":4,"text":"Train","textPreview":"Train","textChars":5,"textLines":1,"bbox":[808,246,167,32]}
+{"kind":"textbox","id":"sh/j29g3ats","slide":4,"text":"split + runtime","textPreview":"split + runtime","textChars":15,"textLines":1,"bbox":[808,284,167,55]}
+{"kind":"shape","id":"sh/i10fu5s7","slide":4,"bbox":[1034,205,202,145]}
+{"kind":"shape","id":"sh/h0ry10bm","slide":4,"bbox":[1034,205,7,145]}
+{"kind":"textbox","id":"sh/wzixsva1","slide":4,"text":"SIGNAL","textPreview":"SIGNAL","textChars":6,"textLines":1,"bbox":[1056,220,167,20]}
+{"kind":"textbox","id":"sh/vy9gzqtg","slide":4,"text":"Decision","textPreview":"Decision","textChars":8,"textLines":1,"bbox":[1056,246,167,32]}
+{"kind":"textbox","id":"sh/ux0fq5sv","slide":4,"text":"threshold + mode","textPreview":"threshold + mode","textChars":16,"textLines":1,"bbox":[1056,284,167,55]}
+{"kind":"shape","id":"sh/1wvyd4rq","slide":4,"bbox":[244,276,46,0]}
+{"kind":"shape","id":"sh/0vmh4za5","slide":4,"bbox":[492,276,46,0]}
+{"kind":"shape","id":"sh/y1wvy18n","slide":4,"bbox":[740,276,46,0]}
+{"kind":"shape","id":"sh/z25c7m98","slide":4,"bbox":[988,276,46,0]}
+{"kind":"textbox","id":"sh/k3ed0rqt","slide":4,"text":"Κάθε node αντιστοιχεί σε έγκυρο YAML block","textPreview":"Κάθε node αντιστοιχεί σε έγκυρο YAML block","textChars":42,"textLines":1,"bbox":[42,405,560,38]}
+{"kind":"shape","id":"sh/l47u9w7e","slide":4,"bbox":[42,470,12,12]}
+{"kind":"textbox","id":"sh/adwvuh8r","slide":4,"text":"Registry-backed component picker","textPreview":"Registry-backed component picker","textChars":32,"textLines":1,"bbox":[68,465,514,38]}
+{"kind":"shape","id":"sh/be5c3m9c","slide":4,"bbox":[42,518,12,12]}
+{"kind":"textbox","id":"sh/czedwrqx","slide":4,"text":"Typed params και defaults από το schema","textPreview":"Typed params και defaults από το schema","textChars":39,"textLines":1,"bbox":[68,513,514,38]}
+{"kind":"shape","id":"sh/x0nu5wr2","slide":4,"bbox":[42,566,12,12]}
+{"kind":"textbox","id":"sh/u9gv6l8v","slide":4,"text":"Αυτόματα input/output column contracts","textPreview":"Αυτόματα input/output column contracts","textChars":38,"textLines":1,"bbox":[68,561,514,38]}
+{"kind":"textbox","id":"sh/vapwfqpg","slide":4,"text":"Δύο ισότιμες όψεις","textPreview":"Δύο ισότιμες όψεις","textChars":18,"textLines":1,"bbox":[680,405,400,38]}
+{"kind":"shape","id":"sh/fm58vitw","slide":4,"bbox":[680,470,240,92]}
+{"kind":"textbox","id":"sh/e1wr2dcb","slide":4,"text":"VISUAL","textPreview":"VISUAL","textChars":6,"textLines":1,"bbox":[700,490,200,28]}
+{"kind":"textbox","id":"sh/1onaxsb2","slide":4,"text":"primary workflow","textPreview":"primary workflow","textChars":16,"textLines":1,"bbox":[700,522,200,20]}
+{"kind":"shape","id":"sh/gne94nuh","slide":4,"bbox":[950,470,240,92]}
+{"kind":"textbox","id":"sh/ry58ryt0","slide":4,"text":"YAML","textPreview":"YAML","textChars":4,"textLines":1,"bbox":[970,490,200,28]}
+{"kind":"textbox","id":"sh/6xcrydcf","slide":4,"text":"inspect / import / export","textPreview":"inspect / import / export","textChars":25,"textLines":1,"bbox":[970,522,200,20]}
+{"kind":"notes","id":"nt/dro53s","slide":4,"text":""}
+{"kind":"slide","id":"sl/v8vf5h","slide":5,"title":"Η βασική οθόνη είναι ένας καμβάς εργασίας, όχι μια σελίδα ρυθμίσεων","textShapes":40}
+{"kind":"textbox","id":"sh/bqh8rqx0","slide":5,"text":"Η βασική οθόνη είναι ένας καμβάς εργασίας, όχι μια σελίδα ρυθμίσεων","textPreview":"Η βασική οθόνη είναι ένας καμβάς εργασίας, όχι μια σελίδα ρυθμίσεων","textChars":67,"textLines":1,"bbox":[42,34,1130,76]}
+{"kind":"textbox","id":"sh/wrq9kvel","slide":5,"text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[1182,660,55,22]}
+{"kind":"shape","id":"sh/xszqtgfq","slide":5,"bbox":[42,132,1196,500]}
+{"kind":"shape","id":"sh/ytsrmlwb","slide":5,"bbox":[42,132,1196,52]}
+{"kind":"textbox","id":"sh/ju18vqxw","slide":5,"text":"Experiment Studio","textPreview":"Experiment Studio","textChars":17,"textLines":1,"bbox":[62,147,230,24]}
+{"kind":"shape","id":"sh/kva9oveh","slide":5,"bbox":[300,141,118,34]}
+{"kind":"textbox","id":"sh/lwjqx0f2","slide":5,"text":"Draft saved","textPreview":"Draft saved","textChars":11,"textLines":1,"bbox":[310,148,98,20]}
+{"kind":"shape","id":"sh/6xsrq5wn","slide":5,"bbox":[965,141,105,34]}
+{"kind":"textbox","id":"sh/7y18zax8","slide":5,"text":"Validate","textPreview":"Validate","textChars":8,"textLines":1,"bbox":[975,148,85,20]}
+{"kind":"shape","id":"sh/zel8nm9o","slide":5,"bbox":[1085,141,115,34]}
+{"kind":"textbox","id":"sh/ydcreh83","slide":5,"text":"Run","textPreview":"Run","textChars":3,"textLines":1,"bbox":[1095,148,95,20]}
+{"kind":"shape","id":"sh/l03apwru","slide":5,"bbox":[42,184,220,448]}
+{"kind":"textbox","id":"sh/kfu9grq9","slide":5,"text":"COMPONENTS","textPreview":"COMPONENTS","textChars":10,"textLines":1,"bbox":[60,205,170,24]}
+{"kind":"shape","id":"sh/ba18jm9s","slide":5,"bbox":[60,246,184,34]}
+{"kind":"textbox","id":"sh/a9srah87","slide":5,"text":"Data","textPreview":"Data","textChars":4,"textLines":1,"bbox":[74,254,150,20]}
+{"kind":"shape","id":"sh/xc3qlcry","slide":5,"bbox":[60,292,184,34]}
+{"kind":"textbox","id":"sh/cbu9c7qd","slide":5,"text":"Features + helpers","textPreview":"Features + helpers","textChars":18,"textLines":1,"bbox":[74,300,150,20]}
+{"kind":"shape","id":"sh/v65sv6pw","slide":5,"bbox":[60,338,184,34]}
+{"kind":"textbox","id":"sh/u5wrm18b","slide":5,"text":"Targets","textPreview":"Targets","textChars":7,"textLines":1,"bbox":[74,346,150,20]}
+{"kind":"shape","id":"sh/610bu5sj","slide":5,"bbox":[60,384,184,34]}
+{"kind":"textbox","id":"sh/r29cnat4","slide":5,"text":"Models","textPreview":"Models","textChars":6,"textLines":1,"bbox":[74,392,150,20]}
+{"kind":"shape","id":"sh/s3itwfap","slide":5,"bbox":[60,430,184,34]}
+{"kind":"textbox","id":"sh/d4rupkra","slide":5,"text":"Signals","textPreview":"Signals","textChars":7,"textLines":1,"bbox":[74,438,150,20]}
+{"kind":"shape","id":"sh/ep0vypsv","slide":5,"bbox":[60,476,184,34]}
+{"kind":"textbox","id":"sh/fq9cra9g","slide":5,"text":"Backtest","textPreview":"Backtest","textChars":8,"textLines":1,"bbox":[74,484,150,20]}
+{"kind":"shape","id":"sh/0rid0fal","slide":5,"bbox":[60,522,184,34]}
+{"kind":"textbox","id":"sh/1srutkr6","slide":5,"text":"Evaluation","textPreview":"Evaluation","textChars":10,"textLines":1,"bbox":[74,530,150,20]}
+{"kind":"shape","id":"sh/u9wbmlsb","slide":5,"bbox":[262,184,650,448]}
+{"kind":"textbox","id":"sh/vupcfqtw","slide":5,"text":"Pipeline canvas","textPreview":"Pipeline canvas","textChars":15,"textLines":1,"bbox":[285,205,220,24]}
+{"kind":"shape","id":"sh/xovelobe","slide":5,"bbox":[300,260,170,95]}
+{"kind":"shape","id":"sh/cnmxsjut","slide":5,"bbox":[300,260,7,95]}
+{"kind":"textbox","id":"sh/bmdwjedo","slide":5,"text":"DATA","textPreview":"DATA","textChars":4,"textLines":1,"bbox":[322,275,135,20]}
+{"kind":"textbox","id":"sh/al4fqtc3","slide":5,"text":"SPX500 · 30m","textPreview":"SPX500 · 30m","textChars":12,"textLines":1,"bbox":[322,301,135,32]}
+{"kind":"textbox","id":"sh/lsfyp8bq","slide":5,"text":"2018–2026","textPreview":"2018–2026","textChars":9,"textLines":1,"bbox":[322,339,135,5]}
+{"kind":"shape","id":"sh/krmxw3u5","slide":5,"bbox":[500,260,170,95]}
+{"kind":"shape","id":"sh/zqdwnytk","slide":5,"bbox":[500,260,7,95]}
+{"kind":"textbox","id":"sh/yp4futcz","slide":5,"text":"FEATURE","textPreview":"FEATURE","textChars":7,"textLines":1,"bbox":[522,275,135,20]}
+{"kind":"textbox","id":"sh/1wbed4v6","slide":5,"text":"Volatility","textPreview":"Volatility","textChars":10,"textLines":1,"bbox":[522,301,135,32]}
+{"kind":"textbox","id":"sh/0v2xkzu1","slide":5,"text":"rolling 96","textPreview":"rolling 96","textChars":10,"textLines":1,"bbox":[522,339,135,5]}
+{"kind":"shape","id":"sh/4bahs7e9","slide":5,"bbox":[700,260,170,95]}
+{"kind":"shape","id":"sh/5cjilcvu","slide":5,"bbox":[700,260,7,95]}
+{"kind":"textbox","id":"sh/i98zqxwj","slide":5,"text":"TARGET","textPreview":"TARGET","textChars":6,"textLines":1,"bbox":[722,275,135,20]}
+{"kind":"textbox","id":"sh/jah0j2d4","slide":5,"text":"Forward return","textPreview":"Forward return","textChars":14,"textLines":1,"bbox":[722,301,135,32]}
+{"kind":"textbox","id":"sh/wnqho7ed","slide":5,"text":"horizon 8","textPreview":"horizon 8","textChars":9,"textLines":1,"bbox":[722,339,135,5]}
+{"kind":"shape","id":"sh/hozihcvy","slide":5,"bbox":[470,307,30,0]}
+{"kind":"shape","id":"sh/ul8zmxw7","slide":5,"bbox":[670,307,30,0]}
+{"kind":"shape","id":"sh/vmh0f2ds","slide":5,"bbox":[500,405,170,95]}
+{"kind":"shape","id":"sh/8j6hkne1","slide":5,"bbox":[500,405,7,95]}
+{"kind":"textbox","id":"sh/9kzidsfm","slide":5,"text":"MODEL","textPreview":"MODEL","textChars":5,"textLines":1,"bbox":[522,420,135,20]}
+{"kind":"textbox","id":"sh/bex03iho","slide":5,"text":"LightGBM","textPreview":"LightGBM","textChars":8,"textLines":1,"bbox":[522,446,135,32]}
+{"kind":"textbox","id":"sh/adojudg3","slide":5,"text":"walk-forward","textPreview":"walk-forward","textChars":12,"textLines":1,"bbox":[522,484,135,5]}
+{"kind":"shape","id":"sh/xgfi5szu","slide":5,"bbox":[700,405,170,95]}
+{"kind":"shape","id":"sh/cf61wny9","slide":5,"bbox":[700,405,7,95]}
+{"kind":"textbox","id":"sh/zix072hk","slide":5,"text":"SIGNAL","textPreview":"SIGNAL","textChars":6,"textLines":1,"bbox":[722,420,135,20]}
+{"kind":"textbox","id":"sh/yhojyxgz","slide":5,"text":"Probability","textPreview":"Probability","textChars":11,"textLines":1,"bbox":[722,446,135,32]}
+{"kind":"textbox","id":"sh/lkzi9szq","slide":5,"text":"0.60 / 0.40","textPreview":"0.60 / 0.40","textChars":11,"textLines":1,"bbox":[722,484,135,5]}
+{"kind":"shape","id":"sh/kj6107y5","slide":5,"bbox":[785,355,0,50]}
+{"kind":"shape","id":"sh/7mhkb2hw","slide":5,"bbox":[670,452,30,0]}
+{"kind":"shape","id":"sh/ml8j2xgb","slide":5,"bbox":[912,184,326,448]}
+{"kind":"textbox","id":"sh/idcvq54v","slide":5,"text":"INSPECTOR","textPreview":"INSPECTOR","textChars":9,"textLines":1,"bbox":[934,205,180,24]}
+{"kind":"textbox","id":"sh/3elcja5g","slide":5,"text":"Volatility","textPreview":"Volatility","textChars":10,"textLines":1,"bbox":[934,245,260,32]}
+{"kind":"textbox","id":"sh/4fudsvml","slide":5,"text":"BASE · NORMALIZE · HELPERS · OUTPUTS","textPreview":"BASE · NORMALIZE · HELPERS · OUTPUTS","textChars":36,"textLines":1,"bbox":[934,292,280,24]}
+{"kind":"textbox","id":"sh/5g3ul0n6","slide":5,"text":"rolling_windows","textPreview":"rolling_windows","textChars":15,"textLines":1,"bbox":[934,330,150,20]}
+{"kind":"shape","id":"sh/upcvml4j","slide":5,"bbox":[934,352,280,32]}
+{"kind":"textbox","id":"sh/vqlcfq54","slide":5,"text":"96","textPreview":"96","textChars":2,"textLines":1,"bbox":[946,359,250,18]}
+{"kind":"textbox","id":"sh/grudovmp","slide":5,"text":"normalization","textPreview":"normalization","textChars":13,"textLines":1,"bbox":[934,394,150,20]}
+{"kind":"shape","id":"sh/hs3uh0na","slide":5,"bbox":[934,416,280,32]}
+{"kind":"textbox","id":"sh/elwvyp43","slide":5,"text":"rolling_zscore","textPreview":"rolling_zscore","textChars":14,"textLines":1,"bbox":[946,423,250,18]}
+{"kind":"textbox","id":"sh/zm5wru58","slide":5,"text":"helper","textPreview":"helper","textChars":6,"textLines":1,"bbox":[934,458,150,20]}
+{"kind":"shape","id":"sh/9gryho7q","slide":5,"bbox":[934,480,280,32]}
+{"kind":"textbox","id":"sh/ofyxoj65","slide":5,"text":"slope + ratio","textPreview":"slope + ratio","textChars":13,"textLines":1,"bbox":[946,487,250,18]}
+{"kind":"shape","id":"sh/nepgfepk","slide":5,"bbox":[934,554,280,46]}
+{"kind":"textbox","id":"sh/mdgfm9oz","slide":5,"text":"3 outputs · 0 errors","textPreview":"3 outputs · 0 errors","textChars":20,"textLines":1,"bbox":[950,566,250,20]}
+{"kind":"notes","id":"nt/v8vf5h","slide":5,"text":""}
+{"kind":"slide","id":"sl/f6pc9t","slide":6,"title":"Η εμπειρία γίνεται ένας γρήγορος, επαναληπτικός κύκλος","textShapes":16}
+{"kind":"textbox","id":"sh/2tc3a947","slide":6,"text":"Η εμπειρία γίνεται ένας γρήγορος, επαναληπτικός κύκλος","textPreview":"Η εμπειρία γίνεται ένας γρήγορος, επαναληπτικός κύκλος","textChars":54,"textLines":1,"bbox":[42,34,1130,76]}
+{"kind":"textbox","id":"sh/pw3mlony","slide":6,"text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[1182,660,55,22]}
+{"kind":"shape","id":"sh/4vulcjmd","slide":6,"bbox":[42,205,255,250]}
+{"kind":"textbox","id":"sh/ryl4ny5o","slide":6,"text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[66,227,42,42]}
+{"kind":"textbox","id":"sh/qxc3et4j","slide":6,"text":"Compose","textPreview":"Compose","textChars":7,"textLines":1,"bbox":[66,290,205,35]}
+{"kind":"textbox","id":"sh/d0nmponu","slide":6,"text":"Drag components και σύνδεσέ τα","textPreview":"Drag components και σύνδεσέ τα","textChars":30,"textLines":1,"bbox":[66,345,205,70]}
+{"kind":"shape","id":"sh/czelg3m9","slide":6,"bbox":[297,330,45,0]}
+{"kind":"shape","id":"sh/z254ry50","slide":6,"bbox":[342,205,255,250]}
+{"kind":"textbox","id":"sh/e1w3it4f","slide":6,"text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[366,227,42,42]}
+{"kind":"textbox","id":"sh/kzqlw7mp","slide":6,"text":"Inspect","textPreview":"Inspect","textChars":7,"textLines":1,"bbox":[366,290,205,35]}
+{"kind":"textbox","id":"sh/l0zmpc3a","slide":6,"text":"Δες outputs, dependencies και leakage","textPreview":"Δες outputs, dependencies και leakage","textChars":37,"textLines":1,"bbox":[366,345,205,70]}
+{"kind":"shape","id":"sh/yx83ux4j","slide":6,"bbox":[597,330,45,0]}
+{"kind":"shape","id":"sh/zyh4n2l4","slide":6,"bbox":[642,205,255,250]}
+{"kind":"textbox","id":"sh/8nq507ml","slide":6,"text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[666,227,42,42]}
+{"kind":"textbox","id":"sh/9ojmtc36","slide":6,"text":"Run","textPreview":"Run","textChars":3,"textLines":1,"bbox":[666,290,205,35]}
+{"kind":"textbox","id":"sh/ml8nyx4v","slide":6,"text":"Smoke test ή full experiment","textPreview":"Smoke test ή full experiment","textChars":28,"textLines":1,"bbox":[666,345,205,70]}
+{"kind":"shape","id":"sh/7mh4r2l0","slide":6,"bbox":[897,330,45,0]}
+{"kind":"shape","id":"sh/wra54rmx","slide":6,"bbox":[942,205,255,250]}
+{"kind":"textbox","id":"sh/hsjmxw3i","slide":6,"text":"4","textPreview":"4","textChars":1,"textLines":1,"bbox":[966,227,42,42]}
+{"kind":"textbox","id":"sh/5wvu1sra","slide":6,"text":"Compare","textPreview":"Compare","textChars":7,"textLines":1,"bbox":[966,290,205,35]}
+{"kind":"textbox","id":"sh/4vmdsnap","slide":6,"text":"Κράτησε baseline και variants","textPreview":"Κράτησε baseline και variants","textChars":29,"textLines":1,"bbox":[966,345,205,70]}
+{"kind":"textbox","id":"sh/judczi94","slide":6,"text":"Ο χρήστης δεν “φεύγει” από το experiment για να δει τι συνέβη.","textPreview":"Ο χρήστης δεν “φεύγει” από το experiment για να δει τι συνέβη.","textChars":62,"textLines":1,"bbox":[42,520,1080,58]}
+{"kind":"textbox","id":"sh/i94vqdsj","slide":6,"text":"Κάθε αλλαγή δημιουργεί versioned draft και συγκρίσιμο run.","textPreview":"Κάθε αλλαγή δημιουργεί versioned draft και συγκρίσιμο run.","textChars":58,"textLines":1,"bbox":[42,590,900,34]}
+{"kind":"notes","id":"nt/f6pc9t","slide":6,"text":""}
+{"kind":"slide","id":"sl/niq340","slide":7,"title":"Κάθε component ανοίγει progressive controls, όχι ωμό config","textShapes":17}
+{"kind":"textbox","id":"sh/h43y54bq","slide":7,"text":"Κάθε component ανοίγει progressive controls, όχι ωμό config","textPreview":"Κάθε component ανοίγει progressive controls, όχι ωμό config","textChars":59,"textLines":1,"bbox":[42,34,1130,76]}
+{"kind":"textbox","id":"sh/u1cfu9sz","slide":7,"text":"07","textPreview":"07","textChars":2,"textLines":1,"bbox":[1182,660,55,22]}
+{"kind":"textbox","id":"sh/f2lw3etk","slide":7,"text":"1 · Pick","textPreview":"1 · Pick","textChars":8,"textLines":1,"bbox":[42,170,240,34]}
+{"kind":"textbox","id":"sh/47ex0ja1","slide":7,"text":"Αναζήτηση με domain tags, inputs, outputs και compatibility.","textPreview":"Αναζήτηση με domain tags, inputs, outputs και compatibility.","textChars":60,"textLines":1,"bbox":[42,220,300,120]}
+{"kind":"textbox","id":"sh/p8ny9obm","slide":7,"text":"2 · Configure","textPreview":"2 · Configure","textChars":13,"textLines":1,"bbox":[360,170,240,34]}
+{"kind":"textbox","id":"sh/25cfy9sv","slide":7,"text":"Raw params, normalizations, helpers, transforms και outputs ρυθμίζονται πλήρως μέσα στο component.","textPreview":"Raw params, normalizations, helpers, transforms και outputs ρυθμίζονται πλήρως μέσα στο component.","textChars":98,"textLines":1,"bbox":[360,220,300,120]}
+{"kind":"textbox","id":"sh/36lg7etg","slide":7,"text":"3 · Connect","textPreview":"3 · Connect","textChars":11,"textLines":1,"bbox":[678,170,240,34]}
+{"kind":"textbox","id":"sh/kbaxofax","slide":7,"text":"Οι επιτρεπτές συνδέσεις φωτίζονται. Τα invalid inputs μπλοκάρονται πριν από run.","textPreview":"Οι επιτρεπτές συνδέσεις φωτίζονται. Τα invalid inputs μπλοκάρονται πριν από run.","textChars":80,"textLines":1,"bbox":[678,220,300,120]}
+{"kind":"textbox","id":"sh/5cjexkbi","slide":7,"text":"4 · Inspect","textPreview":"4 · Inspect","textChars":11,"textLines":1,"bbox":[996,170,240,34]}
+{"kind":"textbox","id":"sh/p47mpsv2","slide":7,"text":"Preview columns, distributions, missingness και causality flags μέσα στο node.","textPreview":"Preview columns, distributions, missingness και causality flags μέσα στο node.","textChars":78,"textLines":1,"bbox":[996,220,240,120]}
+{"kind":"shape","id":"sh/o3e5wnuh","slide":7,"bbox":[42,390,1196,0]}
+{"kind":"textbox","id":"sh/n254nidc","slide":7,"text":"Παράδειγμα node: feature + helpers","textPreview":"Παράδειγμα node: feature + helpers","textChars":34,"textLines":1,"bbox":[42,430,360,30]}
+{"kind":"shape","id":"sh/21wnuxcr","slide":7,"bbox":[430,420,360,160]}
+{"kind":"shape","id":"sh/x876tcve","slide":7,"bbox":[430,420,7,160]}
+{"kind":"textbox","id":"sh/c7y507ut","slide":7,"text":"FEATURE","textPreview":"FEATURE","textChars":7,"textLines":1,"bbox":[452,435,325,20]}
+{"kind":"textbox","id":"sh/b6p4r2d8","slide":7,"text":"Volatility","textPreview":"Volatility","textChars":10,"textLines":1,"bbox":[452,461,325,32]}
+{"kind":"textbox","id":"sh/a5gnyxcn","slide":7,"text":"rolling_windows: 96 · output: vol_rolling_96","textPreview":"rolling_windows: 96 · output: vol_rolling_96","textChars":44,"textLines":1,"bbox":[452,499,325,70]}
+{"kind":"shape","id":"sh/lwr6xcva","slide":7,"bbox":[820,430,170,34]}
+{"kind":"textbox","id":"sh/kby547up","slide":7,"text":"+ normalization","textPreview":"+ normalization","textChars":15,"textLines":1,"bbox":[830,437,150,20]}
+{"kind":"shape","id":"sh/kf6p0v21","slide":7,"bbox":[1005,430,150,34]}
+{"kind":"textbox","id":"sh/5gzqt0jm","slide":7,"text":"+ transform","textPreview":"+ transform","textChars":11,"textLines":1,"bbox":[1015,437,130,20]}
+{"kind":"textbox","id":"sh/ido7ylkv","slide":7,"text":"Κανένα component δεν είναι preset: ολόκληρη η YAML ιεραρχία παραμένει διαθέσιμη ως nested interaction.","textPreview":"Κανένα component δεν είναι preset: ολόκληρη η YAML ιεραρχία παραμένει διαθέσιμη ως nested interaction.","textChars":102,"textLines":1,"bbox":[430,605,760,30]}
+{"kind":"notes","id":"nt/niq340","slide":7,"text":""}
+{"kind":"slide","id":"sl/vd1bxi","slide":8,"title":"Κάθε component εκθέτει όλη την παραμετροποίηση του YAML","textShapes":11}
+{"kind":"textbox","id":"sh/8v2hcfa1","slide":8,"text":"Κάθε component εκθέτει όλη την παραμετροποίηση του YAML","textPreview":"Κάθε component εκθέτει όλη την παραμετροποίηση του YAML","textChars":55,"textLines":1,"bbox":[42,34,1130,76]}
+{"kind":"textbox","id":"sh/7u9gju9g","slide":8,"text":"08","textPreview":"08","textChars":2,"textLines":1,"bbox":[1182,660,55,22]}
+{"kind":"shape","id":"sh/mt0zapsv","slide":8,"bbox":[42,160,255,365]}
+{"kind":"shape","id":"sh/h0byp4ry","slide":8,"bbox":[42,160,255,10]}
+{"kind":"textbox","id":"sh/wz2hgzad","slide":8,"text":"FEATURE","textPreview":"FEATURE","textChars":7,"textLines":1,"bbox":[66,195,205,30]}
+{"kind":"textbox","id":"sh/vytgnu9s","slide":8,"text":"Raw parameters\nNormalizations\nHelpers / transforms\nMultiple instances\nOutput mappings","textPreview":"Raw parameters | Normalizations | Helpers / transforms | Multiple instances | Output mappings","textChars":85,"textLines":5,"bbox":[66,252,205,220]}
+{"kind":"shape","id":"sh/uxkzeps7","slide":8,"bbox":[342,160,255,365]}
+{"kind":"shape","id":"sh/x4ryd0be","slide":8,"bbox":[342,160,255,10]}
+{"kind":"textbox","id":"sh/c3ix4vat","slide":8,"text":"MODEL","textPreview":"MODEL","textChars":5,"textLines":1,"bbox":[366,195,205,30]}
+{"kind":"textbox","id":"sh/yhcfmpkz","slide":8,"text":"Kind + parameters\nPreprocessing\nFeature columns\nSplit / walk-forward\nRuntime / seed","textPreview":"Kind + parameters | Preprocessing | Feature columns | Split / walk-forward | Runtime / seed","textChars":83,"textLines":5,"bbox":[366,252,205,220]}
+{"kind":"shape","id":"sh/ji5gvu1k","slide":8,"bbox":[642,160,255,365]}
+{"kind":"shape","id":"sh/kjehoz25","slide":8,"bbox":[642,160,255,10]}
+{"kind":"textbox","id":"sh/lknyx4jq","slide":8,"text":"TARGET","textPreview":"TARGET","textChars":6,"textLines":1,"bbox":[666,195,205,30]}
+{"kind":"textbox","id":"sh/6lwzq9kv","slide":8,"text":"Kind + horizon\nLabel columns\nBarriers / thresholds\nTrimming / purging\nMetadata outputs","textPreview":"Kind + horizon | Label columns | Barriers / thresholds | Trimming / purging | Metadata outputs","textChars":86,"textLines":5,"bbox":[666,252,205,220]}
+{"kind":"shape","id":"sh/7m5gzu1g","slide":8,"bbox":[942,160,255,365]}
+{"kind":"shape","id":"sh/8nehsz21","slide":8,"bbox":[942,160,255,10]}
+{"kind":"textbox","id":"sh/tony14jm","slide":8,"text":"SIGNAL","textPreview":"SIGNAL","textChars":6,"textLines":1,"bbox":[966,195,205,30]}
+{"kind":"textbox","id":"sh/upgzu9k7","slide":8,"text":"Kind + parameters\nInput columns\nThresholds / modes\nPosition intent\nExecution timing","textPreview":"Kind + parameters | Input columns | Thresholds / modes | Position intent | Execution timing","textChars":83,"textLines":5,"bbox":[966,252,205,220]}
+{"kind":"shape","id":"sh/vapg3e1s","slide":8,"bbox":[42,565,1155,64]}
+{"kind":"textbox","id":"sh/repgbeh0","slide":8,"text":"Το UI δεν περιορίζει το schema: defaults για ταχύτητα, advanced controls για πλήρη έλεγχο και άμεσο YAML preview για διαφάνεια.","textPreview":"Το UI δεν περιορίζει το schema: defaults για ταχύτητα, advanced controls για πλήρη έλεγχο και άμεσο YAML preview για διαφάνεια.","textChars":127,"textLines":1,"bbox":[66,581,1105,34]}
+{"kind":"notes","id":"nt/vd1bxi","slide":8,"text":""}
+{"kind":"slide","id":"sl/c5zk7c","slide":9,"title":"Το validation πρέπει να είναι συνεχές και εξηγήσιμο","textShapes":15}
+{"kind":"textbox","id":"sh/5o7udkju","slide":9,"text":"Το validation πρέπει να είναι συνεχές και εξηγήσιμο","textPreview":"Το validation πρέπει να είναι συνεχές και εξηγήσιμο","textChars":51,"textLines":1,"bbox":[42,34,1130,76]}
+{"kind":"textbox","id":"sh/i1gv2503","slide":9,"text":"09","textPreview":"09","textChars":2,"textLines":1,"bbox":[1182,660,55,22]}
+{"kind":"shape","id":"sh/j2pcba1o","slide":9,"bbox":[42,240,1196,0]}
+{"kind":"textbox","id":"sh/sryd8zi5","slide":9,"text":"Schema","textPreview":"Schema","textChars":6,"textLines":1,"bbox":[42,165,200,30]}
+{"kind":"textbox","id":"sh/tsruhkjq","slide":9,"text":"Όλα τα required params συμπληρωμένα","textPreview":"Όλα τα required params συμπληρωμένα","textChars":35,"textLines":1,"bbox":[250,165,700,48]}
+{"kind":"shape","id":"sh/6pgv6p0f","slide":9,"bbox":[1050,165,130,34]}
+{"kind":"textbox","id":"sh/7qpcfu10","slide":9,"text":"PASS","textPreview":"PASS","textChars":4,"textLines":1,"bbox":[1060,172,110,20]}
+{"kind":"shape","id":"sh/8vedwvi1","slide":9,"bbox":[42,332,1196,0]}
+{"kind":"textbox","id":"sh/9wnu50jm","slide":9,"text":"Dependencies","textPreview":"Dependencies","textChars":12,"textLines":1,"bbox":[42,257,200,30]}
+{"kind":"textbox","id":"sh/9ovq1w36","slide":9,"text":"Κάθε input column παράγεται πριν χρησιμοποιηθεί","textPreview":"Κάθε input column παράγεται πριν χρησιμοποιηθεί","textChars":47,"textLines":1,"bbox":[250,257,700,48]}
+{"kind":"shape","id":"sh/8nmp8rml","slide":9,"bbox":[1050,257,130,34]}
+{"kind":"textbox","id":"sh/nmd8zml0","slide":9,"text":"PASS","textPreview":"PASS","textChars":4,"textLines":1,"bbox":[1060,264,110,20]}
+{"kind":"shape","id":"sh/ml476h4f","slide":9,"bbox":[42,424,1196,0]}
+{"kind":"textbox","id":"sh/xcfq5g32","slide":9,"text":"Leakage","textPreview":"Leakage","textChars":7,"textLines":1,"bbox":[42,349,200,30]}
+{"kind":"textbox","id":"sh/wbm9cbmh","slide":9,"text":"Target/future columns δεν περνούν στα model inputs","textPreview":"Target/future columns δεν περνούν στα model inputs","textChars":50,"textLines":1,"bbox":[250,349,700,48]}
+{"kind":"shape","id":"sh/vqd836lw","slide":9,"bbox":[1050,349,130,34]}
+{"kind":"textbox","id":"sh/ap4ra14r","slide":9,"text":"BLOCK","textPreview":"BLOCK","textChars":5,"textLines":1,"bbox":[1060,356,110,20]}
+{"kind":"shape","id":"sh/5gfq9g3e","slide":9,"bbox":[42,516,1196,0]}
+{"kind":"textbox","id":"sh/kf69gbmt","slide":9,"text":"Execution","textPreview":"Execution","textChars":9,"textLines":1,"bbox":[42,441,200,30]}
+{"kind":"textbox","id":"sh/4jetcfap","slide":9,"text":"Next-bar timing, costs και slippage είναι explicit","textPreview":"Next-bar timing, costs και slippage είναι explicit","textChars":50,"textLines":1,"bbox":[250,441,700,48]}
+{"kind":"shape","id":"sh/5knalkba","slide":9,"bbox":[1050,441,130,34]}
+{"kind":"textbox","id":"sh/ixwbapsz","slide":9,"text":"WARN","textPreview":"WARN","textChars":4,"textLines":1,"bbox":[1060,448,110,20]}
+{"kind":"shape","id":"sh/3i5sjutk","slide":9,"bbox":[42,555,1196,66]}
+{"kind":"textbox","id":"sh/cnetgza1","slide":9,"text":"Click στο BLOCK → highlight το node, εξηγεί τον κίνδυνο και προτείνει ασφαλή διόρθωση.","textPreview":"Click στο BLOCK → highlight το node, εξηγεί τον κίνδυνο και προτείνει ασφαλή διόρθωση.","textChars":86,"textLines":1,"bbox":[66,573,1120,30]}
+{"kind":"notes","id":"nt/c5zk7c","slide":9,"text":""}
+{"kind":"slide","id":"sl/aibkne","slide":10,"title":"Τα αποτελέσματα ανοίγουν μέσα στο ίδιο experiment context","textShapes":15}
+{"kind":"textbox","id":"sh/i9o3utgr","slide":10,"text":"Τα αποτελέσματα ανοίγουν μέσα στο ίδιο experiment context","textPreview":"Τα αποτελέσματα ανοίγουν μέσα στο ίδιο experiment context","textChars":57,"textLines":1,"bbox":[42,34,1130,76]}
+{"kind":"textbox","id":"sh/5czm58zi","slide":10,"text":"10","textPreview":"10","textChars":2,"textLines":1,"bbox":[1182,660,55,22]}
+{"kind":"shape","id":"sh/kbqlw3yx","slide":10,"bbox":[42,145,1196,470]}
+{"kind":"textbox","id":"sh/vmxkzehg","slide":10,"text":"Pipeline","textPreview":"Pipeline","textChars":8,"textLines":1,"bbox":[62,164,120,24]}
+{"kind":"textbox","id":"sh/alo3q9gv","slide":10,"text":"Preview","textPreview":"Preview","textChars":7,"textLines":1,"bbox":[200,164,120,24]}
+{"kind":"textbox","id":"sh/x8f21ozm","slide":10,"text":"Results","textPreview":"Results","textChars":7,"textLines":1,"bbox":[330,164,120,24]}
+{"kind":"shape","id":"sh/w76lsjy1","slide":10,"bbox":[325,198,95,0]}
+{"kind":"shape","id":"sh/fi14bihk","slide":10,"bbox":[80,535,610,0]}
+{"kind":"shape","id":"sh/uh832dgz","slide":10,"bbox":[80,250,0,285]}
+{"kind":"shape","id":"sh/w7md0fid","slide":10,"bbox":[80,470,85,30]}
+{"kind":"shape","id":"sh/x8vu9kjy","slide":10,"bbox":[165,470,85,10]}
+{"kind":"shape","id":"sh/a54vy507","slide":10,"bbox":[250,410,85,70]}
+{"kind":"shape","id":"sh/v6dc7a1s","slide":10,"bbox":[335,410,85,20]}
+{"kind":"shape","id":"sh/832dwvi1","slide":10,"bbox":[420,340,85,90]}
+{"kind":"shape","id":"sh/94vu50jm","slide":10,"bbox":[505,300,85,40]}
+{"kind":"shape","id":"sh/m1kvu50b","slide":10,"bbox":[590,265,100,35]}
+{"kind":"textbox","id":"sh/n2tc3a1w","slide":10,"text":"OOS equity · fold boundaries","textPreview":"OOS equity · fold boundaries","textChars":28,"textLines":1,"bbox":[80,215,380,24]}
+{"kind":"shape","id":"sh/0z2dsvi5","slide":10,"bbox":[740,225,220,120]}
+{"kind":"textbox","id":"sh/l0bu10jq","slide":10,"text":"Sharpe","textPreview":"Sharpe","textChars":6,"textLines":1,"bbox":[760,244,120,20]}
+{"kind":"textbox","id":"sh/hkj29s72","slide":10,"text":"1.42","textPreview":"1.42","textChars":4,"textLines":1,"bbox":[760,276,160,42]}
+{"kind":"shape","id":"sh/gja1gn6x","slide":10,"bbox":[980,225,220,120]}
+{"kind":"textbox","id":"sh/fi1k7ipc","slide":10,"text":"Max DD","textPreview":"Max DD","textChars":6,"textLines":1,"bbox":[1000,244,120,20]}
+{"kind":"textbox","id":"sh/uhsjedor","slide":10,"text":"−8.7%","textPreview":"−8.7%","textChars":5,"textLines":1,"bbox":[1000,276,160,42]}
+{"kind":"shape","id":"sh/tgj25876","slide":10,"bbox":[740,370,460,165]}
+{"kind":"textbox","id":"sh/sfq1cnql","slide":10,"text":"Compare with","textPreview":"Compare with","textChars":12,"textLines":1,"bbox":[760,390,180,24]}
+{"kind":"shape","id":"sh/7uhk3ip0","slide":10,"bbox":[760,428,16,16]}
+{"kind":"textbox","id":"sh/6t8jad8f","slide":10,"text":"Baseline v1","textPreview":"Baseline v1","textChars":11,"textLines":1,"bbox":[788,424,300,24]}
+{"kind":"shape","id":"sh/dc32hc7a","slide":10,"bbox":[760,460,16,16]}
+{"kind":"textbox","id":"sh/cbulo76p","slide":10,"text":"Threshold 0.55","textPreview":"Threshold 0.55","textChars":14,"textLines":1,"bbox":[788,456,300,24]}
+{"kind":"shape","id":"sh/axozi947","slide":10,"bbox":[760,492,16,16]}
+{"kind":"textbox","id":"sh/vyxgbe5s","slide":10,"text":"No volatility feature","textPreview":"No volatility feature","textChars":21,"textLines":1,"bbox":[788,488,300,24]}
+{"kind":"textbox","id":"sh/wz6hkjmd","slide":10,"text":"Το run είναι νέο state του ίδιου αντικειμένου — όχι αρχείο που ψάχνουμε μετά.","textPreview":"Το run είναι νέο state του ίδιου αντικειμένου — όχι αρχείο που ψάχνουμε μετά.","textChars":77,"textLines":1,"bbox":[42,638,1100,32]}
+{"kind":"notes","id":"nt/aibkne","slide":10,"text":""}
+{"kind":"slide","id":"sl/j3gj1z","slide":11,"title":"Η νέα πληροφοριακή αρχιτεκτονική έχει τέσσερις καθαρές περιοχές","textShapes":11}
+{"kind":"textbox","id":"sh/tgjytgze","slide":11,"text":"Η νέα πληροφοριακή αρχιτεκτονική έχει τέσσερις καθαρές περιοχές","textPreview":"Η νέα πληροφοριακή αρχιτεκτονική έχει τέσσερις καθαρές περιοχές","textChars":63,"textLines":1,"bbox":[42,34,1130,76]}
+{"kind":"textbox","id":"sh/6dsfi1g3","slide":11,"text":"11","textPreview":"11","textChars":2,"textLines":1,"bbox":[1182,660,55,22]}
+{"kind":"shape","id":"sh/7e1gr6ho","slide":11,"bbox":[42,165,555,170]}
+{"kind":"textbox","id":"sh/g3uhoby5","slide":11,"text":"Studio","textPreview":"Studio","textChars":6,"textLines":1,"bbox":[70,193,200,36]}
+{"kind":"textbox","id":"sh/h43yxgzq","slide":11,"text":"Create, import YAML, templates, drafts","textPreview":"Create, import YAML, templates, drafts","textChars":38,"textLines":1,"bbox":[70,247,490,60]}
+{"kind":"shape","id":"sh/uhszm1gz","slide":11,"bbox":[642,165,555,170]}
+{"kind":"textbox","id":"sh/fi1gv6hk","slide":11,"text":"Runs","textPreview":"Runs","textChars":4,"textLines":1,"bbox":[670,193,200,36]}
+{"kind":"textbox","id":"sh/wnqxcri1","slide":11,"text":"Queue, status, logs, artifacts, reproducibility","textPreview":"Queue, status, logs, artifacts, reproducibility","textChars":47,"textLines":1,"bbox":[670,247,490,60]}
+{"kind":"shape","id":"sh/x8zylwzm","slide":11,"bbox":[42,385,555,170]}
+{"kind":"textbox","id":"sh/pwjul07a","slide":11,"text":"Compare","textPreview":"Compare","textChars":7,"textLines":1,"bbox":[70,413,200,36]}
+{"kind":"textbox","id":"sh/4batsfq5","slide":11,"text":"Baselines, variants, fold metrics, charts","textPreview":"Baselines, variants, fold metrics, charts","textChars":41,"textLines":1,"bbox":[70,467,490,60]}
+{"kind":"shape","id":"sh/3ahcjapk","slide":11,"bbox":[642,385,555,170]}
+{"kind":"textbox","id":"sh/298bq58z","slide":11,"text":"Execution","textPreview":"Execution","textChars":9,"textLines":1,"bbox":[670,413,200,36]}
+{"kind":"textbox","id":"sh/d0jupk7m","slide":11,"text":"Paper/demo monitoring με ξεχωριστά safety gates","textPreview":"Paper/demo monitoring με ξεχωριστά safety gates","textChars":47,"textLines":1,"bbox":[670,467,490,60]}
+{"kind":"textbox","id":"sh/czatwfq1","slide":11,"text":"Το σημερινό Research / Execution split διατηρείται ως domain boundary, όχι ως περιορισμός της ροής.","textPreview":"Το σημερινό Research / Execution split διατηρείται ως domain boundary, όχι ως περιορισμός της ροής.","textChars":99,"textLines":1,"bbox":[42,625,1130,32]}
+{"kind":"notes","id":"nt/j3gj1z","slide":11,"text":""}
+{"kind":"slide","id":"sl/snka4c","slide":12,"title":"Το refactor πρέπει να ξεκινήσει από shared experiment contracts","textShapes":16}
+{"kind":"textbox","id":"sh/mtwfi9or","slide":12,"text":"Το refactor πρέπει να ξεκινήσει από shared experiment contracts","textPreview":"Το refactor πρέπει να ξεκινήσει από shared experiment contracts","textChars":63,"textLines":1,"bbox":[42,34,1130,76]}
+{"kind":"textbox","id":"sh/9wnyto7i","slide":12,"text":"12","textPreview":"12","textChars":2,"textLines":1,"bbox":[1182,660,55,22]}
+{"kind":"shape","id":"sh/8vexkj6x","slide":12,"bbox":[160,150,960,64]}
+{"kind":"textbox","id":"sh/zqlgnupg","slide":12,"text":"UI shell","textPreview":"UI shell","textChars":8,"textLines":1,"bbox":[185,168,250,28]}
+{"kind":"textbox","id":"sh/ypcfe9ov","slide":12,"text":"Canvas, inspector, command bar, panels","textPreview":"Canvas, inspector, command bar, panels","textChars":38,"textLines":1,"bbox":[465,168,620,28]}
+{"kind":"shape","id":"sh/lsnyp47m","slide":12,"bbox":[160,238,960,64]}
+{"kind":"textbox","id":"sh/0rexgz61","slide":12,"text":"Experiment document","textPreview":"Experiment document","textChars":19,"textLines":1,"bbox":[185,256,250,28]}
+{"kind":"textbox","id":"sh/jmpgzy5k","slide":12,"text":"Versioned graph ↔ YAML round-trip","textPreview":"Versioned graph ↔ YAML round-trip","textChars":33,"textLines":1,"bbox":[465,256,620,28]}
+{"kind":"shape","id":"sh/ilgzqtoz","slide":12,"bbox":[160,326,960,64]}
+{"kind":"textbox","id":"sh/0jqh0zad","slide":12,"text":"Schema service","textPreview":"Schema service","textChars":14,"textLines":1,"bbox":[185,344,250,28]}
+{"kind":"textbox","id":"sh/1kzi94by","slide":12,"text":"Registry, full nested params, defaults, I/O contracts, validation","textPreview":"Registry, full nested params, defaults, I/O contracts, validation","textChars":65,"textLines":1,"bbox":[465,344,620,28]}
+{"kind":"shape","id":"sh/ehozyps7","slide":12,"bbox":[160,414,960,64]}
+{"kind":"textbox","id":"sh/fix07uts","slide":12,"text":"Run service","textPreview":"Run service","textChars":11,"textLines":1,"bbox":[185,432,250,28]}
+{"kind":"textbox","id":"sh/sv6hwfah","slide":12,"text":"Queue, progress events, cancellation, artifacts","textPreview":"Queue, progress events, cancellation, artifacts","textChars":47,"textLines":1,"bbox":[465,432,620,28]}
+{"kind":"shape","id":"sh/dwfy5kbm","slide":12,"bbox":[160,502,960,64]}
+{"kind":"textbox","id":"sh/qtozu5sb","slide":12,"text":"Analysis model","textPreview":"Analysis model","textChars":14,"textLines":1,"bbox":[185,520,250,28]}
+{"kind":"textbox","id":"sh/ruxg3atw","slide":12,"text":"Metrics, series, comparisons, provenance","textPreview":"Metrics, series, comparisons, provenance","textChars":40,"textLines":1,"bbox":[465,520,620,28]}
+{"kind":"textbox","id":"sh/4r6hsfa5","slide":12,"text":"Κρατάμε","textPreview":"Κρατάμε","textChars":7,"textLines":1,"bbox":[42,610,120,24]}
+{"kind":"textbox","id":"sh/5sfy1kbq","slide":12,"text":"registries, loaders, catalogs, artifact readers, execution safety","textPreview":"registries, loaders, catalogs, artifact readers, execution safety","textChars":65,"textLines":1,"bbox":[160,606,470,30]}
+{"kind":"textbox","id":"sh/5o7e5w3e","slide":12,"text":"Ξαναγράφουμε","textPreview":"Ξαναγράφουμε","textChars":12,"textLines":1,"bbox":[680,610,150,24]}
+{"kind":"textbox","id":"sh/knyxwrmt","slide":12,"text":"frontend shell, experiment state model, run orchestration UX","textPreview":"frontend shell, experiment state model, run orchestration UX","textChars":60,"textLines":1,"bbox":[830,606,390,30]}
+{"kind":"notes","id":"nt/snka4c","slide":12,"text":""}
+{"kind":"slide","id":"sl/h08nnm","slide":13,"title":"Τρεις φάσεις μειώνουν το ρίσκο χωρίς να εγκλωβίζουν το νέο design","textShapes":16}
+{"kind":"textbox","id":"sh/3adgzqx0","slide":13,"text":"Τρεις φάσεις μειώνουν το ρίσκο χωρίς να εγκλωβίζουν το νέο design","textPreview":"Τρεις φάσεις μειώνουν το ρίσκο χωρίς να εγκλωβίζουν το νέο design","textChars":65,"textLines":1,"bbox":[42,34,1130,76]}
+{"kind":"textbox","id":"sh/4b6x8vel","slide":13,"text":"13","textPreview":"13","textChars":2,"textLines":1,"bbox":[1182,660,55,22]}
+{"kind":"shape","id":"sh/pcfy10f6","slide":13,"bbox":[42,175,360,300]}
+{"kind":"textbox","id":"sh/u54f21wj","slide":13,"text":"PHASE 1","textPreview":"PHASE 1","textChars":7,"textLines":1,"bbox":[66,198,260,22]}
+{"kind":"textbox","id":"sh/f6dgv6x4","slide":13,"text":"Experiment document","textPreview":"Experiment document","textChars":19,"textLines":1,"bbox":[66,246,310,62]}
+{"kind":"textbox","id":"sh/g7mx4bep","slide":13,"text":"Import/export YAML, schema validation, drafts","textPreview":"Import/export YAML, schema validation, drafts","textChars":45,"textLines":1,"bbox":[66,330,310,90]}
+{"kind":"textbox","id":"sh/h8vyxgfa","slide":13,"text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[327,405,50,50]}
+{"kind":"shape","id":"sh/e1oze5wn","slide":13,"bbox":[447,175,360,300]}
+{"kind":"textbox","id":"sh/z2hg7ad8","slide":13,"text":"PHASE 2","textPreview":"PHASE 2","textChars":7,"textLines":1,"bbox":[471,198,260,22]}
+{"kind":"textbox","id":"sh/76pgj69k","slide":13,"text":"Visual builder","textPreview":"Visual builder","textChars":14,"textLines":1,"bbox":[471,246,310,62]}
+{"kind":"textbox","id":"sh/m5gza1sz","slide":13,"text":"Canvas, inspector, dependency graph, live preview","textPreview":"Canvas, inspector, dependency graph, live preview","textChars":49,"textLines":1,"bbox":[471,330,310,90]}
+{"kind":"textbox","id":"sh/98rylgrq","slide":13,"text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[732,405,50,50]}
+{"kind":"shape","id":"sh/87yhcba5","slide":13,"bbox":[852,175,360,300]}
+{"kind":"textbox","id":"sh/vu9gn69w","slide":13,"text":"PHASE 3","textPreview":"PHASE 3","textChars":7,"textLines":1,"bbox":[876,198,260,22]}
+{"kind":"textbox","id":"sh/ut0ze1sb","slide":13,"text":"Integrated runs","textPreview":"Integrated runs","textChars":15,"textLines":1,"bbox":[876,246,310,62]}
+{"kind":"textbox","id":"sh/hwrypgrm","slide":13,"text":"Queue, embedded results, compare, provenance","textPreview":"Queue, embedded results, compare, provenance","textChars":44,"textLines":1,"bbox":[876,330,310,90]}
+{"kind":"textbox","id":"sh/wvihgbah","slide":13,"text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[1137,405,50,50]}
+{"kind":"shape","id":"sh/jy90rq9s","slide":13,"bbox":[42,535,1196,0]}
+{"kind":"textbox","id":"sh/ix0zils7","slide":13,"text":"Decision gate","textPreview":"Decision gate","textChars":13,"textLines":1,"bbox":[42,575,180,30]}
+{"kind":"textbox","id":"sh/et4jqpcf","slide":13,"text":"Αν αποδεχτούμε το Experiment Studio ως κύριο προϊόν, αξίζει νέο frontend foundation αντί για incremental επέκταση του σημερινού dashboard.","textPreview":"Αν αποδεχτούμε το Experiment Studio ως κύριο προϊόν, αξίζει νέο frontend foundation αντί για incremental επέκταση του σημερινού dashboard.","textChars":138,"textLines":1,"bbox":[245,565,960,68]}
+{"kind":"notes","id":"nt/h08nnm","slide":13,"text":""}
+{"kind":"slide","id":"sl/7vzdth","slide":14,"title":"Η νέα εμπειρία σε μία πρόταση","textShapes":3}
+{"kind":"textbox","id":"sh/nu5kbqtw","slide":14,"text":"Η νέα εμπειρία σε μία πρόταση","textPreview":"Η νέα εμπειρία σε μία πρόταση","textChars":29,"textLines":1,"bbox":[42,42,600,34]}
+{"kind":"textbox","id":"sh/8ve1kvuh","slide":14,"text":"Χτίζω, ελέγχω,\nτρέχω και συγκρίνω\nχωρίς να εγκαταλείπω\nτο experiment.","textPreview":"Χτίζω, ελέγχω, | τρέχω και συγκρίνω | χωρίς να εγκαταλείπω | το experiment.","textChars":69,"textLines":4,"bbox":[42,150,1050,330]}
+{"kind":"textbox","id":"sh/9wn2dgb2","slide":14,"text":"Το YAML παραμένει η αλήθεια. Το app γίνεται ο καλύτερος τρόπος να τη δημιουργείς και να την καταλαβαίνεις.","textPreview":"Το YAML παραμένει η αλήθεια. Το app γίνεται ο καλύτερος τρόπος να τη δημιουργείς και να την καταλαβαίνεις.","textChars":106,"textLines":1,"bbox":[42,555,1020,80]}
+{"kind":"notes","id":"nt/7vzdth","slide":14,"text":""}

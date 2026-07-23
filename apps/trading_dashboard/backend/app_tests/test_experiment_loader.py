@@ -122,6 +122,28 @@ def test_list_runs_exposes_processed_dataset_and_market_making_summary(tmp_path:
     assert runs["market_making__latest"]["asset"] == "BTC/USD"
 
 
+def test_market_making_summary_accepts_quote_event_time_column(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    run_dir = tmp_path / "logs" / "experiments" / "market_making" / "bybit_demo" / "quote_time_demo"
+    run_dir.mkdir(parents=True)
+    _write_json(run_dir / "summary.json", {"total_pnl": 3.5})
+    (run_dir / "quote_events.csv").write_text(
+        "\n".join(
+            [
+                "quote_event_id,event_time,symbol,fair_price",
+                "q1,2026-07-17T11:53:00+00:00,BTCUSDT,118000",
+                "q2,2026-07-17T11:54:00+00:00,BTCUSDT,118010",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    runs = {run["run_id"]: run for run in ExperimentLoader(paths).list_runs()}
+
+    assert runs["market_making__latest"]["asset"] == "BTCUSDT"
+    assert runs["market_making__latest"]["created_at_utc"] == "2026-07-17T11:54:00+00:00"
+
+
 def test_backtest_equity_loads_from_logs_bot_run_id(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
     bot_dir = tmp_path / "logs" / "bot" / "live_demo"

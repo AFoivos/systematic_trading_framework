@@ -175,9 +175,27 @@ class ExperimentLoader:
             orderbook = pd.read_csv(event_path, nrows=1)
             if not orderbook.empty:
                 asset = orderbook.iloc[0].get("symbol")
-            tail = pd.read_csv(event_path, usecols=["timestamp"]).tail(1)
-            if not tail.empty:
-                created_at = str(tail.iloc[-1]["timestamp"])
+            timestamp_col = next(
+                (
+                    str(column)
+                    for column in orderbook.columns
+                    if str(column).strip().lower()
+                    in {
+                        "timestamp",
+                        "event_time",
+                        "event_timestamp",
+                        "datetime",
+                        "date",
+                        "time",
+                        "ts",
+                    }
+                ),
+                None,
+            )
+            if timestamp_col is not None:
+                tail = pd.read_csv(event_path, usecols=[timestamp_col]).tail(1)
+                if not tail.empty:
+                    created_at = str(tail.iloc[-1][timestamp_col])
         if asset is None and trades_path.exists():
             trades = pd.read_csv(trades_path, nrows=1)
             if not trades.empty:

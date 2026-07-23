@@ -17,27 +17,16 @@ def test_yang_zhang_volatility_contract_and_numeric_sanity() -> None:
     assert (out["yz_vol"].dropna() >= 0).all()
 
 
-def test_yang_zhang_volatility_optional_regime_outputs() -> None:
+def test_yang_zhang_volatility_rejects_helper_derived_regime_outputs() -> None:
     df = synthetic_ohlcv()
-    out = add_yang_zhang_volatility(
-        df,
-        window=20,
-        regime_window=30,
-        high_vol_mult=1.05,
-        output_col="yz_vol",
-        rolling_mean_col="yz_mean",
-        ratio_col="yz_ratio",
-        rising_col="yz_rising",
-        high_vol_regime_col="yz_high",
-    )
-
-    assert {"yz_vol", "yz_mean", "yz_ratio", "yz_rising", "yz_high"}.issubset(out.columns)
-    assert_has_finite_values(out["yz_mean"])
-    assert_has_finite_values(out["yz_ratio"])
-    assert str(out["yz_rising"].dtype) == "int8"
-    assert str(out["yz_high"].dtype) == "int8"
-    assert set(out["yz_rising"].unique()).issubset({0, 1})
-    assert set(out["yz_high"].unique()).issubset({0, 1})
+    with pytest.raises(ValueError, match="helper-derived"):
+        add_yang_zhang_volatility(
+            df,
+            window=20,
+            regime_window=30,
+            output_col="yz_vol",
+            rolling_mean_col="yz_mean",
+        )
 
 
 def test_yang_zhang_volatility_missing_columns() -> None:
@@ -48,7 +37,7 @@ def test_yang_zhang_volatility_missing_columns() -> None:
 def test_yang_zhang_volatility_invalid_window() -> None:
     with pytest.raises(ValueError, match="window"):
         add_yang_zhang_volatility(synthetic_ohlcv(), window=1)
-    with pytest.raises(ValueError, match="regime_window"):
+    with pytest.raises(ValueError, match="helper-derived"):
         add_yang_zhang_volatility(
             synthetic_ohlcv(),
             window=20,

@@ -5,9 +5,7 @@ import pandas as pd
 
 from ._ehlers import (
     as_float_array,
-    ensure_unique_columns,
     require_columns,
-    resolve_named_col,
     resolve_output_col,
     validate_bool,
     validate_float,
@@ -20,7 +18,7 @@ def add_cyber_cycle(
     alpha: float = 0.07,
     output_col: str | None = None,
     trigger_col: str | None = None,
-    add_trigger: bool = True,
+    add_trigger: bool = False,
 ) -> pd.DataFrame:
     """
     Apply the registered ``cyber_cycle`` feature transformation.
@@ -36,7 +34,7 @@ def add_cyber_cycle(
               alpha: 0.07
               output_col: null
               trigger_col: null
-              add_trigger: true
+              add_trigger: false
             output_cols:
               - configured by output_col
     
@@ -45,7 +43,7 @@ def add_cyber_cycle(
     price_col:
         Input dataframe column configured by ``price_col``. Default: ``close``.
     trigger_col:
-        Input dataframe column configured by ``trigger_col``. Default: ``null``.
+        Deprecated helper-derived output. Use ``transforms.lag``.
     
     Parameters
     ----------
@@ -58,15 +56,17 @@ def add_cyber_cycle(
     trigger_col:
         Input dataframe column configured by ``trigger_col``. Default: ``null``.
     add_trigger:
-        Boolean switch controlling optional feature behavior. Default: ``true``.
+        Deprecated switch. Must remain false; use ``transforms.lag``.
     """
     require_columns(df, [price_col], feature="Cyber Cycle")
     a = validate_float(alpha, name="alpha", minimum=0.0, maximum=1.0)
     validate_bool(add_trigger, name="add_trigger")
     col = resolve_output_col(output_col, "cyber_cycle")
-    trigger = resolve_named_col(trigger_col, default=f"{col}_trigger", name="trigger_col")
-    if add_trigger:
-        ensure_unique_columns([col, trigger], feature="Cyber Cycle")
+    if add_trigger or trigger_col is not None:
+        raise ValueError(
+            "Cyber Cycle trigger output is helper-derived; use transforms.lag "
+            "with source_col set to the raw cyber_cycle output."
+        )
 
     out = df.copy()
     values = as_float_array(out[price_col])
@@ -102,8 +102,6 @@ def add_cyber_cycle(
             )
 
     out[col] = cycle
-    if add_trigger:
-        out[trigger] = pd.Series(cycle, index=out.index).shift(1)
     return out
 
 

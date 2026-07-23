@@ -5,10 +5,8 @@ import pandas as pd
 
 from ._ehlers import (
     as_float_array,
-    ensure_unique_columns,
     normalize_to_unit_interval,
     require_columns,
-    resolve_named_col,
     resolve_output_col,
     rolling_min_max,
     validate_bool,
@@ -24,7 +22,7 @@ def add_fisher_transform(
     clip: float = 0.999,
     output_col: str | None = None,
     signal_col: str | None = None,
-    add_signal: bool = True,
+    add_signal: bool = False,
 ) -> pd.DataFrame:
     """
     Apply the registered ``fisher_transform`` feature transformation.
@@ -41,7 +39,7 @@ def add_fisher_transform(
               clip: 0.999
               output_col: null
               signal_col: null
-              add_signal: true
+              add_signal: false
             output_cols:
               - configured by output_col
               - configured by signal_col
@@ -62,18 +60,20 @@ def add_fisher_transform(
     output_col:
         Output dataframe column configured by ``output_col``. Default: ``null``.
     signal_col:
-        Output dataframe column configured by ``signal_col``. Default: ``null``.
+        Deprecated helper-derived output. Use ``transforms.lag``.
     add_signal:
-        Boolean switch controlling optional feature behavior. Default: ``true``.
+        Deprecated switch. Must remain false; use ``transforms.lag``.
     """
     require_columns(df, [price_col], feature="Fisher Transform")
     resolved_window = validate_int(window, name="window", minimum=2)
     clip_value = validate_float(clip, name="clip", minimum=0.1, maximum=0.999999)
     validate_bool(add_signal, name="add_signal")
     col = resolve_output_col(output_col, f"fisher_transform_{resolved_window}")
-    signal = resolve_named_col(signal_col, default=f"{col}_signal", name="signal_col")
-    if add_signal:
-        ensure_unique_columns([col, signal], feature="Fisher Transform")
+    if add_signal or signal_col is not None:
+        raise ValueError(
+            "Fisher signal output is helper-derived; use transforms.lag with "
+            "source_col set to the raw Fisher output."
+        )
 
     out = df.copy()
     values = as_float_array(out[price_col])
@@ -92,8 +92,6 @@ def add_fisher_transform(
         fisher[idx] = 0.5 * np.log((1.0 + smoothed[idx]) / (1.0 - smoothed[idx])) + 0.5 * previous_fisher
 
     out[col] = fisher
-    if add_signal:
-        out[signal] = pd.Series(fisher, index=out.index).shift(1)
     return out
 
 
