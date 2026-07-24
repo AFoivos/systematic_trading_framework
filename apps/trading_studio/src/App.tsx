@@ -30,6 +30,16 @@ import {
   type StudioRunResult,
   type ValidationIssue
 } from "./studio";
+import { RunWindow } from "./RunWindow";
+import { listRuns, saveRun, type ChartPlacement, type StoredRun } from "./runStore";
+import {
+  defaultsFor,
+  definitionFor,
+  definitionsFor,
+  type ComponentDefinition,
+  type ParameterDefinition,
+  type ParameterValue
+} from "./frameworkCatalog";
 
 type InspectorTab = "base" | "normalizations" | "helpers" | "outputs";
 type BottomTab = "preview" | "validation" | "results";
@@ -87,6 +97,7 @@ function TopBar({
   onCommitRename,
   onCancelRename,
   onToggleLibrary,
+  onRuns,
   onYaml,
   onValidate,
   onRun
@@ -102,6 +113,7 @@ function TopBar({
   onCommitRename: () => void;
   onCancelRename: () => void;
   onToggleLibrary: () => void;
+  onRuns: () => void;
   onYaml: () => void;
   onValidate: () => void;
   onRun: () => void;
@@ -153,6 +165,7 @@ function TopBar({
       )}
       <div className="autosave" aria-live="polite"><span /> {saveStatus}</div>
       <div className="top-actions">
+        <button className="dark-button" onClick={onRuns}>Runs</button>
         <button className="dark-button" onClick={onYaml}>&lt;/&gt; YAML</button>
         <button className="dark-button" onClick={onValidate}>✓ Validate</button>
         <button className="run-button" onClick={onRun} disabled={running}>
@@ -678,16 +691,97 @@ function NestedBlock({
   );
 }
 
+function prettyRegistryName(name: string): string {
+  return name.replace(/_/g, " ").replace(/\b\w/g, (letter: string) => letter.toUpperCase());
+}
+
+function parameterValue(parameter: ParameterDefinition, params: Record<string, unknown>): ParameterValue {
+  return (params[parameter.name] ?? parameter.default_value ?? parameter.default ?? (parameter.kind === "boolean" ? false : "")) as ParameterValue;
+}
+
+function ParameterEditor({
+  definition,
+  params,
+  onChange
+}: {
+  definition?: ComponentDefinition;
+  params: Record<string, unknown>;
+  onChange: (params: Record<string, unknown>) => void;
+}) {
+  if (!definition?.parameters.length) {
+    return <p className="empty-section">This registry component exposes no configurable parameters.</p>;
+  }
+  return (
+    <div className="registry-parameters">
+      {definition.parameters.map((parameter) => {
+        const value = parameterValue(parameter, params);
+        const update = (next: unknown) => onChange({ ...params, [parameter.name]: next });
+        return (
+          <Field key={parameter.name} label={prettyRegistryName(parameter.name)} hint={parameter.description ?? parameter.annotation ?? undefined}>
+            {parameter.options?.length ? (
+              <select value={String(value ?? "")} onChange={(event) => {
+                const selected = parameter.options?.find((option) => String(option) === event.target.value);
+                update(selected ?? event.target.value);
+              }}>
+                {parameter.options.map((option) => <option key={String(option)} value={String(option)}>{String(option)}</option>)}
+              </select>
+            ) : parameter.kind === "boolean" || typeof value === "boolean" ? (
+              <button type="button" className={`wide-switch ${value ? "on" : ""}`} aria-pressed={Boolean(value)} onClick={() => update(!value)}>
+                {value ? "Enabled" : "Disabled"}
+              </button>
+            ) : parameter.kind === "integer" || parameter.kind === "number" || typeof value === "number" ? (
+              <input type="number" step={parameter.kind === "integer" ? "1" : "any"} value={String(value ?? "")} onChange={(event) => update(event.target.value === "" ? "" : Number(event.target.value))} />
+            ) : parameter.kind === "list" || parameter.kind === "object" || Array.isArray(value) || (value !== null && typeof value === "object") ? (
+              <textarea value={JSON.stringify(value, null, 2)} onChange={(event) => {
+                try { update(JSON.parse(event.target.value)); } catch { /* Keep the previous valid structured value. */ }
+              }} />
+            ) : (
+              <input value={String(value ?? "")} onChange={(event) => update(event.target.value)} />
+            )}
+          </Field>
+        );
+      })}
+    </div>
+  );
+}
+
+function RegistrySelector({
+  kind,
+  value,
+  onSelect
+}: {
+  kind: NodeKind;
+  value: string;
+  onSelect: (definition: ComponentDefinition) => void;
+}) {
+  const definitions = definitionsFor(kind);
+  const selected = definitionFor(kind, value) ?? definitions[0];
+  return (
+    <Field label={`${prettyRegistryName(kind)} registry`} hint={`${definitions.length} registered components from src/${kind}s/registry.py`}>
+      <select value={selected?.name ?? ""} onChange={(event) => {
+        const definition = definitionFor(kind, event.target.value);
+        if (definition) onSelect(definition);
+      }}>
+        {definitions.map((definition) => <option key={definition.name} value={definition.name}>{prettyRegistryName(definition.display_name || definition.name)}</option>)}
+      </select>
+    </Field>
+  );
+}
+
 function FeatureInspector({
   node,
   tab,
   setTab,
-  onUpdate
+  onUpdate,
+  chartRoutes,
+  onChartRouteChange
 }: {
   node: StudioNode & { feature: FeatureConfig };
   tab: InspectorTab;
   setTab: (tab: InspectorTab) => void;
   onUpdate: (node: StudioNode) => void;
+  chartRoutes: Record<string, ChartPlacement>;
+  onChartRouteChange: (output: string, placement: ChartPlacement) => void;
 }) {
   const feature = node.feature;
   const updateFeature = (next: FeatureConfig) => onUpdate({ ...node, feature: next });
@@ -723,36 +817,16 @@ function FeatureInspector({
         {tab === "base" ? (
           <section className="inspector-section">
             <div className="section-title"><h2>Feature parameters</h2></div>
-            <Field label="Feature kind">
-              <select
-                value={feature.kind}
-                onChange={(event) => updateFeature({ ...feature, kind: event.target.value as FeatureConfig["kind"] })}
-              >
-                <option value="volatility">volatility</option>
-                <option value="trend">trend</option>
-                <option value="momentum">momentum</option>
-              </select>
-            </Field>
-            <Field label="Rolling windows (bars)" hint="Comma-separated positive integer windows">
-              <RollingWindowsInput
-                value={feature.rollingWindows}
-                onCommit={(rollingWindows) => updateFeature({ ...feature, rollingWindows })}
-              />
-            </Field>
-            <Field label="Returns column">
-              <input value={feature.returnsCol} onChange={(event) => updateFeature({ ...feature, returnsCol: event.target.value })} />
-            </Field>
-            <Field label="Annualization factor">
-              <select
-                value={feature.annualizationFactor}
-                onChange={(event) => updateFeature({ ...feature, annualizationFactor: event.target.value })}
-              >
-                <option value="auto">auto</option>
-                <option value="252">252</option>
-                <option value="8760">8760</option>
-                <option value="12096">12096</option>
-              </select>
-            </Field>
+            <RegistrySelector kind="feature" value={feature.kind} onSelect={(definition) => updateFeature({
+              ...feature,
+              kind: definition.name,
+              registryParams: defaultsFor(definition)
+            })} />
+            <ParameterEditor
+              definition={definitionFor("feature", feature.kind)}
+              params={feature.registryParams ?? {}}
+              onChange={(registryParams) => updateFeature({ ...feature, registryParams })}
+            />
             <Field label="Enabled">
               <button
                 type="button"
@@ -920,6 +994,15 @@ function FeatureInspector({
                     updateFeature({ ...feature, outputs });
                   }}
                 />
+                <select
+                  aria-label={`Chart placement for ${output}`}
+                  value={chartRoutes[output] ?? "hidden"}
+                  onChange={(event) => onChartRouteChange(output, event.target.value as ChartPlacement)}
+                >
+                  <option value="main">Main chart</option>
+                  <option value="lower">Lower panel</option>
+                  <option value="hidden">Not shown</option>
+                </select>
                 <span className="output-actions">
                   <button type="button" className="icon-button" aria-label={`Move output ${index + 1} up`} disabled={index === 0} onClick={() => updateFeature({ ...feature, outputs: moveAtIndex(feature.outputs, index, -1) })}>↑</button>
                   <button type="button" className="icon-button" aria-label={`Move output ${index + 1} down`} disabled={index === feature.outputs.length - 1} onClick={() => updateFeature({ ...feature, outputs: moveAtIndex(feature.outputs, index, 1) })}>↓</button>
@@ -947,7 +1030,9 @@ function Inspector({
   setTab,
   onUpdate,
   onDuplicate,
-  onDelete
+  onDelete,
+  chartRoutes,
+  onChartRouteChange
 }: {
   selected?: StudioNode;
   tab: InspectorTab;
@@ -955,6 +1040,8 @@ function Inspector({
   onUpdate: (node: StudioNode) => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  chartRoutes: Record<string, ChartPlacement>;
+  onChartRouteChange: (output: string, placement: ChartPlacement) => void;
 }) {
   const meta = selected ? kindMeta[selected.kind] : kindMeta.feature;
   return (
@@ -975,19 +1062,31 @@ function Inspector({
           tab={tab}
           setTab={setTab}
           onUpdate={onUpdate}
+          chartRoutes={chartRoutes}
+          onChartRouteChange={onChartRouteChange}
         />
       ) : (
         <div className="generic-inspector">
           {selected ? (
             <>
-              <h2>{selected.subtitle}</h2>
-              <Field label="Kind"><input value={selected.kind} readOnly /></Field>
-              <Field label="Name">
-                <input value={selected.title} onChange={(event) => onUpdate({ ...selected, title: event.target.value })} />
-              </Field>
-              <Field label="Description">
-                <input value={selected.subtitle} onChange={(event) => onUpdate({ ...selected, subtitle: event.target.value })} />
-              </Field>
+              <h2>{definitionsFor(selected.kind).length ? `${definitionsFor(selected.kind).length} registered ${selected.kind}s` : selected.subtitle}</h2>
+              {definitionsFor(selected.kind).length ? (
+                <>
+                  <RegistrySelector kind={selected.kind} value={selected.title} onSelect={(definition) => onUpdate({
+                    ...selected,
+                    title: definition.name,
+                    subtitle: definition.description || prettyRegistryName(definition.name),
+                    registryParams: defaultsFor(definition)
+                  })} />
+                  <ParameterEditor
+                    definition={definitionFor(selected.kind, selected.title) ?? definitionsFor(selected.kind)[0]}
+                    params={selected.registryParams ?? {}}
+                    onChange={(registryParams) => onUpdate({ ...selected, registryParams })}
+                  />
+                </>
+              ) : (
+                <p>This pipeline component is configured by its dedicated runtime section.</p>
+              )}
               <p>Drag the node on the canvas to reposition it. Delete/Backspace removes the selected node.</p>
             </>
           ) : (
@@ -1253,6 +1352,24 @@ function YamlModal({ onClose, yaml }: { onClose: () => void; yaml: string }) {
   );
 }
 
+function RunsModal({ runs, onClose }: { runs: StoredRun[]; onClose: () => void }) {
+  return (
+    <div className="modal-backdrop" onMouseDown={onClose}>
+      <section className="runs-modal" role="dialog" aria-modal="true" aria-labelledby="runs-title" onMouseDown={(event) => event.stopPropagation()}>
+        <header><div><small>Persistent local history</small><h2 id="runs-title">Saved runs</h2></div><button className="icon-button" onClick={onClose}>×</button></header>
+        <div className="runs-list">
+          {runs.length ? runs.map((run) => (
+            <a className="saved-run" key={run.id} href={`${window.location.pathname}?view=run&runId=${encodeURIComponent(run.id)}`} target="_blank" rel="noreferrer">
+              <span><strong>{run.experimentName}</strong><small>{new Date(run.createdAt).toLocaleString()}</small></span>
+              <span><small>{run.asset} · {run.timeframe}</small><b>Open results ↗</b></span>
+            </a>
+          )) : <div className="empty-runs"><strong>No saved runs yet</strong><span>Your completed experiments will appear here.</span></div>}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function ResultsModal({ result, onClose }: { result: StudioRunResult; onClose: () => void }) {
   const [visibleSeries, setVisibleSeries] = useState<Set<PreviewSeriesKey>>(
     () => new Set(["close", "vol_96_z", "slope_8"])
@@ -1398,7 +1515,7 @@ function StatusBar({
   );
 }
 
-export function App() {
+function StudioEditor() {
   const [history, setHistory] = useState<HistoryState>(() => ({
     past: [],
     present: loadStoredDocument(),
@@ -1412,7 +1529,15 @@ export function App() {
   const [validation, setValidation] = useState<ValidationState | null>(null);
   const [runState, setRunState] = useState<RunState>({ status: "idle" });
   const [yamlOpen, setYamlOpen] = useState(false);
-  const [resultsOpen, setResultsOpen] = useState(false);
+  const [runsOpen, setRunsOpen] = useState(false);
+  const [savedRuns, setSavedRuns] = useState<StoredRun[]>(() => listRuns());
+  const [latestRunId, setLatestRunId] = useState<string | null>(() => listRuns()[0]?.id ?? null);
+  const [chartRoutes, setChartRoutes] = useState<Record<string, ChartPlacement>>({
+    vol_rolling_96: "main",
+    vol_rolling_96__zscore: "lower",
+    vol_slope_8: "lower",
+    vol_slope_over_close: "hidden"
+  });
   const [saveStatus, setSaveStatus] = useState("Saved locally");
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
@@ -1427,7 +1552,6 @@ export function App() {
     runTokenRef.current += 1;
     setValidation(null);
     setRunState({ status: "idle" });
-    setResultsOpen(false);
   }, []);
 
   const commitDocument = useCallback((change: (current: StudioDocument) => StudioDocument) => {
@@ -1515,7 +1639,16 @@ export function App() {
 
   const addFromPalette = (kind: NodeKind, label: string) => {
     const index = studioDocument.nodes.length;
-    addNode(createNode(kind, label, 24 + (index % 5) * 128, 60 + Math.floor(index / 5) * 138));
+    const definition = definitionsFor(kind)[0];
+    const node = createNode(kind, definition?.name ?? label, 24 + (index % 5) * 128, 60 + Math.floor(index / 5) * 138);
+    if (definition) {
+      if (kind === "feature" && node.feature) {
+        node.feature = { ...node.feature, kind: definition.name, registryParams: defaultsFor(definition) };
+      } else {
+        node.registryParams = defaultsFor(definition);
+      }
+    }
+    addNode(node);
   };
 
   const duplicateSelected = () => {
@@ -1557,6 +1690,7 @@ export function App() {
     const token = runTokenRef.current + 1;
     runTokenRef.current = token;
     const startedAtMs = Date.now();
+    const pendingRunWindow = window.open("about:blank", `studio-run-${token}`, "popup,width=1500,height=950");
     setRunState({ status: "running", startedAt: new Date(startedAtMs).toISOString() });
     setBottomTab("results");
     window.setTimeout(() => {
@@ -1564,7 +1698,23 @@ export function App() {
       try {
         const result = executeStudioDocument(studioDocument, startedAtMs, Date.now());
         setRunState({ status: "completed", result });
-        setResultsOpen(true);
+        const storedRun: StoredRun = {
+          id: result.runId,
+          experimentName: studioDocument.name,
+          createdAt: result.completedAt,
+          status: "completed",
+          asset: "SPX500",
+          timeframe: "30m",
+          nodes: studioDocument.nodes.map(({ id, kind, title, subtitle }) => ({ id, kind, title, subtitle })),
+          chartRoutes,
+          yaml
+        };
+        saveRun(storedRun);
+        setSavedRuns(listRuns());
+        setLatestRunId(storedRun.id);
+        const runUrl = `${window.location.pathname}?view=run&runId=${encodeURIComponent(storedRun.id)}`;
+        if (pendingRunWindow) pendingRunWindow.location.href = runUrl;
+        else window.open(runUrl, "_blank");
       } catch (error) {
         setRunState({ status: "failed", error: error instanceof Error ? error.message : String(error) });
       }
@@ -1591,6 +1741,10 @@ export function App() {
         }}
         onCancelRename={() => setRenaming(false)}
         onToggleLibrary={() => setLibraryCollapsed((current) => !current)}
+        onRuns={() => {
+          setSavedRuns(listRuns());
+          setRunsOpen(true);
+        }}
         onYaml={() => setYamlOpen(true)}
         onValidate={() => {
           performValidation();
@@ -1633,20 +1787,28 @@ export function App() {
           onUpdate={updateNode}
           onDuplicate={duplicateSelected}
           onDelete={deleteSelected}
+          chartRoutes={chartRoutes}
+          onChartRouteChange={(output, placement) => setChartRoutes((current) => ({ ...current, [output]: placement }))}
         />
         <BottomDrawer
           tab={bottomTab}
           validation={validation}
           runState={runState}
           setTab={setBottomTab}
-          onOpenResults={() => setResultsOpen(true)}
+          onOpenResults={() => {
+            if (latestRunId) window.open(`${window.location.pathname}?view=run&runId=${encodeURIComponent(latestRunId)}`, `studio-run-${latestRunId}`, "popup,width=1500,height=950");
+          }}
         />
       </div>
       <StatusBar validation={validation} runState={runState} />
       {yamlOpen ? <YamlModal yaml={yaml} onClose={() => setYamlOpen(false)} /> : null}
-      {resultsOpen && runState.status === "completed" ? (
-        <ResultsModal result={runState.result} onClose={() => setResultsOpen(false)} />
-      ) : null}
+      {runsOpen ? <RunsModal runs={savedRuns} onClose={() => setRunsOpen(false)} /> : null}
     </div>
   );
+}
+
+export function App() {
+  const params = new URLSearchParams(window.location.search);
+  const runId = params.get("runId");
+  return params.get("view") === "run" && runId ? <RunWindow runId={runId} /> : <StudioEditor />;
 }

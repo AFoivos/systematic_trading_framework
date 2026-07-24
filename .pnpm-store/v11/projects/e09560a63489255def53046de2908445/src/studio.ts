@@ -20,7 +20,8 @@ export interface Helper {
 }
 
 export interface FeatureConfig {
-  kind: "volatility" | "trend" | "momentum";
+  kind: string;
+  registryParams?: Record<string, unknown>;
   rollingWindows: number[];
   returnsCol: string;
   annualizationFactor: string;
@@ -38,6 +39,7 @@ export interface StudioNode {
   x: number;
   y: number;
   feature?: FeatureConfig;
+  registryParams?: Record<string, unknown>;
 }
 
 export interface StudioDocument {
@@ -169,7 +171,8 @@ export function createNode(kind: NodeKind, title: string, x: number, y: number):
     subtitle: kind[0].toUpperCase() + kind.slice(1),
     x,
     y,
-    feature: kind === "feature" ? createDefaultFeatureConfig() : undefined
+    feature: kind === "feature" ? createDefaultFeatureConfig() : undefined,
+    registryParams: {}
   };
 }
 
@@ -182,15 +185,15 @@ export function createInitialDocument(): StudioDocument {
       {
         id: "volatility",
         kind: "feature",
-        title: "Volatility",
+        title: "volatility",
         subtitle: "Feature",
         x: 145,
         y: 160,
         feature: createDefaultFeatureConfig()
       },
-      { id: "target", kind: "target", title: "Forward return", subtitle: "Target · horizon 8", x: 272, y: 172 },
-      { id: "model", kind: "model", title: "LightGBM", subtitle: "Model · walk-forward", x: 399, y: 172 },
-      { id: "signal", kind: "signal", title: "Probability threshold", subtitle: "Signal · 0.60 / 0.40", x: 526, y: 172 },
+      { id: "target", kind: "target", title: "forward_return", subtitle: "Target · horizon 8", x: 272, y: 172, registryParams: {} },
+      { id: "model", kind: "model", title: "lightgbm_clf", subtitle: "Model · walk-forward", x: 399, y: 172, registryParams: {} },
+      { id: "signal", kind: "signal", title: "probability_threshold", subtitle: "Signal · 0.60 / 0.40", x: 526, y: 172, registryParams: {} },
       { id: "backtest", kind: "backtest", title: "Backtest", subtitle: "Costs · slippage", x: 653, y: 172 }
     ]
   };
@@ -219,7 +222,7 @@ function isStoredDocument(value: unknown): value is StudioDocument {
     const feature = item.feature as Partial<FeatureConfig> | undefined;
     return Boolean(
       feature &&
-      ["volatility", "trend", "momentum"].includes(String(feature.kind)) &&
+      typeof feature.kind === "string" &&
       Array.isArray(feature.rollingWindows) &&
       feature.rollingWindows.every(isFiniteNumber) &&
       typeof feature.returnsCol === "string" &&
@@ -391,6 +394,12 @@ function yamlString(value: string): string {
   return JSON.stringify(value);
 }
 
+function yamlValue(value: unknown): string {
+  if (typeof value === "string") return yamlString(value);
+  if (value === null) return "null";
+  return JSON.stringify(value);
+}
+
 function yamlBoolean(value: boolean): string {
   return value ? "true" : "false";
 }
@@ -410,11 +419,20 @@ export function serializeStudioYaml(document: StudioDocument): string {
       `    name: ${yamlString(node.title)}`,
       `    position: { x: ${Math.round(node.x)}, y: ${Math.round(node.y)} }`
     );
+    if (node.registryParams && Object.keys(node.registryParams).length) {
+      lines.push("    params:");
+      for (const [key, value] of Object.entries(node.registryParams)) {
+        lines.push(`      ${key}: ${yamlValue(value)}`);
+      }
+    }
     if (node.kind !== "feature" || !node.feature) continue;
     const feature = node.feature;
     lines.push(
       "    config:",
       `      feature_kind: ${feature.kind}`,
+      ...(feature.registryParams && Object.keys(feature.registryParams).length
+        ? ["      params:", ...Object.entries(feature.registryParams).map(([key, value]) => `        ${key}: ${yamlValue(value)}`)]
+        : []),
       `      enabled: ${yamlBoolean(feature.enabled)}`,
       `      returns_col: ${yamlString(feature.returnsCol)}`,
       `      rolling_windows: [${feature.rollingWindows.join(", ")}]`,
