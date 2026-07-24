@@ -1,4 +1,9 @@
-export type ChartPlacement = "main" | "lower" | "hidden";
+export type ChartPlacement = "main" | "hidden" | "lower" | `panel:${string}`;
+
+export interface ChartPanelDefinition {
+  id: string;
+  name: string;
+}
 
 export interface StoredRun {
   id: string;
@@ -14,6 +19,15 @@ export interface StoredRun {
     subtitle: string;
   }>;
   chartRoutes: Record<string, ChartPlacement>;
+  chartPanels?: ChartPanelDefinition[];
+  candles?: Array<{ time: string; open: number; high: number; low: number; close: number; volume?: number | null }>;
+  series?: Array<{
+    seriesId: string;
+    label: string;
+    sourceType: string;
+    points: Array<{ time: string; value: number | null }>;
+  }>;
+  runtimeMetadata?: Record<string, unknown>;
   yaml: string;
 }
 

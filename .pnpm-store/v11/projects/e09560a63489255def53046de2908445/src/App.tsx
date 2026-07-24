@@ -31,7 +31,7 @@ import {
   type ValidationIssue
 } from "./studio";
 import { RunWindow } from "./RunWindow";
-import { listRuns, saveRun, type ChartPlacement, type StoredRun } from "./runStore";
+import { listRuns, saveRun, type ChartPanelDefinition, type ChartPlacement, type StoredRun } from "./runStore";
 import {
   defaultsFor,
   definitionFor,
@@ -40,6 +40,7 @@ import {
   type ParameterDefinition,
   type ParameterValue
 } from "./frameworkCatalog";
+import { executeFeatureRuntime } from "./runtime";
 
 type InspectorTab = "base" | "normalizations" | "helpers" | "outputs";
 type BottomTab = "preview" | "validation" | "results";
@@ -768,13 +769,47 @@ function RegistrySelector({
   );
 }
 
+function outputMeaning(output: string): string {
+  if (/zscore|__z/i.test(output)) return "Normalization · rolling z-score";
+  if (/ratio|over/i.test(output)) return "Helper · ratio";
+  if (/slope/i.test(output)) return "Helper · slope";
+  if (/signal|side|position/i.test(output)) return "Signal / position output";
+  return "Base feature measurement";
+}
+
+function nextOutputName(feature: FeatureConfig): string {
+  const root = feature.kind.replace(/[^a-z0-9_]+/gi, "_").toLowerCase();
+  const candidates = [
+    `${root}_value`,
+    `${root}_normalized`,
+    `${root}_signal`,
+    `${root}_output_${feature.outputs.length + 1}`
+  ];
+  return candidates.find((candidate) => !feature.outputs.includes(candidate)) ?? `${root}_${Date.now()}`;
+}
+
+function defaultFeatureOutputs(definition: ComponentDefinition, params: Record<string, ParameterValue>): string[] {
+  const configured = definition.parameters
+    .filter((parameter) => /(^output|output_col$|out_col$)/i.test(parameter.name))
+    .map((parameter) => params[parameter.name])
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+  if (configured.length) return Array.from(new Set(configured));
+  const windows = params.windows;
+  if (Array.isArray(windows) && windows.length) return windows.map((window) => `${definition.name}_${window}`);
+  const window = params.window ?? params.period ?? params.length;
+  return [`${definition.name}_${typeof window === "number" ? window : "value"}`];
+}
+
 function FeatureInspector({
   node,
   tab,
   setTab,
   onUpdate,
   chartRoutes,
-  onChartRouteChange
+  onChartRouteChange,
+  chartPanels,
+  onAddChartPanel,
+  onRenameChartPanel
 }: {
   node: StudioNode & { feature: FeatureConfig };
   tab: InspectorTab;
@@ -782,6 +817,9 @@ function FeatureInspector({
   onUpdate: (node: StudioNode) => void;
   chartRoutes: Record<string, ChartPlacement>;
   onChartRouteChange: (output: string, placement: ChartPlacement) => void;
+  chartPanels: ChartPanelDefinition[];
+  onAddChartPanel: () => void;
+  onRenameChartPanel: (id: string, name: string) => void;
 }) {
   const feature = node.feature;
   const updateFeature = (next: FeatureConfig) => onUpdate({ ...node, feature: next });
@@ -820,7 +858,8 @@ function FeatureInspector({
             <RegistrySelector kind="feature" value={feature.kind} onSelect={(definition) => updateFeature({
               ...feature,
               kind: definition.name,
-              registryParams: defaultsFor(definition)
+              registryParams: defaultsFor(definition),
+              outputs: defaultFeatureOutputs(definition, defaultsFor(definition))
             })} />
             <ParameterEditor
               definition={definitionFor("feature", feature.kind)}
@@ -985,22 +1024,27 @@ function FeatureInspector({
             <div className="section-title"><h2>Generated outputs</h2></div>
             {feature.outputs.map((output, index) => (
               <div className="output-row" key={index}>
-                <input
-                  aria-label={`Output ${index + 1}`}
-                  value={output}
-                  onChange={(event) => {
-                    const outputs = [...feature.outputs];
-                    outputs[index] = event.target.value;
-                    updateFeature({ ...feature, outputs });
-                  }}
-                />
+                <div className="output-identity">
+                  <small>{outputMeaning(output)}</small>
+                  <input
+                    aria-label={`Output ${index + 1}`}
+                    value={output}
+                    onChange={(event) => {
+                      const nextName = event.target.value;
+                      const outputs = [...feature.outputs];
+                      outputs[index] = nextName;
+                      updateFeature({ ...feature, outputs });
+                      onChartRouteChange(nextName, chartRoutes[output] ?? "hidden");
+                    }}
+                  />
+                </div>
                 <select
                   aria-label={`Chart placement for ${output}`}
                   value={chartRoutes[output] ?? "hidden"}
                   onChange={(event) => onChartRouteChange(output, event.target.value as ChartPlacement)}
                 >
                   <option value="main">Main chart</option>
-                  <option value="lower">Lower panel</option>
+                  {chartPanels.map((panel) => <option key={panel.id} value={`panel:${panel.id}`}>{panel.name}</option>)}
                   <option value="hidden">Not shown</option>
                 </select>
                 <span className="output-actions">
@@ -1013,10 +1057,18 @@ function FeatureInspector({
             <button
               type="button"
               className="secondary-wide"
-              onClick={() => updateFeature({ ...feature, outputs: [...feature.outputs, `feature_output_${feature.outputs.length + 1}`] })}
+              onClick={() => updateFeature({ ...feature, outputs: [...feature.outputs, nextOutputName(feature)] })}
             >
               ＋ Add output mapping
             </button>
+            <div className="chart-panel-manager">
+              <strong>Lower panels</strong>
+              {chartPanels.map((panel) => (
+                <input key={panel.id} aria-label={`Name for ${panel.name}`} value={panel.name} onChange={(event) => onRenameChartPanel(panel.id, event.target.value)} />
+              ))}
+              <button type="button" onClick={onAddChartPanel}>＋ Add lower panel</button>
+              <small>Assign multiple outputs to the same panel, or distribute them across separate panels.</small>
+            </div>
           </section>
         ) : null}
       </div>
@@ -1032,7 +1084,10 @@ function Inspector({
   onDuplicate,
   onDelete,
   chartRoutes,
-  onChartRouteChange
+  onChartRouteChange,
+  chartPanels,
+  onAddChartPanel,
+  onRenameChartPanel
 }: {
   selected?: StudioNode;
   tab: InspectorTab;
@@ -1042,6 +1097,9 @@ function Inspector({
   onDelete: () => void;
   chartRoutes: Record<string, ChartPlacement>;
   onChartRouteChange: (output: string, placement: ChartPlacement) => void;
+  chartPanels: ChartPanelDefinition[];
+  onAddChartPanel: () => void;
+  onRenameChartPanel: (id: string, name: string) => void;
 }) {
   const meta = selected ? kindMeta[selected.kind] : kindMeta.feature;
   return (
@@ -1064,6 +1122,9 @@ function Inspector({
           onUpdate={onUpdate}
           chartRoutes={chartRoutes}
           onChartRouteChange={onChartRouteChange}
+          chartPanels={chartPanels}
+          onAddChartPanel={onAddChartPanel}
+          onRenameChartPanel={onRenameChartPanel}
         />
       ) : (
         <div className="generic-inspector">
@@ -1243,7 +1304,7 @@ function BottomDrawer({
         ))}
         <span className="drawer-spacer" />
         <span>{previewRows.length} preview rows</span>
-        <span>Local deterministic preview <i /></span>
+        <span>{runState.status === "completed" ? "Framework transform runtime" : "Ready for framework runtime"} <i /></span>
       </nav>
       {tab === "preview" ? (
         <div className="table-wrap">
@@ -1294,9 +1355,9 @@ function BottomDrawer({
           {runState.status === "completed" ? (
             <>
               <div className="result-copy">
-                <strong>Preview analytics ready</strong>
+                <strong>Feature runtime completed</strong>
                 <span>
-                  {runState.result.previewRowCount} bars · {PREVIEW_SERIES.length} chart series · {runState.result.outputColumns.length} configured outputs
+                  {runState.result.previewRowCount} real bars · {runState.result.outputColumns.length} computed feature series
                 </span>
               </div>
               <button type="button" onClick={onOpenResults}>Open metrics &amp; chart</button>
@@ -1509,7 +1570,7 @@ function StatusBar({
       <span><i /> {validationLabel}</span>
       <span>{runLabel}</span>
       <span className="status-spacer" />
-      <span>Engine: local Studio preview</span>
+      <span>Engine: {runState.status === "completed" ? "framework transform runtime" : "ready"}</span>
       <span>Config: visual + YAML</span>
     </footer>
   );
@@ -1532,10 +1593,14 @@ function StudioEditor() {
   const [runsOpen, setRunsOpen] = useState(false);
   const [savedRuns, setSavedRuns] = useState<StoredRun[]>(() => listRuns());
   const [latestRunId, setLatestRunId] = useState<string | null>(() => listRuns()[0]?.id ?? null);
+  const [chartPanels, setChartPanels] = useState<ChartPanelDefinition[]>([
+    { id: "panel-1", name: "Normalized volatility" },
+    { id: "panel-2", name: "Slope & helpers" }
+  ]);
   const [chartRoutes, setChartRoutes] = useState<Record<string, ChartPlacement>>({
     vol_rolling_96: "main",
-    vol_rolling_96__zscore: "lower",
-    vol_slope_8: "lower",
+    vol_rolling_96__zscore: "panel:panel-1",
+    vol_slope_8: "panel:panel-2",
     vol_slope_over_close: "hidden"
   });
   const [saveStatus, setSaveStatus] = useState("Saved locally");
@@ -1678,7 +1743,7 @@ function StudioEditor() {
     return issues;
   };
 
-  const run = () => {
+  const run = async () => {
     const issues = validateStudioDocument(studioDocument);
     setValidation({ issues, checkedAt: new Date().toLocaleTimeString() });
     const errors = issues.filter((issue) => issue.level === "error");
@@ -1693,11 +1758,20 @@ function StudioEditor() {
     const pendingRunWindow = window.open("about:blank", `studio-run-${token}`, "popup,width=1500,height=950");
     setRunState({ status: "running", startedAt: new Date(startedAtMs).toISOString() });
     setBottomTab("results");
-    window.setTimeout(() => {
-      if (runTokenRef.current !== token) return;
-      try {
-        const result = executeStudioDocument(studioDocument, startedAtMs, Date.now());
+    try {
+        const runtime = await executeFeatureRuntime(studioDocument);
+        if (runTokenRef.current !== token) return;
+        const previewResult = executeStudioDocument(studioDocument, startedAtMs, Date.now());
+        const result = {
+          ...previewResult,
+          previewRowCount: runtime.candles.length,
+          outputColumns: runtime.series.map((series) => series.seriesId)
+        };
         setRunState({ status: "completed", result });
+        const runtimeRoutes = Object.fromEntries(runtime.series.map((series) => [
+          series.label,
+          chartRoutes[series.label] ?? (`panel:${chartPanels[0]?.id ?? "panel-1"}` as ChartPlacement)
+        ]));
         const storedRun: StoredRun = {
           id: result.runId,
           experimentName: studioDocument.name,
@@ -1706,7 +1780,11 @@ function StudioEditor() {
           asset: "SPX500",
           timeframe: "30m",
           nodes: studioDocument.nodes.map(({ id, kind, title, subtitle }) => ({ id, kind, title, subtitle })),
-          chartRoutes,
+          chartRoutes: runtimeRoutes,
+          chartPanels,
+          candles: runtime.candles,
+          series: runtime.series,
+          runtimeMetadata: runtime.metadata,
           yaml
         };
         saveRun(storedRun);
@@ -1715,10 +1793,10 @@ function StudioEditor() {
         const runUrl = `${window.location.pathname}?view=run&runId=${encodeURIComponent(storedRun.id)}`;
         if (pendingRunWindow) pendingRunWindow.location.href = runUrl;
         else window.open(runUrl, "_blank");
-      } catch (error) {
-        setRunState({ status: "failed", error: error instanceof Error ? error.message : String(error) });
-      }
-    }, 0);
+    } catch (error) {
+      pendingRunWindow?.close();
+      setRunState({ status: "failed", error: error instanceof Error ? error.message : String(error) });
+    }
   };
 
   return (
@@ -1789,6 +1867,12 @@ function StudioEditor() {
           onDelete={deleteSelected}
           chartRoutes={chartRoutes}
           onChartRouteChange={(output, placement) => setChartRoutes((current) => ({ ...current, [output]: placement }))}
+          chartPanels={chartPanels}
+          onAddChartPanel={() => setChartPanels((current) => {
+            const index = current.length + 1;
+            return [...current, { id: `panel-${Date.now()}`, name: `Lower panel ${index}` }];
+          })}
+          onRenameChartPanel={(id, name) => setChartPanels((current) => current.map((panel) => panel.id === id ? { ...panel, name } : panel))}
         />
         <BottomDrawer
           tab={bottomTab}

@@ -25,9 +25,10 @@ export function RunWindow({ runId }: { runId: string }) {
         <span className="run-status">✓ Completed</span>
         <span>{run.nodes.length} pipeline components</span>
         <span>{Object.values(run.chartRoutes).filter((placement) => placement !== "hidden").length} visible series</span>
+        {run.runtimeMetadata?.rows_loaded ? <span>{String(run.runtimeMetadata.rows_loaded)} real rows loaded</span> : null}
       </nav>
       <main className="run-content">
-        <TradingChart routes={run.chartRoutes} />
+        <TradingChart routes={run.chartRoutes} panels={run.chartPanels} candles={run.candles} runtimeSeries={run.series} />
         <aside className="run-sidebar">
           <section><h2>Experiment pipeline</h2>{run.nodes.map((node) => <div className="run-node" key={node.id}><small>{node.kind}</small><strong>{node.title}</strong><span>{node.subtitle}</span></div>)}</section>
           <details><summary>Canonical YAML</summary><pre>{run.yaml}</pre></details>

@@ -372,9 +372,15 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .switch.on span { transform: translateX(15px); }
 .section-note, .generic-inspector p { color: var(--muted); font-size: 10px; line-height: 1.5; }
 .output-row { min-height: 44px; display: flex; align-items: center; gap: 7px; padding: 5px 8px; border-bottom: 1px solid var(--line); }
-.output-row input { min-width: 0; flex: 1; height: 31px; padding: 0 8px; border: 1px solid transparent; border-radius: 4px; color: #1c4f9c; background: transparent; font: 11px "Cascadia Code", Consolas, monospace; }
+.output-identity { display: grid; flex: 1; min-width: 0; gap: 2px; }
+.output-identity small { padding-left: 8px; color: var(--muted); font-size: 9px; }
+.output-row input { min-width: 0; width: 100%; height: 31px; padding: 0 8px; border: 1px solid transparent; border-radius: 4px; color: #1c4f9c; background: transparent; font: 11px "Cascadia Code", Consolas, monospace; }
 .output-row input:hover, .output-row input:focus { border-color: var(--line); background: #fff; outline: none; }
 .output-row select { width: 112px; height: 31px; border: 1px solid var(--line); border-radius: 5px; background: #fff; color: var(--ink); font-size: 10px; }
+.chart-panel-manager { display: grid; gap: 7px; margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 7px; background: #f8fafc; }
+.chart-panel-manager input { height: 32px; padding: 0 8px; border: 1px solid var(--line); border-radius: 5px; }
+.chart-panel-manager button { min-height: 32px; border: 1px solid var(--line); border-radius: 5px; background: #fff; cursor: pointer; }
+.chart-panel-manager small { color: var(--muted); line-height: 1.45; }
 .output-actions { display: flex; }
 .output-actions button { width: 22px; height: 26px; }
 .output-actions .remove-action:hover { color: var(--red); }
@@ -435,7 +441,7 @@ th { position: sticky; top: 0; background: #fafbfc; font-weight: 700; }
 .saved-run b { color: var(--blue); font-size: 11px; }
 .empty-runs { display: grid; place-items: center; gap: 7px; min-height: 180px; color: var(--muted); }
 
-.run-window { min-height: 100vh; background: #f4f6f8; color: #18202a; }
+.run-window { width: 100%; height: 100%; overflow-x: hidden; overflow-y: auto; background: #f4f6f8; color: #18202a; }
 .run-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 18px 26px; border-bottom: 1px solid #d8dde4; background: #fff; }
 .run-header h1 { margin: 3px 0 0; font-size: 22px; }
 .run-header small { color: #788492; }
@@ -445,7 +451,7 @@ th { position: sticky; top: 0; background: #fafbfc; font-weight: 700; }
 .run-summary { display: flex; gap: 8px; padding: 10px 26px; border-bottom: 1px solid #d8dde4; background: #f9fafb; }
 .run-summary .run-status { color: #087a45; border-color: #b9e1ce; background: #edf9f3; }
 .run-content { display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: 14px; padding: 14px; }
-.trading-chart-stack { display: grid; grid-template-rows: minmax(430px, 62vh) minmax(190px, 25vh); gap: 12px; width: 100%; min-width: 0; overflow: hidden; }
+.trading-chart-stack { display: grid; grid-template-rows: minmax(430px, 62vh); grid-auto-rows: minmax(220px, 32vh); gap: 12px; width: 100%; min-width: 0; overflow: visible; }
 .chart-panel { display: grid; grid-template-rows: 44px minmax(0, 1fr); min-width: 0; overflow: hidden; border: 1px solid #d8dde4; border-radius: 9px; background: #fff; box-shadow: 0 2px 8px rgba(20,31,45,.04); }
 .chart-panel header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 12px; border-bottom: 1px solid #e8ebef; }
 .chart-panel header div { display: flex; align-items: center; gap: 8px; }
@@ -466,7 +472,7 @@ th { position: sticky; top: 0; background: #fafbfc; font-weight: 700; }
   .run-header { align-items: flex-start; flex-direction: column; }
   .run-content { grid-template-columns: 1fr; }
   .run-sidebar { grid-template-columns: 1fr 1fr; }
-  .trading-chart-stack { grid-template-rows: 440px 210px; }
+  .trading-chart-stack { grid-template-rows: 440px; grid-auto-rows: 210px; }
 }
 @media (max-width: 600px) {
   .run-header, .run-summary { padding-inline: 12px; }

@@ -6,7 +6,7 @@ data:
   source: dukascopy_csv
   interval: 30m
   alignment: outer
-  symbols: [SPX500, US100, GER40, NIKKEI225, XAUUSD, XAGUSD, USOIL, BRENT, EURUSD, ETHUSD]
+  symbols: [SPX500, US100, XAUUSD, USOIL, EURUSD]
   pit:
     timestamp_alignment:
       source_timezone: UTC
@@ -21,14 +21,11 @@ data:
     load_paths:
       SPX500: data/raw/dukascopy_30m_clean/spx500_30m.csv
       US100: data/raw/dukascopy_30m_clean/us100_30m.csv
-      GER40: data/raw/dukascopy_30m_clean/ger40_30m.csv
-      NIKKEI225: data/raw/dukascopy_30m_clean/nikkei225_30m.csv
+
       XAUUSD: data/raw/dukascopy_30m_clean/xauusd_30m.csv
-      XAGUSD: data/raw/dukascopy_30m_clean/xagusd_30m.csv
+
       USOIL: data/raw/dukascopy_30m_clean/usoil_30m.csv
-      BRENT: data/raw/dukascopy_30m_clean/brent_30m.csv
       EURUSD: data/raw/dukascopy_30m_clean/eurusd_30m.csv
-      ETHUSD: data/raw/dukascopy_30m_clean/ethusd_30m.csv
 
 features:
   - step: returns
