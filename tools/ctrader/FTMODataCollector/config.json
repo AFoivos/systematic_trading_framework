@@ -1,0 +1,49 @@
+{
+  "AccessRights": "None",
+  "AddIndicators": false,
+  "Parameters": [
+    {
+      "Name": "SymbolsCsv",
+      "DisplayName": "Symbols",
+      "DefaultValue": "BTCUSD,ETHUSD",
+      "Type": "String",
+      "Group": "Collection"
+    },
+    {
+      "Name": "HistoryDays",
+      "DisplayName": "History Days",
+      "DefaultValue": 30,
+      "Type": "Integer",
+      "MinValue": 1,
+      "MaxValue": 3650,
+      "Group": "Collection"
+    },
+    {
+      "Name": "MaxHistoryBatches",
+      "DisplayName": "Max History Batches",
+      "DefaultValue": 500,
+      "Type": "Integer",
+      "MinValue": 1,
+      "MaxValue": 10000,
+      "Group": "Safety"
+    },
+    {
+      "Name": "QuoteSampleSeconds",
+      "DisplayName": "Quote Sample Seconds",
+      "DefaultValue": 5,
+      "Type": "Integer",
+      "MinValue": 1,
+      "MaxValue": 3600,
+      "Group": "Live Quotes"
+    },
+    {
+      "Name": "StopAfterMinutes",
+      "DisplayName": "Stop After Minutes (0=manual)",
+      "DefaultValue": 60,
+      "Type": "Integer",
+      "MinValue": 0,
+      "MaxValue": 10080,
+      "Group": "Live Quotes"
+    }
+  ]
+}
