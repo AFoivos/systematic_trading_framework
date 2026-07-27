@@ -1,0 +1,91 @@
+schema_version: 1
+
+experiment:
+  name: directional_one_sided_flow
+  description: "One-sided Kraken BTC perpetual quoting from causal L2 imbalance, aggressor flow, trend, and inventory unwind."
+  research_only: true
+
+execution:
+  mode: research_smoke
+  venue: kraken_derivatives
+  allow_order_submission: false
+  quote_order_type: post_only
+  hedge_order_type: none
+  stale_order_book_ms: 3000
+
+instruments:
+  quote_symbol: PF_XBTUSD
+  quote_market: derivatives_perpetual
+
+quote:
+  fair_price_model: microprice
+  quote_placement_mode: fair_price_bps
+  spread_model: volatility_adjusted
+  base_spread_bps: 8.0
+  min_spread_bps: 6.0
+  max_spread_bps: 30.0
+  volatility_multiplier: 1.0
+  inventory_skew_strength: 1.25
+  order_size: 0.001
+  max_inventory: 0.01
+  tick_size: 0.5
+  lot_size: 0.0001
+  min_order_size: 0.0001
+  min_notional: 5.0
+
+fees:
+  maker_fee_bps: 2.0
+  taker_fee_bps: 5.0
+  assumption: "Kraken Derivatives entry tier; replace with the account's actual rolling-volume tier before replay or deployment."
+  verified_at: "2026-07-17"
+  source_url: "https://support.kraken.com/articles/360048917612-fee-schedule"
+
+risk:
+  max_inventory: 0.01
+  max_position_value: 600.0
+  max_daily_loss: 50.0
+  max_open_orders: 1
+  max_order_size: 0.001
+  max_allowed_spread_bps: 25.0
+  kill_on_websocket_disconnect: true
+  kill_on_stale_order_book: true
+  kill_on_spread_widening: true
+
+strategy:
+  type: directional_one_sided_flow
+  parameters:
+    imbalance_weight: 0.45
+    trade_flow_weight: 0.35
+    trend_weight: 0.20
+    trend_scale_bps: 2.0
+    min_abs_signal: 0.2
+    max_volatility_bps: 15.0
+    inventory_soft_limit_ratio: 0.7
+    adverse_selection_buffer_bps: 1.0
+    signal_edge_credit_bps: 3.0
+    min_expected_edge_bps: 0.5
+    quote_both_when_neutral: false
+
+scenario:
+  timestamp: "2026-07-17T12:00:00+00:00"
+  inventory: 0.0
+  realized_pnl: 0.0
+  unrealized_pnl: 0.0
+  open_orders: 0
+  websocket_connected: true
+  recent_returns:
+    - 0.00005
+    - 0.00005
+  trades:
+    - symbol: PF_XBTUSD
+      price: 50001.0
+      quantity: 0.002
+      timestamp: "2026-07-17T11:59:59+00:00"
+      aggressor_side: buy
+  books:
+    quote:
+      symbol: PF_XBTUSD
+      bids:
+        - [50000.0, 9.0]
+      asks:
+        - [50001.0, 1.0]

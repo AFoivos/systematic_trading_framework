@@ -33,6 +33,8 @@ from .orb_candidate_side_signal import orb_candidate_side_signal
 from .ppo_adx_stochrsi_trend_signal import ppo_adx_stochrsi_trend_signal
 from .probabilistic_signal import probabilistic_signal
 from .probability_vol_adjusted_signal import probability_vol_adjusted_signal
+from .qms_alpha_strategy import qms_alpha_strategy_signal
+from .qms_trend_momentum_vol import qms_trend_momentum_vol_signal
 from .quote_flow_scalp_router_signal import quote_flow_scalp_router_signal
 from .regime_filtered_signal import regime_filtered_signal
 from .roc_long_only_conditions_signal import roc_long_only_conditions_signal
@@ -52,6 +54,8 @@ SignalFn = Callable[..., Union[pd.DataFrame, pd.Series]]
 _SIGNAL_COMPONENTS: tuple[tuple[str, SignalFn], ...] = (
     ("c1_trend_pullback_vwap", c1_trend_pullback_vwap_signal),
     ("c2_regime_aware_momentum", c2_regime_aware_momentum_signal),
+    ("qms_alpha_strategy", qms_alpha_strategy_signal),
+    ("qms_trend_momentum_vol", qms_trend_momentum_vol_signal),
     ("ehlers_continuation_long", ehlers_continuation_long_signal),
     ("ehlers_continuation_short", ehlers_continuation_short_signal),
     ("ehlers_decycler_continuation", ehlers_decycler_continuation_signal),
@@ -110,26 +114,8 @@ SIGNAL_KINDS = registry_names(SIGNAL_REGISTRY, DEPRECATED_SIGNAL_ALIASES)
 def get_signal_fn(name: str) -> SignalFn:
     """
     Apply the registered ``get_signal_fn`` signal transformation.
-    
+
     This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated.
-    
-    YAML declaration::
-    
-        signals:
-          kind: get_signal_fn
-          params:
-            name: <required>
-    
-    Required input columns
-    ----------------------
-    Direct inputs:
-        This callable operates on supplied Series/arrays directly or resolves
-        dataframe inputs from the configuration shown above at runtime.
-    
-    Parameters
-    ----------
-    name:
-        Configuration parameter accepted by this signal.
     """
     return get_registered_component(
         SIGNAL_REGISTRY,

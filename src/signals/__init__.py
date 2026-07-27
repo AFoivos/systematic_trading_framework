@@ -56,6 +56,11 @@ from .meta_probability_side_signal import meta_probability_side_signal
 from .orb_candidate_side_signal import orb_candidate_side_signal
 from .probability_vol_adjusted_signal import probability_vol_adjusted_signal
 from .probabilistic_signal import probabilistic_signal
+from .qms_alpha_strategy import (
+    QMS_ALPHA_STRATEGIES,
+    build_qms_alpha_strategy_signal,
+    qms_alpha_strategy_signal,
+)
 from .ppo_adx_stochrsi_trend_signal import (
     build_ppo_adx_stochrsi_trend_signal,
     ppo_adx_stochrsi_trend_signal,
@@ -133,6 +138,9 @@ __all__ = [
     "orb_candidate_side_signal",
     "probability_vol_adjusted_signal",
     "probabilistic_signal",
+    "QMS_ALPHA_STRATEGIES",
+    "build_qms_alpha_strategy_signal",
+    "qms_alpha_strategy_signal",
     "build_ppo_adx_stochrsi_trend_signal",
     "ppo_adx_stochrsi_trend_signal",
     "regime_filtered_signal",

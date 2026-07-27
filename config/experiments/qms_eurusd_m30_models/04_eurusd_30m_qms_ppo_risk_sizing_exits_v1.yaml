@@ -1,0 +1,179 @@
+strategy:
+  name: EURUSD M30 QMS PPO Risk Sizing and Exits
+  version: 1
+  symbol: EURUSD
+  timeframe: M30
+  direction: long_short
+  description: >
+    Walk-forward PPO policy over causal QMS state features. Discrete actions select
+    direction, ATR stop distance, and take-profit multiple; position quantity follows
+    fixed fractional risk, so the action jointly controls effective sizing and exits.
+
+data:
+  source: dukascopy_csv
+  interval: 30m
+  start: "2020-01-01"
+  end: "2026-04-27"
+  alignment: inner
+  symbol: EURUSD
+  pit:
+    timestamp_alignment: {source_timezone: UTC, output_timezone: UTC, normalize_daily: false, duplicate_policy: last}
+    corporate_actions: {policy: none, adj_close_col: adj_close}
+    universe_snapshot: {inactive_policy: raise}
+  storage:
+    mode: cached_only
+    dataset_id: eurusd_30m_qms_ppo_risk_sizing_exits_v1
+    save_raw: false
+    save_processed: true
+    load_path: data/raw/dukascopy_30m_clean/eurusd_30m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed/qms_eurusd_m30_models
+
+features:
+- step: returns
+  params: {log: false, col_name: close_ret}
+- step: atr
+  params: {high_col: high, low_col: low, close_col: close, window: 48, windows: [48], method: wilder, add_over_price: false, atr_col: atr_48}
+  transforms:
+    ratio:
+      enabled: true
+      items: [{numerator_col: atr_48, denominator_col: close, output_col: atr_over_price_48}]
+- step: quant_market_state
+  params: {preset: balanced, kds_config: null, rlvs_config: null, lmds_config: null, bar_minutes: 30.0, inplace: false}
+
+model:
+  kind: ppo_risk_agent
+  feature_cols:
+  - close_ret
+  - atr_over_price_48
+  - ktrend_score
+  - ktrend_uncertainty
+  - kalman_innovation_z
+  - kadx_signed
+  - rlv_regime_z
+  - rlv_shock_z
+  - rlv_fast_slow_ratio
+  - rlv_vol_of_vol_ratio
+  - rlv_term_structure
+  - lmom_score
+  - lmom_efficiency
+  - lmom_persistence
+  - lmom_reversal_pressure
+  - lmom_exhaustion
+  - qms_trend_momentum_alignment
+  - qms_state_uncertainty
+  - qms_post_gap_age
+  - qms_gap_flag
+  signal_col: signal_rl
+  action_col: action_rl
+  pred_is_oos_col: pred_is_oos
+  target:
+    kind: forward_return
+    price_col: close
+    horizon: 1
+    returns_col: close_ret
+    returns_type: simple
+  split:
+    method: walk_forward
+    train_size: 35040
+    validation_size: 4380
+    test_size: 4380
+    train_tail_size: 4380
+    step_size: 4380
+    expanding: false
+    max_folds: 5
+  env:
+    action_space: discrete
+    action_mode: risk_templates
+    opposite_signal_mode: close
+    execution_lag_bars: 1
+    window_size: 64
+    lookback_window: 64
+    max_signal_abs: 1.0
+    atr_column: atr_48
+    open_column: open
+    high_column: high
+    low_column: low
+    close_column: close
+    atr_multipliers: [1.0, 1.5, 2.0]
+    take_profit_r_multiples: [1.5, 2.5]
+    initial_equity: 100000.0
+    risk_fraction: 0.0025
+    max_leverage: 1.0
+    max_notional: null
+    transaction_cost_bps: 0.4
+    slippage_bps: 0.2
+    max_holding_bars: 48
+    reward:
+      realized_pnl_r_multiple: 1.0
+      unrealized_pnl_weight: 0.01
+      holding_penalty: 0.001
+      drawdown_penalty: 0.10
+      cost_per_turnover: 0.0
+      slippage_per_turnover: 0.0
+      inventory_penalty: 0.0
+      switching_penalty: 0.001
+    consistency_gate:
+      minimum_profitable_fold_ratio: 0.60
+      minimum_median_test_return: 0.0
+  params:
+    policy: MlpPolicy
+    total_timesteps: 100000
+    checkpoint_interval: 10000
+    checkpoint_drawdown_penalty: 1.0
+    learning_rate: 0.0003
+    n_steps: 512
+    batch_size: 128
+    gamma: 0.99
+    gae_lambda: 0.95
+    clip_range: 0.2
+    ent_coef: 0.005
+    vf_coef: 0.5
+    max_grad_norm: 0.5
+    device: cpu
+    extractor: {kind: flatten, features_dim: 64}
+    artifact_dir: logs/rl/qms_eurusd_m30_models
+    run_name: eurusd_30m_qms_ppo_risk_sizing_exits_v1
+  runtime: {seed: 7, repro_mode: strict, deterministic: true, threads: 1, seed_torch: true}
+
+signals: {kind: none, params: {}}
+target: {}
+validation: {method: purged_walk_forward, purge_bars: 64, embargo_bars: 64}
+runtime: {seed: 7, repro_mode: strict, deterministic: true, threads: 1, seed_torch: true}
+risk:
+  cost_per_turnover: 0.0
+  slippage_per_turnover: 0.0
+  target_vol: null
+  max_leverage: 1.0
+  sizing: {}
+  dd_guard: {enabled: false}
+  portfolio_guard: {}
+  drawdown_sizing: {}
+  vol_col: null
+backtest:
+  engine: vectorized
+  signal_col: signal_rl
+  returns_col: close_ret
+  returns_type: simple
+  subset: test
+  periods_per_year: 12096
+  missing_return_policy: raise_if_exposed
+  allow_short: true
+  min_holding_bars: 0
+  vol_col: null
+portfolio: {enabled: false, construction: signal_weights, long_short: true, gross_target: 1.0}
+monitoring: {enabled: false, psi_threshold: 0.2, n_bins: 10}
+diagnostics: {enabled: true, model: {enabled: true}}
+execution: {enabled: false, mode: paper, capital: 100000.0, price_col: close}
+logging:
+  enabled: true
+  run_name: eurusd_30m_qms_ppo_risk_sizing_exits_v1
+  output_dir: logs/experiments/qms_eurusd_m30_models
+  save_model: false
+evaluation: {strict_oos_only: true}
+research_metadata:
+  family: qms_eurusd_m30_models
+  task: rl_risk_sizing_and_exit_selection
+  action_semantics: direction_x_atr_stop_x_take_profit_r
+  reward_semantics: realized_r_with_small_unrealized_and_risk_penalties
+  costs_charged_in_environment_only: true

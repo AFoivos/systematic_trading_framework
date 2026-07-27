@@ -1,0 +1,147 @@
+strategy:
+  name: BTCUSD 1m QMS Trend Only Ablation
+  version: 1
+  symbol: BTCUSD
+  timeframe: M1
+  direction: long_short
+
+data:
+  source: dukascopy_csv
+  interval: 1m
+  start: "2021-05-01"
+  end: "2026-02-28"
+  alignment: inner
+  symbol: BTCUSD
+  pit:
+    timestamp_alignment: {source_timezone: UTC, output_timezone: UTC, normalize_daily: false, duplicate_policy: last}
+    corporate_actions: {policy: none, adj_close_col: adj_close}
+    universe_snapshot: {inactive_policy: raise}
+  storage:
+    mode: cached_only
+    dataset_id: btcusd_1m_qms_trend_only_v1
+    save_raw: false
+    save_processed: true
+    load_path: data/raw/dukascopy_30m_clean/btcusd_1m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed/qms_ablation
+
+features:
+- step: returns
+  params: {log: false, col_name: close_ret}
+- step: atr
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    window: 48
+    windows: [48]
+    method: wilder
+    add_over_price: false
+    atr_col: atr_48
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - {numerator_col: atr_48, denominator_col: close, output_col: atr_over_price_48}
+- step: quant_market_state
+  params:
+    preset: balanced
+    kds_config: null
+    rlvs_config: null
+    lmds_config: null
+    inplace: false
+
+model:
+  kind: none
+  split: {method: purged, purge_bars: 64, embargo_bars: 64}
+
+signals:
+  kind: qms_trend_momentum_vol
+  params:
+    mode: long_short
+    combination: trend_only
+    trend_min: 0.03
+    trend_confidence_min: 0.45
+    momentum_min: 0.02
+    momentum_quality_min: 0.15
+    acceleration_min: 0.0
+    alignment_min: 0.0
+    max_abs_volatility_shock: 3.0
+    volatility_shock_scale: 2.0
+    max_state_uncertainty: 0.65
+    score_threshold: 0.30
+    signal_on_crossing: true
+    signal_col: qms_combo_signal
+    candidate_col: qms_combo_candidate
+
+target:
+  kind: triple_barrier
+  price_col: close
+  open_col: open
+  high_col: high
+  low_col: low
+  volatility_col: atr_over_price_48
+  label_mode: meta
+  side_col: qms_combo_signal
+  candidate_col: qms_combo_candidate
+  candidate_mode: all_nonzero
+  entry_price_mode: next_open
+  max_holding: 60
+  upper_mult: 2.0
+  lower_mult: 1.5
+  vol_window: 48
+  min_vol: 0.0001
+  neutral_label: lower
+  tie_break: closest_to_open
+  add_r_multiple: true
+
+validation: {method: purged_walk_forward, purge_bars: 64, embargo_bars: 64}
+runtime: {seed: 7, repro_mode: strict, deterministic: true, threads: 1, seed_torch: false}
+risk:
+  cost_per_turnover: 0.00015
+  slippage_per_turnover: 0.00010
+  target_vol: null
+  max_leverage: 1.0
+  sizing: {}
+  dd_guard: {enabled: false}
+  portfolio_guard: {}
+  drawdown_sizing: {}
+  vol_col: null
+backtest:
+  engine: manual_barrier
+  signal_col: qms_combo_signal
+  returns_col: close_ret
+  returns_type: simple
+  subset: full
+  periods_per_year: 525600
+  missing_return_policy: raise_if_exposed
+  allow_short: true
+  stop_mode: volatility_stop
+  vol_col: atr_over_price_48
+  open_col: open
+  high_col: high
+  low_col: low
+  close_col: close
+  take_profit_r: 2.0
+  stop_loss_r: 1.5
+  risk_per_trade: 0.0025
+  max_holding_bars: 60
+  dynamic_exits: {enabled: false}
+  partial_exits: {enabled: false}
+portfolio: {enabled: false, construction: signal_weights, long_short: true, gross_target: 1.0}
+monitoring: {enabled: false, psi_threshold: 0.2, n_bins: 10}
+diagnostics:
+  enabled: true
+  robustness:
+    enabled: true
+    cost_multipliers: [1.0, 2.0, 3.0]
+    entry_delay_bars: [1, 2]
+    walk_forward_frequency: YE
+execution: {enabled: false, mode: paper, capital: 100000.0, price_col: close}
+logging:
+  enabled: true
+  run_name: btcusd_1m_qms_trend_only_v1
+  output_dir: logs/experiments/qms_ablation
+  save_model: false
+evaluation: {strict_oos_only: false}
+research_metadata: {family: qms_ablation, ablation: trend_only}

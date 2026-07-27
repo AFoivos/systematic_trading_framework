@@ -17,6 +17,33 @@ def apply_forecast_candidate_transform(
     This deterministic model-stage transform exists so a first-stage OOS forecast can
     be converted into candidate/side columns before a later meta-label classifier is
     trained. It performs no fitting and does not use ``returns_col``.
+
+    YAML declaration::
+
+        model_stages:
+          - name: forecast_candidates
+            kind: forecast_candidate_transform
+            params:
+              forecast_col: pred_ret
+              pred_is_oos_col: pred_is_oos
+              upper: 0.001
+              lower: -0.001
+              mode: long_short
+            outputs:
+              signal_col: signal_primary_candidate
+              candidate_col: primary_candidate
+              side_col: primary_candidate_side
+
+    Required input columns
+    ----------------------
+    ``forecast_col`` and ``pred_is_oos_col`` plus any columns referenced by optional
+    activation filters.
+
+    Parameters
+    ----------
+    ``forecast_col`` and ``pred_is_oos_col`` identify the upstream forecast outputs;
+    ``upper``, ``lower``, ``mode``, ``inclusive`` and ``activation_filters`` control
+    candidate activation. Output names may be supplied in ``params`` or ``outputs``.
     """
     del returns_col
     cfg = dict(model_cfg or {})

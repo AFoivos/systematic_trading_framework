@@ -5,6 +5,11 @@ import re
 from typing import Any
 
 from src.intraday import validate_intraday_normalization_policy
+from src.features.systems.config import (
+    resolve_kds_config,
+    resolve_lmds_config,
+    resolve_rlvs_config,
+)
 from src.targets.regression import REGRESSION_TARGET_HORIZON_CONTRACTS, REGRESSION_TARGET_KINDS
 from src.utils.config_kinds import (
     FEATURE_KINDS,
@@ -17,6 +22,9 @@ from src.utils.config_kinds import (
 from src.utils.config_schemas import ResolvedExperimentConfig
 from src.utils.repro import RuntimeConfigError, validate_runtime_config
 from src.signals.panel.global_session_relay_laggard import GLOBAL_SESSION_RELAY_ENABLED_MODULES
+from src.signals.qms_alpha_strategy import validate_qms_alpha_strategy_params
+from src.models.transforms.qms_candidate import validate_qms_candidate_transform_params
+from src.models.transforms.qms_candidate_policy import validate_qms_candidate_policy_params
 
 _RL_SINGLE_ASSET_DQN_KINDS = {"dqn_agent"}
 _RL_PORTFOLIO_DQN_KINDS = {"dqn_portfolio_agent"}
@@ -2173,6 +2181,77 @@ def validate_features_block(features: Any) -> None:
                     value = _finite_number(params[key], field=f"features[].params.{key}")
                     if value < 0.0:
                         raise ConfigValidationError(f"features[].params.{key} must be >= 0.")
+        if step["step"] in {"kds", "rlvs", "lmds", "quant_market_state"}:
+            _validate_quant_system_feature_step(step)
+
+
+def _validate_quant_system_feature_step(step: dict[str, Any]) -> None:
+    system = str(step["step"])
+    allowed = (
+        {"preset", "config", "bar_minutes", "inplace"}
+        if system in {"kds", "rlvs", "lmds"}
+        else {
+            "preset",
+            "kds_config",
+            "rlvs_config",
+            "lmds_config",
+            "bar_minutes",
+            "inplace",
+        }
+    )
+    for field_prefix, params in _iter_feature_param_blocks(step):
+        block_allowed = (
+            allowed | {"transforms", "normalizations"}
+            if "params_by_asset" in field_prefix
+            else allowed
+        )
+        unknown = sorted(set(params).difference(block_allowed))
+        if unknown:
+            raise ConfigValidationError(
+                f"{field_prefix} has unsupported keys for {system}: {unknown}."
+            )
+        preset = params.get("preset", "balanced")
+        if not isinstance(preset, str):
+            raise ConfigValidationError(f"{field_prefix}.preset must be a string.")
+        if "inplace" in params and not isinstance(params["inplace"], bool):
+            raise ConfigValidationError(f"{field_prefix}.inplace must be boolean.")
+        if "bar_minutes" in params:
+            bar_minutes = _finite_number(
+                params["bar_minutes"],
+                field=f"{field_prefix}.bar_minutes",
+            )
+            if bar_minutes <= 0.0:
+                raise ConfigValidationError(f"{field_prefix}.bar_minutes must be > 0.")
+        try:
+            if system == "kds":
+                config = params.get("config")
+                _require_optional_mapping(config, field=f"{field_prefix}.config")
+                resolve_kds_config(config, preset=preset)
+            elif system == "rlvs":
+                config = params.get("config")
+                _require_optional_mapping(config, field=f"{field_prefix}.config")
+                resolve_rlvs_config(config, preset=preset)
+            elif system == "lmds":
+                config = params.get("config")
+                _require_optional_mapping(config, field=f"{field_prefix}.config")
+                resolve_lmds_config(config, preset=preset)
+            else:
+                kds_config = params.get("kds_config")
+                rlvs_config = params.get("rlvs_config")
+                lmds_config = params.get("lmds_config")
+                _require_optional_mapping(kds_config, field=f"{field_prefix}.kds_config")
+                _require_optional_mapping(rlvs_config, field=f"{field_prefix}.rlvs_config")
+                _require_optional_mapping(lmds_config, field=f"{field_prefix}.lmds_config")
+                resolve_kds_config(kds_config, preset=preset)
+                resolve_rlvs_config(rlvs_config, preset=preset)
+                resolve_lmds_config(lmds_config, preset=preset)
+        except ValueError as exc:
+            raise ConfigValidationError(f"{field_prefix} invalid {system} configuration: {exc}") from exc
+
+
+def _require_optional_mapping(value: Any, *, field: str) -> None:
+    if value is not None and not isinstance(value, dict):
+        raise ConfigValidationError(f"{field} must be a mapping or null.")
 
 
 def _flatten_target_cfg_for_validation(target: dict[str, Any]) -> dict[str, Any]:
@@ -2529,6 +2608,20 @@ def validate_model_block(model: dict[str, Any]) -> None:
     for key in _MODEL_OUTPUT_KEYS:
         if key in model and model[key] is not None and not isinstance(model[key], str):
             raise ConfigValidationError(f"model.{key} must be a string when provided.")
+    if model["kind"] == "qms_candidate_transform":
+        try:
+            validate_qms_candidate_transform_params(model.get("params", {}) or {})
+        except (TypeError, ValueError) as exc:
+            raise ConfigValidationError(
+                f"model.params invalid qms_candidate_transform configuration: {exc}"
+            ) from exc
+    if model["kind"] == "qms_candidate_policy_transform":
+        try:
+            validate_qms_candidate_policy_params(model.get("params", {}) or {})
+        except (TypeError, ValueError) as exc:
+            raise ConfigValidationError(
+                f"model.params invalid qms_candidate_policy_transform configuration: {exc}"
+            ) from exc
 
     if "backtest" in model:
         if model["kind"] not in RL_MODEL_KINDS:
@@ -3640,6 +3733,11 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
         raise ConfigValidationError("signals.params.signal_name is no longer supported; use signals.params.signal_col.")
     if "signal_col" in params and params["signal_col"] is not None and not isinstance(params["signal_col"], str):
         raise ConfigValidationError("signals.params.signal_col must be a string.")
+    if signals["kind"] == "qms_alpha_strategy":
+        try:
+            validate_qms_alpha_strategy_params(params)
+        except (TypeError, ValueError) as exc:
+            raise ConfigValidationError(f"signals.params invalid qms_alpha_strategy configuration: {exc}") from exc
     if signals["kind"] == "dense_return_forecast":
         for key in ("forecast_col", "expected_net_return_col", "estimated_cost_col", "volatility_col", "price_col"):
             if key in params and params[key] is not None and not isinstance(params[key], str):

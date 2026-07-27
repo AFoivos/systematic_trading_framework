@@ -770,6 +770,32 @@ features:
       buy_volume_proxy_col: buy_volume_proxy
       sell_volume_proxy_col: sell_volume_proxy
       ofi_proxy_norm_1_col: ofi_proxy_norm_1
+  - step: kds
+    enabled: false
+    params:
+      preset: balanced
+      config: null
+      inplace: false
+  - step: rlvs
+    enabled: false
+    params:
+      preset: balanced
+      config: null
+      inplace: false
+  - step: lmds
+    enabled: false
+    params:
+      preset: balanced
+      config: null
+      inplace: false
+  - step: quant_market_state
+    enabled: false
+    params:
+      preset: balanced
+      kds_config: null
+      rlvs_config: null
+      lmds_config: null
+      inplace: false
   compatibility_only:
   - step: lags
     enabled: false

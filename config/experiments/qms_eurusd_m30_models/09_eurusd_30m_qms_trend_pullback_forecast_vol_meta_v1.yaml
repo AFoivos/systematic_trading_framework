@@ -1,0 +1,280 @@
+strategy:
+  name: EURUSD M30 QMS Forecast-Gated Pullback Meta Label
+  version: 1
+  symbol: EURUSD
+  timeframe: M30
+  direction: long_short
+  description: >
+    A logistic meta-label classifier applied only to forecast-volatility gated KDS
+    pullback candidates. Candidate construction consumes strict OOS volatility
+    forecasts, and the later classifier uses a delayed purged split so its training
+    candidates are themselves cross-fitted.
+
+data:
+  source: dukascopy_csv
+  interval: 30m
+  start: "2020-01-01"
+  end: "2026-04-27"
+  alignment: inner
+  symbol: EURUSD
+  pit:
+    timestamp_alignment: {source_timezone: UTC, output_timezone: UTC, normalize_daily: false, duplicate_policy: last}
+    corporate_actions: {policy: none, adj_close_col: adj_close}
+    universe_snapshot: {inactive_policy: raise}
+  storage:
+    mode: cached_only
+    dataset_id: eurusd_30m_qms_trend_pullback_forecast_vol_meta_v1
+    save_raw: false
+    save_processed: true
+    load_path: data/raw/dukascopy_30m_clean/eurusd_30m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed/qms_eurusd_m30_models
+
+features:
+- step: returns
+  params: {log: false, col_name: close_ret}
+- step: atr
+  params: {high_col: high, low_col: low, close_col: close, window: 48, windows: [48], method: wilder, add_over_price: false, atr_col: atr_48}
+  transforms:
+    ratio:
+      enabled: true
+      items: [{numerator_col: atr_48, denominator_col: close, output_col: atr_over_price_48}]
+- step: quant_market_state
+  params: {preset: balanced, kds_config: null, rlvs_config: null, lmds_config: null, bar_minutes: 30.0, inplace: false}
+
+model_stages:
+- name: qms_reduced_future_volatility_h16
+  stage: 1
+  kind: lightgbm_regressor
+  feature_cols:
+  - atr_over_price_48
+  - rlv_term_structure
+  - rlv_fast_slow_ratio
+  - rlv_shock_z
+  - rlv_vol_of_vol_ratio
+  - qms_post_gap_age
+  target:
+    kind: future_realized_volatility
+    price_col: close
+    returns_col: close_ret
+    returns_type: simple
+    horizon_bars: 16
+    annualize: false
+    periods_per_year: 12096
+    fwd_col: target_future_rv_16
+    label_col: target_future_rv_16
+    clip: [0.0, 0.02]
+  split:
+    method: purged
+    train_size: 26280
+    test_size: 4380
+    step_size: 4380
+    expanding: true
+    max_folds: 10
+    purge_bars: 16
+    embargo_bars: 16
+  params:
+    n_estimators: 300
+    learning_rate: 0.03
+    num_leaves: 15
+    max_depth: 5
+    min_child_samples: 80
+    subsample: 0.85
+    colsample_bytree: 0.85
+    reg_alpha: 0.25
+    reg_lambda: 2.0
+    random_state: 7
+    n_jobs: 1
+    verbosity: -1
+  preprocessing: {scaler: none}
+  calibration: {}
+  runtime: {}
+  env: {}
+  use_features: true
+  pred_ret_col: pred_future_rv_16
+  pred_prob_col: pred_future_rv_high_prob
+  pred_is_oos_col: pred_future_rv_16_is_oos
+- name: qms_kds_pullback_candidates
+  stage: 2
+  kind: qms_candidate_transform
+  params:
+    strategies: [kds_pullback_continuation]
+    common_params:
+      mode: long_short
+      lookback_bars: 4032
+      min_periods: 1008
+      setup_lookback_bars: 8
+      signal_on_crossing: true
+      gap_flag_col: qms_gap_flag
+      unexpected_gap_col: qms_unexpected_data_gap
+    params_by_strategy:
+      kds_pullback_continuation:
+        trend_col: ktrend_score
+        trend_uncertainty_col: ktrend_uncertainty
+        innovation_col: kalman_innovation_z
+        vol_of_vol_ratio_col: rlv_vol_of_vol_ratio
+        trend_strength_quantile: 0.60
+        uncertainty_quantile: 0.50
+        innovation_quantile: 0.90
+        vol_of_vol_quantile: 0.90
+    candidate_col: qms_base_candidate
+    side_col: qms_base_side
+    source_count_col: qms_base_source_count
+    conflict_col: qms_base_side_conflict
+    ready_col: qms_base_threshold_ready
+    origin_prefix: qms_base_origin
+- name: qms_forecast_volatility_policy
+  stage: 3
+  kind: qms_candidate_policy_transform
+  params:
+    candidate_col: qms_base_candidate
+    side_col: qms_base_side
+    pred_is_oos_col: pred_future_rv_16_is_oos
+    side_alignment_cols: [kadx_signed]
+    positive_filter_cols: []
+    gate:
+      kind: forecast_expansion
+      forecast_col: pred_future_rv_16
+      current_vol_col: rlv_sigma_slow
+      lookback_bars: 8064
+      min_periods: 256
+      min_expansion: 1.10
+      forecast_lower_quantile: null
+      forecast_upper_quantile: 0.95
+      current_vol_upper_quantile: 0.95
+    sizing: {kind: fixed}
+    output_candidate_col: qms_policy_candidate
+    output_side_col: qms_policy_side
+    output_weight_col: qms_policy_weight
+    output_signal_col: qms_policy_signal
+    output_gate_ready_col: qms_policy_gate_ready
+    output_expansion_col: qms_policy_expansion_ratio
+- name: qms_forecast_gated_meta_logreg
+  stage: 4
+  kind: logistic_regression_clf
+  outputs:
+    pred_prob_col: qms_policy_meta_pred_prob
+    pred_is_oos_col: qms_policy_meta_pred_is_oos
+    label_col: qms_policy_meta_label
+    candidate_out_col: qms_policy_meta_labeled_candidate
+    event_ret_col: qms_policy_meta_event_ret
+    fwd_col: qms_policy_meta_event_ret
+    r_col: qms_policy_meta_event_r
+    oriented_r_col: qms_policy_meta_oriented_r
+    meta_side_col: qms_policy_meta_label_side
+    oriented_ret_col: qms_policy_meta_oriented_ret
+  target:
+    kind: directional_triple_barrier
+    price_col: close
+    open_col: open
+    high_col: high
+    low_col: low
+    direction_col: qms_policy_side
+    candidate_col: qms_policy_candidate
+    volatility_col: atr_48
+    profit_barrier_r: 1.75
+    stop_barrier_r: 1.25
+    vertical_barrier_bars: 16
+    entry_price_mode: next_open
+    neutral_label: stop
+    tie_break: closest_to_open
+    add_r_multiple: true
+    r_clip: [-3.0, 3.0]
+  split:
+    method: purged
+    train_size: 43800
+    test_size: 4380
+    step_size: 4380
+    expanding: true
+    max_folds: 6
+    purge_bars: 32
+    embargo_bars: 32
+  feature_cols:
+  - atr_over_price_48
+  - qms_policy_side
+  - qms_policy_expansion_ratio
+  - ktrend_score
+  - ktrend_uncertainty
+  - kalman_innovation_z
+  - kadx_signed
+  - rlv_shock_z
+  - rlv_term_structure
+  preprocessing: {scaler: robust}
+  calibration: {method: none}
+  params:
+    C: 0.10
+    class_weight: null
+    max_iter: 1000
+    solver: lbfgs
+    random_state: 7
+  runtime: {}
+  env: {}
+  use_features: true
+  pred_prob_col: qms_policy_meta_pred_prob
+  pred_is_oos_col: qms_policy_meta_pred_is_oos
+
+signals:
+  kind: meta_probability_side
+  params:
+    prob_col: qms_policy_meta_pred_prob
+    side_col: qms_policy_side
+    candidate_col: qms_policy_candidate
+    pred_is_oos_col: qms_policy_meta_pred_is_oos
+    threshold: 0.50
+    min_expected_value_r: 0.05
+    profit_barrier_r: 1.75
+    stop_barrier_r: 1.25
+    clip: 1.0
+    mode: long_short
+    signal_col: qms_policy_meta_signal
+
+target: {}
+validation: {method: purged_walk_forward, purge_bars: 32, embargo_bars: 32}
+runtime: {seed: 7, repro_mode: strict, deterministic: true, threads: 1, seed_torch: false}
+risk:
+  cost_per_turnover: 0.00004
+  slippage_per_turnover: 0.00002
+  target_vol: null
+  max_leverage: 1.0
+  sizing: {}
+  dd_guard: {enabled: false}
+  portfolio_guard: {}
+  drawdown_sizing: {}
+  vol_col: null
+backtest:
+  engine: manual_barrier
+  signal_col: qms_policy_meta_signal
+  returns_col: close_ret
+  returns_type: simple
+  subset: full
+  periods_per_year: 12096
+  missing_return_policy: raise_if_exposed
+  allow_short: true
+  stop_mode: volatility_stop
+  vol_col: atr_over_price_48
+  open_col: open
+  high_col: high
+  low_col: low
+  close_col: close
+  take_profit_r: 1.75
+  stop_loss_r: 1.25
+  risk_per_trade: 0.0025
+  max_holding_bars: 16
+  dynamic_exits: {enabled: false}
+  partial_exits: {enabled: false}
+portfolio: {enabled: false, construction: signal_weights, long_short: true, gross_target: 1.0}
+monitoring: {enabled: false, psi_threshold: 0.2, n_bins: 10}
+diagnostics: {enabled: true, model: {enabled: true}, trade_path: {enabled: true}}
+execution: {enabled: false, mode: paper, capital: 100000.0, price_col: close}
+logging:
+  enabled: true
+  run_name: eurusd_30m_qms_trend_pullback_forecast_vol_meta_v1
+  output_dir: logs/experiments/qms_eurusd_m30_alpha_ladder
+  save_model: false
+evaluation: {strict_oos_only: true}
+research_metadata:
+  family: qms_eurusd_m30_alpha_ladder
+  ablation: forecast_gated_candidates_with_meta_filter
+  candidate_source: kds_pullback_continuation
+  stack_contract: meta_training_consumes_only_cross_fitted_volatility_candidates
+  meta_threshold_policy: precommitted_at_0_50_no_post_run_tuning

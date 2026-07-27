@@ -49,6 +49,12 @@ from .sinewave_indicator import add_sinewave_indicator
 from .supersmoother import add_supersmoother
 from .support_resistance import add_support_resistance_features
 from .support_resistance_v2 import add_support_resistance_v2_features
+from .systems import (
+    add_kds_features,
+    add_lmds_features,
+    add_quant_market_state_features,
+    add_rlvs_features,
+)
 from .technical.adx import add_adx_features
 from .technical.atr import add_atr_features
 from .technical.bollinger import add_bollinger_features
@@ -144,6 +150,10 @@ _FEATURE_COMPONENTS: tuple[tuple[str, FeatureFn], ...] = (
     ("vpin", add_vpin),
     ("order_flow_imbalance", add_order_flow_imbalance),
     ("scalp_microstructure_proxy", add_scalp_microstructure_proxy),
+    ("kds", add_kds_features),
+    ("rlvs", add_rlvs_features),
+    ("lmds", add_lmds_features),
+    ("quant_market_state", add_quant_market_state_features),
 )
 
 

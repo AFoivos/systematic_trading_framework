@@ -1,6 +1,12 @@
 # Κατάλογος Features
 
-Τελευταία ενημέρωση: 2026-06-29
+Τελευταία ενημέρωση: 2026-07-24
+
+> Τα causal market-state systems `kds`, `rlvs`, `lmds` και
+> `quant_market_state` είναι canonical feature steps. Το πλήρες μαθηματικό
+> contract, όλα τα output columns, presets, failure modes και ML guidance
+> βρίσκονται στο
+> [Causal Quantitative Market-State Feature Systems](../features/quant_market_state.md).
 
 Αυτό το αρχείο τεκμηριώνει τα feature steps που είναι διαθέσιμα μέσω του
 `FEATURE_REGISTRY` στο `src/features/registry.py`. Όλα τα χαρακτηριστικά πρέπει να

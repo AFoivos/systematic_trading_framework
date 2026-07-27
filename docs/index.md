@@ -1,6 +1,6 @@
 # Κέντρο τεκμηρίωσης
 
-Τελευταία ενημέρωση: 2026-06-29
+Τελευταία ενημέρωση: 2026-07-24
 
 Αυτός είναι ο κεντρικός χάρτης τεκμηρίωσης του repo. Αν χρησιμοποιείς πρώτη
 φορά το framework, ξεκίνα από το quickstart και μετά πέρασε στον οδηγό YAML.
@@ -24,6 +24,8 @@
   pipeline.
 - [Κατάλογος features](catalog/features.md): διαθέσιμα feature steps και causal
   υποθέσεις, χωρισμένα σε οικογένειες με ερμηνεία τιμών.
+- [KDS / RLVS / LMDS market-state systems](features/quant_market_state.md):
+  τύποι, presets, output reference, causal validation και benchmarks.
 - [Κατάλογος helpers](catalog/helpers.md): διαθέσιμα transform και normalization
   helpers, με κατηγορίες, παραδείγματα και πρακτική ερμηνεία outputs.
 - [Feature normalization playbook](feature_normalization_playbook_gr.md):

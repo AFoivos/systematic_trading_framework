@@ -1,0 +1,69 @@
+version: 1
+
+strategy:
+  id: binance_btc_eth_positive_funding_v1
+  hypothesis: >-
+    Positive USD-M perpetual funding is persistent enough that a long-spot,
+    short-perpetual position entered only after a trailing funding forecast
+    clears fully modeled round-trip and financing costs has positive net
+    out-of-sample returns on both BTCUSDT and ETHUSDT.
+  preregistered_at_utc: "2026-07-26T00:00:00Z"
+
+data:
+  provider: binance_public_rest
+  snapshot_dir: data/raw/binance_funding_carry/v1
+  symbols:
+    - BTCUSDT
+    - ETHUSDT
+  interval: 30m
+  start_inclusive_utc: "2020-09-01T00:00:00Z"
+  end_exclusive_utc: "2026-07-01T00:00:00Z"
+  verify_hashes: true
+  max_price_age_minutes: 240
+
+signal:
+  forecast: trailing_median
+  lookback_events: 3
+  expected_holding_events: 90
+  expected_funding_interval_hours: 8.0
+  entry_cost_multiplier: 1.25
+  exit_forecast_rate: 0.0
+  max_holding_events: 180
+  positive_funding_only: true
+
+execution:
+  spot_fee_bps_per_side: 10.0
+  perpetual_fee_bps_per_side: 5.0
+  spot_slippage_bps_per_side: 1.0
+  perpetual_slippage_bps_per_side: 1.0
+  capital_per_spot_notional: 1.25
+  annual_financing_rate: 0.03
+  max_execution_price_age_minutes: 31
+
+research:
+  timezone: UTC
+  periods_per_year: 1095
+  splits:
+    - name: development
+      start_inclusive_utc: "2020-09-01T00:00:00Z"
+      end_exclusive_utc: "2023-01-01T00:00:00Z"
+      locked: false
+    - name: validation
+      start_inclusive_utc: "2023-01-01T00:00:00Z"
+      end_exclusive_utc: "2025-01-01T00:00:00Z"
+      locked: false
+    - name: locked_test
+      start_inclusive_utc: "2025-01-01T00:00:00Z"
+      end_exclusive_utc: "2026-07-01T00:00:00Z"
+      locked: true
+
+acceptance:
+  validation_split: validation
+  min_portfolio_sharpe: 0.75
+  min_portfolio_cumulative_return: 0.0
+  min_entries_per_symbol: 8
+  require_positive_each_symbol: true
+  cost_stress_multiplier: 1.5
+
+artifacts:
+  output_root: logs/experiments/funding_carry
