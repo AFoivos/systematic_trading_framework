@@ -349,6 +349,13 @@ def _load_external_csv_asset_frames(
 
     metadata = {
         "data_path": str(path),
+        "data_size_bytes": int(path.stat().st_size),
+        "data_modification_timestamp_utc": datetime.fromtimestamp(
+            path.stat().st_mtime, tz=timezone.utc
+        ).isoformat(),
+        "data_sha256": file_sha256(path),
+        "fingerprint_status": "computed_not_verified",
+        "verified_fingerprint": False,
         "format": format_name,
         "explicit_load_path": True,
         "requires_pit_hardening": True,
@@ -398,6 +405,9 @@ def _load_external_csv_asset_frame_mapping(
             end=end,
         )
         asset_frames[asset] = frames[asset]
+        asset_metadata = dict(asset_metadata)
+        asset_metadata["fingerprint_status"] = "computed_not_verified"
+        asset_metadata["verified_fingerprint"] = False
         metadata_by_asset[asset] = asset_metadata
         data_paths[asset] = str(resolved_path)
 
@@ -413,6 +423,12 @@ def _load_external_csv_asset_frame_mapping(
         "allow_missing_assets": bool(allow_missing_assets),
         "skipped_missing_assets": missing_assets,
         "per_asset": metadata_by_asset,
+        "data_sha256_by_asset": {
+            asset: str(meta["data_sha256"])
+            for asset, meta in metadata_by_asset.items()
+        },
+        "fingerprint_status": "computed_not_verified",
+        "verified_fingerprint": False,
     }
     return asset_frames, metadata
 
@@ -583,6 +599,7 @@ def load_dataset_snapshot(
                     f"Dataset snapshot checksum mismatch for '{data_path}'."
                 )
             metadata["verified_fingerprint"] = True
+            metadata["fingerprint_status"] = "verified"
         else:
             expected_fingerprint = dict(metadata.get("fingerprint", {}) or {})
             if expected_fingerprint:
@@ -594,6 +611,10 @@ def load_dataset_snapshot(
                         f"Dataset snapshot fingerprint mismatch for '{data_path}'."
                     )
                 metadata["verified_fingerprint"] = True
+                metadata["fingerprint_status"] = "verified"
+
+        if not bool(metadata.get("verified_fingerprint", False)):
+            metadata.setdefault("fingerprint_status", "computed_not_verified")
 
     asset_frames = _filter_asset_frames(
         asset_frames,

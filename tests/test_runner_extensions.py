@@ -379,6 +379,11 @@ def test_load_dataset_snapshot_accepts_single_asset_raw_csv_with_epoch_ms(tmp_pa
     assert df.index[0] == pd.Timestamp("2015-01-01 22:00:00")
     assert metadata["format"] == "external_single_asset_ohlcv_csv"
     assert metadata["requires_pit_hardening"] is True
+    assert metadata["fingerprint_status"] == "computed_not_verified"
+    assert metadata["verified_fingerprint"] is False
+    assert metadata["data_sha256"]
+    assert metadata["data_size_bytes"] == data_path.stat().st_size
+    assert metadata["data_modification_timestamp_utc"]
 
 
 def test_load_dataset_snapshot_applies_start_end_window_to_external_csv(tmp_path) -> None:
@@ -461,6 +466,12 @@ def test_load_dataset_snapshot_accepts_mapped_external_csv_paths(tmp_path) -> No
     assert metadata["explicit_load_paths"] is True
     assert metadata["requested_start"] == "2015-01-02 00:00:00"
     assert metadata["requested_end"] == "2015-01-02 02:00:00"
+    assert metadata["fingerprint_status"] == "computed_not_verified"
+    assert metadata["verified_fingerprint"] is False
+    assert all(
+        item["fingerprint_status"] == "computed_not_verified"
+        for item in metadata["per_asset"].values()
+    )
 
 
 def test_load_ohlcv_csv_reuses_external_csv_normalization_path(tmp_path) -> None:
@@ -1105,6 +1116,7 @@ def test_run_experiment_supports_multi_asset_portfolio_storage_monitoring_and_ex
             "signal_col": "signal_prob_size",
             "periods_per_year": 252,
             "returns_type": "simple",
+            "allow_short": True,
         },
         "monitoring": {"enabled": True, "psi_threshold": 0.1, "n_bins": 8},
         "execution": {
@@ -1195,6 +1207,7 @@ def test_run_experiment_portfolio_test_subset_zeroes_pre_oos_weights(tmp_path, m
             "periods_per_year": 252,
             "returns_type": "simple",
             "subset": "test",
+            "allow_short": True,
         },
         "logging": {"enabled": False},
     }

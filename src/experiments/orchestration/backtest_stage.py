@@ -32,6 +32,128 @@ from src.risk.position_sizing import scale_signal_for_ftmo
 from src.experiments.schemas import PortfolioMetaPayload
 
 
+_PREDICTION_OUTPUT_KEYS = {
+    "pred_ret_col", "pred_prob_col", "pred_raw_prob_col", "pred_label_col",
+    "forecast_col", "prob_col", "expected_value_col", "action_col",
+}
+_SIGNAL_PREDICTION_INPUT_KEYS = {
+    "forecast_col", "prob_col", "pred_ret_col", "pred_prob_col",
+    "pred_raw_prob_col", "pred_label_col", "expected_value_col",
+}
+
+
+def _prediction_columns(frame: pd.DataFrame, model_meta: dict[str, Any], cfg: dict[str, Any]) -> list[str]:
+    """Resolve predictions from explicit model outputs and signal input contracts."""
+    candidates: set[str] = set()
+    sources: list[dict[str, Any]] = [dict(cfg.get("model", {}) or {}), dict(model_meta or {})]
+    sources.extend(dict(stage or {}) for stage in list(model_meta.get("stages", []) or []))
+    sources.extend(dict(meta or {}) for meta in dict(model_meta.get("per_asset", {}) or {}).values())
+    for source in sources:
+        outputs = dict(source.get("outputs", {}) or {})
+        for mapping in (source, outputs):
+            for key, value in mapping.items():
+                if str(key) in _PREDICTION_OUTPUT_KEYS and value:
+                    candidates.add(str(value))
+    signal_params = dict(dict(cfg.get("signals", {}) or {}).get("params", {}) or {})
+    for key in _SIGNAL_PREDICTION_INPUT_KEYS:
+        value = signal_params.get(key)
+        if value:
+            candidates.add(str(value))
+    return sorted(candidates)
+
+
+def resolve_oos_marker_name(model_meta: dict[str, Any], cfg: dict[str, Any]) -> str:
+    model_cfg = dict(cfg.get("model", {}) or {})
+    outputs = dict(model_cfg.get("outputs", {}) or {})
+    signal_params = dict(dict(cfg.get("signals", {}) or {}).get("params", {}) or {})
+    return str(
+        signal_params.get("pred_is_oos_col")
+        or model_meta.get("pred_is_oos_col")
+        or model_cfg.get("pred_is_oos_col")
+        or outputs.get("pred_is_oos_col")
+        or "pred_is_oos"
+    )
+
+
+def gate_predictions_to_oos(
+    frame: pd.DataFrame,
+    *,
+    cfg: dict[str, Any],
+    model_meta: dict[str, Any],
+    signal_col: str | None,
+    asset: str,
+) -> tuple[pd.DataFrame, pd.Series | None]:
+    """Apply the mandatory OOS boundary before any backtesting engine sees a signal."""
+    prediction_cols = _prediction_columns(frame, model_meta, cfg)
+    if not prediction_cols:
+        return frame, None
+    missing_prediction_cols = sorted(col for col in prediction_cols if col not in frame.columns)
+    if missing_prediction_cols:
+        raise ValueError(
+            f"OOS gating failed for '{asset}': configured prediction outputs are missing: "
+            f"{missing_prediction_cols}."
+        )
+    marker = resolve_oos_marker_name(model_meta, cfg)
+    strict = str(cfg.get("backtest", {}).get("oos_mode", "strict")) == "strict"
+    if frame.index.has_duplicates:
+        examples = frame.index[frame.index.duplicated()].unique()[:5].tolist()
+        raise ValueError(f"Strict OOS validation failed for '{asset}': duplicate timestamps {examples}.")
+    if marker not in frame.columns:
+        raise ValueError(
+            f"OOS gating failed for '{asset}': prediction columns {prediction_cols} require marker '{marker}'."
+        )
+    raw_marker = frame[marker]
+    if strict and raw_marker.isna().any():
+        raise ValueError(f"Strict OOS validation failed for '{asset}': '{marker}' contains missing markers.")
+    oos = raw_marker.fillna(False).astype(bool)
+    has_any_prediction = frame[prediction_cols].notna().any(axis=1)
+    has_complete_prediction = frame[prediction_cols].notna().all(axis=1)
+    if strict and bool((has_any_prediction & ~oos).any()):
+        examples = frame.index[has_any_prediction & ~oos][:5].tolist()
+        raise ValueError(
+            f"Strict OOS validation failed for '{asset}': non-OOS predictions at {examples}."
+        )
+    if strict and bool((oos & ~has_complete_prediction).any()):
+        examples = frame.index[oos & ~has_complete_prediction][:5].tolist()
+        raise ValueError(
+            f"Strict OOS validation failed for '{asset}': OOS timestamps without prediction at {examples}."
+        )
+    out = frame.copy()
+    out.loc[~oos, prediction_cols] = np.nan
+    if signal_col is not None:
+        if signal_col not in out.columns:
+            raise KeyError(f"OOS gating failed for '{asset}': signal column '{signal_col}' is missing.")
+        out.loc[~oos, signal_col] = 0.0
+    if not bool(oos.any()):
+        raise ValueError(f"OOS gating failed for '{asset}': no OOS predictions are available.")
+    return out, oos
+
+
+def _apply_execution_delay_with_oos_boundary(
+    frame: pd.DataFrame,
+    *,
+    signal_col: str,
+    delay_bars: int,
+    oos_mask: pd.Series | None,
+) -> tuple[pd.DataFrame, dict[str, int]]:
+    original = pd.to_numeric(frame[signal_col], errors="coerce").fillna(0.0)
+    shifted = original.shift(int(delay_bars)).fillna(0.0)
+    blocked = pd.Series(False, index=frame.index)
+    if oos_mask is not None:
+        blocked = shifted.ne(0.0) & ~oos_mask.reindex(frame.index).fillna(False).astype(bool)
+        shifted.loc[blocked] = 0.0
+    out = frame.copy()
+    out[signal_col] = shifted
+    tail = original.iloc[-int(delay_bars) :] if int(delay_bars) > 0 else original.iloc[0:0]
+    return out, {
+        "execution_delay_bars": int(delay_bars),
+        "active_signals_before_delay": int(original.ne(0.0).sum()),
+        "active_signals_dropped_at_data_end": int(tail.ne(0.0).sum()),
+        "active_signals_blocked_by_oos_boundary": int(blocked.sum()),
+        "active_signals_after_delay_and_oos": int(shifted.ne(0.0).sum()),
+    }
+
+
 def resolve_vol_col(df: pd.DataFrame, backtest_cfg: dict[str, Any], risk_cfg: dict[str, Any]) -> str | None:
     vol_col = backtest_cfg.get("vol_col") or risk_cfg.get("vol_col")
     if vol_col:
@@ -272,6 +394,8 @@ def run_single_asset_backtest(
     returns_type = backtest_cfg.get("returns_type", "simple")
     validate_returns_series(df[returns_col].dropna(), returns_type)
     backtest_engine = str(backtest_cfg.get("engine", "vectorized"))
+    extra_turnover_cost = float(backtest_cfg.get("estimated_spread_cost_per_unit_turnover", 0.0)) + float(backtest_cfg.get("commission_per_unit_turnover", 0.0))
+    extra_slippage = float(backtest_cfg.get("slippage_per_unit_turnover", 0.0))
 
     dd_cfg = risk_cfg.get("dd_guard") or {}
     dd_guard = dd_cfg.get("enabled", True)
@@ -280,7 +404,26 @@ def run_single_asset_backtest(
     if target_vol is not None and vol_col is None:
         raise ValueError("target_vol is set but no vol_col was found or configured.")
 
-    bt_df = df
+    bt_df, oos_mask = gate_predictions_to_oos(
+        df, cfg=cfg, model_meta=model_meta, signal_col=signal_col, asset=asset
+    )
+    execution_delay = int(backtest_cfg.get("execution_delay_bars", 0) or 0)
+    bt_df, execution_delay_diagnostics = _apply_execution_delay_with_oos_boundary(
+        bt_df,
+        signal_col=signal_col,
+        delay_bars=execution_delay,
+        oos_mask=oos_mask,
+    )
+    execution_delay_diagnostics["active_signals_blocked_by_oos_gating"] = (
+        int(
+            (
+                pd.to_numeric(df[signal_col], errors="coerce").fillna(0.0).ne(0.0)
+                & ~oos_mask.reindex(df.index).fillna(False).astype(bool)
+            ).sum()
+        )
+        if oos_mask is not None
+        else 0
+    )
     bt_signal_col = signal_col
     sizing_cfg = _ftmo_sizing_config(risk_cfg)
     if backtest_engine == "manual_barrier":
@@ -294,7 +437,7 @@ def run_single_asset_backtest(
             raise ValueError("backtest.engine='manual_barrier' currently supports backtest.subset='full' only.")
         max_holding_bars = backtest_cfg.get("max_holding_bars", 16)
         result = run_manual_barrier_backtest(
-            df,
+            bt_df,
             signal_col=signal_col,
             open_col=str(backtest_cfg.get("open_col", "open")),
             high_col=str(backtest_cfg.get("high_col", "high")),
@@ -304,8 +447,8 @@ def run_single_asset_backtest(
             stop_loss_r=float(backtest_cfg.get("stop_loss_r", 1.0)),
             risk_per_trade=float(backtest_cfg.get("risk_per_trade", 0.006)),
             max_holding_bars=int(max_holding_bars) if max_holding_bars is not None else None,
-            cost_per_unit_turnover=float(risk_cfg.get("cost_per_turnover", 0.0)),
-            slippage_per_unit_turnover=float(risk_cfg.get("slippage_per_turnover", 0.0)),
+            cost_per_unit_turnover=float(risk_cfg.get("cost_per_turnover", 0.0)) + extra_turnover_cost,
+            slippage_per_unit_turnover=float(risk_cfg.get("slippage_per_turnover", 0.0)) + extra_slippage,
             max_leverage=float(risk_cfg.get("max_leverage", 1.0)),
             periods_per_year=int(backtest_cfg.get("periods_per_year", 252)),
             dynamic_exits=dict(backtest_cfg.get("dynamic_exits", {}) or {}),
@@ -322,6 +465,9 @@ def run_single_asset_backtest(
         if result.trades is not None and not result.trades.empty and "asset" not in result.trades.columns:
             result.trades = result.trades.copy()
             result.trades.insert(0, "asset", asset)
+        result.summary["execution_delay_diagnostics"] = execution_delay_diagnostics
+        if result.mark_to_market_summary is not None:
+            result.mark_to_market_summary["execution_delay_diagnostics"] = execution_delay_diagnostics
         return result
     if sizing_cfg:
         bt_df, bt_signal_col = _scale_single_asset_signal_for_ftmo(
@@ -330,32 +476,14 @@ def run_single_asset_backtest(
             sizing_cfg=sizing_cfg,
         )
         target_vol = None
-    oos_mask: pd.Series | None = None
-    if model_meta:
-        bt_subset = backtest_cfg.get("subset", "test")
-        pred_is_oos_col = str(model_meta.get("pred_is_oos_col") or "pred_is_oos")
-        if bt_subset == "test" and pred_is_oos_col in df.columns:
-            oos_mask = df[pred_is_oos_col].fillna(False).astype(bool)
-            if bool(oos_mask.any()):
-                # Preserve any pre-backtest signal transforms such as FTMO risk-per-trade sizing.
-                # Rebuilding from the raw df here would drop bt_signal_col for OOS rows and
-                # silently flatten the single-asset backtest despite valid accepted candidates.
-                bt_df = bt_df.copy()
-                bt_df.loc[~oos_mask, bt_signal_col] = 0.0
-                first_oos_label = oos_mask[oos_mask].index[0]
-                bt_df = bt_df.loc[first_oos_label:]
-                oos_mask = oos_mask.reindex(bt_df.index).fillna(False).astype(bool)
-        elif model_meta.get("split_index") is not None and backtest_cfg.get("subset", "test") == "test":
-            bt_df = df.iloc[int(model_meta["split_index"]) :]
-
     result = run_backtest(
         bt_df,
         signal_col=bt_signal_col,
         returns_col=returns_col,
         returns_type=returns_type,
         missing_return_policy=backtest_cfg.get("missing_return_policy", "raise_if_exposed"),
-        cost_per_unit_turnover=risk_cfg.get("cost_per_turnover", 0.0),
-        slippage_per_unit_turnover=risk_cfg.get("slippage_per_turnover", 0.0),
+        cost_per_unit_turnover=float(risk_cfg.get("cost_per_turnover", 0.0)) + extra_turnover_cost,
+        slippage_per_unit_turnover=float(risk_cfg.get("slippage_per_turnover", 0.0)) + extra_slippage,
         target_vol=target_vol,
         vol_col=vol_col,
         max_leverage=risk_cfg.get("max_leverage", 3.0),
@@ -366,6 +494,8 @@ def run_single_asset_backtest(
         periods_per_year=backtest_cfg.get("periods_per_year", 252),
         min_holding_bars=backtest_cfg.get("min_holding_bars", 0),
         liquidate_at_end=bool(backtest_cfg.get("liquidate_at_end", False)),
+        allow_short=bool(backtest_cfg.get("allow_short", False)),
+        holding_cost_per_exposed_bar=float(backtest_cfg.get("holding_cost_per_exposed_bar", 0.0)),
     )
     if oos_mask is not None and bool(oos_mask.any()):
         aligned_oos_mask = oos_mask.reindex(result.returns.index).fillna(False).astype(bool)
@@ -376,6 +506,9 @@ def run_single_asset_backtest(
             costs=result.costs.loc[aligned_oos_mask],
             gross_returns=result.gross_returns.loc[aligned_oos_mask],
         )
+    result.summary["execution_delay_diagnostics"] = execution_delay_diagnostics
+    if result.mark_to_market_summary is not None:
+        result.mark_to_market_summary["execution_delay_diagnostics"] = execution_delay_diagnostics
     return result
 
 
@@ -394,6 +527,46 @@ def run_portfolio_backtest(
     returns_type = backtest_cfg.get("returns_type", "simple")
     bt_subset = str(backtest_cfg.get("subset", "full"))
     backtest_engine = str(backtest_cfg.get("engine", "vectorized"))
+
+    ungated_asset_frames = asset_frames
+    gated_asset_frames: dict[str, pd.DataFrame] = {}
+    oos_masks: dict[str, pd.Series | None] = {}
+    for asset, frame in sorted(asset_frames.items()):
+        gated, oos_mask = gate_predictions_to_oos(
+            frame,
+            cfg=cfg,
+            model_meta=dict(cfg.get("model", {}) or {}),
+            signal_col=signal_col,
+            asset=asset,
+        )
+        gated_asset_frames[asset] = gated
+        oos_masks[asset] = oos_mask
+    asset_frames = gated_asset_frames
+    execution_delay = int(backtest_cfg.get("execution_delay_bars", 0) or 0)
+    execution_delay_diagnostics: dict[str, dict[str, int]] = {}
+    delayed_frames: dict[str, pd.DataFrame] = {}
+    for asset, frame in asset_frames.items():
+        delayed_frames[asset], execution_delay_diagnostics[asset] = _apply_execution_delay_with_oos_boundary(
+            frame,
+            signal_col=signal_col,
+            delay_bars=execution_delay,
+            oos_mask=oos_masks.get(asset),
+        )
+        mask = oos_masks.get(asset)
+        ungated_frame = ungated_asset_frames[asset]
+        execution_delay_diagnostics[asset]["active_signals_blocked_by_oos_gating"] = (
+            int(
+                (
+                    pd.to_numeric(ungated_frame[signal_col], errors="coerce").fillna(0.0).ne(0.0)
+                    & ~mask.reindex(ungated_frame.index).fillna(False).astype(bool)
+                ).sum()
+            )
+            if mask is not None
+            else 0
+        )
+    asset_frames = delayed_frames
+    extra_turnover_cost = float(backtest_cfg.get("estimated_spread_cost_per_unit_turnover", 0.0)) + float(backtest_cfg.get("commission_per_unit_turnover", 0.0))
+    extra_slippage = float(backtest_cfg.get("slippage_per_unit_turnover", 0.0))
 
     if backtest_engine == "portfolio_barrier":
         if str(portfolio_cfg.get("construction", "signal_weights")) != "signal_weights":
@@ -434,15 +607,15 @@ def run_portfolio_backtest(
             ),
             tie_break=str(backtest_cfg.get("tie_break", "closest_to_open")),
             subset=bt_subset,
-            pred_is_oos_col=str(cfg.get("model", {}).get("pred_is_oos_col") or "pred_is_oos"),
+            pred_is_oos_col=resolve_oos_marker_name(dict(cfg.get("model", {}) or {}), cfg),
             alignment=alignment,
             constraints=constraints,
             gross_target=float(portfolio_cfg.get("gross_target", 1.0)),
-            cost_per_turnover=float(risk_cfg.get("cost_per_turnover", 0.0)),
-            slippage_per_turnover=float(risk_cfg.get("slippage_per_turnover", 0.0)),
+            cost_per_turnover=float(risk_cfg.get("cost_per_turnover", 0.0)) + extra_turnover_cost,
+            slippage_per_turnover=float(risk_cfg.get("slippage_per_turnover", 0.0)) + extra_slippage,
             periods_per_year=int(backtest_cfg.get("periods_per_year", 252)),
             annualization_mode=str(backtest_cfg.get("annualization_mode", "fixed_periods")),
-            allow_short=bool(backtest_cfg.get("allow_short", True)),
+            allow_short=bool(backtest_cfg.get("allow_short", False)),
             asset_params=dict(backtest_cfg.get("asset_params", {}) or {}),
             asset_to_group=asset_groups or None,
             portfolio_guard=dict(risk_cfg.get("portfolio_guard", {}) or {}),
@@ -465,6 +638,7 @@ def run_portfolio_backtest(
                 "barrier": dict(barrier_meta),
                 "risk_guard_summary": dict(performance.risk_guard_summary or {}),
                 "sizing": dict(sizing_cfg or {}),
+                "execution_delay": execution_delay_diagnostics,
             },
         )
         return performance, weights, diagnostics, portfolio_meta.to_dict()
@@ -536,12 +710,11 @@ def run_portfolio_backtest(
             )
 
     if bt_subset == "test":
-        pred_is_oos_col = str(cfg.get("model", {}).get("pred_is_oos_col") or "pred_is_oos")
         oos_by_asset: dict[str, pd.Series] = {}
-        for asset, frame in sorted(asset_frames.items()):
-            if pred_is_oos_col not in frame.columns:
+        for asset, mask in sorted(oos_masks.items()):
+            if mask is None:
                 continue
-            oos_by_asset[asset] = frame[pred_is_oos_col].astype(float)
+            oos_by_asset[asset] = mask.astype(float)
         if oos_by_asset:
             oos_df = pd.concat(oos_by_asset, axis=1, join=alignment).sort_index()
             if isinstance(oos_df.columns, pd.MultiIndex):
@@ -567,12 +740,22 @@ def run_portfolio_backtest(
         diagnostics["gross_exposure"] = weights.abs().sum(axis=1).astype(float)
         diagnostics["turnover"] = (weights - prev_weights).abs().sum(axis=1).astype(float)
 
+    if not bool(backtest_cfg.get("allow_short", False)):
+        weights = weights.clip(lower=0.0)
+        if bool((weights < -1e-12).any().any()):
+            raise RuntimeError("Internal error: long-only portfolio contains short weights.")
+        previous_weights = weights.shift(1).fillna(0.0)
+        diagnostics = diagnostics.copy()
+        diagnostics["net_exposure"] = weights.sum(axis=1).astype(float)
+        diagnostics["gross_exposure"] = weights.abs().sum(axis=1).astype(float)
+        diagnostics["turnover"] = (weights - previous_weights).abs().sum(axis=1).astype(float)
+
     performance = compute_portfolio_performance(
         weights,
         asset_returns,
         missing_return_policy=backtest_cfg.get("missing_return_policy", "raise_if_exposed"),
-        cost_per_turnover=risk_cfg.get("cost_per_turnover", 0.0),
-        slippage_per_turnover=risk_cfg.get("slippage_per_turnover", 0.0),
+        cost_per_turnover=float(risk_cfg.get("cost_per_turnover", 0.0)) + extra_turnover_cost,
+        slippage_per_turnover=float(risk_cfg.get("slippage_per_turnover", 0.0)) + extra_slippage,
         periods_per_year=backtest_cfg.get("periods_per_year", 252),
         portfolio_guard=risk_cfg.get("portfolio_guard"),
         drawdown_sizing=risk_cfg.get("drawdown_sizing"),
@@ -596,6 +779,7 @@ def run_portfolio_backtest(
             "sizing": dict(sizing_cfg or {}),
             "selection": dict(portfolio_cfg.get("selection", {}) or {}),
             "hysteresis": dict(cfg.get("execution", {}).get("hysteresis", {}) or {}),
+            "execution_delay": execution_delay_diagnostics,
         },
     )
     return performance, weights, diagnostics, portfolio_meta.to_dict()
@@ -611,11 +795,14 @@ def _primary_robustness_fields(payload: dict[str, Any]) -> dict[str, float]:
     fields: dict[str, float] = {}
     walk_forward = dict(payload.get("walk_forward", {}) or {})
     for key in (
-        "positive_fold_ratio",
-        "min_fold_cumulative_return",
-        "worst_fold_max_drawdown",
-        "mean_fold_sharpe",
-        "std_fold_sharpe",
+        "total_calendar_periods",
+        "active_oos_periods",
+        "positive_active_periods",
+        "positive_active_period_ratio",
+        "min_active_period_cumulative_return",
+        "worst_active_period_max_drawdown",
+        "mean_active_period_sharpe",
+        "std_active_period_sharpe",
     ):
         if key in walk_forward:
             fields[f"robustness_walk_forward_{key}"] = float(walk_forward[key])
@@ -661,7 +848,9 @@ def _run_single_asset_delay_stress(
     *,
     cfg: dict[str, Any],
     delay_bars: int,
-) -> dict[str, float]:
+    evaluation_mask: pd.Series | None = None,
+    evaluation_metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     backtest_cfg = cfg["backtest"]
     signal_col = str(backtest_cfg["signal_col"])
     delayed = df.copy()
@@ -673,10 +862,17 @@ def _run_single_asset_delay_stress(
         model_meta={},
     )
     returns = result.mark_to_market_returns if result.mark_to_market_returns is not None else result.returns
-    return summarize_returns(
-        returns,
+    mask = (
+        evaluation_mask.reindex(returns.index).fillna(False).astype(bool)
+        if evaluation_mask is not None
+        else pd.Series(True, index=returns.index, dtype=bool)
+    )
+    summary = summarize_returns(
+        returns.loc[mask],
         periods_per_year=int(backtest_cfg.get("periods_per_year", 252)),
     )
+    summary.update(dict(evaluation_metadata or {}))
+    return summary
 
 
 def _run_portfolio_delay_stress(
@@ -684,7 +880,9 @@ def _run_portfolio_delay_stress(
     *,
     cfg: dict[str, Any],
     delay_bars: int,
-) -> dict[str, float]:
+    evaluation_mask: pd.Series | None = None,
+    evaluation_metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     strategy_path = dict(cfg.get("backtest", {}).get("strategy_path", {}) or {})
     if str(strategy_path.get("kind", "none")) == "matb":
         delayed_cfg = deepcopy(cfg)
@@ -700,10 +898,17 @@ def _run_portfolio_delay_stress(
             if performance.mark_to_market_returns is not None
             else performance.net_returns
         )
-        return summarize_returns(
-            returns,
+        mask = (
+            evaluation_mask.reindex(returns.index).fillna(False).astype(bool)
+            if evaluation_mask is not None
+            else pd.Series(True, index=returns.index, dtype=bool)
+        )
+        summary = summarize_returns(
+            returns.loc[mask],
             periods_per_year=int(delayed_cfg["backtest"].get("periods_per_year", 252)),
         )
+        summary.update(dict(evaluation_metadata or {}))
+        return summary
 
     signal_col = str(cfg["backtest"]["signal_col"])
     delayed_frames: dict[str, pd.DataFrame] = {}
@@ -717,10 +922,17 @@ def _run_portfolio_delay_stress(
         if performance.mark_to_market_returns is not None
         else performance.net_returns
     )
-    return summarize_returns(
-        returns,
+    mask = (
+        evaluation_mask.reindex(returns.index).fillna(False).astype(bool)
+        if evaluation_mask is not None
+        else pd.Series(True, index=returns.index, dtype=bool)
+    )
+    summary = summarize_returns(
+        returns.loc[mask],
         periods_per_year=int(cfg["backtest"].get("periods_per_year", 252)),
     )
+    summary.update(dict(evaluation_metadata or {}))
+    return summary
 
 
 def _asset_net_contribution_summary(trades: pd.DataFrame | None, *, expected_assets: int) -> dict[str, Any]:
@@ -805,6 +1017,8 @@ def _run_portfolio_combined_stress(
     gross_cap: float,
     cost_multiplier: float,
     max_cost_r: float | None = None,
+    evaluation_mask: pd.Series | None = None,
+    evaluation_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     variant_cfg = deepcopy(cfg)
     variant_cfg["backtest"] = dict(variant_cfg.get("backtest", {}) or {})
@@ -833,10 +1047,14 @@ def _run_portfolio_combined_stress(
         if performance.mark_to_market_returns is not None
         else performance.net_returns
     )
+    if evaluation_mask is not None:
+        mask = evaluation_mask.reindex(returns.index).fillna(False).astype(bool)
+        returns = returns.loc[mask]
     metrics = summarize_returns(
         returns,
         periods_per_year=int(variant_cfg["backtest"].get("periods_per_year", 252)),
     )
+    metrics.update(dict(evaluation_metadata or {}))
     barrier_meta = dict(meta.get("barrier", {}) or {})
     trades = getattr(performance, "trades", None)
     trade_count = int(barrier_meta.get("trade_count", len(trades) if trades is not None else 0))
@@ -878,6 +1096,8 @@ def build_robustness_diagnostics(
     cfg: dict[str, Any],
     performance: BacktestResult | PortfolioPerformance,
     is_portfolio: bool,
+    evaluation_mask: pd.Series | None = None,
+    evaluation_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     diagnostics_cfg = dict(cfg.get("diagnostics", {}) or {})
     robustness_cfg = dict(diagnostics_cfg.get("robustness", {}) or {})
@@ -895,8 +1115,31 @@ def build_robustness_diagnostics(
         costs = performance.costs
     mark_to_market_returns = getattr(performance, "mark_to_market_returns", None)
     position_path = _position_path(performance)
+    scope_mask = (
+        evaluation_mask.reindex(net_returns.index).fillna(False).astype(bool)
+        if evaluation_mask is not None
+        else pd.Series(True, index=net_returns.index, dtype=bool)
+    )
+    scope_metadata = dict(evaluation_metadata or {})
+    if position_path is None:
+        active_eligible = scope_mask & (
+            gross_returns.reindex(scope_mask.index).fillna(0.0).abs().gt(1e-12)
+            | costs.reindex(scope_mask.index).fillna(0.0).abs().gt(1e-12)
+        )
+    elif isinstance(position_path, pd.DataFrame):
+        exposure_active = position_path.reindex(scope_mask.index).fillna(0.0).abs().sum(axis=1).gt(1e-12)
+        active_eligible = scope_mask & (
+            exposure_active | performance.turnover.reindex(scope_mask.index).fillna(0.0).abs().gt(1e-12)
+        )
+    else:
+        exposure_active = position_path.reindex(scope_mask.index).fillna(0.0).abs().gt(1e-12)
+        active_eligible = scope_mask & (
+            exposure_active | performance.turnover.reindex(scope_mask.index).fillna(0.0).abs().gt(1e-12)
+        )
 
     cost_multipliers = list(robustness_cfg.get("cost_multipliers", [1.0, 2.0, 3.0, 5.0]) or [])
+    if not any(np.isclose(float(value), 1.0) for value in cost_multipliers):
+        cost_multipliers.insert(0, 1.0)
     entry_delay_bars = [
         int(value)
         for value in list(robustness_cfg.get("entry_delay_bars", [1, 2]) or [])
@@ -920,15 +1163,32 @@ def build_robustness_diagnostics(
             costs=costs,
             periods_per_year=periods_per_year,
             multipliers=cost_multipliers,
+            turnover=performance.turnover,
+            evaluation_mask=scope_mask,
+            evaluation_metadata=scope_metadata,
         ),
         "walk_forward": calendar_walk_forward_diagnostics(
             mark_to_market_returns if mark_to_market_returns is not None else net_returns,
             periods_per_year=periods_per_year,
             frequency=str(robustness_cfg.get("walk_forward_frequency", "YE") or "YE"),
+            oos_mask=scope_mask,
+            active_eligible_mask=active_eligible,
         ),
-        "mark_to_market": dict(getattr(performance, "mark_to_market_summary", {}) or {}),
+        "mark_to_market": {},
         "entry_delay": {},
+        **scope_metadata,
     }
+    mtm_net = mark_to_market_returns if mark_to_market_returns is not None else net_returns
+    mtm_costs = costs.reindex(mtm_net.index).fillna(0.0).astype(float)
+    mtm_gross = mtm_net.astype(float).fillna(0.0) + mtm_costs
+    payload["mark_to_market"] = summarize_returns(
+        mtm_net.loc[scope_mask.reindex(mtm_net.index).fillna(False).astype(bool)],
+        periods_per_year=periods_per_year,
+        turnover=performance.turnover.loc[scope_mask],
+        costs=mtm_costs.loc[scope_mask],
+        gross_returns=mtm_gross.loc[scope_mask],
+    )
+    payload["mark_to_market"].update(scope_metadata)
     if is_portfolio and (
         bool(robustness_cfg.get("strict_no_remap", False))
         or bool(combined_cost_multipliers)
@@ -964,6 +1224,8 @@ def build_robustness_diagnostics(
                             gross_cap=float(gross_cap),
                             cost_multiplier=float(cost_multiplier),
                             max_cost_r=max_cost_r,
+                            evaluation_mask=scope_mask,
+                            evaluation_metadata=scope_metadata,
                         )
                     except Exception as exc:
                         payload["combined_stress"][key] = {"error": f"{type(exc).__name__}: {exc}"}
@@ -975,6 +1237,8 @@ def build_robustness_diagnostics(
             periods_per_year=periods_per_year,
             gap_loss_per_exposure=float(robustness_cfg.get("gap_loss_per_exposure", 0.0) or 0.0),
             max_gap_multiple=float(robustness_cfg.get("max_gap_multiple", 3.0) or 3.0),
+            evaluation_mask=scope_mask,
+            evaluation_metadata=scope_metadata,
         )
 
     for delay in entry_delay_bars:
@@ -985,6 +1249,8 @@ def build_robustness_diagnostics(
                     asset_frames,
                     cfg=cfg,
                     delay_bars=delay,
+                    evaluation_mask=scope_mask,
+                    evaluation_metadata=scope_metadata,
                 )
             else:
                 asset = next(iter(sorted(asset_frames)))
@@ -993,6 +1259,8 @@ def build_robustness_diagnostics(
                     asset_frames[asset],
                     cfg=cfg,
                     delay_bars=delay,
+                    evaluation_mask=scope_mask,
+                    evaluation_metadata=scope_metadata,
                 )
         except Exception as exc:
             payload["entry_delay"][key] = {"error": f"{type(exc).__name__}: {exc}"}

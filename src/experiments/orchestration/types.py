@@ -32,6 +32,8 @@ class ExperimentResult:
         primary = self.evaluation.get("primary_summary")
         if primary is None:
             primary = getattr(self.backtest, "summary", {})
+        if isinstance(primary, dict):
+            return primary
         return dict(primary or {})
 
 

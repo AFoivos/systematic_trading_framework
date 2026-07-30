@@ -154,6 +154,32 @@ def _bundle_payload(
     }
 
 
+def _concrete_training_range(model_meta: Mapping[str, Any]) -> dict[str, Any]:
+    final_refit = dict(model_meta.get("final_refit", {}) or {})
+    rows = next(
+        (
+            int(final_refit[key])
+            for key in (
+                "model_train_rows",
+                "estimator_fit_rows",
+                "complete_labeled_rows",
+                "labeled_rows",
+                "train_rows_raw",
+            )
+            if final_refit.get(key) is not None
+        ),
+        0,
+    )
+    return {
+        "start_timestamp": final_refit.get("train_start_timestamp"),
+        "end_timestamp": final_refit.get("train_end_timestamp"),
+        "rows": rows,
+        "start_position": final_refit.get("train_start_position"),
+        "end_position": final_refit.get("train_end_position"),
+        "raw_rows": final_refit.get("train_rows_raw"),
+    }
+
+
 def _bundle_manifest(bundle: Mapping[str, Any], *, model_path: Path) -> dict[str, Any]:
     model_meta = dict(bundle.get("model_meta", {}) or {})
     model_config = dict(bundle.get("model_config", {}) or {})
@@ -169,6 +195,9 @@ def _bundle_manifest(bundle: Mapping[str, Any], *, model_path: Path) -> dict[str
         "model_kind": model_meta.get("model_kind") or model_config.get("kind"),
         "task_type": model_meta.get("task_type"),
         "feature_cols": feature_cols,
+        "feature_order": feature_cols,
+        "training_range": _concrete_training_range(model_meta),
+        "final_refit": dict(model_meta.get("final_refit", {}) or {}),
         "pred_ret_col": model_meta.get("pred_ret_col") or model_config.get("pred_ret_col"),
         "pred_prob_col": model_meta.get("pred_prob_col") or model_config.get("pred_prob_col"),
         "pred_label_col": model_meta.get("pred_label_col") or model_config.get("pred_label_col"),
@@ -190,17 +219,27 @@ def save_model_artifacts(
     data_fingerprint: Mapping[str, Any],
 ) -> dict[str, str]:
     """
-    Persist a fitted model bundle when logging.save_model is enabled.
+    Persist a fitted model bundle when explicitly requested or when final refit is enabled.
 
     The run-local copy is always written under artifacts/models. By default, a stable
     installed copy is also written to logs/models/<model_name>.pkl so execution
     configs can reference a predictable path.
     """
     logging_cfg = dict(cfg.get("logging", {}) or {})
-    if not bool(logging_cfg.get("save_model", False)):
+    configured_final_refit = dict(cfg.get("model", {}) or {}).get("final_refit")
+    configured_final_refit_enabled = (
+        bool(dict(configured_final_refit or {}).get("enabled", False))
+        if isinstance(configured_final_refit, Mapping)
+        else bool(configured_final_refit)
+    )
+    final_refit_enabled = bool(dict(model_meta.get("final_refit", {}) or {}).get("enabled", False)) or configured_final_refit_enabled
+    if not bool(logging_cfg.get("save_model", False)) and not final_refit_enabled:
         return {}
     if model is None:
-        raise ValueError("logging.save_model=true but the experiment did not return a fitted model.")
+        raise ValueError(
+            "Model persistence is required (logging.save_model or final_refit.enabled), "
+            "but the experiment did not return a fitted model."
+        )
 
     model_name = _model_name_from_config(cfg, model_meta)
     bundle = _bundle_payload(
@@ -224,7 +263,7 @@ def save_model_artifacts(
         "model_artifact_manifest": str(run_manifest_path),
     }
 
-    install_enabled = bool(logging_cfg.get("install_model", True))
+    install_enabled = bool(logging_cfg.get("save_model", False)) and bool(logging_cfg.get("install_model", True))
     if install_enabled:
         install_dir = _resolve_install_dir(
             logging_cfg.get("model_install_dir")

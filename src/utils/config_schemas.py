@@ -508,6 +508,14 @@ class BacktestConfig:
     dynamic_exits: dict[str, Any] = field(default_factory=dict)
     partial_exits: dict[str, Any] = field(default_factory=dict)
     allow_short: bool = False
+    oos_mode: str = "strict"
+    execution_price: str = "close_lagged"
+    execution_delay_bars: int = 0
+    estimated_spread_cost_per_unit_turnover: float = 0.0
+    commission_per_unit_turnover: float = 0.0
+    slippage_per_unit_turnover: float = 0.0
+    holding_cost_per_exposed_bar: float = 0.0
+    allow_cost_layering: bool = False
     extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -546,6 +554,9 @@ class BacktestConfig:
             "dynamic_exits",
             "partial_exits",
             "allow_short",
+            "oos_mode", "execution_price", "execution_delay_bars",
+            "estimated_spread_cost_per_unit_turnover", "commission_per_unit_turnover",
+            "slippage_per_unit_turnover", "holding_cost_per_exposed_bar", "allow_cost_layering",
         }
         max_holding_bars = data.get("max_holding_bars")
         vertical_barrier_bars = data.get("vertical_barrier_bars")
@@ -605,6 +616,14 @@ class BacktestConfig:
             dynamic_exits=dict(data.get("dynamic_exits", {}) or {}),
             partial_exits=dict(data.get("partial_exits", {}) or {}),
             allow_short=bool(data.get("allow_short", False)),
+            oos_mode=str(data.get("oos_mode", "strict")),
+            execution_price=str(data.get("execution_price", "close_lagged")),
+            execution_delay_bars=int(data.get("execution_delay_bars", 0)),
+            estimated_spread_cost_per_unit_turnover=float(data.get("estimated_spread_cost_per_unit_turnover", 0.0)),
+            commission_per_unit_turnover=float(data.get("commission_per_unit_turnover", 0.0)),
+            slippage_per_unit_turnover=float(data.get("slippage_per_unit_turnover", 0.0)),
+            holding_cost_per_exposed_bar=float(data.get("holding_cost_per_exposed_bar", 0.0)),
+            allow_cost_layering=bool(data.get("allow_cost_layering", False)),
             extra=_validated_extras(
                 data,
                 known,
@@ -654,6 +673,14 @@ class BacktestConfig:
             "dynamic_exits": dict(self.dynamic_exits),
             "partial_exits": dict(self.partial_exits),
             "allow_short": self.allow_short,
+            "oos_mode": self.oos_mode,
+            "execution_price": self.execution_price,
+            "execution_delay_bars": self.execution_delay_bars,
+            "estimated_spread_cost_per_unit_turnover": self.estimated_spread_cost_per_unit_turnover,
+            "commission_per_unit_turnover": self.commission_per_unit_turnover,
+            "slippage_per_unit_turnover": self.slippage_per_unit_turnover,
+            "holding_cost_per_exposed_bar": self.holding_cost_per_exposed_bar,
+            "allow_cost_layering": self.allow_cost_layering,
         }
         return payload | dict(self.extra)
 

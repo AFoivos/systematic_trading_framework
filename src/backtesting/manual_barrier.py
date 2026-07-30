@@ -731,9 +731,8 @@ def run_manual_barrier_backtest(
         else pd.Series(dtype=float)
     )
     trade_metric_overrides = {
-        "profit_factor": profit_factor(trade_returns),
-        "hit_rate": hit_rate(trade_returns),
-        "metric_scope": "trade_ledger",
+        "trade_profit_factor": profit_factor(trade_returns),
+        "win_rate": hit_rate(trade_returns),
         "trade_count": float(len(trades_df)),
     }
     realized_summary.update(trade_metric_overrides)

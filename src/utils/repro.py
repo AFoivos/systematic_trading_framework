@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 import os
+import warnings
 import random
 import sys
 import threading
@@ -107,8 +108,14 @@ def apply_runtime_reproducibility(runtime_cfg: Mapping[str, Any] | None) -> dict
 
     with _REPRO_LOCK:
         pyhash_before = os.getenv("PYTHONHASHSEED")
-        os.environ["PYTHONHASHSEED"] = str(seed)
-        pyhash_after = os.getenv("PYTHONHASHSEED")
+        pyhash_after = pyhash_before
+        if deterministic and pyhash_before != str(seed):
+            warnings.warn(
+                "Deterministic hashing requires PYTHONHASHSEED to be set before Python starts; "
+                f"launch with PYTHONHASHSEED={seed}. The current process hash seed is unchanged.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
 
         random.seed(seed)
         np.random.seed(seed)
@@ -161,8 +168,10 @@ def apply_runtime_reproducibility(runtime_cfg: Mapping[str, Any] | None) -> dict
         "pythonhashseed_after": pyhash_after,
         "pythonhashseed_matches_seed": pyhash_after == str(seed),
         "pythonhashseed_effective_in_process": False,
+        "pythonhashseed_mismatch_policy": "warning",
         "pythonhashseed_note": (
-            "PYTHONHASHSEED set at runtime affects child processes, not hash seeding of current process."
+            "Policy: warn and record a startup-seed mismatch; PYTHONHASHSEED is never mutated "
+            "after process start. Relaunch Python with the requested seed."
         ),
         "thread_env": thread_env,
         "torch": torch_info,

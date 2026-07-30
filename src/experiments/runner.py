@@ -81,7 +81,12 @@ def print_experiment_completion(result: ExperimentResult) -> None:
     """
     print("Experiment completed")
     print("Primary summary:")
-    for k, v in result.evaluation.get("primary_summary", {}).items():
+    final_summary = result.summary
+    if final_summary is not result.evaluation.get("primary_summary"):
+        raise RuntimeError("CLI consistency check failed: CLI is not using the final primary summary object.")
+    if final_summary != dict(result.evaluation.get("primary_summary", {}) or {}):
+        raise RuntimeError("CLI consistency check failed: ExperimentResult.summary is not the final primary summary.")
+    for k, v in final_summary.items():
         print(f"  {k}: {v}")
     _print_evaluation_context(result.evaluation)
     _print_model_context(result.model_meta)

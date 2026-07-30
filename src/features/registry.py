@@ -37,10 +37,12 @@ from .multi_asset_trend_breakout import add_multi_asset_trend_breakout_features
 from .opening_range_breakout import add_opening_range_breakout_features
 from .order_flow_imbalance import add_order_flow_imbalance
 from .parkinson_volatility import add_parkinson_volatility
+from .path_efficiency import add_path_efficiency
 from .permutation_entropy import add_permutation_entropy
 from .regime_context import add_regime_context_features
 from .helpers.normalizations.returns import add_close_returns
 from .roofing_filter import add_roofing_filter
+from .rolling_autocorrelation import add_rolling_autocorrelation
 from .scalp_microstructure_proxy import add_scalp_microstructure_proxy
 from .session_context import add_session_context_features
 from .shannon_entropy import add_shannon_entropy
@@ -135,6 +137,7 @@ _FEATURE_COMPONENTS: tuple[tuple[str, FeatureFn], ...] = (
     ("autocorrelation_periodogram", add_autocorrelation_periodogram),
     ("homodyne_discriminator", add_homodyne_discriminator),
     ("parkinson_volatility", add_parkinson_volatility),
+    ("path_efficiency", add_path_efficiency),
     ("garman_klass_volatility", add_garman_klass_volatility),
     ("yang_zhang_volatility", add_yang_zhang_volatility),
     ("hurst_exponent", add_hurst_exponent),
@@ -143,6 +146,7 @@ _FEATURE_COMPONENTS: tuple[tuple[str, FeatureFn], ...] = (
     ("hmm_regime", add_hmm_regime),
     ("hilbert_transform", add_hilbert_transform),
     ("roofing_filter", add_roofing_filter),
+    ("rolling_autocorrelation", add_rolling_autocorrelation),
     ("schaff_trend_cycle", add_schaff_trend_cycle_features),
     ("supersmoother", add_supersmoother),
     ("shannon_entropy", add_shannon_entropy),

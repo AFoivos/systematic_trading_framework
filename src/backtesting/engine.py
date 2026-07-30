@@ -90,6 +90,8 @@ def run_backtest(
     periods_per_year: int = 252,
     min_holding_bars: int = 0,
     liquidate_at_end: bool = False,
+    allow_short: bool = False,
+    holding_cost_per_exposed_bar: float = 0.0,
 ) -> BacktestResult:
     """
     Simple vectorized backtest with optional vol targeting, slippage, and drawdown guard.
@@ -111,7 +113,8 @@ def run_backtest(
         raise ValueError("returns_type must be 'simple' or 'log'.")
 
     leverage_cap = abs(float(max_leverage))
-    positions = signal.copy().clip(lower=-leverage_cap, upper=leverage_cap)
+    lower_bound = -leverage_cap if allow_short else 0.0
+    positions = signal.copy().clip(lower=lower_bound, upper=leverage_cap)
 
     if target_vol is not None:
         if vol_col is None:
@@ -124,12 +127,12 @@ def run_backtest(
             target_vol=target_vol,
             max_leverage=max_leverage,
         ).fillna(0.0)
-        positions = positions.clip(lower=-leverage_cap, upper=leverage_cap)
+        positions = positions.clip(lower=lower_bound, upper=leverage_cap)
 
     positions = apply_min_holding_bars_to_positions(
         positions,
         min_holding_bars=int(min_holding_bars),
-    ).clip(lower=-leverage_cap, upper=leverage_cap)
+    ).clip(lower=lower_bound, upper=leverage_cap)
 
     (
         positions,
@@ -144,6 +147,7 @@ def run_backtest(
         returns=returns,
         missing_return_policy=missing_return_policy,
         cost_rate=float(cost_per_unit_turnover + slippage_per_unit_turnover),
+        holding_cost_rate=float(holding_cost_per_exposed_bar),
         dd_guard=bool(dd_guard),
         max_drawdown=float(max_drawdown),
         cooloff_bars=int(cooloff_bars),
@@ -169,6 +173,9 @@ def run_backtest(
         turnover=turnover,
         summary=summary,
         trades=None,
+        mark_to_market_returns=strat_returns.copy(),
+        mark_to_market_equity_curve=equity_curve.copy(),
+        mark_to_market_summary=dict(summary),
     )
 
 
@@ -178,6 +185,7 @@ def _run_causal_accounting(
     returns: pd.Series,
     missing_return_policy: str,
     cost_rate: float,
+    holding_cost_rate: float,
     dd_guard: bool,
     max_drawdown: float,
     cooloff_bars: int,
@@ -194,6 +202,8 @@ def _run_causal_accounting(
 ]:
     if cost_rate < 0.0:
         raise ValueError("combined turnover cost must be >= 0.")
+    if holding_cost_rate < 0.0:
+        raise ValueError("holding_cost_per_exposed_bar must be >= 0.")
     if cooloff_bars < 0:
         raise ValueError("cooloff_bars must be >= 0.")
     max_dd = abs(float(max_drawdown))
@@ -275,7 +285,7 @@ def _run_causal_accounting(
             desired = 0.0
         next_position = 0.0 if guard_active or gross_return <= -1.0 else desired
         turnover_value = abs(next_position - previous_position)
-        cost_value = float(cost_rate * turnover_value)
+        cost_value = float(cost_rate * turnover_value + holding_cost_rate * abs(previous_position))
         available_after_gross = max(1.0 + gross_return, 0.0)
         cost_value = min(cost_value, available_after_gross)
         net_return = gross_return - cost_value
@@ -296,7 +306,10 @@ def _run_causal_accounting(
             guard_trigger_count += 1
             next_position = 0.0
             turnover_value = abs(previous_position)
-            cost_value = min(float(cost_rate * turnover_value), available_after_gross)
+            cost_value = min(
+                float(cost_rate * turnover_value + holding_cost_rate * abs(previous_position)),
+                available_after_gross,
+            )
             net_return = gross_return - cost_value
             final_equity = equity * max(1.0 + net_return, 0.0)
             final_peak = max(equity_peak, final_equity)

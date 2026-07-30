@@ -86,6 +86,7 @@ def test_dynamic_exit_uses_actual_side_specific_reason() -> None:
     performance, _, _, _ = run_portfolio_barrier_backtest(
         {"A": frame}, signal_col="signal", volatility_col="atr_20", vertical_barrier_bars=3,
         profit_barrier_r=10.0, stop_barrier_r=10.0,
+        allow_short=True,
         dynamic_exit={"enabled": True, "long_exit_col": "exit_long", "short_exit_col": "exit_short", "long_reason_col": "reason_long", "short_reason_col": "reason_short"},
     )
     assert performance.trades.iloc[0]["exit_reason"] == "cluster_failure"

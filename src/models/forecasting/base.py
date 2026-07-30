@@ -722,6 +722,7 @@ def train_forward_forecaster(
             "enabled": True,
             "train_start_position": 0,
             "train_end_position": int(final_cutoff),
+            "train_start_timestamp": out.index[0],
             "train_end_timestamp": out.index[final_cutoff],
             "train_rows_raw": int(len(final_train_idx)),
             "labeled_rows": int(out.iloc[final_train_idx][fwd_col].notna().sum()),

@@ -281,11 +281,23 @@ def default_backtest_block(
     backtest.setdefault("returns_type", "simple")
     backtest.setdefault("missing_return_policy", "raise_if_exposed")
     backtest.setdefault("min_holding_bars", 0)
+    backtest.setdefault("allow_short", False)
+    backtest.setdefault("oos_mode", "strict")
+    engine = str(backtest.get("engine", "vectorized"))
+    legacy_entry_mode = str(backtest.get("entry_price_mode", "next_open"))
+    derived_execution_price = (
+        "close_lagged"
+        if engine == "vectorized" or (engine == "portfolio_barrier" and legacy_entry_mode == "current_close")
+        else "next_open"
+    )
+    backtest.setdefault("execution_price", derived_execution_price)
+    backtest.setdefault("execution_delay_bars", 0)
+    backtest.setdefault("estimated_spread_cost_per_unit_turnover", 0.0)
+    backtest.setdefault("commission_per_unit_turnover", 0.0)
+    backtest.setdefault("slippage_per_unit_turnover", 0.0)
+    backtest.setdefault("holding_cost_per_exposed_bar", 0.0)
+    backtest.setdefault("allow_cost_layering", False)
     if str(backtest.get("engine", "vectorized")) == "portfolio_barrier":
-        # portfolio_barrier historically accepted negative signals even though the generic
-        # backtest default was false. Keep legacy YAML behaviour explicit at resolution time;
-        # new research configs must set this field themselves.
-        backtest.setdefault("allow_short", True)
         backtest.setdefault("open_col", "open")
         backtest.setdefault("high_col", "high")
         backtest.setdefault("low_col", "low")
@@ -356,7 +368,8 @@ def default_diagnostics_block(diagnostics: dict[str, Any]) -> dict[str, Any]:
     forecast = dict(diagnostics.get("forecast", {}) or {})
     forecast.setdefault("quantiles", 10)
     forecast.setdefault("autocorrelation_lags", [1, 2, 4, 8, 16])
-    forecast.setdefault("volatility_col", "atr_pct_rank_100")
+    # Null means resolve the actual configured volatility-rank feature at runtime.
+    forecast.setdefault("volatility_col", None)
     diagnostics["forecast"] = forecast
     robustness = dict(diagnostics.get("robustness", {}) or {})
     robustness.setdefault("enabled", False)

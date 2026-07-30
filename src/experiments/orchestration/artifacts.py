@@ -24,6 +24,7 @@ from src.evaluation.trade_path_diagnostics import (
     summarize_trade_lifecycle,
 )
 from src.experiments.orchestration.common import data_stats_payload, redact_sensitive_values, resolved_feature_columns
+from src.experiments.orchestration.consistency import apply_final_trade_accounting
 from src.experiments.orchestration.reporting import build_experiment_report_markdown
 from src.experiments.support.execution_source_audit import write_execution_source_audit
 from src.models.artifacts import save_model_artifacts
@@ -2261,7 +2262,10 @@ def _normalized_performance_trade_events(performance: BacktestResult | Portfolio
     core_columns = [
         "asset", "signal_time", "entry_time", "exit_time", "side", "signal_module",
         "entry_cluster", "entry_price", "exit_price", "take_profit_price", "stop_loss_price",
-        "exit_reason", "bars_held", "gross_return", "net_return", "realized_r", "cost",
+        "exit_reason", "bars_held", "gross_return", "net_return", "cost_return",
+        "gross_pnl_currency", "net_pnl_currency", "cost_currency",
+        "gross_r_multiple", "net_r_multiple", "mfe_r_multiple", "mae_r_multiple",
+        "realized_r", "cost",
         "entry_context_age_bars", "entry_macro_context_age_bars", "entry_laggard_gap",
         "signal_strength", "entry_relay_score",
     ]
@@ -2272,6 +2276,226 @@ def _normalized_performance_trade_events(performance: BacktestResult | Portfolio
         if column not in events.columns:
             events[column] = pd.NA
     return events.reindex(columns=[*core_columns, *[column for column in events.columns if column not in core_columns]])
+
+
+def _canonical_completed_trade_ledger(
+    *,
+    data: pd.DataFrame | dict[str, pd.DataFrame],
+    cfg: dict[str, Any],
+    performance: BacktestResult | PortfolioPerformance,
+) -> pd.DataFrame:
+    raw = getattr(performance, "trades", None)
+    if isinstance(raw, pd.DataFrame) and not raw.empty:
+        ledger = raw.copy()
+    else:
+        frames = _asset_frames_for_trade_diagnostics(data, cfg)
+        ledgers: list[pd.DataFrame] = []
+        if isinstance(performance, BacktestResult):
+            asset = next(iter(sorted(frames))) if len(frames) == 1 else None
+            ledger, _ = build_trade_ledger_from_position_transitions(
+                frames,
+                positions=performance.positions,
+                gross_returns=performance.gross_returns,
+                net_returns=performance.returns,
+                costs=performance.costs,
+                turnover=performance.turnover,
+                cfg=cfg,
+                asset=asset,
+            )
+            ledgers.append(ledger)
+        elif performance.applied_weights is not None:
+            weights = performance.applied_weights.astype(float)
+            asset_turnover = weights.diff().fillna(weights).abs()
+            total_turnover = asset_turnover.sum(axis=1).replace(0.0, np.nan)
+            returns_col = str(cfg.get("backtest", {}).get("returns_col", "close_ret"))
+            for asset in sorted(set(weights.columns) & set(frames)):
+                if returns_col not in frames[asset].columns:
+                    continue
+                aligned_returns = pd.to_numeric(frames[asset][returns_col], errors="coerce").reindex(weights.index)
+                gross = weights[asset].shift(1).fillna(0.0) * aligned_returns.fillna(0.0)
+                allocated_cost = performance.costs.reindex(weights.index).fillna(0.0) * (
+                    asset_turnover[asset] / total_turnover
+                ).fillna(0.0)
+                ledger, _ = build_trade_ledger_from_position_transitions(
+                    frames,
+                    positions=weights[asset],
+                    gross_returns=gross,
+                    net_returns=gross - allocated_cost,
+                    costs=allocated_cost,
+                    turnover=asset_turnover[asset],
+                    cfg=cfg,
+                    asset=str(asset),
+                )
+                ledgers.append(ledger)
+        ledger = pd.concat([item for item in ledgers if not item.empty], ignore_index=True) if any(not item.empty for item in ledgers) else pd.DataFrame()
+    if ledger.empty:
+        return ledger
+    aliases = {
+        "cost_return": ("total_cost", "cost_paid", "cost"),
+        "gross_r_multiple": ("gross_r", "gross_trade_r"),
+        "net_r_multiple": ("net_r", "trade_r", "realized_r"),
+        "mfe_r_multiple": ("max_favorable_r",),
+        "mae_r_multiple": ("max_adverse_r",),
+    }
+    for target, sources in aliases.items():
+        if target in ledger.columns:
+            continue
+        source = next((name for name in sources if name in ledger.columns), None)
+        if source is not None:
+            ledger[target] = ledger[source]
+    # Normalize all return-denominated costs against the authoritative engine identity.
+    # Some legacy lifecycle enrichers split a configured round-trip estimate 50/50 and
+    # thereby lost small compounding/slippage differences. Preserve any source values for
+    # audit, but make the canonical components add exactly to gross_return - net_return.
+    def _numeric_column(name: str) -> pd.Series:
+        if name not in ledger.columns:
+            return pd.Series(np.nan, index=ledger.index, dtype=float)
+        return pd.to_numeric(ledger[name], errors="coerce").astype(float)
+
+    gross = _numeric_column("gross_return")
+    net = _numeric_column("net_return")
+    reconciled_total = (gross - net).where(gross.notna() & net.notna())
+    existing_total = _numeric_column("cost_return")
+    total = reconciled_total.where(reconciled_total.notna(), existing_total).fillna(0.0)
+    if bool((total < -1e-12).any()):
+        raise ValueError("Canonical trade ledger contains negative total trading costs.")
+    total = total.clip(lower=0.0)
+    ledger["cost_return"] = total
+    ledger["total_cost"] = total
+
+    holding = _numeric_column("holding_cost").fillna(0.0)
+    holding = holding.clip(lower=0.0).where(holding <= total, total)
+    entry_source = _numeric_column("entry_cost")
+    entry = entry_source.where(entry_source.notna(), (total - holding) / 2.0)
+    entry = entry.clip(lower=0.0).where(entry <= (total - holding), total - holding)
+    exit_cost = total - entry - holding
+    ledger["entry_cost"] = entry
+    ledger["exit_cost"] = exit_cost
+    ledger["holding_cost"] = holding
+    ledger["cost_component_reconciliation"] = (
+        entry + exit_cost + holding - total
+    ).abs()
+    required = [
+        "entry_timestamp", "exit_timestamp", "side", "entry_price", "exit_price",
+        "bars_held", "gross_return", "net_return", "cost_return",
+        "gross_pnl_currency", "net_pnl_currency", "cost_currency",
+        "gross_r_multiple", "net_r_multiple", "mfe_r_multiple", "mae_r_multiple",
+        "exit_reason",
+    ]
+    for column in required:
+        if column not in ledger.columns:
+            ledger[column] = pd.NA
+    ledger["return_unit"] = "fractional_return"
+    ledger["r_multiple_unit"] = "R"
+    ledger["currency_pnl_available"] = ledger[["gross_pnl_currency", "net_pnl_currency"]].notna().all(axis=1)
+    return ledger
+
+
+def _completed_trade_metrics(trades: pd.DataFrame) -> dict[str, Any]:
+    """Canonical trade metrics; bar returns and position transitions are intentionally excluded."""
+    if trades is None or trades.empty:
+        return {
+            "trade_count": 0,
+            "completed_trade_count": 0,
+            "win_rate": 0.0,
+            "trade_return_profit_factor": 0.0,
+            "trade_r_profit_factor": 0.0,
+            "trade_profit_factor": 0.0,
+            "entry_trade_cost": 0.0,
+            "exit_trade_cost": 0.0,
+            "holding_trade_cost": 0.0,
+            "total_trade_cost": 0.0,
+        }
+
+    def _numeric(column: str) -> pd.Series:
+        if column not in trades.columns:
+            return pd.Series(dtype=float)
+        return pd.to_numeric(trades[column], errors="coerce").dropna().astype(float)
+
+    def _profit_factor(values: pd.Series) -> float:
+        gains = float(values[values > 0.0].sum())
+        losses = float(-values[values < 0.0].sum())
+        return float(gains / losses) if losses > 0.0 else (float("inf") if gains > 0.0 else 0.0)
+
+    trade_returns = _numeric("net_return")
+    trade_r = _numeric("net_r_multiple")
+    if trade_r.empty:
+        for fallback in ("trade_r", "realized_r"):
+            trade_r = _numeric(fallback)
+            if not trade_r.empty:
+                break
+    entry_cost = _numeric("entry_cost")
+    exit_cost = _numeric("exit_cost")
+    holding_cost = _numeric("holding_cost")
+    total_cost = _numeric("cost_return")
+    trade_return_pf = _profit_factor(trade_returns)
+    trade_r_pf = _profit_factor(trade_r)
+    return {
+        "trade_count": int(len(trades)),
+        "completed_trade_count": int(len(trades)),
+        "win_rate": float((trade_returns > 0.0).mean()) if not trade_returns.empty else 0.0,
+        "trade_return_profit_factor": trade_return_pf,
+        "trade_r_profit_factor": trade_r_pf,
+        # Backward-compatible explicit trade metric. The generic profit_factor is never
+        # replaced and remains the bar-return metric.
+        "trade_profit_factor": trade_return_pf,
+        "entry_trade_cost": float(entry_cost.sum()) if not entry_cost.empty else 0.0,
+        "exit_trade_cost": float(exit_cost.sum()) if not exit_cost.empty else 0.0,
+        "holding_trade_cost": float(holding_cost.sum()) if not holding_cost.empty else 0.0,
+        "total_trade_cost": float(total_cost.sum()) if not total_cost.empty else 0.0,
+    }
+
+
+def canonicalize_completed_trade_accounting(
+    *,
+    data: pd.DataFrame | dict[str, pd.DataFrame],
+    cfg: dict[str, Any],
+    performance: BacktestResult | PortfolioPerformance,
+    trades: pd.DataFrame | None = None,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Attach the canonical ledger and make every headline trade metric ledger-derived."""
+    canonical = trades if isinstance(trades, pd.DataFrame) and not trades.empty else _canonical_completed_trade_ledger(
+        data=data, cfg=cfg, performance=performance
+    )
+    performance.trades = canonical.copy()
+    metrics = _completed_trade_metrics(canonical)
+    position_path = performance.positions if isinstance(performance, BacktestResult) else performance.applied_weights
+    if isinstance(position_path, pd.Series):
+        position_transitions = int(position_path.fillna(0.0).diff().fillna(position_path.fillna(0.0)).abs().gt(1e-12).sum())
+        exposed_bars = int(position_path.fillna(0.0).abs().gt(1e-12).sum())
+    elif isinstance(position_path, pd.DataFrame):
+        delta = position_path.fillna(0.0).diff().fillna(position_path.fillna(0.0)).abs()
+        position_transitions = int(delta.gt(1e-12).sum().sum())
+        exposed_bars = int(position_path.fillna(0.0).abs().gt(1e-12).sum().sum())
+    else:
+        position_transitions = 0
+        exposed_bars = 0
+    metrics.update({
+        "position_transition_count": position_transitions,
+        "turnover_event_count": int(performance.turnover.fillna(0.0).abs().gt(1e-12).sum()),
+        "exposed_bar_count": exposed_bars,
+    })
+    timeline = dict(performance.summary or {})
+    timeline.update(metrics)
+    timeline.setdefault("bar_return_profit_factor", timeline.get("profit_factor", 0.0))
+    timeline.setdefault("profit_factor_scope", "bar_returns")
+    timeline["bar_return_profit_factor_scope"] = "bar_returns"
+    timeline["trade_return_profit_factor_scope"] = "completed_trade_net_returns"
+    timeline["trade_r_profit_factor_scope"] = "completed_trade_net_r_multiples"
+    timeline["trade_profit_factor_scope"] = "completed_trade_net_returns"
+    performance.summary = timeline
+    mtm = dict(getattr(performance, "mark_to_market_summary", {}) or timeline)
+    mtm.update(metrics)
+    mtm.setdefault("bar_return_profit_factor", mtm.get("profit_factor", 0.0))
+    mtm.setdefault("profit_factor_scope", "bar_returns")
+    mtm["bar_return_profit_factor_scope"] = "bar_returns"
+    mtm["trade_return_profit_factor_scope"] = "completed_trade_net_returns"
+    mtm["trade_r_profit_factor_scope"] = "completed_trade_net_r_multiples"
+    mtm["trade_profit_factor_scope"] = "completed_trade_net_returns"
+    performance.mark_to_market_summary = mtm
+    timeline["canonical_trade_ledger_applied"] = True
+    mtm["canonical_trade_ledger_applied"] = True
+    return canonical, metrics
 
 
 def save_artifacts(
@@ -2294,6 +2518,7 @@ def save_artifacts(
     config_hash_sha256: str,
     data_fingerprint: dict[str, Any],
     stage_tails: dict[str, Any] | None = None,
+    lifecycle_context: dict[str, Any] | None = None,
 ) -> dict[str, str]:
     run_dir.mkdir(parents=True, exist_ok=False)
 
@@ -2310,19 +2535,44 @@ def save_artifacts(
             cfg=safe_cfg,
         )
 
-    evaluation, lifecycle_context = enrich_evaluation_with_trade_path_diagnostics(
-        cfg=cfg,
-        data=data,
-        performance=performance,
-        model_meta=model_meta,
-        evaluation=evaluation,
+    already_canonical = bool(dict(performance.summary or {}).get("canonical_trade_ledger_applied", False))
+    if already_canonical:
+        canonical_trades = getattr(performance, "trades", pd.DataFrame()).copy()
+        trade_metrics = _completed_trade_metrics(canonical_trades)
+        for key in ("position_transition_count", "turnover_event_count", "exposed_bar_count"):
+            trade_metrics[key] = performance.summary.get(key, 0)
+    else:
+        canonical_trades, trade_metrics = canonicalize_completed_trade_accounting(
+            data=data,
+            cfg=cfg,
+            performance=performance,
+        )
+    # Pipeline callers pass the context produced by their single enrichment pass. Direct
+    # artifact callers retain backward compatibility and perform that pass here exactly once.
+    if lifecycle_context is None:
+        evaluation, lifecycle_context = enrich_evaluation_with_trade_path_diagnostics(
+            cfg=cfg,
+            data=data,
+            performance=performance,
+            model_meta=model_meta,
+            evaluation=evaluation,
+        )
+        evaluation = apply_final_trade_accounting(evaluation, trade_metrics=trade_metrics)
+    else:
+        lifecycle_context = dict(lifecycle_context)
+    primary_summary = evaluation.get("primary_summary", performance.summary) or {}
+    if not isinstance(primary_summary, dict):
+        primary_summary = dict(primary_summary)
+    timeline_summary = dict(evaluation.get("timeline_summary", performance.summary) or {})
+    mtm_summary = dict(
+        evaluation.get("mark_to_market_summary", performance.mark_to_market_summary or timeline_summary) or {}
     )
 
     summary_path = run_dir / "summary.json"
     payload = {
-        "summary": evaluation.get("primary_summary", performance.summary),
-        "timeline_summary": performance.summary,
-        "mark_to_market_summary": getattr(performance, "mark_to_market_summary", None) or {},
+        "summary": primary_summary,
+        "timeline_summary": timeline_summary,
+        "mark_to_market_summary": mtm_summary,
         "evaluation": evaluation,
         "monitoring": monitoring,
         "execution": execution,
@@ -2340,6 +2590,10 @@ def save_artifacts(
             "runtime": run_metadata.get("runtime", {}),
         },
     }
+    if payload["summary"] is not payload["evaluation"].get("primary_summary"):
+        raise RuntimeError("Artifact consistency check failed: summary does not reference the final primary summary object.")
+    if payload["summary"] != dict(payload["evaluation"].get("primary_summary", {}) or {}):
+        raise RuntimeError("Artifact consistency check failed: summary and evaluation.primary_summary differ.")
     with summary_path.open("w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2, default=str)
 

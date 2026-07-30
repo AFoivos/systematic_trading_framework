@@ -100,10 +100,13 @@ _FEATURE_SELECTOR_PROFILES = {
     "ftmo_fx_intraday_momentum_v1",
 }
 _FEATURE_TRANSFORM_HELPERS = {
+    "affine",
     "between_flag",
     "crossing_flag",
     "difference",
     "lag",
+    "log",
+    "product",
     "ratio",
     "reciprocal",
     "rising_flag",
@@ -795,6 +798,28 @@ def validate_data_block(data: dict[str, Any]) -> None:
                     raise ConfigValidationError("data.storage.load_paths keys must be non-empty strings.")
                 if not isinstance(path, str) or not path.strip():
                     raise ConfigValidationError("data.storage.load_paths values must be non-empty strings.")
+        expected_sha256 = storage.get("expected_sha256")
+        if expected_sha256 is not None and (
+            not isinstance(expected_sha256, str)
+            or len(expected_sha256) != 64
+            or any(ch not in "0123456789abcdefABCDEF" for ch in expected_sha256)
+        ):
+            raise ConfigValidationError("data.storage.expected_sha256 must be a 64-character SHA-256 hex string or null.")
+        expected_by_asset = storage.get("expected_sha256_by_asset")
+        if expected_by_asset is not None:
+            if not isinstance(expected_by_asset, dict):
+                raise ConfigValidationError("data.storage.expected_sha256_by_asset must be a mapping or null.")
+            for asset, digest in expected_by_asset.items():
+                if not isinstance(asset, str) or not asset.strip():
+                    raise ConfigValidationError("data.storage.expected_sha256_by_asset keys must be non-empty strings.")
+                if (
+                    not isinstance(digest, str)
+                    or len(digest) != 64
+                    or any(ch not in "0123456789abcdefABCDEF" for ch in digest)
+                ):
+                    raise ConfigValidationError(
+                        "data.storage.expected_sha256_by_asset values must be 64-character SHA-256 hex strings."
+                    )
         for key in ("raw_dir", "processed_dir"):
             if key in storage and not isinstance(storage[key], str):
                 raise ConfigValidationError(f"data.storage.{key} must be a string.")
@@ -1351,6 +1376,21 @@ def _helper_param_sets(raw_block: Any, *, field: str) -> list[dict[str, Any]]:
 
 
 def _validate_feature_transform_params(kind: str, params: dict[str, Any], *, field: str) -> None:
+    if kind in {"affine", "log"}:
+        _validate_column_ref_or_selector(params, col_key="source_col", selector_key="source_selector", field=field)
+        _validate_optional_string(params.get("output_col"), field=f"{field}.output_col")
+    if kind == "affine":
+        _finite_number(params.get("scale", 1.0), field=f"{field}.scale")
+        _finite_number(params.get("offset", 0.0), field=f"{field}.offset")
+    if kind == "log":
+        _finite_number(params.get("offset", 0.0), field=f"{field}.offset")
+        if _finite_number(params.get("eps", 1e-12), field=f"{field}.eps") < 0.0:
+            raise ConfigValidationError(f"{field}.eps must be >= 0.")
+    if kind == "product":
+        _validate_column_ref_or_selector(params, col_key="left_col", selector_key="left_selector", field=field)
+        _validate_column_ref_or_selector(params, col_key="right_col", selector_key="right_selector", field=field)
+        _validate_optional_string(params.get("output_col"), field=f"{field}.output_col")
+        _finite_number(params.get("scale", 1.0), field=f"{field}.scale")
     if kind in {"rms", "slope", "rolling_clip", "rolling_zscore"}:
         _validate_column_ref_or_selector(
             params,
@@ -1412,7 +1452,20 @@ def _validate_pairs(value: Any, *, field: str) -> None:
 
 
 def _validate_feature_normalization_params(kind: str, params: dict[str, Any], *, field: str) -> None:
-    if kind == "returns":
+    if kind == "efficiency_ratio":
+        _validate_optional_string(params.get("source_col"), field=f"{field}.source_col")
+        windows = params.get("windows", [24, 48, 96])
+        if not isinstance(windows, (list, tuple)) or not windows:
+            raise ConfigValidationError(f"{field}.windows must be a non-empty list of positive integers.")
+        for idx, window in enumerate(windows):
+            _positive_int(window, field=f"{field}.windows[{idx}]")
+        if len(set(windows)) != len(windows):
+            raise ConfigValidationError(f"{field}.windows must not contain duplicates.")
+        if "epsilon" in params and _finite_number(params["epsilon"], field=f"{field}.epsilon") <= 0.0:
+            raise ConfigValidationError(f"{field}.epsilon must be > 0.")
+        if "bar_minutes" in params and _finite_number(params["bar_minutes"], field=f"{field}.bar_minutes") <= 0.0:
+            raise ConfigValidationError(f"{field}.bar_minutes must be > 0.")
+    elif kind == "returns":
         _validate_optional_string(params.get("close_col"), field=f"{field}.close_col")
         windows = params.get("windows", [1, 4, 8, 20, 48])
         if not isinstance(windows, (list, tuple)) or not windows:
@@ -4270,6 +4323,49 @@ def validate_backtest_block(backtest: dict[str, Any]) -> None:
     engine = str(backtest.get("engine", "vectorized"))
     if engine not in {"vectorized", "manual_barrier", "portfolio_barrier"}:
         raise ConfigValidationError("backtest.engine must be 'vectorized', 'manual_barrier', or 'portfolio_barrier'.")
+    if not isinstance(backtest.get("allow_short", False), bool):
+        raise ConfigValidationError("backtest.allow_short must be boolean.")
+    oos_mode = str(backtest.get("oos_mode", "strict"))
+    if oos_mode not in {"strict", "gated"}:
+        raise ConfigValidationError("backtest.oos_mode must be 'strict' or 'gated'.")
+    execution_price = str(backtest.get("execution_price", "close_lagged"))
+    if execution_price not in {"close_lagged", "next_open", "bid_ask"}:
+        raise ConfigValidationError(
+            "backtest.execution_price must be 'close_lagged', 'next_open', or 'bid_ask'."
+        )
+    _non_negative_int(backtest.get("execution_delay_bars", 0), field="backtest.execution_delay_bars")
+    for cost_key in (
+        "estimated_spread_cost_per_unit_turnover", "commission_per_unit_turnover",
+        "slippage_per_unit_turnover", "holding_cost_per_exposed_bar",
+    ):
+        if _finite_number(backtest.get(cost_key, 0.0), field=f"backtest.{cost_key}") < 0.0:
+            raise ConfigValidationError(f"backtest.{cost_key} must be >= 0.")
+    if engine == "vectorized" and execution_price != "close_lagged":
+        raise ConfigValidationError(
+            "backtest.engine='vectorized' currently supports execution_price='close_lagged' only."
+        )
+    if engine == "manual_barrier" and execution_price != "next_open":
+        raise ConfigValidationError(
+            "backtest.engine='manual_barrier' currently requires execution_price='next_open'."
+        )
+    if execution_price == "bid_ask" and engine != "portfolio_barrier":
+        raise ConfigValidationError(
+            "backtest.execution_price='bid_ask' is currently supported only by portfolio_barrier."
+        )
+    if engine == "portfolio_barrier":
+        entry_mode = str(backtest.get("entry_price_mode", "next_open"))
+        expected_entry_mode = "current_close" if execution_price == "close_lagged" else "next_open"
+        if execution_price != "bid_ask" and entry_mode != expected_entry_mode:
+            raise ConfigValidationError(
+                f"backtest.execution_price='{execution_price}' conflicts with "
+                f"backtest.entry_price_mode='{entry_mode}'."
+            )
+    if not isinstance(backtest.get("allow_cost_layering", False), bool):
+        raise ConfigValidationError("backtest.allow_cost_layering must be boolean.")
+    if float(backtest.get("holding_cost_per_exposed_bar", 0.0)) != 0.0 and engine != "vectorized":
+        raise ConfigValidationError(
+            "Non-zero backtest.holding_cost_per_exposed_bar is currently supported only by the vectorized single-asset engine."
+        )
     stop_mode = str(backtest.get("stop_mode", "fixed_return"))
     if stop_mode not in {"fixed_return", "volatility_stop"}:
         raise ConfigValidationError("backtest.stop_mode must be 'fixed_return' or 'volatility_stop'.")
@@ -5399,7 +5495,50 @@ def validate_resolved_config(cfg: dict[str, Any]) -> dict[str, Any]:
     validate_panel_signals_block(cfg.get("panel_signals", []), symbols=symbols)
     validate_risk_block(cfg["risk"])
     validate_backtest_block(cfg["backtest"])
+    risk_costs_active = any(
+        float(cfg["risk"].get(key, 0.0) or 0.0) != 0.0
+        for key in ("cost_per_turnover", "slippage_per_turnover")
+    )
+    execution_costs_active = any(
+        float(cfg["backtest"].get(key, 0.0) or 0.0) != 0.0
+        for key in (
+            "estimated_spread_cost_per_unit_turnover",
+            "commission_per_unit_turnover",
+            "slippage_per_unit_turnover",
+        )
+    )
+    if risk_costs_active and execution_costs_active and not bool(cfg["backtest"].get("allow_cost_layering", False)):
+        raise ConfigValidationError(
+            "Costs are configured in both risk.* and backtest execution-cost fields. "
+            "This can double count costs; consolidate them or set backtest.allow_cost_layering=true explicitly."
+        )
+    signal_mode = str(dict(cfg.get("signals", {}).get("params", {}) or {}).get("mode", ""))
+    if (signal_mode.startswith("long_short") or signal_mode == "short_only") and not bool(cfg["backtest"].get("allow_short", False)):
+        raise ConfigValidationError(
+            f"signals.params.mode='{signal_mode}' conflicts with backtest.allow_short=false. "
+            "Enable shorts explicitly or use a long-only signal mode."
+        )
     validate_portfolio_block(cfg["portfolio"])
+    if bool(cfg["portfolio"].get("enabled", False)) and float(cfg["backtest"].get("holding_cost_per_exposed_bar", 0.0)) != 0.0:
+        raise ConfigValidationError(
+            "Non-zero backtest.holding_cost_per_exposed_bar is not yet supported for portfolio accounting."
+        )
+    if str(cfg["backtest"].get("execution_price", "close_lagged")) == "bid_ask":
+        strategy_path = dict(cfg["backtest"].get("strategy_path", {}) or {})
+        if str(strategy_path.get("kind", "none")) != "matb" or not bool(strategy_path.get("strict_bid_ask", False)):
+            raise ConfigValidationError(
+                "backtest.execution_price='bid_ask' requires portfolio_barrier with "
+                "backtest.strategy_path.kind='matb' and strict_bid_ask=true."
+            )
+    if (
+        bool(cfg["portfolio"].get("enabled", False))
+        and bool(cfg["portfolio"].get("long_short", True))
+        and not bool(cfg["backtest"].get("allow_short", False))
+    ):
+        raise ConfigValidationError(
+            "portfolio.long_short=true is incompatible with backtest.allow_short=false. "
+            "Set portfolio.long_short=false or enable shorts explicitly."
+        )
     if (
         str(cfg["backtest"].get("engine", "vectorized")) == "portfolio_barrier"
         and bool(cfg["portfolio"].get("long_short", True))

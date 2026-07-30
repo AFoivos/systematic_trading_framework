@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 from typing import Any, Mapping, Sequence
 
 import numpy as np
@@ -482,6 +483,40 @@ def collect_lightgbm_importance(model_meta: Mapping[str, Any]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def resolve_forecast_volatility_column(
+    asset_frames: Mapping[str, pd.DataFrame],
+    *,
+    cfg: Mapping[str, Any] | None = None,
+) -> dict[str, str | None]:
+    """Resolve the diagnostic volatility feature from the configured feature contract."""
+    cfg_dict = dict(cfg or {})
+    forecast_cfg = dict(dict(cfg_dict.get("diagnostics", {}) or {}).get("forecast", {}) or {})
+    configured = forecast_cfg.get("configured_volatility_col", forecast_cfg.get("volatility_col"))
+    configured_col = str(configured) if configured not in (None, "") else None
+    available_columns = {str(col) for frame in asset_frames.values() for col in frame.columns}
+    if configured_col in available_columns:
+        return {"configured_volatility_col": configured_col, "resolved_volatility_col": configured_col}
+
+    feature_contract_candidates: list[str] = []
+    for step in list(cfg_dict.get("features", []) or []):
+        step_cfg = dict(step or {})
+        if str(step_cfg.get("step", "")) != "indicator_pullback":
+            continue
+        params = dict(step_cfg.get("params", {}) or {})
+        base = str(params.get("atr_pct_col", "atr_pct"))
+        configured_window = params.get("atr_pct_rank_window")
+        if configured_window is not None:
+            feature_contract_candidates.append(f"{base}_rank_{int(configured_window)}")
+        else:
+            # Do not invent a diagnostic period. A unique emitted contract column is safe;
+            # multiple candidates require an explicit configured volatility_col.
+            emitted = sorted(col for col in available_columns if re.fullmatch(rf"{re.escape(base)}_rank_\d+", col))
+            if len(emitted) == 1:
+                feature_contract_candidates.append(emitted[0])
+    resolved = next((col for col in feature_contract_candidates if col in available_columns), None)
+    return {"configured_volatility_col": configured_col, "resolved_volatility_col": resolved}
+
+
 def build_dense_forecast_diagnostic_frames(
     asset_frames: Mapping[str, pd.DataFrame],
     *,
@@ -508,8 +543,14 @@ def build_dense_forecast_diagnostic_frames(
         or "expected_net_return"
     )
     target_col = str(model_meta_dict.get("fwd_col") or dict(model_meta_dict.get("target", {}) or {}).get("label_col") or "target_future_return_v2")
-    oos_col = str(model_meta_dict.get("pred_is_oos_col") or "pred_is_oos")
-    volatility_col = str(forecast_cfg.get("volatility_col") or "atr_pct_rank_100")
+    oos_col = str(
+        signal_params.get("pred_is_oos_col")
+        or model_meta_dict.get("pred_is_oos_col")
+        or model_cfg.get("pred_is_oos_col")
+        or "pred_is_oos"
+    )
+    volatility_resolution = resolve_forecast_volatility_column(asset_frames, cfg=cfg_dict)
+    volatility_col = str(volatility_resolution.get("resolved_volatility_col") or "")
     quantiles = int(forecast_cfg.get("quantiles", 10) or 10)
     lags = tuple(int(x) for x in list(forecast_cfg.get("autocorrelation_lags", [1, 2, 4, 8, 16]) or []))
 
@@ -607,6 +648,8 @@ def build_dense_forecast_diagnostic_frames(
             else pd.DataFrame()
         ),
         "residuals": residual_payload,
+        "configured_volatility_col": volatility_resolution.get("configured_volatility_col"),
+        "resolved_volatility_col": volatility_resolution.get("resolved_volatility_col"),
     }
     turnover_cost = turnover_cost_diagnostics(
         net_returns=net_returns,
@@ -950,6 +993,7 @@ def _write_lightgbm_importance_plots(
 
 __all__ = [
     "build_dense_forecast_diagnostic_frames",
+    "resolve_forecast_volatility_column",
     "collect_lightgbm_importance",
     "collect_shap_diagnostics",
     "collect_shap_status",

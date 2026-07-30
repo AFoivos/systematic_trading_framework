@@ -254,7 +254,7 @@ def test_pipeline_result_primary_summary_includes_trade_path_diagnostics(tmp_pat
         pipeline_mod,
         "apply_model_pipeline_to_assets",
         lambda frames, model_cfg, model_stages, returns_col: (
-            {asset: data.assign(pred_ret=0.25) for asset, data in frames.items()},
+            {asset: data.assign(pred_ret=0.25, pred_is_oos=True) for asset, data in frames.items()},
             None,
             {},
         ),
@@ -300,6 +300,7 @@ def test_pipeline_result_primary_summary_includes_trade_path_diagnostics(tmp_pat
     )
 
     primary = result.evaluation["primary_summary"]
+    assert result.summary is primary
     assert primary["avg_max_favorable_r"] == 2.0
     assert primary["loser_was_positive_rate"] == 1.0
     assert primary["avg_giveback_r"] == 2.1

@@ -1,4 +1,5 @@
 from .apply import apply_feature_helpers
+from .affine import add_affine_transform, compute_affine
 from .difference import add_difference_transform, compute_difference
 from .flags import (
     add_between_flag_transform,
@@ -11,6 +12,8 @@ from .flags import (
     compute_threshold_flag,
 )
 from .lag import add_lag_transform, compute_lag
+from .log import add_log_transform, compute_log
+from .product import add_product_transform, compute_product
 from .ratio import add_ratio_transform, compute_ratio
 from .reciprocal import add_reciprocal_transform, compute_reciprocal
 from .rolling_clip import add_rolling_clip_transform, compute_rolling_clip
@@ -26,10 +29,13 @@ from .rms import add_rms_transform, compute_rms
 from .slope import add_slope_transform, compute_slope
 
 __all__ = [
+    "add_affine_transform",
     "add_crossing_flag_transform",
     "add_between_flag_transform",
     "add_difference_transform",
     "add_lag_transform",
+    "add_log_transform",
+    "add_product_transform",
     "add_ratio_transform",
     "add_reciprocal_transform",
     "add_rising_flag_transform",
@@ -44,9 +50,12 @@ __all__ = [
     "add_threshold_flag_transform",
     "apply_feature_helpers",
     "compute_between_flag",
+    "compute_affine",
     "compute_crossing_flag",
     "compute_difference",
     "compute_lag",
+    "compute_log",
+    "compute_product",
     "compute_ratio",
     "compute_reciprocal",
     "compute_rising_flag",

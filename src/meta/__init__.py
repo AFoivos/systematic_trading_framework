@@ -8,8 +8,11 @@ from .stacked_trade_filter import (
     train_stacked_meta_filter,
     validate_meta_feature_columns,
 )
+from .completed_trade_history import CompletedTradeHistoryState, add_completed_trade_history_features
 
 __all__ = [
+    "CompletedTradeHistoryState",
+    "add_completed_trade_history_features",
     "DEFAULT_META_FEATURE_COLS",
     "MetaStackingResult",
     "build_causal_meta_features",

@@ -6,6 +6,7 @@ import pandas as pd
 
 from .normalizations.atr_distances import add_atr_distance_features
 from .normalizations.atr_scaled_distance import add_atr_scaled_distance_features
+from .normalizations.efficiency_ratio import add_efficiency_ratio_features
 from .normalizations.range_position import add_range_position_features
 from .normalizations.realized_vol_percentile import add_realized_vol_percentile_features
 from .normalizations.returns import add_return_features
@@ -17,6 +18,9 @@ from .normalizations.volatility import add_volatility_normalization_features
 from .normalizations.volatility_scaled_return import add_volatility_scaled_return_features
 from .normalizations.volume_relative import add_volume_relative_features
 from .difference import add_difference_transform
+from .affine import add_affine_transform
+from .log import add_log_transform
+from .product import add_product_transform
 from .flags import (
     add_between_flag_transform,
     add_crossing_flag_transform,
@@ -38,10 +42,13 @@ from .slope import add_slope_transform
 HelperFn = Callable[..., pd.DataFrame]
 
 TRANSFORM_HELPERS: Mapping[str, HelperFn] = {
+    "affine": add_affine_transform,
     "between_flag": add_between_flag_transform,
     "crossing_flag": add_crossing_flag_transform,
     "difference": add_difference_transform,
     "lag": add_lag_transform,
+    "log": add_log_transform,
+    "product": add_product_transform,
     "ratio": add_ratio_transform,
     "reciprocal": add_reciprocal_transform,
     "rolling_clip": add_rolling_clip_transform,
@@ -57,6 +64,7 @@ TRANSFORM_HELPERS: Mapping[str, HelperFn] = {
 }
 
 NORMALIZATION_HELPERS: Mapping[str, HelperFn] = {
+    "efficiency_ratio": add_efficiency_ratio_features,
     "returns": add_return_features,
     "atr_distances": add_atr_distance_features,
     "atr_scaled_distance": add_atr_scaled_distance_features,

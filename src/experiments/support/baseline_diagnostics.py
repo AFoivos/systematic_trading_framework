@@ -34,6 +34,9 @@ def _performance_summary(group: pd.DataFrame) -> dict[str, Any]:
             "trade_count": 0,
             "gross_pnl": 0.0,
             "net_pnl": 0.0,
+            "entry_cost": 0.0,
+            "exit_cost": 0.0,
+            "holding_cost": 0.0,
             "total_cost": 0.0,
             "profit_factor": None,
             "hit_rate": None,
@@ -42,9 +45,36 @@ def _performance_summary(group: pd.DataFrame) -> dict[str, Any]:
         }
     gross = _numeric(group["gross_return"]) if "gross_return" in group.columns else pd.Series(dtype=float)
     net = _numeric(group["net_return"]) if "net_return" in group.columns else pd.Series(dtype=float)
-    costs = _numeric(group["cost"]) if "cost" in group.columns else pd.Series(dtype=float)
-    if costs.empty and "cost_paid" in group.columns:
-        costs = _numeric(group["cost_paid"])
+    costs = pd.Series(dtype=float)
+    for cost_col in ("cost_return", "total_cost", "cost_paid", "cost"):
+        if cost_col in group.columns:
+            costs = _numeric(group[cost_col]).fillna(0.0)
+            break
+    entry_cost = _numeric(group["entry_cost"]).fillna(0.0) if "entry_cost" in group.columns else pd.Series(0.0, index=group.index)
+    exit_cost = _numeric(group["exit_cost"]).fillna(0.0) if "exit_cost" in group.columns else pd.Series(0.0, index=group.index)
+    holding_cost = _numeric(group["holding_cost"]).fillna(0.0) if "holding_cost" in group.columns else pd.Series(0.0, index=group.index)
+    gross_total = float(gross.sum()) if not gross.empty else 0.0
+    net_total = float(net.sum()) if not net.empty else 0.0
+    cost_total = float(costs.sum()) if not costs.empty else 0.0
+    component_total = float(entry_cost.sum() + exit_cost.sum() + holding_cost.sum())
+    if any(column in group.columns for column in ("entry_cost", "exit_cost", "holding_cost")) and not np.isclose(
+        component_total,
+        cost_total,
+        rtol=1e-10,
+        atol=1e-12,
+    ):
+        raise ValueError(
+            "Completed-trade breakdown accounting mismatch: cost components != total_cost."
+        )
+    if gross.notna().any() and net.notna().any() and not np.isclose(
+        gross_total - cost_total,
+        net_total,
+        rtol=1e-10,
+        atol=1e-12,
+    ):
+        raise ValueError(
+            "Completed-trade breakdown accounting mismatch: gross_pnl - total_cost != net_pnl."
+        )
     r_values = pd.Series(dtype=float)
     for col in ("realized_r", "trade_r"):
         if col in group.columns:
@@ -52,10 +82,14 @@ def _performance_summary(group: pd.DataFrame) -> dict[str, Any]:
             break
     return {
         "trade_count": int(len(group)),
-        "gross_pnl": float(gross.sum()) if not gross.empty else 0.0,
-        "net_pnl": float(net.sum()) if not net.empty else 0.0,
-        "cost": float(costs.sum()) if not costs.empty else 0.0,
-        "total_cost": float(costs.sum()) if not costs.empty else 0.0,
+        "gross_pnl": gross_total,
+        "net_pnl": net_total,
+        "entry_cost": float(entry_cost.sum()),
+        "exit_cost": float(exit_cost.sum()),
+        "holding_cost": float(holding_cost.sum()),
+        "cost": cost_total,
+        "total_cost": cost_total,
+        "pnl_unit": "fractional_return",
         "profit_factor": _profit_factor(net),
         "hit_rate": _hit_rate(net),
         "average_r": float(r_values.mean()) if not r_values.empty else None,

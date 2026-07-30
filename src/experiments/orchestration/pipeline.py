@@ -2,22 +2,33 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
+import warnings
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 import pandas as pd
 
+from src.evaluation.model_diagnostics import resolve_forecast_volatility_column
 from src.experiments.orchestration.artifacts import (
+    canonicalize_completed_trade_accounting,
     enrich_evaluation_with_trade_path_diagnostics,
     save_artifacts,
 )
 from src.experiments.orchestration.backtest_stage import (
     build_robustness_diagnostics,
+    gate_predictions_to_oos,
+    resolve_oos_marker_name,
     run_portfolio_backtest,
     run_single_asset_backtest,
 )
 from src.experiments.orchestration.common import build_storage_context, resolve_symbols
+from src.experiments.orchestration.consistency import (
+    apply_evaluation_scope_metadata,
+    apply_final_trade_accounting,
+    assert_run_consistency,
+    assert_saved_primary_summary,
+)
 from src.experiments.orchestration.execution_stage import build_execution_output
 from src.experiments.orchestration.feature_stage import apply_signals_to_assets, apply_steps_to_assets
 from src.experiments.orchestration.model_stage import apply_model_pipeline_to_assets
@@ -27,6 +38,7 @@ from src.experiments.orchestration.reporting import (
     build_portfolio_evaluation,
     build_single_asset_evaluation,
     compute_monitoring_report,
+    resolve_evaluation_scope,
 )
 from src.experiments.orchestration.stage_trace import (
     build_stage_tail_snapshot,
@@ -46,6 +58,7 @@ from src.utils.run_metadata import (
     build_run_metadata,
     compute_config_hash,
     compute_dataframe_fingerprint,
+    file_sha256,
 )
 from src.src_data.storage import asset_frames_to_long_frame
 
@@ -111,6 +124,46 @@ def _record_stage_tail(
         print("")
 
 
+def _raw_input_fingerprint_record(
+    *,
+    asset: str,
+    path: str | Path,
+    expected_trusted_sha256: str | None,
+    repro_mode: str,
+) -> dict[str, Any]:
+    candidate = Path(path).resolve()
+    if not candidate.is_file():
+        raise FileNotFoundError(f"Configured raw input for {asset} does not exist: {candidate}")
+    actual_sha256 = file_sha256(candidate)
+    expected = str(expected_trusted_sha256).lower() if expected_trusted_sha256 is not None else None
+    matches = None if expected is None else expected == actual_sha256.lower()
+    status = "computed_not_verified" if matches is None else ("verified" if matches else "mismatch")
+    if matches is False and str(repro_mode) == "strict":
+        raise ValueError(f"Raw input fingerprint mismatch for {candidate} in strict reproducibility mode.")
+    if matches is False:
+        warnings.warn(
+            f"Raw input fingerprint mismatch recorded for {candidate}; reproducibility mode is non-strict.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    stat = candidate.stat()
+    return {
+        "asset": str(asset),
+        "path": str(candidate),
+        "size_bytes": int(stat.st_size),
+        "bytes": int(stat.st_size),
+        "modification_timestamp_utc": datetime.fromtimestamp(
+            stat.st_mtime, tz=ZoneInfo("UTC")
+        ).isoformat(),
+        "sha256": actual_sha256,
+        "expected_trusted_sha256": expected,
+        "fingerprint_status": status,
+        "verified_fingerprint": bool(status == "verified"),
+        "fingerprint_matches_expected": matches,
+        "verification_policy": "error_on_mismatch" if str(repro_mode) == "strict" else "record_mismatch",
+    }
+
+
 def run_experiment_pipeline(
     config_path: str | Path,
     *,
@@ -137,6 +190,56 @@ def run_experiment_pipeline(
         )
         raw_long_frame = asset_frames_to_long_frame(raw_asset_frames)
         data_fingerprint = compute_dataframe_fingerprint(raw_long_frame)
+        raw_paths: dict[str, str] = {}
+        storage_cfg = dict(data_cfg.get("storage", {}) or {})
+        if storage_cfg.get("load_path"):
+            raw_paths[resolve_symbols(data_cfg)[0]] = str(storage_cfg["load_path"])
+        raw_paths.update({str(k): str(v) for k, v in dict(storage_cfg.get("load_paths", {}) or {}).items()})
+        loaded_snapshot = dict(storage_meta.get("loaded_snapshot", {}) or {})
+        if not raw_paths and loaded_snapshot.get("data_path"):
+            raw_paths[resolve_symbols(data_cfg)[0]] = str(loaded_snapshot["data_path"])
+        if not raw_paths:
+            raw_paths.update({str(k): str(v) for k, v in dict(loaded_snapshot.get("data_paths", {}) or {}).items()})
+        raw_input_files: list[dict[str, Any]] = []
+        expected_sha256_by_asset = {
+            str(k): str(v).lower()
+            for k, v in dict(storage_cfg.get("expected_sha256_by_asset", {}) or {}).items()
+        }
+        trusted_single_sha256 = storage_cfg.get("expected_sha256")
+        if trusted_single_sha256 is not None:
+            trusted_single_sha256 = str(trusted_single_sha256).lower()
+        snapshot_is_verified = bool(loaded_snapshot.get("verified_fingerprint", False)) and str(
+            loaded_snapshot.get("fingerprint_status", "verified")
+        ) == "verified"
+        if snapshot_is_verified:
+            for asset, digest in dict(loaded_snapshot.get("data_sha256_by_asset", {}) or {}).items():
+                expected_sha256_by_asset.setdefault(str(asset), str(digest).lower())
+        for raw_asset, raw_path in sorted(raw_paths.items()):
+            expected_sha256 = expected_sha256_by_asset.get(raw_asset)
+            if expected_sha256 is None and len(raw_paths) == 1:
+                expected_sha256 = trusted_single_sha256
+            if expected_sha256 is None and len(raw_paths) == 1 and snapshot_is_verified:
+                expected_sha256 = loaded_snapshot.get("data_sha256")
+            raw_input_files.append(
+                _raw_input_fingerprint_record(
+                    asset=raw_asset,
+                    path=raw_path,
+                    expected_trusted_sha256=expected_sha256,
+                    repro_mode=str(cfg.get("runtime", {}).get("repro_mode", "strict")),
+                )
+            )
+        if len(raw_paths) > 1 and set(raw_paths) != {item["asset"] for item in raw_input_files}:
+            raise ValueError("Raw input fingerprinting did not cover every configured asset.")
+        data_fingerprint["raw_input_files"] = raw_input_files
+        if raw_input_files:
+            statuses = {str(item["fingerprint_status"]) for item in raw_input_files}
+            aggregate_status = (
+                "mismatch" if "mismatch" in statuses
+                else ("verified" if statuses == {"verified"} else "computed_not_verified")
+            )
+            storage_meta["raw_input_fingerprints"] = raw_input_files
+            storage_meta["fingerprint_status"] = aggregate_status
+            storage_meta["verified_fingerprint"] = bool(aggregate_status == "verified")
         del raw_long_frame
 
         feature_asset_frames = apply_steps_to_assets(
@@ -190,6 +293,29 @@ def run_experiment_pipeline(
             model_stages=model_stages_cfg,
             returns_col=returns_col,
         )
+        oos_audit: dict[str, Any] = {"marker_recognized": False, "assets": {}}
+        gated_model_frames: dict[str, pd.DataFrame] = {}
+        for asset, frame in sorted(model_asset_frames.items()):
+            gated_frame, oos_mask = gate_predictions_to_oos(
+                frame,
+                cfg=cfg,
+                model_meta=dict(model_meta or {}),
+                signal_col=None,
+                asset=asset,
+            )
+            gated_model_frames[asset] = gated_frame
+            if oos_mask is not None:
+                oos_audit["marker_recognized"] = True
+                oos_audit["assets"][asset] = {
+                    "rows": int(len(frame)),
+                    "oos_rows": int(oos_mask.sum()),
+                    "pred_is_oos_col": resolve_oos_marker_name(dict(model_meta or {}), cfg),
+                }
+        model_asset_frames = gated_model_frames
+        model_meta = dict(model_meta or {})
+        anti_leakage = dict(model_meta.get("anti_leakage", {}) or {})
+        anti_leakage["oos_prediction_audit"] = oos_audit
+        model_meta["anti_leakage"] = anti_leakage
         _record_stage_tail(
             traces=stage_tails,
             stage="model_applied" if enabled_model_stage_count == 0 else f"model_applied[{enabled_model_stage_count}_stages]",
@@ -266,6 +392,20 @@ def run_experiment_pipeline(
                 stage_tail_cfg=stage_tail_cfg,
             )
 
+        volatility_resolution = resolve_forecast_volatility_column(asset_frames, cfg=cfg)
+        diagnostics_cfg = dict(cfg.get("diagnostics", {}) or {})
+        forecast_diagnostics_cfg = dict(diagnostics_cfg.get("forecast", {}) or {})
+        forecast_diagnostics_cfg.update(volatility_resolution)
+        resolved_volatility_col = volatility_resolution.get("resolved_volatility_col")
+        if resolved_volatility_col:
+            forecast_diagnostics_cfg["volatility_col"] = resolved_volatility_col
+        diagnostics_cfg["forecast"] = forecast_diagnostics_cfg
+        cfg["diagnostics"] = diagnostics_cfg
+        model_meta = dict(model_meta or {})
+        model_diagnostics_meta = dict(model_meta.get("diagnostics", {}) or {})
+        model_diagnostics_meta["forecast_volatility"] = dict(volatility_resolution)
+        model_meta["diagnostics"] = model_diagnostics_meta
+
         # Persist the final research frame, not the intermediate feature-only frame.
         # The dashboard uses this snapshot to visualize model predictions, signals,
         # and target columns alongside the base OHLCV/features.
@@ -299,6 +439,9 @@ def run_experiment_pipeline(
                 asset_frames,
                 cfg=cfg,
             )
+            canonical_trades, canonical_trade_metrics = canonicalize_completed_trade_accounting(
+                data=asset_frames, cfg=cfg, performance=performance
+            )
             evaluation = build_portfolio_evaluation(
                 asset_frames,
                 performance=performance,
@@ -315,6 +458,9 @@ def run_experiment_pipeline(
                 asset_frames[asset],
                 cfg=cfg,
                 model_meta=model_meta,
+            )
+            canonical_trades, canonical_trade_metrics = canonicalize_completed_trade_accounting(
+                data=asset_frames, cfg=cfg, performance=performance
             )
             evaluation = build_single_asset_evaluation(
                 asset,
@@ -344,10 +490,17 @@ def run_experiment_pipeline(
                     cfg=cfg,
                     model_meta=model_meta,
                 )
-                fold_backtests = build_fold_backtest_diagnostics(
-                    asset_frames[asset],
-                    cfg=cfg,
-                    model_meta=model_meta,
+                robustness_enabled = bool(
+                    dict(dict(cfg.get("diagnostics", {}) or {}).get("robustness", {}) or {}).get("enabled", False)
+                )
+                fold_backtests = (
+                    build_fold_backtest_diagnostics(
+                        asset_frames[asset],
+                        cfg=cfg,
+                        model_meta=model_meta,
+                    )
+                    if robustness_enabled
+                    else {}
                 )
                 regime_performance = build_regime_performance_diagnostics(
                     asset_frames[asset],
@@ -377,6 +530,20 @@ def run_experiment_pipeline(
             evaluation=evaluation,
         )
 
+        performance_index = (
+            performance.net_returns.index if is_portfolio else performance.returns.index
+        )
+        evaluation_mask, evaluation_metadata = resolve_evaluation_scope(
+            asset_frames,
+            performance_index=performance_index,
+            model_meta=model_meta,
+            alignment=str(cfg.get("data", {}).get("alignment", "inner")),
+        )
+        evaluation = apply_evaluation_scope_metadata(
+            evaluation,
+            metadata=evaluation_metadata,
+        )
+
         robustness = (
             {}
             if rl_environment_is_authoritative
@@ -385,6 +552,8 @@ def run_experiment_pipeline(
                 cfg=cfg,
                 performance=performance,
                 is_portfolio=is_portfolio,
+                evaluation_mask=evaluation_mask,
+                evaluation_metadata=evaluation_metadata,
             )
         )
         if robustness:
@@ -393,6 +562,17 @@ def run_experiment_pipeline(
             primary_summary.update(dict(robustness.get("primary_summary_fields", {}) or {}))
             evaluation["primary_summary"] = primary_summary
             evaluation["robustness"] = robustness
+
+        evaluation = apply_final_trade_accounting(
+            evaluation,
+            trade_metrics=canonical_trade_metrics,
+        )
+        assert_run_consistency(
+            evaluation=evaluation,
+            performance=performance,
+            evaluation_mask=evaluation_mask,
+            trade_metrics=canonical_trade_metrics,
+        )
 
         monitoring = compute_monitoring_report(
             asset_frames,
@@ -448,10 +628,15 @@ def run_experiment_pipeline(
                 run_metadata=run_metadata,
                 config_hash_sha256=config_hash_sha256,
                 data_fingerprint=data_fingerprint,
+                lifecycle_context=_trade_path_context,
                 stage_tails={
                     "config": stage_tail_cfg,
                     "stages": stage_tails,
                 },
+            )
+            assert_saved_primary_summary(
+                summary_path=artifacts["summary"],
+                evaluation=evaluation,
             )
 
         result_data: pd.DataFrame | dict[str, pd.DataFrame]

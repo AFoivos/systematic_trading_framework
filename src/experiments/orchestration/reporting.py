@@ -151,7 +151,10 @@ def _performance_breakdown_rows(section: dict[str, Any]) -> list[list[Any]]:
                     bucket,
                     metrics.get("trade_count"),
                     metrics.get("gross_pnl"),
-                    metrics.get("cost"),
+                    metrics.get("entry_cost"),
+                    metrics.get("exit_cost"),
+                    metrics.get("holding_cost"),
+                    metrics.get("total_cost", metrics.get("cost")),
                     metrics.get("net_pnl"),
                     metrics.get("profit_factor"),
                     metrics.get("hit_rate"),
@@ -655,6 +658,9 @@ def build_experiment_report_markdown(
     forecast_baselines = _safe_meta_dict(evaluation.get("forecast_baselines"))
     threshold_grid = _safe_meta_dict(evaluation.get("threshold_grid"))
     fold_backtest_diagnostics = _safe_meta_dict(evaluation.get("fold_backtest_diagnostics"))
+    if not bool(dict(dict(cfg.get("diagnostics", {}) or {}).get("robustness", {}) or {}).get("enabled", False)):
+        robustness_diagnostics = {}
+        fold_backtest_diagnostics = {}
     regime_performance = _safe_meta_dict(evaluation.get("regime_performance"))
 
     symbols = data_cfg.get("symbols") or ([data_cfg.get("symbol")] if data_cfg.get("symbol") else [])
@@ -1109,7 +1115,7 @@ def build_experiment_report_markdown(
                 [
                     "### Performance Breakdowns",
                     _markdown_table(
-                        ["Group", "Bucket", "Trades", "Gross PnL", "Cost", "Net PnL", "Profit Factor", "Hit Rate"],
+                        ["Group", "Bucket", "Trades", "Gross PnL", "Entry Cost", "Exit Cost", "Holding Cost", "Total Cost", "Net PnL", "Profit Factor", "Hit Rate"],
                         breakdown_rows,
                     ),
                 ]
@@ -1149,7 +1155,7 @@ def build_experiment_report_markdown(
                 [
                     "### Regime And Year Diagnostics",
                     _markdown_table(
-                        ["Group", "Bucket", "Trades", "Gross PnL", "Cost", "Net PnL", "Profit Factor", "Hit Rate"],
+                        ["Group", "Bucket", "Trades", "Gross PnL", "Entry Cost", "Exit Cost", "Holding Cost", "Total Cost", "Net PnL", "Profit Factor", "Hit Rate"],
                         breakdown_rows,
                     ),
                 ]
@@ -1187,7 +1193,7 @@ def build_experiment_report_markdown(
                 [
                     "### Side Diagnostics",
                     _markdown_table(
-                        ["Group", "Bucket", "Trades", "Gross PnL", "Cost", "Net PnL", "Profit Factor", "Hit Rate"],
+                        ["Group", "Bucket", "Trades", "Gross PnL", "Entry Cost", "Exit Cost", "Holding Cost", "Total Cost", "Net PnL", "Profit Factor", "Hit Rate"],
                         side_rows,
                     ),
                 ]
@@ -1197,7 +1203,7 @@ def build_experiment_report_markdown(
                 [
                     "### Year Diagnostics",
                     _markdown_table(
-                        ["Group", "Bucket", "Trades", "Gross PnL", "Cost", "Net PnL", "Profit Factor", "Hit Rate"],
+                        ["Group", "Bucket", "Trades", "Gross PnL", "Entry Cost", "Exit Cost", "Holding Cost", "Total Cost", "Net PnL", "Profit Factor", "Hit Rate"],
                         year_rows,
                     ),
                 ]
@@ -1207,7 +1213,7 @@ def build_experiment_report_markdown(
                 [
                     "### Volatility Regime Diagnostics",
                     _markdown_table(
-                        ["Group", "Bucket", "Trades", "Gross PnL", "Cost", "Net PnL", "Profit Factor", "Hit Rate"],
+                        ["Group", "Bucket", "Trades", "Gross PnL", "Entry Cost", "Exit Cost", "Holding Cost", "Total Cost", "Net PnL", "Profit Factor", "Hit Rate"],
                         volatility_rows,
                     ),
                 ]
@@ -1255,7 +1261,7 @@ def build_experiment_report_markdown(
                 [
                     "### Year Diagnostics",
                     _markdown_table(
-                        ["Group", "Bucket", "Trades", "Gross PnL", "Cost", "Net PnL", "Profit Factor", "Hit Rate"],
+                        ["Group", "Bucket", "Trades", "Gross PnL", "Entry Cost", "Exit Cost", "Holding Cost", "Total Cost", "Net PnL", "Profit Factor", "Hit Rate"],
                         year_rows,
                     ),
                 ]
@@ -1303,7 +1309,7 @@ def build_experiment_report_markdown(
                 [
                     "### Year Diagnostics",
                     _markdown_table(
-                        ["Group", "Bucket", "Trades", "Gross PnL", "Cost", "Net PnL", "Profit Factor", "Hit Rate"],
+                        ["Group", "Bucket", "Trades", "Gross PnL", "Entry Cost", "Exit Cost", "Holding Cost", "Total Cost", "Net PnL", "Profit Factor", "Hit Rate"],
                         year_rows,
                     ),
                 ]
@@ -1760,6 +1766,146 @@ def compute_subset_metrics(
         costs=costs.loc[aligned_mask],
         gross_returns=gross_returns.loc[aligned_mask],
     )
+
+
+def evaluation_scope_metadata(mask: pd.Series, *, scope: str) -> dict[str, Any]:
+    """Describe the exact row set used by every headline and robustness summary."""
+    selected = mask.fillna(False).astype(bool)
+    selected_index = selected.index[selected]
+    return {
+        "evaluation_scope": str(scope),
+        "evaluation_start": selected_index.min().isoformat() if len(selected_index) else None,
+        "evaluation_end": selected_index.max().isoformat() if len(selected_index) else None,
+        "evaluation_rows": int(selected.sum()),
+    }
+
+
+def resolve_evaluation_scope(
+    asset_frames: dict[str, pd.DataFrame],
+    *,
+    performance_index: pd.Index,
+    model_meta: dict[str, Any],
+    alignment: str = "inner",
+) -> tuple[pd.Series, dict[str, Any]]:
+    """Resolve one canonical timeline mask from the configured per-model OOS markers."""
+    marker_series: dict[str, pd.Series] = {}
+    per_asset_meta = dict(model_meta.get("per_asset", {}) or {})
+    for asset, frame in sorted(asset_frames.items()):
+        asset_meta = dict(per_asset_meta.get(asset, {}) or model_meta or {})
+        marker = str(asset_meta.get("pred_is_oos_col") or model_meta.get("pred_is_oos_col") or "pred_is_oos")
+        if marker in frame.columns:
+            marker_series[asset] = frame[marker].fillna(False).astype(bool)
+
+    index = pd.Index(performance_index)
+    if not marker_series:
+        mask = pd.Series(True, index=index, dtype=bool)
+        return mask, evaluation_scope_metadata(mask, scope="timeline")
+
+    missing_assets = sorted(set(asset_frames) - set(marker_series))
+    if missing_assets:
+        raise ValueError(
+            "Evaluation scope is ambiguous: OOS markers are present for only a subset of assets; "
+            f"missing markers for {missing_assets}."
+        )
+    markers = pd.concat(marker_series, axis=1, join=alignment).sort_index()
+    if isinstance(markers.columns, pd.MultiIndex):
+        markers.columns = markers.columns.get_level_values(0)
+    mask = markers.reindex(index).fillna(False).astype(bool).all(axis=1)
+    if not bool(mask.any()):
+        raise ValueError("Strict OOS evaluation scope contains zero rows.")
+    return mask, evaluation_scope_metadata(mask, scope="strict_oos_only")
+
+
+def _with_evaluation_scope(summary: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]:
+    out = dict(summary or {})
+    out.update(metadata)
+    return out
+
+
+def _scoped_mark_to_market_summary(
+    performance: Any,
+    *,
+    periods_per_year: int,
+    mask: pd.Series,
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
+    returns = getattr(performance, "mark_to_market_returns", None)
+    if returns is None:
+        returns = performance.returns if isinstance(performance, BacktestResult) else performance.net_returns
+    costs = performance.costs.reindex(returns.index).fillna(0.0).astype(float)
+    # MTM engines do not all expose a separate MTM gross series. Reconstructing it from
+    # the engine's own MTM net return and booked costs preserves the accounting identity.
+    gross = returns.astype(float).fillna(0.0) + costs
+    summary = compute_subset_metrics(
+        net_returns=returns,
+        turnover=performance.turnover,
+        costs=costs,
+        gross_returns=gross,
+        periods_per_year=periods_per_year,
+        mask=mask,
+    )
+    return _with_evaluation_scope(summary, metadata)
+
+
+def build_oos_volatility_rank_diagnostic(
+    asset_frames: dict[str, pd.DataFrame],
+    *,
+    model_meta: dict[str, Any],
+    evaluation_mask: pd.Series,
+    evaluation_metadata_payload: dict[str, Any],
+) -> dict[str, Any]:
+    resolution = dict(
+        dict(model_meta.get("diagnostics", {}) or {}).get("forecast_volatility", {}) or {}
+    )
+    volatility_col = resolution.get("resolved_volatility_col")
+    if not volatility_col:
+        return {
+            "status": "unavailable",
+            "reason": "configured volatility-rank feature could not be resolved",
+            "configured_volatility_col": resolution.get("configured_volatility_col"),
+            "resolved_volatility_col": None,
+            **evaluation_metadata_payload,
+        }
+
+    values: list[pd.Series] = []
+    missing_assets: list[str] = []
+    for asset, frame in sorted(asset_frames.items()):
+        if str(volatility_col) not in frame.columns:
+            missing_assets.append(str(asset))
+            continue
+        mask = evaluation_mask.reindex(frame.index).fillna(False).astype(bool)
+        values.append(pd.to_numeric(frame.loc[mask, str(volatility_col)], errors="coerce"))
+    if missing_assets:
+        return {
+            "status": "error",
+            "reason": f"resolved volatility-rank feature is missing for assets {missing_assets}",
+            "configured_volatility_col": resolution.get("configured_volatility_col"),
+            "resolved_volatility_col": str(volatility_col),
+            **evaluation_metadata_payload,
+        }
+    numeric = pd.concat(values, ignore_index=True).replace([np.inf, -np.inf], np.nan) if values else pd.Series(dtype=float)
+    valid = numeric.dropna().astype(float)
+    if valid.empty:
+        return {
+            "status": "unavailable",
+            "reason": "volatility-rank feature has no finite values in the OOS evaluation rows",
+            "configured_volatility_col": resolution.get("configured_volatility_col"),
+            "resolved_volatility_col": str(volatility_col),
+            **evaluation_metadata_payload,
+        }
+    return {
+        "status": "ok",
+        "metric_scope": "configured_volatility_rank_feature",
+        "configured_volatility_col": resolution.get("configured_volatility_col"),
+        "resolved_volatility_col": str(volatility_col),
+        "evaluation_value_rows": int(len(valid)),
+        "missing_value_rows": int(len(numeric) - len(valid)),
+        "mean": float(valid.mean()),
+        "std": float(valid.std(ddof=1)) if len(valid) > 1 else 0.0,
+        "min": float(valid.min()),
+        "max": float(valid.max()),
+        **evaluation_metadata_payload,
+    }
 
 
 def _fold_test_boundaries(fold: dict[str, Any]) -> tuple[int, int]:
@@ -2393,12 +2539,20 @@ def _compute_ftmo_objective(
     }
 
 
-def _mark_to_market_primary_fields(performance: Any) -> dict[str, float]:
-    summary = dict(getattr(performance, "mark_to_market_summary", {}) or {})
+def _mark_to_market_primary_fields(summary_or_performance: Any) -> dict[str, Any]:
+    summary = (
+        dict(summary_or_performance)
+        if isinstance(summary_or_performance, dict)
+        else dict(getattr(summary_or_performance, "mark_to_market_summary", {}) or {})
+    )
     if not summary:
         return {}
-    fields: dict[str, float] = {}
-    for key in ("cumulative_return", "annualized_return", "sharpe", "max_drawdown", "profit_factor"):
+    fields: dict[str, Any] = {}
+    for key in (
+        "cumulative_return", "annualized_return", "annualized_vol", "sharpe",
+        "conventional_sharpe", "return_over_vol_sharpe", "max_drawdown",
+        "profit_factor", "bar_return_profit_factor",
+    ):
         if key in summary:
             fields[f"mtm_{key}"] = summary[key]
     return fields
@@ -2413,6 +2567,15 @@ def build_single_asset_evaluation(
     periods_per_year: int,
     backtest_cfg: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    timeline_mask = pd.Series(True, index=performance.returns.index, dtype=bool)
+    timeline_scope = evaluation_scope_metadata(timeline_mask, scope="timeline")
+    timeline_summary = _with_evaluation_scope(dict(performance.summary), timeline_scope)
+    timeline_mtm = _scoped_mark_to_market_summary(
+        performance,
+        periods_per_year=periods_per_year,
+        mask=timeline_mask,
+        metadata=timeline_scope,
+    )
     trade_diagnostics = _trade_diagnostics_from_trades(performance.trades)
     c2_diagnostics = compute_c2_regime_aware_momentum_diagnostics(
         df,
@@ -2439,23 +2602,24 @@ def build_single_asset_evaluation(
         performance=performance,
         signal_col=str(dict(backtest_cfg or {}).get("signal_col", "ehlers_continuation_signal")),
     )
-    primary_summary = dict(performance.summary)
+    primary_summary = dict(timeline_summary)
     for key in ("trade_count", "average_r", "median_r"):
         if key in trade_diagnostics:
             primary_summary[key] = trade_diagnostics[key]
-    primary_summary.update(_mark_to_market_primary_fields(performance))
+    primary_summary.update(_mark_to_market_primary_fields(timeline_mtm))
     evaluation = EvaluationPayload(
         scope="timeline",
         primary_summary=primary_summary,
-        timeline_summary=dict(performance.summary),
+        timeline_summary=timeline_summary,
         extra={
+            **timeline_scope,
             "trade_diagnostics": trade_diagnostics,
             "baseline_diagnostics": baseline_diagnostics,
             "c2_diagnostics": c2_diagnostics,
             "stc_roofing_hilbert_diagnostics": stc_diagnostics,
             "ehlers_continuation_long_diagnostics": ehlers_diagnostics,
             "ehlers_continuation_short_diagnostics": ehlers_short_diagnostics,
-            "mark_to_market_summary": dict(getattr(performance, "mark_to_market_summary", {}) or {}),
+            "mark_to_market_summary": timeline_mtm,
         },
     ).to_dict()
 
@@ -2463,7 +2627,11 @@ def build_single_asset_evaluation(
     if pred_is_oos_col not in df.columns:
         return evaluation
 
-    oos_mask = df[pred_is_oos_col].reindex(performance.returns.index).fillna(False).astype(bool)
+    oos_mask, scope_metadata = resolve_evaluation_scope(
+        {asset: df},
+        performance_index=performance.returns.index,
+        model_meta=model_meta,
+    )
     oos_summary = compute_subset_metrics(
         net_returns=performance.returns,
         turnover=performance.turnover,
@@ -2503,12 +2671,25 @@ def build_single_asset_evaluation(
         label_col=str(target_meta.get("label_col")) if target_meta.get("label_col") is not None else None,
         pred_is_oos_col=pred_is_oos_col,
     )
-    primary_summary = dict(oos_summary or performance.summary)
+    oos_summary = _with_evaluation_scope(oos_summary, scope_metadata)
+    scoped_mtm = _scoped_mark_to_market_summary(
+        performance,
+        periods_per_year=periods_per_year,
+        mask=oos_mask,
+        metadata=scope_metadata,
+    )
+    volatility_diagnostic = build_oos_volatility_rank_diagnostic(
+        {asset: df},
+        model_meta=model_meta,
+        evaluation_mask=oos_mask,
+        evaluation_metadata_payload=scope_metadata,
+    )
+    primary_summary = dict(oos_summary or timeline_summary)
     primary_summary.update(dict(orb_diagnostics.get("primary_summary_fields", {}) or {}))
     for key in ("trade_count", "average_r", "median_r"):
         if key in trade_diagnostics:
             primary_summary[key] = trade_diagnostics[key]
-    primary_summary.update(_mark_to_market_primary_fields(performance))
+    primary_summary.update(_mark_to_market_primary_fields(scoped_mtm))
     for key in ("flat_rate", "long_rate", "short_rate"):
         if policy_summary.get(key) is not None:
             primary_summary[key] = policy_summary[key]
@@ -2516,15 +2697,18 @@ def build_single_asset_evaluation(
     return EvaluationPayload(
         scope="strict_oos_only",
         primary_summary=primary_summary,
-        timeline_summary=dict(performance.summary),
+        timeline_summary=timeline_summary,
         oos_only_summary=oos_summary,
         extra={
+            **scope_metadata,
             "oos_rows": int(oos_mask.sum()),
             "oos_coverage": float(oos_mask.mean()) if len(oos_mask) > 0 else 0.0,
             "fold_backtest_summaries": fold_summaries,
             "model_oos_summary": dict(model_meta.get("oos_classification_summary", {}) or {}),
             "model_oos_regression_summary": dict(model_meta.get("oos_regression_summary", {}) or {}),
-            "model_oos_volatility_summary": dict(model_meta.get("oos_volatility_summary", {}) or {}),
+            "model_forecast_volatility_summary": dict(model_meta.get("oos_volatility_summary", {}) or {}),
+            "model_oos_volatility_summary": volatility_diagnostic,
+            "oos_volatility_rank_diagnostic": volatility_diagnostic,
             "model_oos_policy_summary": policy_summary,
             "orb_diagnostics": orb_diagnostics,
             "trade_diagnostics": trade_diagnostics,
@@ -2533,7 +2717,7 @@ def build_single_asset_evaluation(
             "stc_roofing_hilbert_diagnostics": stc_diagnostics,
             "ehlers_continuation_long_diagnostics": ehlers_diagnostics,
             "ehlers_continuation_short_diagnostics": ehlers_short_diagnostics,
-            "mark_to_market_summary": dict(getattr(performance, "mark_to_market_summary", {}) or {}),
+            "mark_to_market_summary": scoped_mtm,
             "asset": asset,
         },
     ).to_dict()
@@ -2549,25 +2733,35 @@ def build_portfolio_evaluation(
     risk_cfg: dict[str, Any] | None = None,
     backtest_cfg: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    timeline_mask = pd.Series(True, index=performance.net_returns.index, dtype=bool)
+    timeline_scope = evaluation_scope_metadata(timeline_mask, scope="timeline")
+    timeline_summary = _with_evaluation_scope(dict(performance.summary), timeline_scope)
+    timeline_mtm = _scoped_mark_to_market_summary(
+        performance,
+        periods_per_year=periods_per_year,
+        mask=timeline_mask,
+        metadata=timeline_scope,
+    )
     trade_diagnostics = _trade_diagnostics_from_trades(getattr(performance, "trades", None))
     baseline_diagnostics = compute_baseline_vwap_rms_ema_ppo_mfi_atr_diagnostics(
         asset_frames,
         performance=performance,
         signal_col=str(dict(backtest_cfg or {}).get("signal_col", "signal_side")),
     )
-    primary_summary = dict(performance.summary)
+    primary_summary = dict(timeline_summary)
     for key in ("trade_count", "average_r", "median_r"):
         if key in trade_diagnostics:
             primary_summary[key] = trade_diagnostics[key]
-    primary_summary.update(_mark_to_market_primary_fields(performance))
+    primary_summary.update(_mark_to_market_primary_fields(timeline_mtm))
     evaluation = EvaluationPayload(
         scope="timeline",
         primary_summary=primary_summary,
-        timeline_summary=dict(performance.summary),
+        timeline_summary=timeline_summary,
         extra={
+            **timeline_scope,
             "trade_diagnostics": trade_diagnostics,
             "baseline_diagnostics": baseline_diagnostics,
-            "mark_to_market_summary": dict(getattr(performance, "mark_to_market_summary", {}) or {}),
+            "mark_to_market_summary": timeline_mtm,
             "risk_guard_summary": dict(performance.risk_guard_summary or {}),
         },
     ).to_dict()
@@ -2590,10 +2784,12 @@ def build_portfolio_evaluation(
     if not oos_by_asset:
         return evaluation
 
-    oos_df = pd.concat(oos_by_asset, axis=1, join=alignment).sort_index()
-    if isinstance(oos_df.columns, pd.MultiIndex):
-        oos_df.columns = oos_df.columns.get_level_values(0)
-    oos_mask = oos_df.reindex(performance.net_returns.index).fillna(0.0).astype(bool).all(axis=1)
+    oos_mask, scope_metadata = resolve_evaluation_scope(
+        asset_frames,
+        performance_index=performance.net_returns.index,
+        model_meta=model_meta,
+        alignment=alignment,
+    )
     oos_summary = compute_subset_metrics(
         net_returns=performance.net_returns,
         turnover=performance.turnover,
@@ -2602,7 +2798,20 @@ def build_portfolio_evaluation(
         periods_per_year=periods_per_year,
         mask=oos_mask,
     )
-    primary_summary = dict(oos_summary or performance.summary)
+    oos_summary = _with_evaluation_scope(oos_summary, scope_metadata)
+    scoped_mtm = _scoped_mark_to_market_summary(
+        performance,
+        periods_per_year=periods_per_year,
+        mask=oos_mask,
+        metadata=scope_metadata,
+    )
+    volatility_diagnostic = build_oos_volatility_rank_diagnostic(
+        asset_frames,
+        model_meta=model_meta,
+        evaluation_mask=oos_mask,
+        evaluation_metadata_payload=scope_metadata,
+    )
+    primary_summary = dict(oos_summary or timeline_summary)
     for key in (
         "trade_count",
         "position_change_count",
@@ -2615,7 +2824,7 @@ def build_portfolio_evaluation(
     for key in ("trade_count", "average_r", "median_r"):
         if key in trade_diagnostics:
             primary_summary[key] = trade_diagnostics[key]
-    primary_summary.update(_mark_to_market_primary_fields(performance))
+    primary_summary.update(_mark_to_market_primary_fields(scoped_mtm))
     portfolio_guard_cfg = dict(dict(risk_cfg or {}).get("portfolio_guard", {}) or {})
     ftmo_metrics = compute_ftmo_style_metrics(
         net_returns=performance.net_returns.loc[oos_mask],
@@ -2713,9 +2922,10 @@ def build_portfolio_evaluation(
     return EvaluationPayload(
         scope="strict_oos_only",
         primary_summary=primary_summary,
-        timeline_summary=dict(performance.summary),
+        timeline_summary=timeline_summary,
         oos_only_summary=oos_summary,
         extra={
+            **scope_metadata,
             "oos_active_dates": int(oos_mask.sum()),
             "oos_date_coverage": float(oos_mask.mean()) if len(oos_mask) > 0 else 0.0,
             "fold_backtest_summaries": fold_summaries,
@@ -2725,7 +2935,9 @@ def build_portfolio_evaluation(
             "feature_diagnostics": _portfolio_feature_diagnostics(model_meta),
             "model_oos_summary": dict(model_meta.get("oos_classification_summary", {}) or {}),
             "model_oos_regression_summary": dict(model_meta.get("oos_regression_summary", {}) or {}),
-            "model_oos_volatility_summary": dict(model_meta.get("oos_volatility_summary", {}) or {}),
+            "model_forecast_volatility_summary": dict(model_meta.get("oos_volatility_summary", {}) or {}),
+            "model_oos_volatility_summary": volatility_diagnostic,
+            "oos_volatility_rank_diagnostic": volatility_diagnostic,
             "model_oos_policy_summary": policy_summary,
             "forecast_quality": forecast_quality,
             "signal_diagnostics_by_asset": per_asset_policy_map,
@@ -2736,6 +2948,7 @@ def build_portfolio_evaluation(
                 asset: list(meta.get("folds", []) or [])
                 for asset, meta in dict(model_meta.get("per_asset", {}) or {}).items()
             },
+            "mark_to_market_summary": scoped_mtm,
         },
     ).to_dict()
 
@@ -2817,10 +3030,13 @@ __all__ = [
     "build_fold_backtest_summaries",
     "build_portfolio_fold_backtest_summaries",
     "build_portfolio_evaluation",
+    "build_oos_volatility_rank_diagnostic",
     "build_experiment_diagnostics",
     "build_experiment_report_markdown",
     "build_single_asset_evaluation",
     "compute_monitoring_for_asset",
     "compute_monitoring_report",
     "compute_subset_metrics",
+    "evaluation_scope_metadata",
+    "resolve_evaluation_scope",
 ]

@@ -649,6 +649,7 @@ def train_forward_classifier(
             "enabled": True,
             "train_start_position": 0,
             "train_end_position": int(final_cutoff),
+            "train_start_timestamp": out.index[0],
             "train_end_timestamp": out.index[final_cutoff],
             "train_rows_raw": int(final_cutoff + 1),
             "complete_labeled_rows": int(len(final_train_fit)),

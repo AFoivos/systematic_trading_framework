@@ -9,6 +9,13 @@ services:
       - ./:/workspace
     environment:
       PYTHONPATH: /workspace
+      # Python reads this only at interpreter startup; override for configs using another seed.
+      PYTHONHASHSEED: ${PYTHONHASHSEED:-7}
+      # The host bind mount has a different owner than appuser inside the container.
+      # Allow Git metadata collection required by runtime.repro_mode=strict.
+      GIT_CONFIG_COUNT: 1
+      GIT_CONFIG_KEY_0: safe.directory
+      GIT_CONFIG_VALUE_0: /workspace
       MT5_LOGIN: ${MT5_LOGIN:-}
       MT5_PASSWORD: ${MT5_PASSWORD:-}
       MT5_SERVER: ${MT5_SERVER:-}

@@ -814,7 +814,7 @@ def run_portfolio_barrier_backtest(
     slippage_per_turnover: float = 0.0,
     periods_per_year: int = 252,
     annualization_mode: str = "fixed_periods",
-    allow_short: bool = True,
+    allow_short: bool = False,
     asset_params: Mapping[str, Mapping[str, Any]] | None = None,
     asset_to_group: Mapping[str, str] | None = None,
     portfolio_guard: Mapping[str, Any] | None = None,
@@ -1663,15 +1663,14 @@ def run_portfolio_barrier_backtest(
         summary["average_r"] = float(trade_r.mean()) if not trade_r.empty else np.nan
         summary["median_r"] = float(trade_r.median()) if not trade_r.empty else np.nan
         summary["win_rate"] = trade_hit_rate
-        summary["profit_factor"] = trade_profit_factor
-        summary["hit_rate"] = trade_hit_rate
-        summary["metric_scope"] = "trade_ledger"
-        mark_to_market_summary["profit_factor"] = trade_profit_factor
-        mark_to_market_summary["hit_rate"] = trade_hit_rate
-        mark_to_market_summary["metric_scope"] = "trade_ledger"
+        summary["trade_profit_factor"] = trade_profit_factor
+        mark_to_market_summary["trade_profit_factor"] = trade_profit_factor
+        mark_to_market_summary["win_rate"] = trade_hit_rate
     if trades_df.empty:
-        summary["metric_scope"] = "trade_ledger"
-        mark_to_market_summary["metric_scope"] = "trade_ledger"
+        summary["trade_profit_factor"] = 0.0
+        summary["win_rate"] = 0.0
+        mark_to_market_summary["trade_profit_factor"] = 0.0
+        mark_to_market_summary["win_rate"] = 0.0
     summary.update(
         {
             "bankrupt": bool(portfolio_bankrupt),

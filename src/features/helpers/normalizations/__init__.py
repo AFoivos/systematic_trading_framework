@@ -1,5 +1,6 @@
 from .atr_distances import add_atr_distance_features
 from .atr_scaled_distance import add_atr_scaled_distance_features
+from .efficiency_ratio import add_efficiency_ratio_features
 from .range_position import add_range_position_features
 from .realized_vol_percentile import add_realized_vol_percentile_features
 from .returns import add_close_returns, add_return_features, compute_returns
@@ -15,6 +16,7 @@ __all__ = [
     "add_atr_distance_features",
     "add_atr_scaled_distance_features",
     "add_close_returns",
+    "add_efficiency_ratio_features",
     "add_range_position_features",
     "add_realized_vol_percentile_features",
     "add_return_features",

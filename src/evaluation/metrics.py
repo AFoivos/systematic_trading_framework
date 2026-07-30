@@ -408,6 +408,11 @@ def compute_backtest_metrics(
             )
         )
         base["annualization_mode"] = annualization_mode
+        base["conventional_sharpe"] = 0.0
+        base["return_over_vol_sharpe"] = 0.0
+        base["sharpe_legacy_alias"] = "return_over_vol_sharpe"
+        base["bar_return_profit_factor"] = 0.0
+        base["profit_factor_scope"] = "bar_returns"
         return base
     if annualization_mode == "calendar_daily":
         metric_returns, elapsed_days = calendar_daily_returns(rets)
@@ -458,6 +463,15 @@ def compute_backtest_metrics(
             costs=costs,
         )
     )
+    conventional = float(metrics.get("sharpe", 0.0))
+    ann_vol = float(metrics.get("annualized_vol", 0.0))
+    ann_return = float(metrics.get("annualized_return", 0.0))
+    metrics["conventional_sharpe"] = conventional
+    metrics["return_over_vol_sharpe"] = float(ann_return / ann_vol) if ann_vol > 0.0 else 0.0
+    metrics["sharpe"] = metrics["return_over_vol_sharpe"]
+    metrics["sharpe_legacy_alias"] = "return_over_vol_sharpe"
+    metrics["bar_return_profit_factor"] = float(metrics.get("profit_factor", 0.0))
+    metrics["profit_factor_scope"] = "bar_returns"
     return metrics
 
 

@@ -22,10 +22,13 @@ from .transforms import (
     compute_tsfresh_rolling_transform,
 )
 from .helpers import (
+    add_affine_transform,
     add_between_flag_transform,
     add_crossing_flag_transform,
     add_difference_transform,
     add_lag_transform,
+    add_log_transform,
+    add_product_transform,
     add_ratio_transform,
     add_reciprocal_transform,
     add_rising_flag_transform,
@@ -40,9 +43,12 @@ from .helpers import (
     add_threshold_flag_transform,
     apply_feature_helpers,
     compute_between_flag,
+    compute_affine,
     compute_crossing_flag,
     compute_difference,
     compute_lag,
+    compute_log,
+    compute_product,
     compute_ratio,
     compute_reciprocal,
     compute_rising_flag,
@@ -56,6 +62,8 @@ from .helpers import (
     compute_slope,
     compute_threshold_flag,
 )
+from .path_efficiency import add_path_efficiency
+from .rolling_autocorrelation import add_rolling_autocorrelation, compute_rolling_autocorrelation
 from .technical.trend import (
     compute_sma,
     compute_ema,
@@ -133,6 +141,7 @@ from .systems import (
     add_rlvs_features,
 )
 __all__ = [
+    "add_affine_transform",
     "compute_returns",
     "add_close_returns",
     "add_regime_context_features",
@@ -157,6 +166,8 @@ __all__ = [
     "add_between_flag_transform",
     "add_difference_transform",
     "add_lag_transform",
+    "add_log_transform",
+    "add_product_transform",
     "add_ratio_transform",
     "add_reciprocal_transform",
     "add_rising_flag_transform",
@@ -171,9 +182,12 @@ __all__ = [
     "add_threshold_flag_transform",
     "apply_feature_helpers",
     "compute_between_flag",
+    "compute_affine",
     "compute_crossing_flag",
     "compute_difference",
     "compute_lag",
+    "compute_log",
+    "compute_product",
     "compute_ratio",
     "compute_reciprocal",
     "compute_rising_flag",
@@ -242,6 +256,9 @@ __all__ = [
     "add_vpin",
     "add_yang_zhang_volatility",
     "add_momentum_features",
+    "add_path_efficiency",
+    "add_rolling_autocorrelation",
+    "compute_rolling_autocorrelation",
     "add_oscillator_features",
     "HARVolatilityForecaster",
     "KDSConfig",
