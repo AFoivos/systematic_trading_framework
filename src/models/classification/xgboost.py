@@ -50,8 +50,17 @@ def train_xgboost_classifier(
     for unsupported_key in ("num_leaves", "min_child_samples"):
         params.pop(unsupported_key, None)
     params = {key: value for key, value in params.items() if value is not None}
-    params.setdefault("objective", "binary:logistic")
-    params.setdefault("eval_metric", "logloss")
+    class_weight = params.pop("class_weight", None)
+    if class_weight is not None:
+        cfg["_class_weight"] = class_weight
+    target_kind = str(dict(cfg.get("target", {}) or {}).get("kind", ""))
+    if target_kind == "first_passage_barrier_multiclass":
+        params.setdefault("objective", "multi:softprob")
+        params.setdefault("num_class", 3)
+        params.setdefault("eval_metric", "mlogloss")
+    else:
+        params.setdefault("objective", "binary:logistic")
+        params.setdefault("eval_metric", "logloss")
     params.setdefault("tree_method", "hist")
     cfg["params"] = params
 

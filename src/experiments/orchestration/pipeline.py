@@ -52,6 +52,7 @@ from src.experiments.support.forecast_alpha_diagnostics import (
     build_forecast_threshold_grid_diagnostics,
     build_regime_performance_diagnostics,
 )
+from src.experiments.support.barrier_probability import build_barrier_probability_diagnostics
 from src.utils.config import load_experiment_config
 from src.utils.repro import runtime_reproducibility_context
 from src.utils.run_metadata import (
@@ -529,6 +530,18 @@ def run_experiment_pipeline(
             model_meta=model_meta,
             evaluation=evaluation,
         )
+        if not is_portfolio:
+            barrier_probability = build_barrier_probability_diagnostics(
+                next(iter(asset_frames.values())),
+                model_meta=model_meta,
+                performance=performance,
+                diagnostics_cfg=dict(
+                    dict(cfg.get("diagnostics", {}) or {}).get("barrier_probability", {}) or {}
+                ),
+            )
+            if barrier_probability:
+                evaluation = dict(evaluation)
+                evaluation["barrier_probability"] = barrier_probability
 
         performance_index = (
             performance.net_returns.index if is_portfolio else performance.returns.index

@@ -137,9 +137,15 @@ def _print_model_context(model_meta: dict[str, object]) -> None:
         {
             "evaluation_rows": classification.get("evaluation_rows"),
             "accuracy": classification.get("accuracy"),
+            "balanced_accuracy": classification.get("balanced_accuracy"),
+            "macro_f1": classification.get("macro_f1"),
             "roc_auc": classification.get("roc_auc"),
+            "roc_auc_ovr_macro": classification.get("roc_auc_ovr_macro"),
+            "pr_auc_ovr_macro": classification.get("pr_auc_ovr_macro"),
             "log_loss": classification.get("log_loss"),
             "brier": classification.get("brier"),
+            "multiclass_brier": classification.get("multiclass_brier"),
+            "expected_calibration_error": classification.get("expected_calibration_error"),
             "positive_rate": classification.get("positive_rate"),
         },
     )
@@ -169,8 +175,12 @@ def _print_model_context(model_meta: dict[str, object]) -> None:
         "Target diagnostics",
         {
             "kind": target.get("kind"),
+            "horizon_bars": target.get("horizon_bars"),
+            "entry_delay_bars": target.get("entry_delay_bars"),
             "candidate_rows": target.get("candidate_rows"),
             "labeled_rows": target.get("labeled_rows"),
+            "ambiguous_count": target.get("ambiguous_count"),
+            "ambiguous_rate": target.get("ambiguous_rate"),
             "positive_rate": target.get("positive_rate"),
             "profit_barrier_count": target.get("profit_barrier_count"),
             "stop_barrier_count": target.get("stop_barrier_count"),

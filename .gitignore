@@ -159,6 +159,7 @@ tests/*
 !tests/utils/*.py
 !tests/experiments/
 tests/experiments/*
+!tests/experiments/test_barrier_probability_diagnostics.py
 !tests/experiments/evolutionary/
 !tests/experiments/evolutionary/*.py
 !tests/trade_path/

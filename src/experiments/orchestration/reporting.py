@@ -662,6 +662,7 @@ def build_experiment_report_markdown(
         robustness_diagnostics = {}
         fold_backtest_diagnostics = {}
     regime_performance = _safe_meta_dict(evaluation.get("regime_performance"))
+    barrier_probability = _safe_meta_dict(evaluation.get("barrier_probability"))
 
     symbols = data_cfg.get("symbols") or ([data_cfg.get("symbol")] if data_cfg.get("symbol") else [])
     run_name = str(cfg.get("logging", {}).get("run_name", cfg.get("config_path", "experiment")))
@@ -799,6 +800,62 @@ def build_experiment_report_markdown(
                 _markdown_table(["Metric", "Value"], model_summary_rows),
             ]
         )
+
+    if barrier_probability:
+        barrier_rows: list[list[Any]] = []
+        label_distribution = _safe_meta_dict(barrier_probability.get("label_distribution"))
+        for metric, value in _dict_metric_rows(label_distribution):
+            barrier_rows.append([f"labels.{metric}", value])
+        ambiguous = _safe_meta_dict(barrier_probability.get("ambiguous"))
+        for metric, value in _dict_metric_rows(ambiguous):
+            barrier_rows.append([f"ambiguous.{metric}", value])
+        calibration_payload = _safe_meta_dict(barrier_probability.get("calibration"))
+        for variant in ("raw", "calibrated"):
+            metrics = _safe_meta_dict(calibration_payload.get(variant))
+            for key in (
+                "evaluation_rows",
+                "log_loss",
+                "multiclass_brier",
+                "macro_f1",
+                "balanced_accuracy",
+                "roc_auc_ovr_macro",
+                "pr_auc_ovr_macro",
+                "expected_calibration_error",
+            ):
+                if key in metrics:
+                    barrier_rows.append([f"{variant}.{key}", metrics.get(key)])
+        if barrier_rows:
+            lines.extend(
+                [
+                    "",
+                    "## First-Passage Barrier Probability Diagnostics",
+                    _markdown_table(["Metric", "Value"], barrier_rows),
+                ]
+            )
+        path_rows: list[list[Any]] = []
+        for name, payload in _safe_meta_dict(barrier_probability.get("path_distributions")).items():
+            for metric, value in _dict_metric_rows(_safe_meta_dict(payload)):
+                path_rows.append([name, metric, value])
+        if path_rows:
+            lines.extend(
+                [
+                    "### Path Distributions",
+                    _markdown_table(["Path Metric", "Statistic", "Value"], path_rows),
+                ]
+            )
+        net_value = primary.get("net_pnl", primary.get("cumulative_return"))
+        try:
+            net_numeric = float(net_value)
+        except (TypeError, ValueError):
+            net_numeric = float("nan")
+        if np.isfinite(net_numeric) and net_numeric <= 0.0:
+            lines.append(
+                "**Research conclusion:** the OOS EV policy did not produce positive net performance after costs in this run."
+            )
+        elif np.isfinite(net_numeric):
+            lines.append(
+                "**Research conclusion:** net OOS performance is positive in this run, but this is not an alpha claim; confirm it on the locked holdout."
+            )
 
     prediction_diagnostics = _safe_meta_dict(model_meta.get("prediction_diagnostics"))
     if prediction_diagnostics:
@@ -1319,6 +1376,7 @@ def build_experiment_report_markdown(
         lines.extend(["", "## Robustness Diagnostics"])
         for label, section in (
             ("Cost Stress", "cost_stress"),
+            ("Slippage Stress", "slippage_stress"),
             ("Entry Delay", "entry_delay"),
             ("Walk Forward", "walk_forward"),
             ("Gap Stress", "gap_stress"),
@@ -1336,6 +1394,19 @@ def build_experiment_report_markdown(
         target_rows: list[list[Any]] = []
         for key in (
             "kind",
+            "horizon_bars",
+            "entry_delay_bars",
+            "entry_price_type",
+            "upper_atr_multiplier",
+            "lower_atr_multiplier",
+            "atr_anchor",
+            "ambiguous_policy",
+            "ambiguous_count",
+            "ambiguous_rate",
+            "intrabar_resolved_count",
+            "unresolved_ambiguous_count",
+            "minimum_barrier_to_cost_ratio",
+            "round_trip_cost",
             "label_mode",
             "max_holding",
             "max_holding_bars",
@@ -1465,6 +1536,29 @@ def build_experiment_report_markdown(
                             row.get("source"),
                         ]
                         for row in top_features
+                    ],
+                ),
+            ]
+        )
+
+    permutation_importance = _safe_meta_dict(model_meta.get("permutation_importance"))
+    permutation_features = list(permutation_importance.get("top_features", []) or [])
+    if permutation_features:
+        lines.extend(
+            [
+                "",
+                "## Fold OOS Permutation Importance",
+                _markdown_table(
+                    ["Rank", "Feature", "Mean Importance", "Std", "Fold Count"],
+                    [
+                        [
+                            row.get("rank"),
+                            row.get("feature"),
+                            row.get("mean_importance", row.get("importance")),
+                            row.get("std_importance", row.get("importance_std")),
+                            row.get("fold_count"),
+                        ]
+                        for row in permutation_features
                     ],
                 ),
             ]

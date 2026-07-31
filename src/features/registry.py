@@ -7,6 +7,15 @@ import pandas as pd
 from src.utils.registry import build_registry, get_registered_component, lazy_callable, registry_names
 
 from .autocorrelation_periodogram import add_autocorrelation_periodogram
+from .barrier_state import (
+    add_barrier_equilibrium_features,
+    add_barrier_market_organization_features,
+    add_barrier_microstructure_features,
+    add_barrier_path_features,
+    add_barrier_persistence_features,
+    add_barrier_session_features,
+    add_barrier_volatility_features,
+)
 from .center_of_gravity import add_center_of_gravity
 from .cyber_cycle import add_cyber_cycle
 from .decycler import add_decycler
@@ -90,6 +99,13 @@ FeatureFn = Callable[..., pd.DataFrame]
 
 _FEATURE_COMPONENTS: tuple[tuple[str, FeatureFn], ...] = (
     ("returns", add_close_returns),
+    ("barrier_equilibrium", add_barrier_equilibrium_features),
+    ("barrier_path", add_barrier_path_features),
+    ("barrier_persistence", add_barrier_persistence_features),
+    ("barrier_volatility", add_barrier_volatility_features),
+    ("barrier_market_organization", add_barrier_market_organization_features),
+    ("barrier_microstructure", add_barrier_microstructure_features),
+    ("barrier_session", add_barrier_session_features),
     ("impulse_12_96", add_impulse_12_96),
     ("volatility", add_volatility_features),
     ("trend", add_trend_features),

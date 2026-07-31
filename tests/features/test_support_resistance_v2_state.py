@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import pandas as pd
 
-from src.features.support_resistance_v2 import _breakout_retest_events
+from src.features.support_resistance_v2 import (
+    _breakout_retest_events,
+    add_support_resistance_v2_features,
+)
 
 
 def _series(values: list[float]) -> pd.Series:
@@ -49,3 +52,26 @@ def test_breakout_retest_state_expires_and_invalidates() -> None:
 
     assert expired_retest.sum() == 0.0
     assert invalidated_retest.sum() == 0.0
+
+
+def test_atr_distance_outputs_are_opt_in_with_explicit_atr_column() -> None:
+    index = pd.date_range("2024-01-01", periods=12, freq="h")
+    frame = pd.DataFrame(
+        {
+            "close": [100, 101, 102, 103, 102, 101, 100, 99, 100, 101, 102, 101],
+            "high": [101, 102, 103, 104, 103, 102, 101, 100, 101, 102, 103, 102],
+            "low": [99, 100, 101, 102, 101, 100, 99, 98, 99, 100, 101, 100],
+            "atr_2": [2.0] * 12,
+        },
+        index=index,
+    )
+
+    out = add_support_resistance_v2_features(
+        frame,
+        atr_col="atr_2",
+        pivot_left_window=2,
+        pivot_confirm_bars=1,
+    )
+
+    assert "sr_v2_resistance_distance_atr" in out.columns
+    assert "sr_v2_support_distance_atr" in out.columns

@@ -45,6 +45,19 @@ TARGET_OUTPUT_KEYS = frozenset(
         "meta_side_col",
         "oriented_ret_col",
         "vol_source_col",
+        "time_to_first_hit_col",
+        "mfe_atr_col",
+        "mae_atr_col",
+        "terminal_return_col",
+        "terminal_return_atr_col",
+        "upper_distance_col",
+        "lower_distance_col",
+        "ambiguous_col",
+        "intrabar_resolved_col",
+        "eligible_col",
+        "barrier_cost_ratio_col",
+        "stop_first_label_col",
+        "target_first_label_col",
     }
 )
 

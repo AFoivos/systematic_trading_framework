@@ -8,6 +8,7 @@ import pandas as pd
 from src.utils.registry import build_registry, get_registered_component, registry_names
 
 from .c1_trend_pullback_vwap import c1_trend_pullback_vwap_signal
+from .barrier_expected_value_signal import barrier_expected_value_signal
 from .c2_regime_aware_momentum import c2_regime_aware_momentum_signal
 from .conviction_sizing_signal import conviction_sizing_signal
 from .dense_return_forecast_signal import dense_return_forecast_signal
@@ -52,6 +53,7 @@ SignalFn = Callable[..., Union[pd.DataFrame, pd.Series]]
 
 
 _SIGNAL_COMPONENTS: tuple[tuple[str, SignalFn], ...] = (
+    ("barrier_expected_value", barrier_expected_value_signal),
     ("c1_trend_pullback_vwap", c1_trend_pullback_vwap_signal),
     ("c2_regime_aware_momentum", c2_regime_aware_momentum_signal),
     ("qms_alpha_strategy", qms_alpha_strategy_signal),

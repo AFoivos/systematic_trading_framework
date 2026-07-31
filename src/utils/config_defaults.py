@@ -364,6 +364,12 @@ def default_diagnostics_block(diagnostics: dict[str, Any]) -> dict[str, Any]:
     shap_cfg.setdefault("per_prediction_row_limit", 3)
     shap_cfg.setdefault("random_state", 42)
     model["shap"] = shap_cfg
+    permutation_cfg = dict(model.get("permutation_importance", {}) or {})
+    permutation_cfg.setdefault("enabled", False)
+    permutation_cfg.setdefault("max_rows", 2000)
+    permutation_cfg.setdefault("n_repeats", 3)
+    permutation_cfg.setdefault("random_state", 7)
+    model["permutation_importance"] = permutation_cfg
     diagnostics["model"] = model
     forecast = dict(diagnostics.get("forecast", {}) or {})
     forecast.setdefault("quantiles", 10)
@@ -374,6 +380,7 @@ def default_diagnostics_block(diagnostics: dict[str, Any]) -> dict[str, Any]:
     robustness = dict(diagnostics.get("robustness", {}) or {})
     robustness.setdefault("enabled", False)
     robustness.setdefault("cost_multipliers", [1.0, 2.0, 3.0, 5.0])
+    robustness.setdefault("slippage_multipliers", [1.0, 2.0, 3.0])
     robustness.setdefault("entry_delay_bars", [1, 2])
     robustness.setdefault("walk_forward_frequency", "YE")
     robustness.setdefault("gap_loss_per_exposure", 0.0)
@@ -412,6 +419,15 @@ def default_diagnostics_block(diagnostics: dict[str, Any]) -> dict[str, Any]:
     plots.setdefault("max_path_points", 200000)
     trade_path["plots"] = plots
     diagnostics["trade_path"] = trade_path
+    barrier_probability = dict(diagnostics.get("barrier_probability", {}) or {})
+    barrier_probability.setdefault("signal_col", "barrier_ev_signal")
+    sensitivity_grid = dict(barrier_probability.get("sensitivity_grid", {}) or {})
+    sensitivity_grid.setdefault("enabled", False)
+    sensitivity_grid.setdefault("horizons", [6, 12, 24])
+    sensitivity_grid.setdefault("multipliers", [0.50, 0.75, 1.00, 1.25])
+    sensitivity_grid.setdefault("asymmetric", [{"upper": 1.00, "lower": 0.75}])
+    barrier_probability["sensitivity_grid"] = sensitivity_grid
+    diagnostics["barrier_probability"] = barrier_probability
     return diagnostics
 
 

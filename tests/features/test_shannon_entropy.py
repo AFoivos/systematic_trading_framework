@@ -34,3 +34,18 @@ def test_shannon_entropy_is_causal() -> None:
         output_cols=["shannon_entropy_32"],
         params={"window": 32, "bins": 8},
     )
+
+
+def test_shannon_entropy_supports_return_signs() -> None:
+    df = synthetic_ohlcv()
+    df["return"] = df["close"].pct_change()
+    out = add_shannon_entropy(
+        df,
+        source_col="return",
+        window=32,
+        bins=3,
+        value_mode="sign",
+        output_col="sign_entropy",
+    )
+
+    assert out["sign_entropy"].notna().any()

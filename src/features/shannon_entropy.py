@@ -12,6 +12,7 @@ def add_shannon_entropy(
     window: int = 64,
     bins: int = 10,
     normalize: bool = True,
+    value_mode: str = "raw",
     output_col: str | None = None,
 ) -> pd.DataFrame:
     """
@@ -55,10 +56,15 @@ def add_shannon_entropy(
     _validate_window(bins, name="bins")
     if bins <= 1:
         raise ValueError("bins must be greater than 1.")
+    resolved_mode = str(value_mode).strip().lower()
+    if resolved_mode not in {"raw", "sign"}:
+        raise ValueError("value_mode must be one of ['raw', 'sign'].")
     col = _resolve_output_col(output_col, f"shannon_entropy_{window}")
 
     out = df.copy()
     source = out[source_col].astype(float)
+    if resolved_mode == "sign":
+        source = np.sign(source)
     out[col] = source.rolling(window=window, min_periods=window).apply(
         lambda values: _entropy(values, bins=bins, normalize=normalize),
         raw=True,

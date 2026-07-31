@@ -179,6 +179,7 @@ class ModelConfig:
     returns_input_col: str | None = None
     signal_col: str | None = None
     action_col: str | None = None
+    final_refit: bool = True
     extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -203,6 +204,7 @@ class ModelConfig:
             "returns_input_col",
             "signal_col",
             "action_col",
+            "final_refit",
         }
         _validate_model_backtest_context(data)
         feature_cols_raw = data.get("feature_cols")
@@ -231,6 +233,7 @@ class ModelConfig:
             returns_input_col=data.get("returns_input_col"),
             signal_col=data.get("signal_col"),
             action_col=data.get("action_col"),
+            final_refit=bool(data.get("final_refit", True)),
             extra=_validated_extras(
                 data,
                 known,
@@ -259,6 +262,7 @@ class ModelConfig:
             "returns_input_col": self.returns_input_col,
             "signal_col": self.signal_col,
             "action_col": self.action_col,
+            "final_refit": self.final_refit,
         }
         if self.feature_selectors is not None:
             payload["feature_selectors"] = dict(self.feature_selectors)
@@ -289,6 +293,7 @@ class ModelStageConfig:
     returns_input_col: str | None = None
     signal_col: str | None = None
     action_col: str | None = None
+    final_refit: bool = True
     extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -316,6 +321,7 @@ class ModelStageConfig:
             "returns_input_col",
             "signal_col",
             "action_col",
+            "final_refit",
         }
         feature_cols_raw = data.get("feature_cols")
         if feature_cols_raw is not None and not isinstance(feature_cols_raw, list):
@@ -346,6 +352,7 @@ class ModelStageConfig:
             returns_input_col=data.get("returns_input_col"),
             signal_col=data.get("signal_col"),
             action_col=data.get("action_col"),
+            final_refit=bool(data.get("final_refit", True)),
             extra=_validated_extras(
                 data,
                 known,
@@ -377,6 +384,7 @@ class ModelStageConfig:
             "returns_input_col": self.returns_input_col,
             "signal_col": self.signal_col,
             "action_col": self.action_col,
+            "final_refit": self.final_refit,
         }
         if self.feature_selectors is not None:
             payload["feature_selectors"] = dict(self.feature_selectors)

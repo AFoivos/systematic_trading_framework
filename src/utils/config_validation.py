@@ -178,6 +178,19 @@ _TARGET_OUTPUT_KEYS = {
     "meta_side_col",
     "oriented_ret_col",
     "vol_source_col",
+    "time_to_first_hit_col",
+    "mfe_atr_col",
+    "mae_atr_col",
+    "terminal_return_col",
+    "terminal_return_atr_col",
+    "upper_distance_col",
+    "lower_distance_col",
+    "ambiguous_col",
+    "intrabar_resolved_col",
+    "eligible_col",
+    "barrier_cost_ratio_col",
+    "stop_first_label_col",
+    "target_first_label_col",
 }
 _MODEL_OUTPUT_KEYS = {
     "pred_prob_col",
@@ -2646,6 +2659,74 @@ def _validate_trade_evaluation_target_block(
             )
 
 
+def _validate_first_passage_barrier_target_block(
+    target: dict[str, Any],
+    *,
+    field_prefix: str = "model.target",
+) -> None:
+    string_keys = (
+        "open_col",
+        "high_col",
+        "low_col",
+        "close_col",
+        "atr_col",
+        "label_col",
+        "fwd_col",
+        "time_to_first_hit_col",
+        "mfe_col",
+        "mae_col",
+        "mfe_atr_col",
+        "mae_atr_col",
+        "terminal_return_col",
+        "terminal_return_atr_col",
+        "upper_distance_col",
+        "lower_distance_col",
+        "ambiguous_col",
+        "intrabar_resolved_col",
+        "entry_price_col",
+        "exit_price_col",
+        "exit_reason_col",
+        "upper_barrier_col",
+        "lower_barrier_col",
+        "eligible_col",
+        "barrier_cost_ratio_col",
+        "stop_first_label_col",
+        "target_first_label_col",
+        "intrabar_open_col",
+        "intrabar_high_col",
+        "intrabar_low_col",
+    )
+    for key in string_keys:
+        if key in target and (
+            not isinstance(target[key], str) or not str(target[key]).strip()
+        ):
+            raise ConfigValidationError(f"{field_prefix}.{key} must be a non-empty string.")
+    _positive_int(target.get("horizon_bars", target.get("horizon", 12)), field=f"{field_prefix}.horizon_bars")
+    _positive_int(target.get("atr_period", 14), field=f"{field_prefix}.atr_period")
+    _positive_int(target.get("entry_delay_bars", 1), field=f"{field_prefix}.entry_delay_bars")
+    for key, default in (
+        ("upper_atr_multiplier", 1.0),
+        ("lower_atr_multiplier", target.get("upper_atr_multiplier", 1.0)),
+    ):
+        if _finite_number(target.get(key, default), field=f"{field_prefix}.{key}") <= 0.0:
+            raise ConfigValidationError(f"{field_prefix}.{key} must be > 0.")
+    for key in ("minimum_barrier_to_cost_ratio", "round_trip_cost"):
+        if _finite_number(target.get(key, 0.0), field=f"{field_prefix}.{key}") < 0.0:
+            raise ConfigValidationError(f"{field_prefix}.{key} must be >= 0.")
+    if str(target.get("entry_price_type", "open")) not in {"open", "close"}:
+        raise ConfigValidationError(f"{field_prefix}.entry_price_type must be one of: open, close.")
+    if str(target.get("ambiguous_policy", "exclude")) not in {"exclude", "stop_first", "target_first"}:
+        raise ConfigValidationError(
+            f"{field_prefix}.ambiguous_policy must be one of: exclude, stop_first, target_first."
+        )
+    if "use_intrabar_resolution" in target and not isinstance(target.get("use_intrabar_resolution"), bool):
+        raise ConfigValidationError(f"{field_prefix}.use_intrabar_resolution must be boolean.")
+    if target.get("intrabar_data") is not None:
+        raise ConfigValidationError(
+            f"{field_prefix}.intrabar_data is programmatic-only; tracked configs must reference data through the data layer."
+        )
+
+
 def validate_model_block(model: dict[str, Any]) -> None:
     if "kind" not in model:
         raise ConfigValidationError("model.kind is required.")
@@ -2741,13 +2822,19 @@ def validate_model_block(model: dict[str, Any]) -> None:
         if not isinstance(calibration, dict):
             raise ConfigValidationError("model.calibration must be a mapping when provided.")
         calibration_method = str(calibration.get("method", "none") or "none").strip().lower()
-        if calibration_method not in {"none", "sigmoid"}:
-            raise ConfigValidationError("model.calibration.method must be one of: none, sigmoid.")
+        if calibration_method not in {"none", "sigmoid", "isotonic"}:
+            raise ConfigValidationError("model.calibration.method must be one of: none, sigmoid, isotonic.")
         if calibration_method != "none":
             fraction = _finite_number(calibration.get("fraction", 0.20), field="model.calibration.fraction")
             if not 0.0 < fraction < 0.5:
                 raise ConfigValidationError("model.calibration.fraction must be in (0, 0.5).")
             _positive_int(calibration.get("min_rows", 200), field="model.calibration.min_rows")
+            _positive_int(
+                calibration.get("min_class_rows", 25 if calibration_method == "isotonic" else 5),
+                field="model.calibration.min_class_rows",
+            )
+        if "final_refit" in model and not isinstance(model.get("final_refit"), bool):
+            raise ConfigValidationError("model.final_refit must be boolean.")
         feature_cols = model.get("feature_cols")
         if feature_cols is not None:
             if (
@@ -2791,6 +2878,12 @@ def validate_model_block(model: dict[str, Any]) -> None:
                 raise ConfigValidationError(
                     "model.target.kind='target_before_stop_probability' is supported only for classifiers."
                 )
+            if target_kind == "first_passage_barrier_multiclass":
+                if model["kind"] not in _CLASSIFIER_MODEL_KINDS:
+                    raise ConfigValidationError(
+                        "model.target.kind='first_passage_barrier_multiclass' is supported only for classifiers."
+                    )
+                _validate_first_passage_barrier_target_block(target)
             if model["kind"] in _FOUNDATION_FORECASTER_MODEL_KINDS and target_kind not in {
                 "forward_return",
                 "future_return_regression",
@@ -3544,6 +3637,16 @@ def validate_model_block(model: dict[str, Any]) -> None:
         _non_negative_int(split.get("purge_bars", 0), field="model.split.purge_bars")
         _non_negative_int(split.get("embargo_bars", 0), field="model.split.embargo_bars")
         target_kind = str(target.get("kind", "forward_return"))
+        if target_kind == "first_passage_barrier_multiclass":
+            dependency_horizon = int(target.get("horizon_bars", target.get("horizon", 12))) + int(
+                target.get("entry_delay_bars", 1)
+            )
+            purge_bars = int(split.get("purge_bars", dependency_horizon))
+            if purge_bars < dependency_horizon:
+                raise ConfigValidationError(
+                    "model.split.purge_bars must be >= model.target.horizon_bars + "
+                    "model.target.entry_delay_bars for first-passage labels."
+                )
         if target_kind in {
             "expected_realized_r",
             "target_before_stop_probability",
@@ -3953,6 +4056,51 @@ def validate_signals_block(signals: dict[str, Any]) -> None:
             value = _finite_number(params.get(key, 1.0), field=f"signals.params.{key}")
             if value <= 0:
                 raise ConfigValidationError(f"signals.params.{key} must be > 0.")
+    if signals["kind"] == "barrier_expected_value":
+        string_keys = (
+            "upper_probability_col",
+            "lower_probability_col",
+            "no_hit_probability_col",
+            "calibrated_col",
+            "pred_is_oos_col",
+            "atr_col",
+            "price_col",
+            "spread_col",
+            "activity_col",
+            "no_hit_long_return_col",
+            "no_hit_short_return_col",
+            "signal_col",
+            "long_ev_col",
+            "short_ev_col",
+            "selected_ev_col",
+            "expected_edge_col",
+            "round_trip_cost_col",
+        )
+        for key in string_keys:
+            if key in params and params[key] is not None and (
+                not isinstance(params[key], str) or not params[key].strip()
+            ):
+                raise ConfigValidationError(f"signals.params.{key} must be a non-empty string or null.")
+        for key in ("allow_long", "allow_short"):
+            if key in params and not isinstance(params.get(key), bool):
+                raise ConfigValidationError(f"signals.params.{key} must be boolean.")
+        for key in ("upper_atr_multiplier", "lower_atr_multiplier", "cost_safety_factor", "maximum_position"):
+            if _finite_number(params.get(key, 1.0), field=f"signals.params.{key}") <= 0.0:
+                raise ConfigValidationError(f"signals.params.{key} must be > 0.")
+        for key in ("minimum_expected_edge", "cost_per_turnover", "slippage_per_turnover"):
+            if _finite_number(params.get(key, 0.0), field=f"signals.params.{key}") < 0.0:
+                raise ConfigValidationError(f"signals.params.{key} must be >= 0.")
+        for key, default in (("minimum_class_probability", 0.0), ("maximum_no_hit_probability", 1.0)):
+            value = _finite_number(params.get(key, default), field=f"signals.params.{key}")
+            if not 0.0 <= value <= 1.0:
+                raise ConfigValidationError(f"signals.params.{key} must be within [0,1].")
+        _positive_int(params.get("entry_delay_bars", 1), field="signals.params.entry_delay_bars")
+        if params.get("maximum_spread") is not None and _finite_number(
+            params.get("maximum_spread"), field="signals.params.maximum_spread"
+        ) < 0.0:
+            raise ConfigValidationError("signals.params.maximum_spread must be >= 0 when provided.")
+        if params.get("minimum_activity") is not None:
+            _finite_number(params.get("minimum_activity"), field="signals.params.minimum_activity")
     if signals["kind"] == "orb_candidate_side":
         for key in ("candidate_col", "side_col", "signal_col"):
             if key in params and params[key] is not None and not isinstance(params[key], str):
@@ -4887,6 +5035,20 @@ def validate_diagnostics_block(diagnostics: dict[str, Any]) -> None:
     random_state = shap_cfg.get("random_state", 42)
     if isinstance(random_state, bool) or not isinstance(random_state, int) or random_state < 0:
         raise ConfigValidationError("diagnostics.model.shap.random_state must be an integer >= 0.")
+    permutation_cfg = model.get("permutation_importance", {})
+    if not isinstance(permutation_cfg, dict):
+        raise ConfigValidationError("diagnostics.model.permutation_importance must be a mapping.")
+    if not isinstance(permutation_cfg.get("enabled", False), bool):
+        raise ConfigValidationError("diagnostics.model.permutation_importance.enabled must be boolean.")
+    for key, default in (("max_rows", 2000), ("n_repeats", 3)):
+        _positive_int(
+            permutation_cfg.get(key, default),
+            field=f"diagnostics.model.permutation_importance.{key}",
+        )
+    _non_negative_int(
+        permutation_cfg.get("random_state", 7),
+        field="diagnostics.model.permutation_importance.random_state",
+    )
 
     forecast = diagnostics.get("forecast", {})
     if not isinstance(forecast, dict):
@@ -4909,6 +5071,7 @@ def validate_diagnostics_block(diagnostics: dict[str, Any]) -> None:
         raise ConfigValidationError("diagnostics.robustness.strict_no_remap must be boolean.")
     for key in (
         "cost_multipliers",
+        "slippage_multipliers",
         "entry_delay_bars",
         "combined_cost_multipliers",
         "gross_cap_values",
@@ -4927,6 +5090,8 @@ def validate_diagnostics_block(diagnostics: dict[str, Any]) -> None:
                 if key in {"gross_cap_values", "cost_filter_max_cost_r_values"}:
                     if numeric <= 0.0:
                         raise ConfigValidationError(f"diagnostics.robustness.{key}[{idx}] must be > 0.")
+                elif key == "slippage_multipliers" and numeric <= 0.0:
+                    raise ConfigValidationError(f"diagnostics.robustness.{key}[{idx}] must be > 0.")
                 elif numeric < 0.0:
                     raise ConfigValidationError(f"diagnostics.robustness.{key}[{idx}] must be >= 0.")
     frequency = robustness.get("walk_forward_frequency", "YE")
@@ -5025,6 +5190,55 @@ def validate_diagnostics_block(diagnostics: dict[str, Any]) -> None:
         raise ConfigValidationError("diagnostics.trade_path.plots.enabled must be boolean.")
     for key in ("max_trades", "max_path_points"):
         _positive_int(plots.get(key, 500 if key == "max_trades" else 200000), field=f"diagnostics.trade_path.plots.{key}")
+
+    barrier_probability = diagnostics.get("barrier_probability", {})
+    if not isinstance(barrier_probability, dict):
+        raise ConfigValidationError("diagnostics.barrier_probability must be a mapping.")
+    if "signal_col" in barrier_probability and (
+        not isinstance(barrier_probability["signal_col"], str)
+        or not barrier_probability["signal_col"].strip()
+    ):
+        raise ConfigValidationError("diagnostics.barrier_probability.signal_col must be a non-empty string.")
+    sensitivity_grid = barrier_probability.get("sensitivity_grid", {})
+    if not isinstance(sensitivity_grid, dict):
+        raise ConfigValidationError("diagnostics.barrier_probability.sensitivity_grid must be a mapping.")
+    if not isinstance(sensitivity_grid.get("enabled", False), bool):
+        raise ConfigValidationError(
+            "diagnostics.barrier_probability.sensitivity_grid.enabled must be boolean."
+        )
+    for key, default in (("horizons", [6, 12, 24]), ("multipliers", [0.5, 0.75, 1.0, 1.25])):
+        values = sensitivity_grid.get(key, default)
+        if not isinstance(values, list) or not values:
+            raise ConfigValidationError(
+                f"diagnostics.barrier_probability.sensitivity_grid.{key} must be a non-empty list."
+            )
+        for idx, value in enumerate(values):
+            numeric = _finite_number(
+                value,
+                field=f"diagnostics.barrier_probability.sensitivity_grid.{key}[{idx}]",
+            )
+            if numeric <= 0.0 or (key == "horizons" and (isinstance(value, bool) or int(value) != value)):
+                raise ConfigValidationError(
+                    f"diagnostics.barrier_probability.sensitivity_grid.{key} values must be positive."
+                )
+    asymmetric = sensitivity_grid.get("asymmetric", [])
+    if not isinstance(asymmetric, list):
+        raise ConfigValidationError(
+            "diagnostics.barrier_probability.sensitivity_grid.asymmetric must be a list."
+        )
+    for idx, item in enumerate(asymmetric):
+        if not isinstance(item, dict):
+            raise ConfigValidationError(
+                f"diagnostics.barrier_probability.sensitivity_grid.asymmetric[{idx}] must be a mapping."
+            )
+        for side in ("upper", "lower"):
+            if _finite_number(
+                item.get(side),
+                field=f"diagnostics.barrier_probability.sensitivity_grid.asymmetric[{idx}].{side}",
+            ) <= 0.0:
+                raise ConfigValidationError(
+                    f"diagnostics.barrier_probability.sensitivity_grid.asymmetric[{idx}].{side} must be > 0."
+                )
 
 
 def validate_execution_block(execution: dict[str, Any]) -> None:

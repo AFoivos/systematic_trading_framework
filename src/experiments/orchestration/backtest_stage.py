@@ -875,6 +875,54 @@ def _run_single_asset_delay_stress(
     return summary
 
 
+def _run_slippage_stress(
+    asset_frames: dict[str, pd.DataFrame],
+    *,
+    cfg: dict[str, Any],
+    multiplier: float,
+    is_portfolio: bool,
+    evaluation_mask: pd.Series | None = None,
+    evaluation_metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Reprice the frozen signal path with deteriorated execution slippage."""
+    variant_cfg = deepcopy(cfg)
+    variant_cfg["risk"] = dict(variant_cfg.get("risk", {}) or {})
+    variant_cfg["risk"]["slippage_per_turnover"] = (
+        float(cfg.get("risk", {}).get("slippage_per_turnover", 0.0)) * float(multiplier)
+    )
+    if is_portfolio:
+        performance, _, _, _ = run_portfolio_backtest(asset_frames, cfg=variant_cfg)
+        returns = (
+            performance.mark_to_market_returns
+            if performance.mark_to_market_returns is not None
+            else performance.net_returns
+        )
+    else:
+        asset = next(iter(sorted(asset_frames)))
+        performance = run_single_asset_backtest(
+            asset,
+            asset_frames[asset],
+            cfg=variant_cfg,
+            model_meta={},
+        )
+        returns = (
+            performance.mark_to_market_returns
+            if performance.mark_to_market_returns is not None
+            else performance.returns
+        )
+    mask = (
+        evaluation_mask.reindex(returns.index).fillna(False).astype(bool)
+        if evaluation_mask is not None
+        else pd.Series(True, index=returns.index, dtype=bool)
+    )
+    summary = summarize_returns(
+        returns.loc[mask],
+        periods_per_year=int(variant_cfg["backtest"].get("periods_per_year", 252)),
+    )
+    summary.update(dict(evaluation_metadata or {}))
+    return summary
+
+
 def _run_portfolio_delay_stress(
     asset_frames: dict[str, pd.DataFrame],
     *,
@@ -1140,6 +1188,11 @@ def build_robustness_diagnostics(
     cost_multipliers = list(robustness_cfg.get("cost_multipliers", [1.0, 2.0, 3.0, 5.0]) or [])
     if not any(np.isclose(float(value), 1.0) for value in cost_multipliers):
         cost_multipliers.insert(0, 1.0)
+    slippage_multipliers = [
+        float(value)
+        for value in list(robustness_cfg.get("slippage_multipliers", [1.0, 2.0, 3.0]) or [])
+        if float(value) > 0.0
+    ]
     entry_delay_bars = [
         int(value)
         for value in list(robustness_cfg.get("entry_delay_bars", [1, 2]) or [])
@@ -1176,6 +1229,7 @@ def build_robustness_diagnostics(
         ),
         "mark_to_market": {},
         "entry_delay": {},
+        "slippage_stress": {},
         **scope_metadata,
     }
     mtm_net = mark_to_market_returns if mark_to_market_returns is not None else net_returns
@@ -1264,6 +1318,20 @@ def build_robustness_diagnostics(
                 )
         except Exception as exc:
             payload["entry_delay"][key] = {"error": f"{type(exc).__name__}: {exc}"}
+
+    for multiplier in slippage_multipliers:
+        key = f"slippage_x{multiplier:g}"
+        try:
+            payload["slippage_stress"][key] = _run_slippage_stress(
+                asset_frames,
+                cfg=cfg,
+                multiplier=multiplier,
+                is_portfolio=is_portfolio,
+                evaluation_mask=scope_mask,
+                evaluation_metadata=scope_metadata,
+            )
+        except Exception as exc:
+            payload["slippage_stress"][key] = {"error": f"{type(exc).__name__}: {exc}"}
 
     payload["primary_summary_fields"] = _primary_robustness_fields(payload)
     return payload

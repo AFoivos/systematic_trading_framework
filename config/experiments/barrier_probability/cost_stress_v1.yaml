@@ -1,0 +1,294 @@
+strategy:
+  name: XAUUSD 30m Barrier Cost and Delay Stress
+  version: 1
+  symbol: XAUUSD
+  timeframe: 30m
+  direction: long_short
+  description: >
+    Primary EV policy with base, multiplied cost, deteriorated slippage and additional entry-delay diagnostics.
+
+data:
+  source: dukascopy_csv
+  interval: 30m
+  start: "2020-01-01"
+  end: "2024-12-31"
+  alignment: inner
+  symbol: XAUUSD
+  pit:
+    timestamp_alignment: {source_timezone: UTC, output_timezone: UTC, normalize_daily: false, duplicate_policy: last}
+    corporate_actions: {policy: none, adj_close_col: adj_close}
+    universe_snapshot: {inactive_policy: raise}
+  storage:
+    mode: cached_only
+    dataset_id: xauusd_30m_barrier_cost_stress_v1
+    save_raw: false
+    save_processed: true
+    load_path: data/raw/dukascopy_30m_clean/xauusd_30m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed/barrier_probability
+
+features:
+- step: returns
+  params: {log: false, col_name: close_ret}
+- step: atr
+  params: {high_col: high, low_col: low, close_col: close, window: 14, windows: [14], method: wilder, add_over_price: false, atr_col: atr_14}
+  transforms:
+    ratio:
+      enabled: true
+      items: [{numerator_col: atr_14, denominator_col: close, output_col: atr_over_price_14}]
+- step: kds
+  params: {preset: balanced, config: null, bar_minutes: 30.0, inplace: false}
+- step: support_resistance_v2
+  params: {price_col: close, high_col: high, low_col: low, atr_col: atr_14, atr_window: 14, pivot_left_window: 24, pivot_confirm_bars: 6, touch_tolerance_atr: 0.25, breakout_tolerance_atr: 0.05, retest_expiry_bars: 24}
+- step: barrier_equilibrium
+  params: {close_col: close, high_col: high, low_col: low, atr_col: atr_14, kalman_level_col: kalman_level, kalman_level_is_log: true, vwap_col: null, window: 48, zscore_window: 96, robust_median_window: 5}
+- step: barrier_path
+  params: {open_col: open, high_col: high, low_col: low, close_col: close, atr_col: atr_14, window: 48}
+- step: barrier_persistence
+  params: {close_col: close, residual_col: deviation_kalman_atr, window: 96, variance_ratio_lag: 4, autocorrelation_lags: [1, 4, 8], include_adf: false}
+- step: hurst_exponent
+  params: {price_col: close, window: 96, min_lag: 2, max_lag: 20, output_col: hurst_96}
+- step: barrier_volatility
+  params: {close_col: close, atr_col: atr_14, short_window: 12, long_window: 48, percentile_window: 252, cusum_threshold: 5.0}
+  transforms:
+    rolling_std:
+      enabled: true
+      items: [{source_col: realized_volatility_48, output_col: volatility_of_volatility_48, window: 48, min_periods: 48, ddof: 0}]
+- step: parkinson_volatility
+  params: {high_col: high, low_col: low, window: 48, output_col: parkinson_vol_48}
+- step: garman_klass_volatility
+  params: {open_col: open, high_col: high, low_col: low, close_col: close, window: 48, output_col: garman_klass_vol_48}
+- step: yang_zhang_volatility
+  params: {open_col: open, high_col: high, low_col: low, close_col: close, window: 48, output_col: yang_zhang_vol_48}
+- step: shannon_entropy
+  params: {source_col: close_ret, window: 48, bins: 3, normalize: true, value_mode: sign, output_col: shannon_entropy_48}
+- step: permutation_entropy
+  params: {source_col: close_ret, window: 48, order: 3, delay: 1, normalize: true, output_col: permutation_entropy_48}
+- step: barrier_market_organization
+  params: {shannon_entropy_col: shannon_entropy_48, permutation_entropy_col: permutation_entropy_48, returns_col: close_ret, close_col: close, window: 48, percentile_window: 252, include_sample_entropy: false}
+- step: barrier_session
+  params: {timezone: UTC, spread_col: spread_bps, activity_col: volume, percentile_window: 252}
+
+model:
+  kind: logistic_regression_clf
+  feature_cols:
+  - atr_over_price_14
+  - kalman_drift
+  - kalman_drift_z
+  - kalman_innovation_z
+  - range_position_48
+  - distance_local_high_atr_48
+  - distance_local_low_atr_48
+  - deviation_median_atr
+  - deviation_median_z_96
+  - deviation_robust_regression_atr
+  - deviation_robust_regression_z_96
+  - deviation_kalman_atr
+  - deviation_kalman_z_96
+  - sr_v2_resistance_distance_atr
+  - sr_v2_support_distance_atr
+  - sr_v2_resistance_age
+  - sr_v2_support_age
+  - sr_v2_resistance_touch_count
+  - sr_v2_support_touch_count
+  - positive_realized_semivariance_48
+  - negative_realized_semivariance_48
+  - semivariance_imbalance_48
+  - upper_wick_ratio
+  - lower_wick_ratio
+  - wick_asymmetry
+  - candle_close_location
+  - consecutive_up_transitions
+  - consecutive_down_transitions
+  - path_efficiency_48
+  - backward_mfe_atr_48
+  - backward_mae_atr_48
+  - return_path_roughness_48
+  - maximum_drawdown_48
+  - maximum_drawup_48
+  - variance_ratio_4_96
+  - return_autocorrelation_lag_1_96
+  - return_autocorrelation_lag_4_96
+  - return_autocorrelation_lag_8_96
+  - rolling_regression_slope_96
+  - rolling_regression_r2_96
+  - ou_half_life_96
+  - correlation_trend_96
+  - hurst_96
+  - realized_volatility_12
+  - realized_volatility_48
+  - short_long_volatility_ratio_12_48
+  - bipower_variation_48
+  - jump_share_48
+  - volatility_of_volatility_48
+  - atr_percentile_252
+  - parkinson_vol_48
+  - garman_klass_vol_48
+  - yang_zhang_vol_48
+  - cusum_positive_state
+  - cusum_negative_state
+  - change_point_probability_proxy_12_48
+  - shannon_entropy_48
+  - permutation_entropy_48
+  - shannon_entropy_change
+  - permutation_entropy_change
+  - shannon_entropy_percentile_252
+  - permutation_entropy_percentile_252
+  - hour_sin_24
+  - hour_cos_24
+  - day_of_week_sin_7
+  - day_of_week_cos_7
+  - session_asia
+  - session_london
+  - session_new_york
+  - session_london_new_york_overlap
+  - spread_percentile_252
+  - activity_percentile_252
+  target:
+    kind: first_passage_barrier_multiclass
+    horizon_bars: 12
+    upper_atr_multiplier: 1.0
+    lower_atr_multiplier: 1.0
+    atr_period: 14
+    atr_col: atr_14
+    entry_delay_bars: 1
+    entry_price_type: open
+    ambiguous_policy: exclude
+    use_intrabar_resolution: false
+    minimum_barrier_to_cost_ratio: 3.0
+  split:
+    method: purged
+    train_size: 35040
+    test_size: 4380
+    step_size: 4380
+    expanding: true
+    max_folds: 5
+    purge_bars: 13
+    embargo_bars: 13
+  preprocessing: {scaler: robust}
+  calibration: {method: sigmoid, fraction: 0.20, min_rows: 1000, min_class_rows: 100}
+  pred_prob_col: pred_prob
+  pred_raw_prob_col: pred_prob_raw
+  pred_is_oos_col: pred_is_oos
+  final_refit: true
+  params:
+    C: 0.25
+    class_weight: balanced
+    max_iter: 1500
+    solver: saga
+    tol: 0.001
+    n_jobs: 1
+    random_state: 7
+
+signals:
+  kind: barrier_expected_value
+  params:
+    upper_probability_col: pred_prob_upper
+    lower_probability_col: pred_prob_lower
+    no_hit_probability_col: pred_prob_no_hit
+    calibrated_col: pred_probability_calibrated
+    pred_is_oos_col: pred_is_oos
+    atr_col: atr_14
+    price_col: close
+    spread_col: spread_bps
+    activity_col: volume
+    upper_atr_multiplier: 1.0
+    lower_atr_multiplier: 1.0
+    minimum_expected_edge: 0.00005
+    minimum_class_probability: 0.38
+    cost_safety_factor: 1.5
+    cost_per_turnover: 0.00004
+    slippage_per_turnover: 0.00002
+    maximum_no_hit_probability: 0.70
+    allow_long: true
+    allow_short: true
+    entry_delay_bars: 1
+    maximum_spread: 0.00060
+    minimum_activity: 0.01
+    maximum_position: 1.0
+    signal_col: barrier_ev_signal
+
+target: {}
+validation: {method: purged_walk_forward, purge_bars: 13, embargo_bars: 13}
+runtime: {seed: 7, repro_mode: strict, deterministic: true, threads: 1, seed_torch: false}
+risk:
+  cost_per_turnover: 0.00004
+  slippage_per_turnover: 0.00002
+  target_vol: null
+  max_leverage: 1.0
+  sizing: {}
+  dd_guard: {enabled: false}
+  portfolio_guard: {}
+  drawdown_sizing: {}
+  vol_col: null
+backtest:
+  engine: manual_barrier
+  signal_col: barrier_ev_signal
+  returns_col: close_ret
+  returns_type: simple
+  subset: full
+  periods_per_year: 12096
+  missing_return_policy: raise_if_exposed
+  allow_short: true
+  stop_mode: volatility_stop
+  vol_col: atr_over_price_14
+  open_col: open
+  high_col: high
+  low_col: low
+  close_col: close
+  take_profit_r: 1.0
+  stop_loss_r: 1.0
+  risk_per_trade: 0.0025
+  max_holding_bars: 12
+  dynamic_exits: {enabled: false}
+  partial_exits: {enabled: false}
+portfolio: {enabled: false, construction: signal_weights, long_short: true, gross_target: 1.0}
+monitoring: {enabled: false, psi_threshold: 0.2, n_bins: 10}
+diagnostics:
+  enabled: true
+  model:
+    enabled: true
+    shap: {enabled: false}
+    permutation_importance: {enabled: true, max_rows: 2000, n_repeats: 3, random_state: 7}
+  baselines: {enabled: true, random_seed: 7}
+  trade_path:
+    enabled: true
+    include_executed_trades: true
+    include_target_trades: true
+    include_probability_quality: true
+    include_counterfactuals: true
+    write_trade_paths: true
+    write_probability_quality: true
+    thresholds_r: [0.5, 1.0, 1.5, 2.0]
+    bars_held_buckets: [1, 2, 4, 8, 16]
+    plots: {enabled: true, max_trades: 500, max_path_points: 200000}
+  barrier_probability:
+    signal_col: barrier_ev_signal
+    sensitivity_grid:
+      enabled: false
+      horizons: [6, 12, 24]
+      multipliers: [0.50, 0.75, 1.00, 1.25]
+      asymmetric: [{upper: 1.00, lower: 0.75}]
+  robustness:
+    enabled: true
+    cost_multipliers: [1.0, 2.0, 3.0, 5.0]
+    slippage_multipliers: [1.0, 2.0, 3.0]
+    entry_delay_bars: [1, 2]
+    walk_forward_frequency: YE
+execution: {enabled: false, mode: paper, capital: 100000.0, price_col: close}
+logging:
+  enabled: true
+  run_name: xauusd_30m_barrier_cost_stress_v1
+  output_dir: logs/experiments/barrier_probability
+  save_model: false
+  save_predictions: true
+evaluation: {strict_oos_only: true}
+research_metadata:
+  family: first_passage_barrier_probability
+  experiment_role: cost_stress
+  dataset: xauusd_30m
+  feature_group: core_without_microstructure
+  calibration_policy: fold_local_future_validation_only
+  ambiguous_policy: excluded_primary_stop_first_target_first_sensitivity
+  microstructure_semantics: provider_volume_activity_proxy_not_true_ofi
+  no_holdout_tuning: false

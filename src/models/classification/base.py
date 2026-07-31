@@ -6,6 +6,9 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import RobustScaler, StandardScaler
 from sklearn.linear_model import LogisticRegression
+from sklearn.isotonic import IsotonicRegression
+from sklearn.utils.class_weight import compute_sample_weight
+from sklearn.inspection import permutation_importance
 
 from src.evaluation.time_splits import (
     assert_no_forward_label_leakage,
@@ -17,8 +20,11 @@ from src.evaluation.fold_reporting import report_optuna_fold
 from src.evaluation.model_metrics import (
     binary_classification_metrics,
     empty_classification_metrics,
+    empty_multiclass_classification_metrics,
     empty_regression_metrics,
     empty_volatility_metrics,
+    multiclass_baseline_metrics,
+    multiclass_classification_metrics,
 )
 from src.models.common.overlay import resolve_garch_overlay
 from src.evaluation.diagnostics import (
@@ -41,6 +47,33 @@ from src.targets.registry import build_target
 from src.models.types import EstimatorFactory
 
 
+class FoldProbabilityCalibrator:
+    """One-vs-rest probability calibration fitted on a later temporal window."""
+
+    def __init__(self, *, method: str, models: list[object]) -> None:
+        self.method = str(method)
+        self.models = list(models)
+
+    def predict(self, raw_probability: np.ndarray) -> np.ndarray:
+        raw = np.asarray(raw_probability, dtype=float)
+        if raw.ndim != 2 or raw.shape[1] != len(self.models):
+            raise ValueError("Calibration input shape does not match fitted class calibrators.")
+        calibrated = np.zeros_like(raw, dtype=float)
+        for class_idx, model in enumerate(self.models):
+            values = np.clip(raw[:, class_idx], 1e-6, 1.0 - 1e-6)
+            if self.method == "sigmoid":
+                logits = np.log(values / (1.0 - values)).reshape(-1, 1)
+                calibrated[:, class_idx] = model.predict_proba(logits)[:, 1]
+            else:
+                calibrated[:, class_idx] = model.predict(values)
+        row_sums = calibrated.sum(axis=1, keepdims=True)
+        invalid = (~np.isfinite(row_sums[:, 0])) | (row_sums[:, 0] <= 1e-12)
+        if bool(invalid.any()):
+            calibrated[invalid] = raw[invalid]
+            row_sums = calibrated.sum(axis=1, keepdims=True)
+        return calibrated / np.maximum(row_sums, 1e-12)
+
+
 class FittedClassifierPipeline:
     """Serializable deployment wrapper for preprocessing, estimator, and calibration."""
 
@@ -49,14 +82,17 @@ class FittedClassifierPipeline:
         *,
         estimator: object,
         scaler: StandardScaler | RobustScaler | None,
-        calibrator: LogisticRegression | None,
+        calibrator: FoldProbabilityCalibrator | None,
         estimator_family: str,
+        classes: np.ndarray | list[int] | None = None,
     ) -> None:
         self.estimator = estimator
         self.scaler = scaler
         self.calibrator = calibrator
         self.estimator_family = str(estimator_family)
-        self.classes_ = np.asarray(getattr(estimator, "classes_", [0, 1]))
+        self.classes_ = np.asarray(
+            classes if classes is not None else getattr(estimator, "classes_", [0, 1])
+        )
 
     def _transform(self, features: pd.DataFrame | np.ndarray) -> pd.DataFrame | np.ndarray:
         if isinstance(features, pd.DataFrame):
@@ -79,22 +115,41 @@ class FittedClassifierPipeline:
         return raw
 
     def predict_proba(self, features: pd.DataFrame | np.ndarray) -> np.ndarray:
-        raw_probability = np.asarray(
+        estimator_probability = np.asarray(
             self.estimator.predict_proba(self._transform(features)),
             dtype=float,
         )
+        raw_probability = _expand_estimator_probabilities(
+            self.estimator,
+            estimator_probability,
+            class_count=len(self.classes_),
+        )
         if self.calibrator is None:
             return raw_probability
-        if raw_probability.ndim != 2 or raw_probability.shape[1] != 2:
-            raise ValueError("Sigmoid calibration requires a binary classifier.")
-        positive = _apply_sigmoid_calibrator(self.calibrator, raw_probability[:, 1])
-        return np.column_stack([1.0 - positive, positive])
+        return self.calibrator.predict(raw_probability)
 
     def predict(self, features: pd.DataFrame | np.ndarray) -> np.ndarray:
         probability = self.predict_proba(features)
-        if probability.ndim == 2 and probability.shape[1] == 2:
-            return (probability[:, 1] >= 0.5).astype(int)
         return self.classes_[np.argmax(probability, axis=1)]
+
+
+def _expand_estimator_probabilities(
+    estimator: object,
+    raw_probability: np.ndarray,
+    *,
+    class_count: int,
+) -> np.ndarray:
+    raw = np.asarray(raw_probability, dtype=float)
+    estimator_classes = np.asarray(getattr(estimator, "classes_", np.arange(raw.shape[1])), dtype=int)
+    if raw.ndim != 2 or raw.shape[1] != len(estimator_classes):
+        raise ValueError("Estimator probability output does not match estimator.classes_.")
+    expanded = np.zeros((raw.shape[0], int(class_count)), dtype=float)
+    for source_idx, encoded_class in enumerate(estimator_classes):
+        if encoded_class < 0 or encoded_class >= class_count:
+            raise ValueError("Estimator emitted an encoded class outside the declared class range.")
+        expanded[:, int(encoded_class)] = raw[:, source_idx]
+    row_sums = expanded.sum(axis=1, keepdims=True)
+    return expanded / np.maximum(row_sums, 1e-12)
 
 
 def _fit_deployment_preprocessor(
@@ -161,15 +216,23 @@ def _apply_fold_feature_preprocessing(
 def _resolve_calibration_cfg(model_cfg: dict[str, Any]) -> dict[str, Any]:
     cfg = dict(model_cfg.get("calibration", {}) or {})
     method = str(cfg.get("method", "none") or "none").strip().lower()
-    if method not in {"none", "sigmoid"}:
-        raise ValueError("model.calibration.method must be one of: none, sigmoid.")
+    if method not in {"none", "sigmoid", "isotonic"}:
+        raise ValueError("model.calibration.method must be one of: none, sigmoid, isotonic.")
     fraction = float(cfg.get("fraction", 0.20))
     if not 0.0 < fraction < 0.5:
         raise ValueError("model.calibration.fraction must be in (0, 0.5).")
     min_rows = int(cfg.get("min_rows", 200))
     if min_rows <= 0:
         raise ValueError("model.calibration.min_rows must be positive.")
-    return {"method": method, "fraction": fraction, "min_rows": min_rows}
+    min_class_rows = int(cfg.get("min_class_rows", 25 if method == "isotonic" else 5))
+    if min_class_rows <= 0:
+        raise ValueError("model.calibration.min_class_rows must be positive.")
+    return {
+        "method": method,
+        "fraction": fraction,
+        "min_rows": min_rows,
+        "min_class_rows": min_class_rows,
+    }
 
 
 def _split_fit_and_calibration_rows(
@@ -223,6 +286,78 @@ def _apply_sigmoid_calibrator(calibrator: LogisticRegression, raw_probability: n
     return calibrator.predict_proba(logits)[:, 1].astype("float32")
 
 
+def _fit_probability_calibrator(
+    raw_probability: np.ndarray,
+    labels_encoded: pd.Series,
+    *,
+    method: str,
+    min_class_rows: int,
+) -> FoldProbabilityCalibrator:
+    raw = np.asarray(raw_probability, dtype=float)
+    labels = labels_encoded.to_numpy(dtype=int, copy=False)
+    if raw.ndim != 2:
+        raise ValueError("Calibration probabilities must be a 2D matrix.")
+    models: list[object] = []
+    for class_idx in range(raw.shape[1]):
+        binary = (labels == class_idx).astype(int)
+        positives = int(binary.sum())
+        negatives = int(len(binary) - positives)
+        if positives < int(min_class_rows) or negatives < int(min_class_rows):
+            raise ValueError(
+                "Fold-local calibration requires at least "
+                f"{min_class_rows} positive and negative rows for class {class_idx}."
+            )
+        values = np.clip(raw[:, class_idx], 1e-6, 1.0 - 1e-6)
+        if method == "sigmoid":
+            logits = np.log(values / (1.0 - values)).reshape(-1, 1)
+            calibrator: object = LogisticRegression(random_state=0, max_iter=500)
+            calibrator.fit(logits, binary)
+        elif method == "isotonic":
+            if len(np.unique(values)) < 3:
+                raise ValueError("Isotonic calibration requires at least three distinct probabilities per class.")
+            calibrator = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
+            calibrator.fit(values, binary)
+        else:
+            raise ValueError("Probability calibrator method must be sigmoid or isotonic.")
+        models.append(calibrator)
+    return FoldProbabilityCalibrator(method=method, models=models)
+
+
+def _barrier_fold_ambiguity(
+    train_frame: pd.DataFrame,
+    eval_frame: pd.DataFrame,
+    *,
+    target_meta: dict[str, Any],
+) -> dict[str, float | int] | None:
+    if target_meta.get("kind") != "first_passage_barrier_multiclass":
+        return None
+    ambiguous_col = str(target_meta.get("ambiguous_col", "ambiguous"))
+    entry_price_col = str(target_meta.get("entry_price_col", "entry_price"))
+
+    def summarize(frame: pd.DataFrame) -> tuple[int, int, float]:
+        if ambiguous_col not in frame.columns:
+            return 0, 0, 0.0
+        evaluated = (
+            frame[entry_price_col].notna()
+            if entry_price_col in frame.columns
+            else pd.Series(True, index=frame.index, dtype=bool)
+        )
+        count = int(frame.loc[evaluated, ambiguous_col].fillna(False).astype(bool).sum())
+        rows = int(evaluated.sum())
+        return count, rows, float(count / rows) if rows else 0.0
+
+    train_count, train_rows, train_rate = summarize(train_frame)
+    eval_count, eval_rows, eval_rate = summarize(eval_frame)
+    return {
+        "train_ambiguous_count": train_count,
+        "train_evaluated_rows": train_rows,
+        "train_ambiguous_rate": train_rate,
+        "eval_ambiguous_count": eval_count,
+        "eval_evaluated_rows": eval_rows,
+        "eval_ambiguous_rate": eval_rate,
+    }
+
+
 def train_forward_classifier(
     df: pd.DataFrame,
     model_cfg: dict[str, Any],
@@ -257,8 +392,42 @@ def train_forward_classifier(
         or calibration_cfg["method"] != "none"
     )
     pred_raw_prob_col = str(model_cfg.get("pred_raw_prob_col") or f"{pred_prob_col}_raw")
-    target_cfg = model_cfg.get("target", {}) or {}
+    target_cfg = dict(model_cfg.get("target", {}) or {})
+    if str(target_cfg.get("kind", "")) == "first_passage_barrier_multiclass":
+        risk_cfg = dict(model_cfg.get("risk", {}) or {})
+        target_cfg.setdefault(
+            "round_trip_cost",
+            2.0
+            * (
+                float(risk_cfg.get("cost_per_turnover", 0.0) or 0.0)
+                + float(risk_cfg.get("slippage_per_turnover", 0.0) or 0.0)
+            ),
+        )
     out, label_col, fwd_col, target_meta = build_target(df=work_df, target_cfg=target_cfg)
+    class_labels = np.asarray(target_meta.get("class_labels", [0, 1]), dtype=int)
+    if class_labels.ndim != 1 or len(class_labels) < 2 or len(np.unique(class_labels)) != len(class_labels):
+        raise ValueError("Classifier targets must declare at least two unique class_labels.")
+    class_to_encoded = {int(label): idx for idx, label in enumerate(class_labels)}
+    is_multiclass = len(class_labels) > 2
+    primary_class = int(target_meta.get("primary_probability_class", class_labels[-1]))
+    if primary_class not in class_to_encoded:
+        raise ValueError("target primary_probability_class must be present in class_labels.")
+    primary_class_idx = int(class_to_encoded[primary_class])
+    class_names = {
+        int(label): str(dict(target_meta.get("class_names", {}) or {}).get(str(int(label)), int(label)))
+        for label in class_labels
+    }
+    class_probability_cols = {
+        int(label): f"{pred_prob_col}_{class_names[int(label)]}"
+        for label in class_labels
+    }
+    class_raw_probability_cols = {
+        int(label): f"{pred_raw_prob_col}_{class_names[int(label)]}"
+        for label in class_labels
+    }
+    probability_calibrated_col = str(
+        model_cfg.get("probability_calibrated_col") or "pred_probability_calibrated"
+    )
 
     contract_df = out
     contract_target_col = label_col
@@ -306,6 +475,38 @@ def train_forward_classifier(
         if emit_raw_probability
         else None
     )
+    class_probabilities = (
+        {
+            int(label): pd.Series(
+                np.nan,
+                index=out.index,
+                name=class_probability_cols[int(label)],
+                dtype="float32",
+            )
+            for label in class_labels
+        }
+        if is_multiclass
+        else {}
+    )
+    class_raw_probabilities = (
+        {
+            int(label): pd.Series(
+                np.nan,
+                index=out.index,
+                name=class_raw_probability_cols[int(label)],
+                dtype="float32",
+            )
+            for label in class_labels
+        }
+        if is_multiclass and emit_raw_probability
+        else {}
+    )
+    probability_calibrated = pd.Series(
+        False,
+        index=out.index,
+        name=probability_calibrated_col,
+        dtype=bool,
+    )
     oos_mask = pd.Series(False, index=out.index, name=pred_is_oos_col)
     oos_assignment_count = pd.Series(0, index=out.index, dtype="int32")
     extra_prediction_cols: dict[str, pd.Series] = {}
@@ -318,7 +519,9 @@ def train_forward_classifier(
     target_horizon = int(target_meta["horizon"])
     all_eval_labels: list[np.ndarray] = []
     all_eval_probs: list[np.ndarray] = []
+    all_eval_raw_probs: list[np.ndarray] = []
     fold_feature_importances: list[list[dict[str, Any]]] = []
+    fold_permutation_importances: list[list[dict[str, Any]]] = []
     train_label_distributions: list[dict[str, Any]] = []
     eval_label_distributions: list[dict[str, Any]] = []
     total_train_rows_dropped_missing = 0
@@ -353,6 +556,11 @@ def train_forward_classifier(
 
         train_df = out.iloc[safe_train_idx]
         test_df = out.iloc[split.test_idx]
+        fold_ambiguity = _barrier_fold_ambiguity(
+            train_df,
+            test_df,
+            target_meta=target_meta,
+        )
         quantile_low_value: float | None = None
         quantile_high_value: float | None = None
         if target_meta.get("quantiles") is not None:
@@ -393,6 +601,10 @@ def train_forward_classifier(
         y_train = estimator_fit[label_col].astype(int)
         if int(y_train.nunique()) < 2:
             raise ValueError(f"Fold {split.fold} has a single target class after preprocessing.")
+        unknown_train_labels = sorted(set(y_train.unique()) - set(class_to_encoded))
+        if unknown_train_labels:
+            raise ValueError(f"Fold {split.fold} contains undeclared target classes: {unknown_train_labels}")
+        y_train_encoded = y_train.map(class_to_encoded).astype(int)
         train_label_distribution = summarize_label_distribution(y_train)
         train_label_distributions.append(train_label_distribution)
 
@@ -426,19 +638,27 @@ def train_forward_classifier(
             preprocessing_cfg=preprocessing_cfg,
         )
         preprocessing_meta = dict(fold_preprocessing_meta)
-        y_train_input: pd.Series | np.ndarray = y_train
+        y_train_input: pd.Series | np.ndarray = y_train_encoded
         if estimator_family == "xgboost":
             if isinstance(X_train_input, pd.DataFrame):
                 X_train_input = X_train_input.to_numpy(dtype=np.float32, copy=False)
             else:
                 X_train_input = np.asarray(X_train_input, dtype=np.float32)
-            y_train_input = y_train.to_numpy(dtype=np.int32, copy=False)
-        model.fit(X_train_input, y_train_input)
-        calibrator: LogisticRegression | None = None
+            y_train_input = y_train_encoded.to_numpy(dtype=np.int32, copy=False)
+        fit_kwargs: dict[str, Any] = {}
+        if model_cfg.get("_class_weight") is not None:
+            fit_kwargs["sample_weight"] = compute_sample_weight(
+                class_weight=model_cfg["_class_weight"],
+                y=np.asarray(y_train_input, dtype=int),
+            )
+        model.fit(X_train_input, y_train_input, **fit_kwargs)
+        calibrator: FoldProbabilityCalibrator | None = None
         if bool(fold_calibration_meta.get("enabled", False)):
             calibration_labels = calibration_fit[label_col].astype(int)
-            if int(calibration_labels.nunique()) < 2:
-                raise ValueError(f"Fold {split.fold} calibration window has a single target class.")
+            calibration_labels_encoded = calibration_labels.map(class_to_encoded)
+            if calibration_labels_encoded.isna().any():
+                raise ValueError(f"Fold {split.fold} calibration window contains undeclared classes.")
+            calibration_labels_encoded = calibration_labels_encoded.astype(int)
             calibration_features = calibration_fit[feature_cols]
             _, calibration_input, _ = _apply_fold_feature_preprocessing(
                 estimator_fit[feature_cols],
@@ -447,17 +667,41 @@ def train_forward_classifier(
             )
             if estimator_family == "xgboost":
                 calibration_input = np.asarray(calibration_input, dtype=np.float32)
-            calibration_raw = model.predict_proba(calibration_input)[:, 1]
-            calibrator = _fit_sigmoid_calibrator(calibration_raw, calibration_labels)
-            fold_calibration_meta["calibration_positive_rate"] = float(calibration_labels.mean())
-            fold_calibration_meta["raw_probability_mean"] = float(np.mean(calibration_raw))
-            fold_calibration_meta["calibrated_probability_mean"] = float(
-                np.mean(_apply_sigmoid_calibrator(calibrator, calibration_raw))
+            calibration_raw = _expand_estimator_probabilities(
+                model,
+                model.predict_proba(calibration_input),
+                class_count=len(class_labels),
             )
+            calibrator = _fit_probability_calibrator(
+                calibration_raw,
+                calibration_labels_encoded,
+                method=str(calibration_cfg["method"]),
+                min_class_rows=int(calibration_cfg["min_class_rows"]),
+            )
+            calibration_calibrated = calibrator.predict(calibration_raw)
+            fold_calibration_meta["calibration_class_rates"] = {
+                str(int(label)): float(np.mean(calibration_labels.to_numpy(dtype=int) == label))
+                for label in class_labels
+            }
+            fold_calibration_meta["raw_probability_mean_by_class"] = {
+                str(int(label)): float(np.mean(calibration_raw[:, idx]))
+                for idx, label in enumerate(class_labels)
+            }
+            fold_calibration_meta["calibrated_probability_mean_by_class"] = {
+                str(int(label)): float(np.mean(calibration_calibrated[:, idx]))
+                for idx, label in enumerate(class_labels)
+            }
         fold_feature_importance = extract_feature_importance(model, feature_cols)
         fold_feature_importances.append(fold_feature_importance)
 
-        fold_eval_metrics = empty_classification_metrics()
+        fold_eval_metrics: dict[str, object] = (
+            empty_multiclass_classification_metrics() if is_multiclass else empty_classification_metrics()
+        )
+        fold_raw_eval_metrics: dict[str, object] = (
+            empty_multiclass_classification_metrics() if is_multiclass else empty_classification_metrics()
+        )
+        fold_baselines: dict[str, dict[str, object]] = {}
+        fold_permutation_importance: list[dict[str, Any]] = []
         eval_label_distribution = summarize_label_distribution(pd.Series(dtype=float))
 
         if pred_rows > 0:
@@ -467,17 +711,40 @@ def train_forward_classifier(
                     test_input = test_input.to_numpy(dtype=np.float32, copy=False)
                 else:
                     test_input = np.asarray(test_input, dtype=np.float32)
-            raw_proba = model.predict_proba(test_input)[:, 1].astype("float32")
-            proba = (
-                _apply_sigmoid_calibrator(calibrator, raw_proba)
-                if calibrator is not None
-                else raw_proba
+            raw_probability_matrix = _expand_estimator_probabilities(
+                model,
+                model.predict_proba(test_input),
+                class_count=len(class_labels),
             )
-            raw_pred_series = pd.Series(raw_proba, index=pred_index, dtype="float32")
+            probability_matrix = (
+                calibrator.predict(raw_probability_matrix)
+                if calibrator is not None
+                else raw_probability_matrix
+            )
+            raw_pred_series = pd.Series(
+                raw_probability_matrix[:, primary_class_idx],
+                index=pred_index,
+                dtype="float32",
+            )
             if pred_raw_prob is not None:
                 pred_raw_prob.loc[pred_index] = raw_pred_series
-            pred_series = pd.Series(proba, index=pred_index, dtype="float32")
+            pred_series = pd.Series(
+                probability_matrix[:, primary_class_idx],
+                index=pred_index,
+                dtype="float32",
+            )
             pred_prob.loc[pred_index] = pred_series
+            if is_multiclass:
+                for class_idx, class_label in enumerate(class_labels):
+                    class_probabilities[int(class_label)].loc[pred_index] = probability_matrix[
+                        :, class_idx
+                    ].astype("float32")
+                    if emit_raw_probability:
+                        class_raw_probabilities[int(class_label)].loc[pred_index] = raw_probability_matrix[
+                            :, class_idx
+                        ].astype("float32")
+            if calibrator is not None:
+                probability_calibrated.loc[pred_index] = True
 
             if target_meta.get("quantiles") is not None:
                 test_labels = assign_quantile_labels(
@@ -492,12 +759,89 @@ def train_forward_classifier(
             labeled_mask = eval_labels.notna()
             if bool(labeled_mask.any()):
                 y_eval = eval_labels.loc[labeled_mask].astype(int)
-                p_eval = pred_series.loc[labeled_mask]
-                fold_eval_metrics = binary_classification_metrics(y_eval, p_eval)
+                if is_multiclass:
+                    p_eval_frame = pd.DataFrame(
+                        probability_matrix[labeled_mask.to_numpy(dtype=bool)],
+                        index=y_eval.index,
+                        columns=class_labels,
+                    )
+                    raw_eval_frame = pd.DataFrame(
+                        raw_probability_matrix[labeled_mask.to_numpy(dtype=bool)],
+                        index=y_eval.index,
+                        columns=class_labels,
+                    )
+                    fold_eval_metrics = multiclass_classification_metrics(
+                        y_eval,
+                        p_eval_frame,
+                        class_labels=class_labels,
+                    )
+                    fold_raw_eval_metrics = multiclass_classification_metrics(
+                        y_eval,
+                        raw_eval_frame,
+                        class_labels=class_labels,
+                    )
+                    last_returns = (
+                        pd.to_numeric(out["close"], errors="coerce").pct_change()
+                        if "close" in out.columns
+                        else None
+                    )
+                    fold_baselines = multiclass_baseline_metrics(
+                        y_train,
+                        y_eval,
+                        class_labels=class_labels,
+                        last_returns=last_returns,
+                        random_seed=int(dict(model_cfg.get("diagnostics", {}) or {}).get("baselines", {}).get("random_seed", 7)) + int(split.fold),
+                    )
+                    all_eval_probs.append(p_eval_frame.to_numpy(dtype=float, copy=False))
+                    all_eval_raw_probs.append(raw_eval_frame.to_numpy(dtype=float, copy=False))
+                else:
+                    p_eval = pred_series.loc[labeled_mask]
+                    raw_p_eval = raw_pred_series.loc[labeled_mask]
+                    fold_eval_metrics = binary_classification_metrics(y_eval, p_eval)
+                    fold_raw_eval_metrics = binary_classification_metrics(y_eval, raw_p_eval)
+                    all_eval_probs.append(p_eval.to_numpy(dtype=float, copy=False))
+                    all_eval_raw_probs.append(raw_p_eval.to_numpy(dtype=float, copy=False))
                 eval_label_distribution = summarize_label_distribution(y_eval)
                 all_eval_labels.append(y_eval.to_numpy(dtype=int, copy=False))
-                all_eval_probs.append(p_eval.to_numpy(dtype=float, copy=False))
+                permutation_cfg = dict(
+                    dict(dict(model_cfg.get("diagnostics", {}) or {}).get("model", {}) or {}).get(
+                        "permutation_importance", {}
+                    )
+                    or {}
+                )
+                if bool(permutation_cfg.get("enabled", False)):
+                    eval_encoded = y_eval.map(class_to_encoded).astype(int).to_numpy(dtype=int)
+                    labeled_positions = np.flatnonzero(labeled_mask.to_numpy(dtype=bool))
+                    max_rows = int(permutation_cfg.get("max_rows", 2000))
+                    labeled_positions = labeled_positions[-max_rows:]
+                    if isinstance(test_input, pd.DataFrame):
+                        permutation_features = test_input.iloc[labeled_positions]
+                    else:
+                        permutation_features = np.asarray(test_input)[labeled_positions]
+                    permutation_labels = eval_encoded[-len(labeled_positions) :]
+                    permutation_result = permutation_importance(
+                        model,
+                        permutation_features,
+                        permutation_labels,
+                        scoring="neg_log_loss",
+                        n_repeats=int(permutation_cfg.get("n_repeats", 3)),
+                        random_state=int(permutation_cfg.get("random_state", 7)) + int(split.fold),
+                        n_jobs=1,
+                    )
+                    fold_permutation_importance = sorted(
+                        [
+                            {
+                                "feature": str(feature),
+                                "importance": float(permutation_result.importances_mean[idx]),
+                                "importance_std": float(permutation_result.importances_std[idx]),
+                            }
+                            for idx, feature in enumerate(feature_cols)
+                        ],
+                        key=lambda row: abs(float(row["importance"])),
+                        reverse=True,
+                    )
         eval_label_distributions.append(eval_label_distribution)
+        fold_permutation_importances.append(fold_permutation_importance)
 
         overlay_fold_meta: dict[str, Any] = {}
         if overlay_predictor is not None:
@@ -558,10 +902,15 @@ def train_forward_classifier(
                 "calibration": fold_calibration_meta,
                 "feature_importance": fold_feature_importance,
                 "classification_metrics": fold_eval_metrics,
+                "raw_classification_metrics": fold_raw_eval_metrics,
+                "baseline_metrics": fold_baselines,
+                "permutation_importance": fold_permutation_importance,
                 "regression_metrics": empty_regression_metrics(),
                 "volatility_metrics": empty_volatility_metrics(),
             }
         )
+        if fold_ambiguity is not None:
+            fold_meta[-1]["ambiguity"] = fold_ambiguity
         if overlay_fold_meta:
             fold_meta[-1]["overlay"] = overlay_fold_meta
         report_optuna_fold(model_kind, int(split.fold), dict(fold_meta[-1]))
@@ -603,24 +952,36 @@ def train_forward_classifier(
         final_labels = final_estimator_fit[label_col].astype(int)
         if int(final_labels.nunique()) < 2:
             raise ValueError("Final classifier refit has a single target class.")
+        final_labels_encoded = final_labels.map(class_to_encoded)
+        if final_labels_encoded.isna().any():
+            raise ValueError("Final classifier refit contains undeclared target classes.")
+        final_labels_encoded = final_labels_encoded.astype(int)
         final_train_input, final_scaler, final_preprocessing_meta = (
             _fit_deployment_preprocessor(
                 final_estimator_fit[feature_cols],
                 preprocessing_cfg=preprocessing_cfg,
             )
         )
-        final_label_input: pd.Series | np.ndarray = final_labels
+        final_label_input: pd.Series | np.ndarray = final_labels_encoded
         if estimator_family == "xgboost":
             final_train_input = np.asarray(final_train_input, dtype=np.float32)
-            final_label_input = final_labels.to_numpy(dtype=np.int32, copy=False)
+            final_label_input = final_labels_encoded.to_numpy(dtype=np.int32, copy=False)
         final_estimator = estimator_factory(model_params)
-        final_estimator.fit(final_train_input, final_label_input)
+        final_fit_kwargs: dict[str, Any] = {}
+        if model_cfg.get("_class_weight") is not None:
+            final_fit_kwargs["sample_weight"] = compute_sample_weight(
+                class_weight=model_cfg["_class_weight"],
+                y=np.asarray(final_label_input, dtype=int),
+            )
+        final_estimator.fit(final_train_input, final_label_input, **final_fit_kwargs)
 
-        final_calibrator: LogisticRegression | None = None
+        final_calibrator: FoldProbabilityCalibrator | None = None
         if bool(final_calibration_meta.get("enabled", False)):
             calibration_labels = final_calibration_fit[label_col].astype(int)
-            if int(calibration_labels.nunique()) < 2:
-                raise ValueError("Final classifier calibration window has a single target class.")
+            calibration_labels_encoded = calibration_labels.map(class_to_encoded)
+            if calibration_labels_encoded.isna().any():
+                raise ValueError("Final classifier calibration window contains undeclared classes.")
+            calibration_labels_encoded = calibration_labels_encoded.astype(int)
             calibration_values: pd.DataFrame | np.ndarray = final_calibration_fit[feature_cols]
             if final_scaler is not None:
                 calibration_values = final_scaler.transform(
@@ -632,10 +993,16 @@ def train_forward_classifier(
                     if isinstance(calibration_values, pd.DataFrame)
                     else np.asarray(calibration_values, dtype=np.float32)
                 )
-            calibration_raw = final_estimator.predict_proba(calibration_values)[:, 1]
-            final_calibrator = _fit_sigmoid_calibrator(
+            calibration_raw = _expand_estimator_probabilities(
+                final_estimator,
+                final_estimator.predict_proba(calibration_values),
+                class_count=len(class_labels),
+            )
+            final_calibrator = _fit_probability_calibrator(
                 calibration_raw,
-                calibration_labels,
+                calibration_labels_encoded,
+                method=str(calibration_cfg["method"]),
+                min_class_rows=int(calibration_cfg["min_class_rows"]),
             )
 
         model = FittedClassifierPipeline(
@@ -643,6 +1010,7 @@ def train_forward_classifier(
             scaler=final_scaler,
             calibrator=final_calibrator,
             estimator_family=estimator_family,
+            classes=class_labels,
         )
         preprocessing_meta = dict(final_preprocessing_meta)
         final_refit_meta = {
@@ -668,15 +1036,41 @@ def train_forward_classifier(
     if (oos_assignment_count > 1).any():
         raise ValueError("Overlapping test windows detected. Use non-overlapping split configuration.")
 
-    oos_classification_summary = empty_classification_metrics()
+    oos_classification_summary: dict[str, object] = (
+        empty_multiclass_classification_metrics() if is_multiclass else empty_classification_metrics()
+    )
+    oos_raw_classification_summary: dict[str, object] = (
+        empty_multiclass_classification_metrics() if is_multiclass else empty_classification_metrics()
+    )
     if all_eval_labels and all_eval_probs:
         y_all = pd.Series(np.concatenate(all_eval_labels), dtype=int)
-        p_all = pd.Series(np.concatenate(all_eval_probs), dtype=float)
-        oos_classification_summary = binary_classification_metrics(y_all, p_all)
+        if is_multiclass:
+            p_all = pd.DataFrame(np.concatenate(all_eval_probs), columns=class_labels)
+            raw_p_all = pd.DataFrame(np.concatenate(all_eval_raw_probs), columns=class_labels)
+            oos_classification_summary = multiclass_classification_metrics(
+                y_all,
+                p_all,
+                class_labels=class_labels,
+            )
+            oos_raw_classification_summary = multiclass_classification_metrics(
+                y_all,
+                raw_p_all,
+                class_labels=class_labels,
+            )
+        else:
+            p_all = pd.Series(np.concatenate(all_eval_probs), dtype=float)
+            raw_p_all = pd.Series(np.concatenate(all_eval_raw_probs), dtype=float)
+            oos_classification_summary = binary_classification_metrics(y_all, p_all)
+            oos_raw_classification_summary = binary_classification_metrics(y_all, raw_p_all)
 
     out[pred_prob_col] = pred_prob
     if pred_raw_prob is not None:
         out[pred_raw_prob_col] = pred_raw_prob
+    for class_label, series in class_probabilities.items():
+        out[class_probability_cols[int(class_label)]] = series
+    for class_label, series in class_raw_probabilities.items():
+        out[class_raw_probability_cols[int(class_label)]] = series
+    out[probability_calibrated_col] = probability_calibrated
     out[pred_is_oos_col] = oos_mask
     for col_name, series in sorted(extra_prediction_cols.items(), key=lambda kv: str(kv[0])):
         out[col_name] = series
@@ -705,6 +1099,14 @@ def train_forward_classifier(
         ),
         "pred_prob_col": pred_prob_col,
         "pred_raw_prob_col": pred_raw_prob_col if pred_raw_prob is not None else None,
+        "class_labels": [int(value) for value in class_labels],
+        "class_probability_cols": {
+            str(int(label)): column for label, column in class_probability_cols.items()
+        } if is_multiclass else {},
+        "class_raw_probability_cols": {
+            str(int(label)): column for label, column in class_raw_probability_cols.items()
+        } if is_multiclass and emit_raw_probability else {},
+        "probability_calibrated_col": probability_calibrated_col,
         "pred_is_oos_col": pred_is_oos_col,
         "label_col": label_col,
         "fwd_col": fwd_col,
@@ -717,10 +1119,12 @@ def train_forward_classifier(
         "oos_rows": int(oos_mask.sum()),
         "oos_prediction_coverage": float(total_test_pred_rows / max(int(oos_mask.sum()), 1)),
         "oos_classification_summary": oos_classification_summary,
+        "oos_raw_classification_summary": oos_raw_classification_summary,
         "oos_regression_summary": empty_regression_metrics(),
         "oos_volatility_summary": empty_volatility_metrics(),
         "feature_importance": aggregate_feature_importance(fold_feature_importances),
         "feature_importance_stability": summarize_feature_importance_stability(fold_feature_importances),
+        "permutation_importance": aggregate_feature_importance(fold_permutation_importances),
         "feature_family_counts": summarize_feature_family_counts(feature_cols),
         "label_distribution": label_distribution,
         "prediction_diagnostics": prediction_diagnostics,

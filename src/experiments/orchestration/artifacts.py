@@ -345,6 +345,117 @@ def _save_category_bar_chart(
     plt.close(fig)
 
 
+def _save_calibration_chart(
+    path: Path,
+    *,
+    raw_rows: list[dict[str, Any]],
+    calibrated_rows: list[dict[str, Any]],
+) -> None:
+    if not _ensure_matplotlib_backend(path.parent.parent):
+        return
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.plot([0.0, 1.0], [0.0, 1.0], linestyle="--", color="black", label="ideal")
+    for label, rows in (("raw", raw_rows), ("calibrated", calibrated_rows)):
+        points = [
+            (float(row["mean_confidence"]), float(row["accuracy"]))
+            for row in rows
+            if row.get("mean_confidence") is not None and row.get("accuracy") is not None
+        ]
+        if points:
+            ax.plot(
+                [point[0] for point in points],
+                [point[1] for point in points],
+                marker="o",
+                linewidth=1.5,
+                label=label,
+            )
+    ax.set_xlim(0.0, 1.0)
+    ax.set_ylim(0.0, 1.0)
+    ax.set_xlabel("Mean predicted confidence")
+    ax.set_ylabel("Observed accuracy")
+    ax.set_title("Multiclass Calibration: Raw vs Fold-Calibrated")
+    ax.grid(alpha=0.3)
+    ax.legend(loc="best")
+    fig.tight_layout()
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _save_heatmap_chart(
+    path: Path,
+    *,
+    title: str,
+    frame: pd.DataFrame,
+    value_format: str = ".3f",
+) -> None:
+    if frame.empty or not _ensure_matplotlib_backend(path.parent.parent):
+        return
+    import matplotlib.pyplot as plt
+
+    values = frame.to_numpy(dtype=float)
+    fig, ax = plt.subplots(figsize=(max(6.0, 1.2 * frame.shape[1]), max(3.0, 0.8 * frame.shape[0])))
+    image = ax.imshow(values, aspect="auto", cmap="viridis")
+    ax.set_xticks(np.arange(frame.shape[1]))
+    ax.set_xticklabels([str(value) for value in frame.columns])
+    ax.set_yticks(np.arange(frame.shape[0]))
+    ax.set_yticklabels([str(value) for value in frame.index])
+    for row_idx in range(frame.shape[0]):
+        for col_idx in range(frame.shape[1]):
+            value = values[row_idx, col_idx]
+            if np.isfinite(value):
+                ax.text(col_idx, row_idx, format(value, value_format), ha="center", va="center", color="white")
+    ax.set_title(title)
+    ax.set_xlabel(str(frame.columns.name or "column"))
+    ax.set_ylabel(str(frame.index.name or "row"))
+    fig.colorbar(image, ax=ax)
+    fig.tight_layout()
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _save_fold_equity_chart(
+    path: Path,
+    *,
+    returns: pd.Series,
+    index: pd.Index,
+    folds: list[dict[str, Any]],
+) -> None:
+    if not folds or not _ensure_matplotlib_backend(path.parent.parent):
+        return
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(11, 5))
+    combined_mask = pd.Series(False, index=index)
+    plotted = False
+    for fold in folds:
+        start = int(fold.get("test_start", 0))
+        end = min(int(fold.get("test_end", 0)), len(index))
+        if start < 0 or end <= start:
+            continue
+        fold_index = index[start:end]
+        fold_returns = returns.reindex(fold_index).fillna(0.0).astype(float)
+        curve = (1.0 + fold_returns).cumprod() - 1.0
+        ax.plot(curve.index, curve.to_numpy(), linewidth=1.0, alpha=0.75, label=f"fold {fold.get('fold')}")
+        combined_mask.iloc[start:end] = True
+        plotted = True
+    if bool(combined_mask.any()):
+        combined = returns.reindex(index).where(combined_mask).dropna().astype(float)
+        combined_curve = (1.0 + combined).cumprod() - 1.0
+        ax.plot(combined_curve.index, combined_curve.to_numpy(), color="black", linewidth=2.0, label="combined OOS")
+    if not plotted:
+        plt.close(fig)
+        return
+    ax.set_title("OOS Equity Curves by Fold and Combined")
+    ax.set_ylabel("Cumulative return")
+    ax.grid(alpha=0.3)
+    ax.legend(loc="best", ncol=2)
+    fig.tight_layout()
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
 def _save_rolling_line_chart(
     path: Path,
     *,
@@ -815,6 +926,234 @@ def _write_model_diagnostic_artifacts(
         )
         if coverage_chart_path.exists():
             chart_paths["prediction_coverage_by_fold"] = str(coverage_chart_path.relative_to(run_dir))
+
+    return chart_paths, artifact_paths
+
+
+def _write_barrier_probability_artifacts(
+    *,
+    run_dir: Path,
+    data: pd.DataFrame | dict[str, pd.DataFrame],
+    performance: BacktestResult | PortfolioPerformance,
+    model_meta: dict[str, Any],
+    evaluation: dict[str, Any],
+) -> tuple[dict[str, str], dict[str, str]]:
+    diagnostics = dict(evaluation.get("barrier_probability", {}) or {})
+    target_meta = dict(model_meta.get("target", {}) or {})
+    if not diagnostics or target_meta.get("kind") != "first_passage_barrier_multiclass":
+        return {}, {}
+    if isinstance(data, dict):
+        if len(data) != 1:
+            return {}, {}
+        frame = next(iter(data.values()))
+    else:
+        frame = data
+
+    report_assets_dir = run_dir / "report_assets"
+    diagnostics_dir = run_dir / "artifacts" / "barrier_probability"
+    report_assets_dir.mkdir(parents=True, exist_ok=True)
+    diagnostics_dir.mkdir(parents=True, exist_ok=True)
+    chart_paths: dict[str, str] = {}
+    artifact_paths: dict[str, str] = {}
+
+    summary_path = diagnostics_dir / "summary.json"
+    _write_json(summary_path, diagnostics)
+    artifact_paths["barrier_probability_summary"] = str(summary_path.relative_to(run_dir))
+
+    calibration = dict(diagnostics.get("calibration", {}) or {})
+    reliability_rows: list[dict[str, Any]] = []
+    for variant in ("raw", "calibrated"):
+        metrics = dict(calibration.get(variant, {}) or {})
+        reliability_rows.extend(
+            [{"variant": variant} | dict(row or {}) for row in list(metrics.get("reliability", []) or [])]
+        )
+    if reliability_rows:
+        reliability_path = diagnostics_dir / "calibration_reliability.csv"
+        pd.DataFrame(reliability_rows).to_csv(reliability_path, index=False)
+        artifact_paths["barrier_calibration_reliability"] = str(reliability_path.relative_to(run_dir))
+        calibration_chart = report_assets_dir / "barrier_calibration_raw_vs_calibrated.png"
+        _save_calibration_chart(
+            calibration_chart,
+            raw_rows=list(dict(calibration.get("raw", {}) or {}).get("reliability", []) or []),
+            calibrated_rows=list(dict(calibration.get("calibrated", {}) or {}).get("reliability", []) or []),
+        )
+        if calibration_chart.exists():
+            chart_paths["barrier_calibration_raw_vs_calibrated"] = str(calibration_chart.relative_to(run_dir))
+
+    bucket_rows: list[dict[str, Any]] = []
+    for label, rows in dict(diagnostics.get("probability_buckets", {}) or {}).items():
+        bucket_rows.extend([{"label": label} | dict(row or {}) for row in list(rows or [])])
+    for name, key in (
+        ("selected_ev", "expected_value_buckets"),
+        ("predicted_edge", "predicted_edge_buckets"),
+    ):
+        bucket_rows.extend([{"label": name} | dict(row or {}) for row in list(diagnostics.get(key, []) or [])])
+    if bucket_rows:
+        bucket_path = diagnostics_dir / "probability_and_ev_buckets.csv"
+        pd.DataFrame(bucket_rows).to_csv(bucket_path, index=False)
+        artifact_paths["barrier_probability_ev_buckets"] = str(bucket_path.relative_to(run_dir))
+
+    fold_distribution_rows: list[dict[str, Any]] = []
+    for raw_fold in list(diagnostics.get("folds", []) or []):
+        fold = dict(raw_fold or {})
+        ambiguity = dict(fold.get("ambiguity", {}) or {})
+        for sample, distribution_key in (
+            ("train", "train_label_distribution"),
+            ("oos_evaluation", "eval_label_distribution"),
+        ):
+            distribution = dict(fold.get(distribution_key, {}) or {})
+            counts = dict(distribution.get("class_counts", {}) or {})
+            total = int(distribution.get("labeled_rows", 0) or 0)
+            fold_distribution_rows.append(
+                {
+                    "fold": fold.get("fold"),
+                    "sample": sample,
+                    "labeled_rows": total,
+                    "lower_count": int(counts.get("-1", 0) or 0),
+                    "no_hit_count": int(counts.get("0", 0) or 0),
+                    "upper_count": int(counts.get("1", 0) or 0),
+                    "lower_rate": float(int(counts.get("-1", 0) or 0) / total) if total else None,
+                    "no_hit_rate": float(int(counts.get("0", 0) or 0) / total) if total else None,
+                    "upper_rate": float(int(counts.get("1", 0) or 0) / total) if total else None,
+                    "ambiguous_count": ambiguity.get(f"{'eval' if sample == 'oos_evaluation' else 'train'}_ambiguous_count"),
+                    "ambiguous_rate": ambiguity.get(f"{'eval' if sample == 'oos_evaluation' else 'train'}_ambiguous_rate"),
+                }
+            )
+    if fold_distribution_rows:
+        fold_distribution_path = diagnostics_dir / "fold_class_and_ambiguity_distribution.csv"
+        pd.DataFrame(fold_distribution_rows).to_csv(fold_distribution_path, index=False)
+        artifact_paths["barrier_fold_class_distribution"] = str(
+            fold_distribution_path.relative_to(run_dir)
+        )
+
+    regime_rows: list[dict[str, Any]] = []
+    for regime, rows in dict(diagnostics.get("performance_by_regime", {}) or {}).items():
+        regime_rows.extend([{"regime": regime} | dict(row or {}) for row in list(rows or [])])
+    if regime_rows:
+        regime_path = diagnostics_dir / "performance_by_regime.csv"
+        pd.DataFrame(regime_rows).to_csv(regime_path, index=False)
+        artifact_paths["barrier_performance_by_regime"] = str(regime_path.relative_to(run_dir))
+
+    sensitivity_rows: list[dict[str, Any]] = []
+    for raw_row in list(diagnostics.get("barrier_sensitivity", []) or []):
+        row = dict(raw_row or {})
+        rates = dict(row.pop("class_rates", {}) or {})
+        sensitivity_rows.append(
+            row
+            | {
+                "lower_rate": rates.get("-1"),
+                "no_hit_rate": rates.get("0"),
+                "upper_rate": rates.get("1"),
+            }
+        )
+    if sensitivity_rows:
+        sensitivity_frame = pd.DataFrame(sensitivity_rows)
+        sensitivity_path = diagnostics_dir / "barrier_sensitivity.csv"
+        sensitivity_frame.to_csv(sensitivity_path, index=False)
+        artifact_paths["barrier_sensitivity"] = str(sensitivity_path.relative_to(run_dir))
+        symmetric = sensitivity_frame.loc[sensitivity_frame["barrier_kind"].eq("symmetric")]
+        if not symmetric.empty:
+            heatmap_frame = symmetric.pivot_table(
+                index="horizon_bars",
+                columns="upper_atr_multiplier",
+                values="no_hit_rate",
+                aggfunc="first",
+            )
+            heatmap_frame.index.name = "horizon_bars"
+            heatmap_frame.columns.name = "ATR multiplier"
+            sensitivity_chart = report_assets_dir / "barrier_sensitivity_no_hit_heatmap.png"
+            _save_heatmap_chart(
+                sensitivity_chart,
+                title="No-Hit Rate by Horizon and Symmetric ATR Multiplier",
+                frame=heatmap_frame,
+            )
+            if sensitivity_chart.exists():
+                chart_paths["barrier_sensitivity_no_hit_heatmap"] = str(sensitivity_chart.relative_to(run_dir))
+
+    robustness = dict(evaluation.get("robustness", {}) or {})
+    cost_rows = [
+        {"cost_scenario": scenario} | dict(metrics or {})
+        for scenario, metrics in dict(robustness.get("cost_stress", {}) or {}).items()
+    ]
+    if cost_rows:
+        cost_frame = pd.DataFrame(cost_rows)
+        cost_path = diagnostics_dir / "cost_stress.csv"
+        cost_frame.to_csv(cost_path, index=False)
+        artifact_paths["barrier_cost_stress"] = str(cost_path.relative_to(run_dir))
+        if "cumulative_return" in cost_frame:
+            heatmap_frame = cost_frame.set_index("cost_scenario")[["cumulative_return"]].T
+            heatmap_frame.index.name = "metric"
+            heatmap_frame.columns.name = "cost scenario"
+            cost_chart = report_assets_dir / "barrier_cost_stress_heatmap.png"
+            _save_heatmap_chart(
+                cost_chart,
+                title="Net Cumulative Return under Cost Stress",
+                frame=heatmap_frame,
+            )
+            if cost_chart.exists():
+                chart_paths["barrier_cost_stress_heatmap"] = str(cost_chart.relative_to(run_dir))
+
+    permutation_rows: list[dict[str, Any]] = []
+    for fold in list(model_meta.get("folds", []) or []):
+        permutation_rows.extend(
+            [{"fold": fold.get("fold")} | dict(row or {}) for row in list(fold.get("permutation_importance", []) or [])]
+        )
+    if permutation_rows:
+        permutation_path = diagnostics_dir / "permutation_importance_by_fold.csv"
+        pd.DataFrame(permutation_rows).to_csv(permutation_path, index=False)
+        artifact_paths["barrier_permutation_importance_by_fold"] = str(permutation_path.relative_to(run_dir))
+
+    path_series = {
+        name: pd.to_numeric(frame[name], errors="coerce")
+        for name in ("mfe_atr", "mae_atr", "time_to_first_hit", "terminal_return")
+        if name in frame.columns
+    }
+    if "mfe_atr" in path_series or "mae_atr" in path_series:
+        path_chart = report_assets_dir / "barrier_mfe_mae_atr_distribution.png"
+        _save_histogram_chart(
+            path_chart,
+            title="First-Passage MFE/MAE Distribution",
+            xlabel="ATR units",
+            series_map={key: value for key, value in path_series.items() if key in {"mfe_atr", "mae_atr"}},
+            bins=50,
+        )
+        if path_chart.exists():
+            chart_paths["barrier_mfe_mae_atr_distribution"] = str(path_chart.relative_to(run_dir))
+    if "time_to_first_hit" in path_series:
+        time_chart = report_assets_dir / "barrier_time_to_first_hit_distribution.png"
+        _save_histogram_chart(
+            time_chart,
+            title="Time to First Barrier Touch",
+            xlabel="Bars from feature row",
+            series_map={"time_to_first_hit": path_series["time_to_first_hit"]},
+            bins=max(int(target_meta.get("horizon_bars", 12)), 3),
+        )
+        if time_chart.exists():
+            chart_paths["barrier_time_to_first_hit_distribution"] = str(time_chart.relative_to(run_dir))
+    label_col = str(target_meta.get("label_col", "first_passage_label"))
+    if "terminal_return" in path_series and label_col in frame.columns:
+        no_hit_chart = report_assets_dir / "barrier_no_hit_terminal_return.png"
+        no_hit = path_series["terminal_return"].where(pd.to_numeric(frame[label_col], errors="coerce").eq(0.0))
+        _save_histogram_chart(
+            no_hit_chart,
+            title="No-Hit Terminal Return",
+            xlabel="Return",
+            series_map={"no_hit": no_hit},
+            bins=50,
+        )
+        if no_hit_chart.exists():
+            chart_paths["barrier_no_hit_terminal_return"] = str(no_hit_chart.relative_to(run_dir))
+
+    if isinstance(performance, BacktestResult):
+        fold_equity_chart = report_assets_dir / "barrier_oos_equity_by_fold.png"
+        _save_fold_equity_chart(
+            fold_equity_chart,
+            returns=performance.returns,
+            index=frame.index,
+            folds=list(model_meta.get("folds", []) or []),
+        )
+        if fold_equity_chart.exists():
+            chart_paths["barrier_oos_equity_by_fold"] = str(fold_equity_chart.relative_to(run_dir))
 
     return chart_paths, artifact_paths
 
@@ -2762,6 +3101,16 @@ def save_artifacts(
         evaluation=evaluation,
     )
     for label, rel_path in {**forecast_alpha_chart_paths, **forecast_alpha_artifact_paths}.items():
+        artifacts[label] = str((run_dir / rel_path).resolve())
+
+    barrier_chart_paths, barrier_artifact_paths = _write_barrier_probability_artifacts(
+        run_dir=run_dir,
+        data=data,
+        performance=performance,
+        model_meta=model_meta,
+        evaluation=evaluation,
+    )
+    for label, rel_path in {**barrier_chart_paths, **barrier_artifact_paths}.items():
         artifacts[label] = str((run_dir / rel_path).resolve())
 
     tsfresh_dataset_artifacts = _write_tsfresh_feature_dataset_artifacts(

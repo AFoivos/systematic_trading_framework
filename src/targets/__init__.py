@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from .candidate_expected_r import CANDIDATE_EXPECTED_R_OUTPUT_COLS, build_candidate_expected_r_target
 from .directional_triple_barrier import build_directional_triple_barrier_target
+from .first_passage_barrier import build_first_passage_barrier_target
 from .forward_return import build_forward_return_target
 from .future_return_regression import build_future_return_regression_target
 from .output_aliases import TARGET_OUTPUT_KEYS, apply_target_output_aliases
@@ -58,6 +59,7 @@ __all__ = [
     "build_excess_return_regression_target",
     "build_expected_realized_r_target",
     "build_forward_return_target",
+    "build_first_passage_barrier_target",
     "build_future_drawdown_regression_target",
     "build_future_path_efficiency_target",
     "build_future_range_regression_target",

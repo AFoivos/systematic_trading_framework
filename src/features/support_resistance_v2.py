@@ -225,6 +225,16 @@ def add_support_resistance_v2_features(
     support_level = pivot_low_confirmed.ffill()
     out["sr_v2_resistance_level"] = resistance_level.astype("float32")
     out["sr_v2_support_level"] = support_level.astype("float32")
+    # Preserve the historical fallback contract when ``atr_col`` is omitted.
+    # The normalized distance outputs are opt-in because adding columns to an
+    # existing feature family can otherwise change downstream feature selectors.
+    if atr_col is not None:
+        out["sr_v2_resistance_distance_atr"] = (
+            (resistance_level - close) / atr
+        ).astype("float32")
+        out["sr_v2_support_distance_atr"] = (
+            (close - support_level) / atr
+        ).astype("float32")
 
     resistance_pivot_event = pivot_high_confirmed.notna()
     support_pivot_event = pivot_low_confirmed.notna()
