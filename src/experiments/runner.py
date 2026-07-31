@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 from src.experiments.contracts import validate_data_contract
 from src.experiments.orchestration import (
@@ -60,10 +63,30 @@ def _load_asset_frames(
     )
 
 
-def run_experiment(config_path: str | Path) -> ExperimentResult:
+def _pipeline_kind(config_path: str | Path) -> str | None:
+    """Read only the optional pipeline selector before canonical validation."""
+    path = Path(config_path)
+    if not path.is_absolute():
+        path = (Path.cwd() / path).resolve()
+    if not path.is_file():
+        return None
+    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    pipeline = payload.get("pipeline")
+    if not isinstance(pipeline, dict):
+        return None
+    kind = pipeline.get("kind")
+    return str(kind) if kind not in (None, "", "canonical_experiment") else None
+
+
+def run_experiment(config_path: str | Path) -> ExperimentResult | Any:
     """
     Run experiment end to end while keeping `src.experiments.runner` as the stable entrypoint.
     """
+    pipeline_kind = _pipeline_kind(config_path)
+    if pipeline_kind is not None:
+        from src.pipelines.registry import get_pipeline_fn
+
+        return get_pipeline_fn(pipeline_kind)(config_path)
     return run_experiment_pipeline(
         config_path,
         load_asset_frames_fn=_load_asset_frames,
@@ -244,7 +267,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     result = run_experiment(args.config)
-    print_experiment_completion(result)
+    if isinstance(result, ExperimentResult):
+        print_experiment_completion(result)
+    else:
+        import json
+
+        print("Experiment pipeline completed")
+        print(json.dumps(result, indent=2, default=str))
 
 
 __all__ = [

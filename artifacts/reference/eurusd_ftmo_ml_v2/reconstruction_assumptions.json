@@ -1,0 +1,112 @@
+{
+  "authoritative_reference_manifest": {
+    "copied_count": 0,
+    "destination_directory": "artifacts/reference/eurusd_ftmo_ml_v2",
+    "files": [
+      {
+        "expected_sha256": "384af9b40271f1598a545c79c77303922ed20d257b968c7b4718820accef4164",
+        "filename": "eurusd_30m.csv",
+        "status": "missing"
+      },
+      {
+        "expected_sha256": "37289f74e9e3b318349a372443eb6050c9cbe987e14bfe294a867e41af208943",
+        "filename": "eurusd_ftmo_ml_v2_strategy_spec.json",
+        "status": "missing"
+      },
+      {
+        "expected_sha256": "9df3a12f7661835eca40a337a0d062e88474859fcb7fd201211ade1e0a22daaa",
+        "filename": "eurusd_ftmo_ml_v2_strategy.py",
+        "status": "missing"
+      },
+      {
+        "expected_sha256": "276d274cf7fc4e5bcb27b50fb936e1e018f0d2b958d5b5bc5bfb0073caf5ebe5",
+        "filename": "eurusd_ftmo_ml_v2_model_bundle.joblib",
+        "status": "missing"
+      },
+      {
+        "expected_sha256": "4c8aa79a8d4635ddfdb221b6aa9449b05123d5883b81fc6f1fa28e367eebd1b8",
+        "filename": "eurusd_ftmo_ml_v2_feature_dictionary.csv",
+        "status": "missing"
+      },
+      {
+        "expected_sha256": null,
+        "filename": "eurusd_ftmo_ml_v2_feature_importance.csv",
+        "status": "missing"
+      },
+      {
+        "expected_sha256": "5a9fff9bff85b0f28e231d4949d0c0ae430c6f4ef4adfa1a9415783b278f5582",
+        "filename": "eurusd_ftmo_ml_v2_period_metrics.csv",
+        "status": "missing"
+      },
+      {
+        "expected_sha256": null,
+        "filename": "eurusd_ftmo_ml_v2_parameter_sensitivity.csv",
+        "status": "missing"
+      },
+      {
+        "expected_sha256": null,
+        "filename": "eurusd_ftmo_ml_v2_cost_stress.csv",
+        "status": "missing"
+      },
+      {
+        "expected_sha256": null,
+        "filename": "eurusd_ftmo_ml_v2_risk_scenarios.csv",
+        "status": "missing"
+      },
+      {
+        "expected_sha256": null,
+        "filename": "eurusd_ftmo_ml_v2_strategy_report.html",
+        "status": "missing"
+      },
+      {
+        "expected_sha256": null,
+        "filename": "eurusd_ftmo_strategy_spec.json",
+        "status": "missing"
+      },
+      {
+        "expected_sha256": null,
+        "filename": "eurusd_ftmo_ml_strategy_spec.json",
+        "status": "missing"
+      },
+      {
+        "expected_sha256": null,
+        "filename": "eurusd_ftmo_ml_strategy.py",
+        "status": "missing"
+      }
+    ],
+    "hash_mismatch_count": 0,
+    "missing_count": 14,
+    "source_directory": "/mnt/data"
+  },
+  "exactly_recovered": [
+    "fixed 151-column order from the supplied implementation brief",
+    "four pullback component parameters and state-machine rules",
+    "session-fade schedule and filter",
+    "three LightGBM parameter sets",
+    "annual walk-forward schedule",
+    "confidence, aggregation, volatility, sizing, and FTMO overlay constants"
+  ],
+  "forbidden_substitutions": [
+    "no synthetic replacement for a missing reference file",
+    "no parameter optimization to close a parity gap",
+    "no RL, DL, calibration, imputation, scaling, or additional models"
+  ],
+  "inferred_because_original_source_not_persisted": [
+    "rolling standard-deviation ddof=1 where the brief says pandas rolling_std without a ddof",
+    "bar-level equity marking at each M30 open for FTMO daily-loss approximation",
+    "baseline-only cost_stress.csv when no reference stress grid is available"
+  ],
+  "not_reproducible_from_available_artifacts": [
+    "bit-for-bit annual fold models",
+    "candidate-level historical reference predictions",
+    "reference candidate signal fixtures",
+    "exact historical parity when authoritative data or files are missing"
+  ],
+  "reconstructed_from_documented_formula": [
+    "candidate generation and executable next-open labels",
+    "bar and candidate feature composition",
+    "OOS model training and scoring",
+    "bar-level target aggregation and account simulation"
+  ],
+  "status": "documented_reconstruction_not_exact_reproduction"
+}

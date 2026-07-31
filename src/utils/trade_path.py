@@ -38,6 +38,13 @@ def normalize_dynamic_exit_config(dynamic_exits: Mapping[str, Any] | None) -> di
         "breakeven": {"enabled": False, "trigger_r": 0.8, "lock_r": 0.0},
         "profit_lock": {"enabled": False, "trigger_r": 1.2, "lock_r": 0.3},
         "atr_trailing": {"enabled": False, "activation_r": 0.0, "distance_mult": 1.0},
+        "r_trailing": {
+            "enabled": False,
+            "activation_r": 1.0,
+            "distance_r": 0.5,
+            "risk_distance_col": "",
+            "intrabar_policy": "adverse_first",
+        },
         "no_progress": {"enabled": False, "bars": 6, "min_favorable_r": 0.2, "exit_price": "close"},
     }
     if not enabled:
@@ -49,6 +56,7 @@ def normalize_dynamic_exit_config(dynamic_exits: Mapping[str, Any] | None) -> di
     breakeven = dict(cfg.get("breakeven", {}) or {})
     profit_lock = dict(cfg.get("profit_lock", {}) or {})
     atr_trailing = dict(cfg.get("atr_trailing", {}) or {})
+    r_trailing = dict(cfg.get("r_trailing", {}) or {})
     no_progress = dict(cfg.get("no_progress", {}) or {})
 
     out = {
@@ -91,6 +99,13 @@ def normalize_dynamic_exit_config(dynamic_exits: Mapping[str, Any] | None) -> di
             "activation_r": float(atr_trailing.get("activation_r", 0.0)),
             "distance_mult": float(atr_trailing.get("distance_mult", 1.0)),
         },
+        "r_trailing": {
+            "enabled": enabled and _enabled(r_trailing),
+            "activation_r": float(r_trailing.get("activation_r", 1.0)),
+            "distance_r": float(r_trailing.get("distance_r", 0.5)),
+            "risk_distance_col": str(r_trailing.get("risk_distance_col", "")),
+            "intrabar_policy": str(r_trailing.get("intrabar_policy", "adverse_first")),
+        },
         "no_progress": {
             "enabled": enabled and _enabled(no_progress),
             "bars": int(no_progress.get("bars", 6)),
@@ -121,6 +136,14 @@ def normalize_dynamic_exit_config(dynamic_exits: Mapping[str, Any] | None) -> di
         raise ValueError("dynamic_exits.atr_trailing.activation_r must be >= 0.")
     if out["atr_trailing"]["distance_mult"] <= 0.0:
         raise ValueError("dynamic_exits.atr_trailing.distance_mult must be > 0.")
+    if out["r_trailing"]["activation_r"] < 0.0:
+        raise ValueError("dynamic_exits.r_trailing.activation_r must be >= 0.")
+    if out["r_trailing"]["distance_r"] <= 0.0:
+        raise ValueError("dynamic_exits.r_trailing.distance_r must be > 0.")
+    if out["r_trailing"]["enabled"] and not out["r_trailing"]["risk_distance_col"].strip():
+        raise ValueError("dynamic_exits.r_trailing.risk_distance_col must be a non-empty string.")
+    if out["r_trailing"]["intrabar_policy"] != "adverse_first":
+        raise ValueError("dynamic_exits.r_trailing.intrabar_policy must be 'adverse_first'.")
     if out["no_progress"]["min_favorable_r"] < 0.0:
         raise ValueError("dynamic_exits.no_progress.min_favorable_r must be >= 0.")
     return out
@@ -267,6 +290,12 @@ def _empty_barrier_outcome(
         "time_to_mae": np.nan,
         "breakeven_activated": False,
         "profit_lock_activated": False,
+        "r_trailing_activated": False,
+        "r_trailing_activation_r": np.nan,
+        "r_trailing_distance_r": np.nan,
+        "initial_risk_distance": np.nan,
+        "effective_trailing_stop": np.nan,
+        "intrabar_policy": "",
     }
 
 
@@ -751,6 +780,7 @@ def simulate_barrier_trade_outcome(
     stop_mode: str = "fixed_return",
     volatility: np.ndarray | None = None,
     vol_col: str | None = None,
+    r_trailing_risk_distances: np.ndarray | None = None,
     forecasts: np.ndarray | None = None,
     long_trend_break: np.ndarray | None = None,
     short_trend_break: np.ndarray | None = None,
@@ -813,6 +843,21 @@ def simulate_barrier_trade_outcome(
     raw_entry_price = float(opens[entry_idx] if entry_price_mode == "next_open" else closes[signal_idx])
     if not np.isfinite(raw_entry_price) or raw_entry_price <= 0.0:
         return _empty_barrier_outcome(signal_idx=signal_idx, side=side_int, exit_reason="invalid_entry")
+    dynamic_cfg = normalize_dynamic_exit_config(dynamic_exits)
+    r_trailing_risk_distance: float | None = None
+    if dynamic_cfg["r_trailing"]["enabled"]:
+        if r_trailing_risk_distances is None:
+            raise ValueError("r_trailing_risk_distances is required when dynamic_exits.r_trailing is enabled.")
+        r_trailing_risk_distance = (
+            float(r_trailing_risk_distances[signal_idx])
+            if signal_idx < len(r_trailing_risk_distances)
+            else np.nan
+        )
+        if not np.isfinite(r_trailing_risk_distance) or r_trailing_risk_distance <= 0.0:
+            raise ValueError(
+                "dynamic_exits.r_trailing initial risk distance must be finite and > 0 "
+                f"at candidate entry index {signal_idx}."
+            )
 
     if stop_mode == "volatility_stop":
         if volatility is None:
@@ -856,6 +901,7 @@ def simulate_barrier_trade_outcome(
             forecasts=forecasts,
             short_trend_break=short_trend_break,
             volatility=volatility,
+            initial_risk_distance=r_trailing_risk_distance,
             tie_break=tie_break,
             legacy_same_bar_stop_reason=legacy_same_bar_stop_reason,
         )
@@ -877,6 +923,7 @@ def simulate_barrier_trade_outcome(
             forecasts=forecasts,
             long_trend_break=long_trend_break,
             volatility=volatility,
+            initial_risk_distance=r_trailing_risk_distance,
             tie_break=tie_break,
             legacy_same_bar_stop_reason=legacy_same_bar_stop_reason,
         )
@@ -939,6 +986,12 @@ def simulate_barrier_trade_outcome(
         "max_adverse_r": float(path["max_adverse_r"]),
         "breakeven_activated": bool(path["breakeven_activated"]),
         "profit_lock_activated": bool(path["profit_lock_activated"]),
+        "r_trailing_activated": bool(path["r_trailing_activated"]),
+        "r_trailing_activation_r": float(path["r_trailing_activation_r"]),
+        "r_trailing_distance_r": float(path["r_trailing_distance_r"]),
+        "initial_risk_distance": float(path["initial_risk_distance"]),
+        "effective_trailing_stop": float(path["effective_trailing_stop"]),
+        "intrabar_policy": str(path["intrabar_policy"]),
     }
 
 
@@ -959,6 +1012,7 @@ def simulate_long_trade_path(
     forecasts: np.ndarray | None = None,
     long_trend_break: np.ndarray | None = None,
     volatility: np.ndarray | None = None,
+    initial_risk_distance: float | None = None,
     tie_break: str = "conservative",
     legacy_same_bar_stop_reason: bool = False,
 ) -> dict[str, Any]:
@@ -985,6 +1039,10 @@ def simulate_long_trade_path(
         raise ValueError("take_profit_price must be above entry_price for a long trade.")
 
     dynamic_cfg = normalize_dynamic_exit_config(dynamic_exits)
+    r_trailing = dynamic_cfg["r_trailing"]
+    r_risk_distance = float(initial_risk_distance) if initial_risk_distance is not None else np.nan
+    if r_trailing["enabled"] and (not np.isfinite(r_risk_distance) or r_risk_distance <= 0.0):
+        raise ValueError("dynamic_exits.r_trailing initial risk distance must be finite and > 0.")
     partial_cfg = normalize_partial_exit_config(partial_exits)
     partial_rules = list(partial_cfg["rules"]) if partial_cfg["enabled"] else []
     partial_rule_fired = [False] * len(partial_rules)
@@ -993,6 +1051,9 @@ def simulate_long_trade_path(
     stop_reason = "stop_loss"
     breakeven_activated = False
     profit_lock_activated = False
+    r_trailing_activated = False
+    effective_trailing_stop = np.nan
+    highest_price_since_entry = entry
     max_favorable_r = 0.0
     max_adverse_r = 0.0
     bars_held = 0
@@ -1121,6 +1182,17 @@ def simulate_long_trade_path(
                     effective_stop_price = float(candidate_stop)
                     stop_reason = "atr_trailing_stop"
 
+        if r_trailing["enabled"]:
+            highest_price_since_entry = max(highest_price_since_entry, bar_high)
+            mfe_r = (highest_price_since_entry - entry) / r_risk_distance
+            if mfe_r >= r_trailing["activation_r"]:
+                r_trailing_activated = True
+                candidate_stop = highest_price_since_entry - r_trailing["distance_r"] * r_risk_distance
+                effective_trailing_stop = float(candidate_stop)
+                if candidate_stop >= effective_stop_price:
+                    effective_stop_price = float(candidate_stop)
+                    stop_reason = "r_trailing_stop"
+
         signal_off = dynamic_cfg["signal_off_exit"]
         if signal_off["enabled"] and bars_held >= signal_off["min_bars_held"] and signals is not None:
             current_signal = float(signals[idx]) if idx < len(signals) and np.isfinite(float(signals[idx])) else 0.0
@@ -1206,6 +1278,12 @@ def simulate_long_trade_path(
         "breakeven_activated": bool(breakeven_activated),
         "profit_lock_activated": bool(profit_lock_activated),
         "effective_stop_price": float(effective_stop_price),
+        "r_trailing_activated": bool(r_trailing_activated),
+        "r_trailing_activation_r": float(r_trailing["activation_r"]),
+        "r_trailing_distance_r": float(r_trailing["distance_r"]),
+        "initial_risk_distance": float(r_risk_distance),
+        "effective_trailing_stop": float(effective_trailing_stop),
+        "intrabar_policy": str(r_trailing["intrabar_policy"]),
         "partial_exits": partial_exit_events,
     }
 
@@ -1227,6 +1305,7 @@ def simulate_short_trade_path(
     forecasts: np.ndarray | None = None,
     short_trend_break: np.ndarray | None = None,
     volatility: np.ndarray | None = None,
+    initial_risk_distance: float | None = None,
     tie_break: str = "conservative",
     legacy_same_bar_stop_reason: bool = False,
 ) -> dict[str, Any]:
@@ -1250,6 +1329,10 @@ def simulate_short_trade_path(
         raise ValueError("take_profit_price must be below entry_price for a short trade.")
 
     dynamic_cfg = normalize_dynamic_exit_config(dynamic_exits)
+    r_trailing = dynamic_cfg["r_trailing"]
+    r_risk_distance = float(initial_risk_distance) if initial_risk_distance is not None else np.nan
+    if r_trailing["enabled"] and (not np.isfinite(r_risk_distance) or r_risk_distance <= 0.0):
+        raise ValueError("dynamic_exits.r_trailing initial risk distance must be finite and > 0.")
     partial_cfg = normalize_partial_exit_config(partial_exits)
     partial_rules = list(partial_cfg["rules"]) if partial_cfg["enabled"] else []
     partial_rule_fired = [False] * len(partial_rules)
@@ -1258,6 +1341,9 @@ def simulate_short_trade_path(
     stop_reason = "stop_loss"
     breakeven_activated = False
     profit_lock_activated = False
+    r_trailing_activated = False
+    effective_trailing_stop = np.nan
+    lowest_price_since_entry = entry
     max_favorable_r = 0.0
     max_adverse_r = 0.0
     bars_held = 0
@@ -1386,6 +1472,17 @@ def simulate_short_trade_path(
                     effective_stop_price = float(candidate_stop)
                     stop_reason = "atr_trailing_stop"
 
+        if r_trailing["enabled"]:
+            lowest_price_since_entry = min(lowest_price_since_entry, bar_low)
+            mfe_r = (entry - lowest_price_since_entry) / r_risk_distance
+            if mfe_r >= r_trailing["activation_r"]:
+                r_trailing_activated = True
+                candidate_stop = lowest_price_since_entry + r_trailing["distance_r"] * r_risk_distance
+                effective_trailing_stop = float(candidate_stop)
+                if candidate_stop <= effective_stop_price:
+                    effective_stop_price = float(candidate_stop)
+                    stop_reason = "r_trailing_stop"
+
         signal_off = dynamic_cfg["signal_off_exit"]
         if signal_off["enabled"] and bars_held >= signal_off["min_bars_held"] and signals is not None:
             current_signal = float(signals[idx]) if idx < len(signals) and np.isfinite(float(signals[idx])) else 0.0
@@ -1471,6 +1568,12 @@ def simulate_short_trade_path(
         "breakeven_activated": bool(breakeven_activated),
         "profit_lock_activated": bool(profit_lock_activated),
         "effective_stop_price": float(effective_stop_price),
+        "r_trailing_activated": bool(r_trailing_activated),
+        "r_trailing_activation_r": float(r_trailing["activation_r"]),
+        "r_trailing_distance_r": float(r_trailing["distance_r"]),
+        "initial_risk_distance": float(r_risk_distance),
+        "effective_trailing_stop": float(effective_trailing_stop),
+        "intrabar_policy": str(r_trailing["intrabar_policy"]),
         "partial_exits": partial_exit_events,
     }
 

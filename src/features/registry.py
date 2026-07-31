@@ -24,6 +24,7 @@ from .dominant_cycle_period import add_dominant_cycle_period
 from .dominant_cycle_phase import add_dominant_cycle_phase
 from .ehlers_ml_long_candidate import ehlers_ml_long_candidate_feature
 from .even_better_sinewave import add_even_better_sinewave
+from .eurusd_ftmo_ml_v2 import build_bar_feature_frame as add_eurusd_ftmo_ml_v2_features
 from .extrema_context import swing_extrema_context
 from .fama import add_fama
 from .fisher_transform import add_fisher_transform
@@ -150,6 +151,7 @@ _FEATURE_COMPONENTS: tuple[tuple[str, FeatureFn], ...] = (
     ("frama", add_frama),
     ("center_of_gravity", add_center_of_gravity),
     ("even_better_sinewave", add_even_better_sinewave),
+    ("eurusd_ftmo_ml_v2", add_eurusd_ftmo_ml_v2_features),
     ("autocorrelation_periodogram", add_autocorrelation_periodogram),
     ("homodyne_discriminator", add_homodyne_discriminator),
     ("parkinson_volatility", add_parkinson_volatility),

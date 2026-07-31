@@ -7,12 +7,14 @@ from typing import Any
 from src.utils.registry import build_registry, get_registered_component, registry_names
 
 from .canonical_pipeline import run_canonical_pipeline
+from src.experiments.support.eurusd_ftmo_ml_v2 import run_reconstruction as run_eurusd_ftmo_ml_v2_pipeline
 
 PipelineFn = Callable[[str | Path], Any]
 
 
 _PIPELINE_COMPONENTS: tuple[tuple[str, PipelineFn], ...] = (
     ("canonical_experiment", run_canonical_pipeline),
+    ("eurusd_ftmo_ml_v2", run_eurusd_ftmo_ml_v2_pipeline),
 )
 
 

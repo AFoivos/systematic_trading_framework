@@ -253,6 +253,9 @@ def run_manual_barrier_backtest(
     partial_cfg = normalize_partial_exit_config(partial_exits)
     partial_enabled = bool(partial_cfg.get("enabled", False))
     needs_volatility = stop_mode == "volatility_stop" or bool(dynamic_cfg["atr_trailing"]["enabled"])
+    r_trailing_cfg = dict(dynamic_cfg["r_trailing"])
+    needs_r_trailing_risk = bool(r_trailing_cfg["enabled"])
+    r_trailing_risk_col = str(r_trailing_cfg["risk_distance_col"])
     needs_forecast = bool(dynamic_cfg["forecast_decay"]["enabled"]) or bool(dynamic_cfg["trend_break"]["enabled"])
     if needs_volatility and (vol_col is None or not str(vol_col).strip()):
         raise ValueError("vol_col is required for volatility_stop or dynamic_exits.atr_trailing.")
@@ -263,6 +266,8 @@ def run_manual_barrier_backtest(
         required_cols.append(str(vol_col))
     if needs_forecast:
         required_cols.append(str(forecast_col))
+    if needs_r_trailing_risk:
+        required_cols.append(r_trailing_risk_col)
     if max_entry_gap_atr is not None:
         required_cols.append(str(entry_gap_atr_col))
     _require_columns(df, required_cols)
@@ -288,6 +293,11 @@ def run_manual_barrier_backtest(
     forecasts = (
         pd.to_numeric(frame[str(forecast_col)], errors="coerce").to_numpy(dtype=float)
         if needs_forecast
+        else None
+    )
+    r_trailing_risk_distances = (
+        pd.to_numeric(frame[r_trailing_risk_col], errors="coerce").to_numpy(dtype=float)
+        if needs_r_trailing_risk
         else None
     )
 
@@ -329,6 +339,13 @@ def run_manual_barrier_backtest(
 
         entry_idx = i + 1
         entry_open = _finite_price(frame.iloc[entry_idx][open_col], field=f"{open_col}[entry]")
+        r_trailing_initial_risk_distance: float | None = None
+        if needs_r_trailing_risk:
+            assert r_trailing_risk_distances is not None
+            r_trailing_initial_risk_distance = _finite_positive(
+                r_trailing_risk_distances[i],
+                field=f"{r_trailing_risk_col}[candidate_entry]",
+            )
         if max_entry_gap_atr is not None:
             signal_atr = _finite_positive(
                 frame.iloc[i][str(entry_gap_atr_col)],
@@ -397,6 +414,7 @@ def run_manual_barrier_backtest(
                 stop_mode=stop_mode,
                 volatility=volatility,
                 vol_col=str(vol_col) if vol_col is not None else None,
+                r_trailing_risk_distances=r_trailing_risk_distances,
                 forecasts=forecasts,
                 long_trend_break=long_trend_break,
                 short_trend_break=short_trend_break,
@@ -422,6 +440,12 @@ def run_manual_barrier_backtest(
                 "breakeven_activated": bool(outcome["breakeven_activated"]),
                 "profit_lock_activated": bool(outcome["profit_lock_activated"]),
                 "effective_stop_price": float(outcome["effective_stop_price"]),
+                "r_trailing_activated": bool(outcome["r_trailing_activated"]),
+                "r_trailing_activation_r": float(outcome["r_trailing_activation_r"]),
+                "r_trailing_distance_r": float(outcome["r_trailing_distance_r"]),
+                "initial_risk_distance": float(outcome["initial_risk_distance"]),
+                "effective_trailing_stop": float(outcome["effective_trailing_stop"]),
+                "intrabar_policy": str(outcome["intrabar_policy"]),
                 "partial_exits": [],
             }
         elif is_short:
@@ -443,6 +467,7 @@ def run_manual_barrier_backtest(
                 forecasts=forecasts,
                 short_trend_break=short_trend_break,
                 volatility=volatility,
+                initial_risk_distance=r_trailing_initial_risk_distance,
                 tie_break="conservative",
                 legacy_same_bar_stop_reason=not bool(dynamic_cfg.get("enabled", False)),
             )
@@ -465,6 +490,7 @@ def run_manual_barrier_backtest(
                 forecasts=forecasts,
                 long_trend_break=long_trend_break,
                 volatility=volatility,
+                initial_risk_distance=r_trailing_initial_risk_distance,
                 tie_break="conservative",
                 legacy_same_bar_stop_reason=not bool(dynamic_cfg.get("enabled", False)),
             )
@@ -683,6 +709,12 @@ def run_manual_barrier_backtest(
             "breakeven_activated": bool(path["breakeven_activated"]),
             "profit_lock_activated": bool(path["profit_lock_activated"]),
             "effective_stop_price": float(path["effective_stop_price"]),
+            "r_trailing_activated": bool(path["r_trailing_activated"]),
+            "r_trailing_activation_r": float(path["r_trailing_activation_r"]),
+            "r_trailing_distance_r": float(path["r_trailing_distance_r"]),
+            "initial_risk_distance": float(path["initial_risk_distance"]),
+            "effective_trailing_stop": float(path["effective_trailing_stop"]),
+            "intrabar_policy": str(path["intrabar_policy"]),
             "stop_mode": stop_mode,
             "effective_risk_per_trade": effective_risk_per_trade,
             "risk_guard_reason": guard_reason,

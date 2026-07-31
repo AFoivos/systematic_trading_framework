@@ -123,6 +123,7 @@ _FEATURE_TRANSFORM_HELPERS = {
 _FEATURE_NORMALIZATION_HELPERS = {
     "atr_distances",
     "atr_scaled_distance",
+    "efficiency_ratio",
     "range_position",
     "realized_vol_percentile",
     "returns",
@@ -4822,6 +4823,13 @@ def _validate_dynamic_exits_block(dynamic_exits: Any) -> None:
         "breakeven": {"enabled": bool, "trigger_r": float, "lock_r": float},
         "profit_lock": {"enabled": bool, "trigger_r": float, "lock_r": float},
         "atr_trailing": {"enabled": bool, "activation_r": float, "distance_mult": float},
+        "r_trailing": {
+            "enabled": bool,
+            "activation_r": float,
+            "distance_r": float,
+            "risk_distance_col": str,
+            "intrabar_policy": str,
+        },
         "no_progress": {"enabled": bool, "bars": int, "min_favorable_r": float, "exit_price": str},
     }
     for section_name, spec in section_specs.items():
@@ -4850,8 +4858,14 @@ def _validate_dynamic_exits_block(dynamic_exits: Any) -> None:
                     raise ConfigValidationError(f"{field} must be >= 0.")
                 if key == "distance_mult" and numeric <= 0.0:
                     raise ConfigValidationError(f"{field} must be > 0.")
+                if key == "distance_r" and numeric <= 0.0:
+                    raise ConfigValidationError(f"{field} must be > 0.")
             elif expected is str:
-                if value not in {"close", "next_open"}:
+                if key == "risk_distance_col" and (not isinstance(value, str) or not value.strip()):
+                    raise ConfigValidationError(f"{field} must be a non-empty string.")
+                elif key == "intrabar_policy" and value != "adverse_first":
+                    raise ConfigValidationError(f"{field} must be 'adverse_first'.")
+                elif key == "exit_price" and value not in {"close", "next_open"}:
                     raise ConfigValidationError(f"{field} must be 'close' or 'next_open'.")
 
 

@@ -174,10 +174,20 @@ def compute_atr(
     tr = compute_true_range(high, low, close)
     if method == "wilder":
         atr = wilder_smooth(tr, window=window)
+    elif method == "wilder_ewm":
+        # Some persisted research contracts use pandas' recursive EWM
+        # convention rather than the classic SMA-seeded Wilder recursion.
+        # Keep it explicit so callers cannot silently substitute one for the
+        # other: alpha=1/window, adjust=False, and a full-window warm-up.
+        atr = tr.ewm(
+            alpha=1.0 / float(window),
+            adjust=False,
+            min_periods=window,
+        ).mean()
     elif method == "simple":
         atr = tr.rolling(window=window, min_periods=window).mean()
     else:
-        raise ValueError("method must be 'wilder' or 'simple'")
+        raise ValueError("method must be 'wilder', 'wilder_ewm', or 'simple'")
     atr.name = f"atr_{window}"
     return atr
 
