@@ -921,3 +921,1303 @@ NaN prediction, non-candidate row ή in-sample/OOS-false row μένει flat. Τ
 signal δεν επιτρέπεται να δημιουργήσει κατεύθυνση. Στο αρχικό MATB audit το ML
 sample gate απέτυχε, συνεπώς αυτό το signal παραμένει διαθέσιμο και tested αλλά
 δεν ενεργοποιείται στο deterministic config.
+
+<!-- BEGIN GENERATED EXHAUSTIVE REFERENCE -->
+
+# Πλήρης registry-backed αναφορά
+
+Η ενότητα αυτή παράγεται από τα ενεργά registries και τις υπογραφές του κώδικα. Έτσι κάθε διαθέσιμο component έχει αυτοτελή παράγραφο και copy-ready YAML. Τιμές όπως `<required>` πρέπει να αντικατασταθούν, ενώ `<configured>` δηλώνει runtime επιλογή που δεν έχει ασφαλές καθολικό default.
+
+## Canonical signals
+
+### `barrier_expected_value`
+
+Convert calibrated barrier probabilities to a cost-aware causal position. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: barrier_expected_value
+  params:
+    upper_probability_col: pred_prob_upper
+    lower_probability_col: pred_prob_lower
+    no_hit_probability_col: pred_prob_no_hit
+    calibrated_col: pred_probability_calibrated
+    pred_is_oos_col: pred_is_oos
+    atr_col: atr_14
+    price_col: close
+    spread_col: spread_bps
+    activity_col: null
+    no_hit_long_return_col: null
+    no_hit_short_return_col: null
+    upper_atr_multiplier: 1.0
+    lower_atr_multiplier: 1.0
+    minimum_expected_edge: 0.0
+    minimum_class_probability: 0.0
+    cost_safety_factor: 1.25
+    cost_per_turnover: 0.0
+    slippage_per_turnover: 0.0
+    maximum_no_hit_probability: 1.0
+    allow_long: true
+    allow_short: true
+    entry_delay_bars: 1
+    maximum_spread: null
+    minimum_activity: null
+    maximum_position: 1.0
+    signal_col: barrier_ev_signal
+    long_ev_col: barrier_ev_long
+    short_ev_col: barrier_ev_short
+    selected_ev_col: barrier_ev_selected
+    expected_edge_col: barrier_expected_edge
+    round_trip_cost_col: barrier_round_trip_cost
+```
+
+### `c1_trend_pullback_vwap`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: c1_trend_pullback_vwap
+  params:
+    mode: long_short
+    trend_regime_col: trend_regime
+    long_trigger_col: vwap_rms_ema_cross_long_setup
+    short_trigger_col: vwap_rms_ema_cross_short_setup
+    ppo_hist_col: ppo_hist
+    ppo_above_signal_col: ppo_above_signal
+    ppo_below_signal_col: ppo_below_signal
+    mfi_col: mfi_14
+    stoch_k_col: stoch_rsi_k
+    stoch_d_col: stoch_rsi_d
+    zscore_momentum_col: zscore_momentum_20
+    volatility_regime_col: volatility_regime
+    trend_quality_col: rolling_r2_96
+    mfi_long_min: 40.0
+    mfi_long_max: 80.0
+    mfi_short_min: 20.0
+    mfi_short_max: 60.0
+    long_zscore_min: 0.0
+    short_zscore_max: 0.0
+    max_volatility_regime: 1.0
+    strict_trend_quality_min: 0.35
+    strict_mfi_long_min: 50.0
+    strict_mfi_short_max: 50.0
+    strict_long_zscore_min: 0.5
+    strict_short_zscore_max: -0.5
+    use_strict_signal: false
+    long_candidate_col: c1_long_candidate
+    short_candidate_col: c1_short_candidate
+    long_candidate_strict_col: c1_long_candidate_strict
+    short_candidate_strict_col: c1_short_candidate_strict
+    signal_col: signal_side
+    candidate_col: signal_candidate
+    output_cols:
+    - c1_long_candidate
+    - c1_short_candidate
+    - signal_side
+    - signal_candidate
+```
+
+### `c2_regime_aware_momentum`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: c2_regime_aware_momentum
+  params:
+    mode: long_short
+    trend_regime_col: trend_regime
+    ppo_col: ppo
+    ppo_signal_col: ppo_signal
+    ppo_hist_col: ppo_hist
+    adx_col: adx_14
+    roc_col: roc_12
+    zscore_momentum_col: zscore_momentum_20
+    volatility_regime_col: volatility_regime
+    adx_min: 18.0
+    zscore_long_min: 0.0
+    zscore_short_max: 0.0
+    roc_long_min: 0.0
+    roc_short_max: 0.0
+    use_ppo_signal_cross: true
+    allowed_volatility_regimes:
+    - 0
+    - 1
+    long_candidate_col: c2_long_candidate
+    short_candidate_col: c2_short_candidate
+    signal_col: c2_signal
+    candidate_col: c2_signal_candidate
+    bullish_trend_col: c2_bullish_trend
+    bearish_trend_col: c2_bearish_trend
+    adx_pass_col: c2_adx_pass
+    ppo_long_pass_col: c2_ppo_long_pass
+    ppo_short_pass_col: c2_ppo_short_pass
+    roc_long_pass_col: c2_roc_long_pass
+    roc_short_pass_col: c2_roc_short_pass
+    zscore_long_pass_col: c2_zscore_long_pass
+    zscore_short_pass_col: c2_zscore_short_pass
+    volatility_pass_col: c2_volatility_regime_pass
+    output_cols:
+    - c2_long_candidate
+    - c2_short_candidate
+    - c2_signal
+    - c2_signal_candidate
+    - c2_adx_pass
+    - c2_ppo_long_pass
+    - c2_ppo_short_pass
+    - c2_roc_long_pass
+    - c2_roc_short_pass
+    - c2_zscore_long_pass
+    - c2_zscore_short_pass
+    - c2_volatility_regime_pass
+```
+
+### `qms_alpha_strategy`
+
+The transform implements five explicit QMS alpha hypotheses. All adaptive thresholds are rolling quantiles shifted by one bar, so the current signal uses only information available before or at the current closed bar. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: qms_alpha_strategy
+  params:
+    strategy: kds_pullback_continuation
+    lookback_bars: 8064
+    min_periods: 2016
+    signal_on_crossing: true
+    signal_col: qms_alpha_signal
+    candidate_col: qms_alpha_candidate
+```
+
+### `qms_trend_momentum_vol`
+
+signals: kind: qms_trend_momentum_vol params: combination: trend_momentum_vol mode: long_short. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: qms_trend_momentum_vol
+  params:
+    combination: trend_momentum_vol
+    mode: long_short
+```
+
+### `ehlers_continuation_long`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: ehlers_continuation_long
+  params:
+    entry_mode: state
+    entry_delay_bars: 0
+    long_only: true
+    use_ema_regime: true
+    use_mama_fama: true
+    use_roofing_gt_slope: true
+    use_decycler: true
+    ema_fast_col: ema_50
+    ema_slow_col: ema_100
+    mama_col: mama
+    fama_col: fama
+    roofing_col: roofing_filter_48_10
+    roofing_slope_col: roofing_filter_48_10_slope
+    decycler_osc_col: decycler_oscillator_30_60
+    ema_condition_col: ehlers_continuation_ema50_gt_ema100
+    mama_condition_col: ehlers_continuation_mama_gt_fama
+    roofing_positive_col: ehlers_continuation_roofing_gt_zero
+    roofing_slope_positive_col: ehlers_continuation_roofing_slope_gt_zero
+    roofing_gt_slope_col: ehlers_continuation_roofing_gt_slope
+    decycler_positive_col: ehlers_continuation_decycler_osc_gt_zero
+    state_col: ehlers_continuation_long_state
+    entry_col: ehlers_continuation_long_entry
+    signal_col: ehlers_continuation_signal
+    candidate_col: ehlers_continuation_candidate
+    output_cols:
+    - ehlers_continuation_signal
+    - ehlers_continuation_candidate
+```
+
+### `ehlers_continuation_short`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: ehlers_continuation_short
+  params:
+    entry_mode: state
+    entry_delay_bars: 0
+    short_only: true
+    use_ema_regime: true
+    use_mama_fama: true
+    use_roofing_lt_slope: true
+    use_decycler: true
+    ema_fast_col: ema_50
+    ema_slow_col: ema_100
+    mama_col: mama
+    fama_col: fama
+    roofing_col: roofing_filter_48_10
+    roofing_slope_col: roofing_filter_48_10_slope
+    decycler_osc_col: decycler_oscillator_30_60
+    ema_condition_col: ehlers_continuation_ema50_lt_ema100
+    mama_condition_col: ehlers_continuation_mama_lt_fama
+    roofing_negative_col: ehlers_continuation_roofing_lt_zero
+    roofing_slope_negative_col: ehlers_continuation_roofing_slope_lt_zero
+    roofing_lt_slope_col: ehlers_continuation_roofing_lt_slope
+    decycler_negative_col: ehlers_continuation_decycler_osc_lt_zero
+    state_col: ehlers_continuation_short_state
+    entry_col: ehlers_continuation_short_entry
+    signal_col: ehlers_continuation_signal
+    candidate_col: ehlers_continuation_candidate
+    output_cols:
+    - ehlers_continuation_signal
+    - ehlers_continuation_candidate
+```
+
+### `ehlers_decycler_continuation`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: ehlers_decycler_continuation
+  params:
+    decycler_osc_col: decycler_oscillator_30_60
+    decycler_ratio_col: ehlers_decycler_over_close
+    decycler_osc_min: 0.45
+    decycler_ratio_max: 0.994
+    entry_mode: state
+    signal_col: signal_side
+    candidate_col: signal_candidate
+    output_cols:
+    - signal_candidate
+```
+
+### `ehlers_semiscalp_long`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: ehlers_semiscalp_long
+  params:
+    entry_mode: transition
+    require_mama_rising: false
+    roofing_trigger_mode: rising
+    price_col: close
+    mama_col: mama
+    fama_col: fama
+    decycler_col: decycler
+    roofing_col: roofing_filter_48_10
+    laguerre_col: laguerre_rsi
+    fisher_col: fisher_transform
+    hilbert_amplitude_col: hilbert_amplitude_64
+    dominant_cycle_period_col: dominant_cycle_period
+    amplitude_lookback: 100
+    laguerre_min: 0.5
+    min_cycle_period: 10.0
+    max_cycle_period: 48.0
+    use_cycle_period_filter: false
+    signal_col: signal_side
+    candidate_col: signal_candidate
+    output_cols:
+    - signal_side
+    - signal_candidate
+```
+
+### `ehlers_trend_pullback_continuation_long`
+
+This signal consumes already-built feature/helper columns and writes a deterministic long-only candidate/signal without training or target access. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: ehlers_trend_pullback_continuation_long
+  params:
+    entry_mode: state
+    entry_delay_bars: 0
+    long_only: true
+    signal_col: signal_side
+    candidate_col: signal_candidate
+```
+
+### `trend_state`
+
+signals: kind: trend_state params: state_col: trend_regime. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: trend_state
+  params:
+    state_col: <required>
+    signal_col: null
+    mode: long_short_hold
+```
+
+### `ema_rms_ppo_vwap`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: ema_rms_ppo_vwap
+  params:
+    close_col: close
+    atr_col: atr_14
+    ema_fast_rms_col: ema_20__root_mean_square
+    ema_mid_rms_col: ema_50__root_mean_square
+    ema_slow_rms_col: ema_100__root_mean_square
+    vwap_col: vwap_20
+    vwap_rms_col: vwap_20__root_mean_square
+    ppo_col: ppo
+    ppo_signal_col: ppo_signal
+    mode: long_short
+    require_vwap_rms_filter: false
+    require_rms_slope_filter: false
+    max_vwap_distance_atr: 1.0
+    min_rms_slope: 0.0
+    signal_col: signal_side
+    candidate_col: signal_candidate
+    bull_stack_col: ema_rms_bull_stack
+    bear_stack_col: ema_rms_bear_stack
+    fast_slope_col: ema_rms_fast_slope
+    vwap_distance_atr_col: vwap_distance_atr
+    vwap_reclaim_col: vwap_reclaim
+    vwap_reject_col: vwap_reject
+    vwap_rms_long_bias_col: vwap_rms_long_bias
+    vwap_rms_short_bias_col: vwap_rms_short_bias
+    ppo_hist_col: ppo_hist
+    long_setup_col: ema_rms_long_setup
+    short_setup_col: ema_rms_short_setup
+    output_cols:
+    - atr_14
+    - vwap_20
+    - signal_side
+    - signal_candidate
+```
+
+### `eurusd_session_bb_reversion`
+
+This signal uses current-bar and trailing feature columns only. It emits a long-only candidate for EURUSD 30m session Bollinger/RSI washout mean-reversion research. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: eurusd_session_bb_reversion
+  params:
+    bb_percent_b_col: bb_percent_b_40_2.0
+    rsi_col: close_rsi_28
+    roc_col: roc_8
+    close_over_ema_col: close_over_ema_200
+    atr_rank_col: atr_pct_rank_336
+    spread_rank_col: spread_rank_336
+    is_weekend_col: is_weekend
+    timezone: UTC
+    start_hour: 7
+    end_hour: 18
+    bb_percent_b_max: 0.12
+    rsi_max: 35.0
+    roc_max: -0.0005
+    max_abs_trend: 0.005
+    min_atr_rank: 0.1
+    max_atr_rank: 0.8
+    max_spread_rank: 0.75
+    signal_col: signal_side
+    candidate_col: signal_candidate
+    score_col: eurusd_bb_reversion_score
+```
+
+### `probability_threshold`
+
+Map probability forecasts to {-1,0,1} signal with dead-zone. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: probability_threshold
+  params:
+    prob_col: <required>
+    signal_col: null
+    upper: 0.55
+    lower: 0.45
+    upper_exit: null
+    lower_exit: null
+    mode: long_short_hold
+    base_signal_col: null
+```
+
+### `probability_conviction`
+
+Linear map prob in [0, 1] to exposure in [-clip, clip]. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: probability_conviction
+  params:
+    prob_col: <required>
+    signal_col: null
+    clip: 1.0
+```
+
+### `probability_vol_adjusted`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: probability_vol_adjusted
+  params:
+    prob_col: pred_prob
+    vol_col: pred_vol
+    signal_col: null
+    prob_center: 0.5
+    upper: null
+    lower: null
+    vol_target: 0.001
+    clip: 1.0
+    vol_floor: 1.0e-06
+    min_signal_abs: 0.0
+    activation_filters: null
+    top_quantile: null
+    top_quantile_window: null
+    max_trade_rate: null
+```
+
+### `meta_probability_side`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: meta_probability_side
+  params:
+    prob_col: pred_prob
+    side_col: primary_side
+    candidate_col: null
+    pred_is_oos_col: null
+    expected_value_col: null
+    signal_col: null
+    threshold: null
+    upper: null
+    min_expected_value_r: null
+    profit_barrier_r: 1.0
+    stop_barrier_r: 1.0
+    clip: 1.0
+    mode: long_short
+```
+
+### `orb_candidate_side`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: orb_candidate_side
+  params:
+    candidate_col: orb_candidate
+    side_col: orb_side
+    signal_col: signal_orb_side
+    mode: long_short
+```
+
+### `ppo_adx_stochrsi_trend`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: ppo_adx_stochrsi_trend
+  params:
+    close_col: close
+    high_col: high
+    low_col: low
+    ema_fast_col: ema_50
+    ema_slow_col: ema_150
+    ppo_col: ppo
+    ppo_signal_col: ppo_signal
+    adx_col: adx
+    plus_di_col: plus_di
+    minus_di_col: minus_di
+    atr_col: atr
+    stoch_k_col: stochrsi_k
+    stoch_d_col: stochrsi_d
+    mode: long_short
+    require_adx: true
+    adx_threshold: 20.0
+    ppo_slope_threshold: 0.0
+    stoch_oversold: 0.2
+    stoch_overbought: 0.8
+    stoch_entry_mode: reset_or_cross
+    atr_stop_mult: 1.5
+    atr_take_profit_mult: 2.0
+    atr_trailing_mult: 1.0
+    use_atr_trailing_stop: false
+    signal_col: signal
+    position_col: position
+    entry_long_col: entry_long
+    entry_short_col: entry_short
+    exit_long_col: exit_long
+    exit_short_col: exit_short
+    long_setup_col: long_setup
+    short_setup_col: short_setup
+    exit_long_rule_col: exit_long_rule
+    exit_short_rule_col: exit_short_rule
+    ppo_slope_col: ppo_slope
+    ema_trend_state_col: ema_trend_state
+    directional_spread_col: directional_spread
+    stoch_bullish_reset_col: stochrsi_bullish_reset
+    stoch_bearish_reset_col: stochrsi_bearish_reset
+    stoch_bullish_cross_col: stochrsi_bullish_cross
+    stoch_bearish_cross_col: stochrsi_bearish_cross
+    atr_stop_distance_col: atr_stop_distance
+    atr_take_profit_distance_col: atr_take_profit_distance
+    atr_stop_long_col: atr_stop_long
+    atr_stop_short_col: atr_stop_short
+    atr_take_profit_long_col: atr_take_profit_long
+    atr_take_profit_short_col: atr_take_profit_short
+    atr_trailing_stop_long_col: atr_trailing_stop_long
+    atr_trailing_stop_short_col: atr_trailing_stop_short
+    output_cols:
+    - signal
+```
+
+### `quote_flow_scalp_router`
+
+This signal builds deterministic scalp candidates from point-in-time quote-flow, spread, volume, wick, support/resistance, and session features. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: quote_flow_scalp_router
+  params:
+    mode: long_short
+    close_col: close
+    atr_col: atr_14
+    vwap_distance_col: close_minus_vwap_20_atr
+    vpin_rank_col: vpin_proxy_50_rank_252
+    ofi_fast_col: ofi_proxy_5_norm
+    ofi_slow_col: ofi_proxy_15_norm
+    spread_rank_col: spread_bps_rank_252
+    spread_z_col: spread_bps_z_252
+    volume_relative_col: volume_relative_48
+    close_pos_col: close_pos_in_bar
+    signal_col: signal_side
+```
+
+### `roc_long_only_conditions`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: roc_long_only_conditions
+  params:
+    roc_window: 12
+    roc_col: null
+    roc_min: 0.0015
+    vol_short_window: 24
+    vol_long_window: 168
+    regime_vol_ratio_z_col: null
+    vol_z_min: -1.5
+    vol_z_max: 1.75
+    close_z_col: close_z
+    close_z_min: -0.25
+    close_z_max: 2.25
+    close_open_ratio_col: close_open_ratio
+    close_open_ratio_min: 0.0002
+    mtf_1h_col: mtf_1h_trend_score
+    mtf_1h_min: -0.001
+    mtf_4h_col: mtf_4h_trend_score
+    mtf_4h_min: -0.002
+    is_weekend_col: is_weekend
+    macro_condition_col: null
+    min_score_required: 5
+    require_all_conditions: false
+    require_bullish_candle: false
+    required_condition_names: null
+    vol_adjustment_strength: 0.9
+    min_exposure: 0.1
+    max_exposure: 1.0
+    signal_col: null
+    long_signal_col: manual_long_signal
+    score_col: manual_conviction_score
+    all_conditions_col: manual_all_conditions_signal
+    vol_adjusted_col: manual_vol_adjusted_signal
+    short_signal_col: short_signal
+    combined_signal_col: combined_signal
+```
+
+### `ema_stoch_rsi_pullback`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: ema_stoch_rsi_pullback
+  params:
+    price_col: close
+    ema_fast_col: ema_50
+    ema_slow_col: ema_150
+    stoch_k_col: stoch_rsi_k
+    stoch_d_col: stoch_rsi_d
+    stoch_recover_col: stoch_rsi_recover_from_oversold
+    stoch_fall_col: stoch_rsi_fall_from_overbought
+    oversold: 0.2
+    overbought: 0.8
+    max_bars_after_cross: 30
+    require_k_d_confirmation: true
+    require_price_above_slow_ema_for_long: true
+    require_price_below_slow_ema_for_short: true
+    use_first_pullback_only: true
+    prefix: ema_stoch
+    side_col: signal_side
+    candidate_col: signal_candidate
+    signal_col: null
+    output_cols:
+    - configured by signal_col
+```
+
+### `indicator_model_adaptive_pullback`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: indicator_model_adaptive_pullback
+  params:
+    close_col: close
+    ema_fast: 20
+    ema_mid: 50
+    ema_slow: 100
+    ema_fast_col: null
+    ema_mid_col: null
+    ema_slow_col: null
+    ema_slope_fast_col: null
+    ema_slope_mid_col: null
+    adx_col: null
+    min_adx: 18.0
+    max_adx: 45.0
+    rsi_col: null
+    rsi_long_min: 45.0
+    rsi_long_max: 68.0
+    rsi_short_min: 32.0
+    rsi_short_max: 55.0
+    stoch_k_col: stoch_rsi_k
+    stoch_d_col: stoch_rsi_d
+    stoch_cross_up_col: stoch_rsi_cross_up
+    stoch_cross_down_col: stoch_rsi_cross_down
+    stoch_long_max: 60.0
+    stoch_short_min: 40.0
+    macd_hist_col: macd_hist
+    macd_hist_slope_col: macd_hist_slope
+    require_macd_confirmation: true
+    atr_pct_rank_col: null
+    min_atr_pct_rank: 0.2
+    max_atr_pct_rank: 0.9
+    bb_bandwidth_col: bollinger_bandwidth
+    bb_bandwidth_rank_col: bollinger_bandwidth_rank_100
+    min_bb_bandwidth: 0.0
+    min_bb_bandwidth_rank: 0.2
+    distance_ema_fast_atr_col: null
+    max_distance_from_ema_atr: 0.75
+    candidate_long_col: candidate_long
+    candidate_short_col: candidate_short
+    direction_col: direction
+    signal_col: signal
+    candidate_col: signal_candidate
+    signal_name_col: signal_name
+    score_col: signal_score
+    signal_name: indicator_model_adaptive_pullback
+    output_cols:
+    - signal
+    - signal_candidate
+```
+
+### `manual_long_model_filter`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: manual_long_model_filter
+  params:
+    prob_col: pred_prob
+    candidate_col: manual_long_candidate
+    base_signal_col: manual_vol_adjusted_candidate
+    threshold: 0.55
+    gate_col: null
+    gate_cols_any: null
+    min_signal_abs: 0.0
+    expected_value_col: null
+    min_expected_value_r: null
+    profit_barrier_r: 1.0
+    stop_barrier_r: 1.0
+    volatility_col: null
+    round_trip_cost_return: 0.0
+    cost_buffer_r: 0.0
+    signal_col: null
+```
+
+### `matb_candidate`
+
+Convert deterministic MATB candidate events to a stateless trade side. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: matb_candidate
+  params:
+    candidate_col: matb_candidate
+    side_col: matb_side
+    signal_col: signal_side
+    mode: long_short
+```
+
+### `matb_meta_filter`
+
+Accept MATB candidates only with genuine OOS probability and EV evidence. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: matb_meta_filter
+  params:
+    candidate_col: matb_candidate
+    side_col: matb_side
+    probability_col: matb_pred_success_prob
+    expected_r_col: matb_pred_ev_r
+    oos_col: matb_pred_is_oos
+    minimum_probability: 0.55
+    minimum_expected_r: 0.1
+    signal_col: signal_side
+    mode: long_short
+```
+
+### `dense_return_forecast`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: dense_return_forecast
+  params:
+    forecast_col: pred_ret
+    signal_col: expected_net_return
+    expected_net_return_col: expected_net_return
+    estimated_cost_col: estimated_round_trip_cost
+    cost_per_turnover: 0.0
+    slippage_per_turnover: 0.0
+    cost_round_trip_mult: 2.0
+    forecast_is_vol_normalized: false
+    volatility_col: atr_14
+    price_col: close
+    volatility_floor: 1.0e-12
+    signed_cost_adjustment: true
+    clip: null
+```
+
+### `forecast_threshold`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: forecast_threshold
+  params:
+    forecast_col: pred_ret
+    signal_col: null
+    upper: 0.0
+    lower: null
+    mode: long_short_hold
+    activation_filters: null
+```
+
+### `forecast_threshold_candidate`
+
+Emit the thresholded forecast signal plus OOS-only primary candidate columns. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: forecast_threshold_candidate
+  params:
+    forecast_col: pred_ret
+    pred_is_oos_col: pred_is_oos
+    signal_col: null
+    upper: 0.0
+    lower: null
+    mode: long_short
+    activation_filters: null
+    candidate_col: primary_candidate
+    side_col: primary_candidate_side
+    strength_col: primary_candidate_strength
+    threshold_distance_col: primary_candidate_threshold_distance
+    inclusive: false
+```
+
+### `forecast_threshold_hysteresis`
+
+Apply a stateful hysteresis threshold to regression forecasts. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: forecast_threshold_hysteresis
+  params:
+    forecast_col: pred_ret
+    signal_col: null
+    long_entry: 0.75
+    long_exit: 0.25
+    short_entry: -0.75
+    short_exit: -0.25
+    cooldown_bars: 0
+    min_holding_bars: 0
+```
+
+### `forecast_vol_adjusted`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: forecast_vol_adjusted
+  params:
+    forecast_col: pred_ret
+    vol_col: pred_vol
+    signal_col: null
+    clip: 1.0
+    vol_floor: 1.0e-06
+```
+
+### `rsi`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: rsi
+  params:
+    rsi_col: <required>
+    buy_level: 30.0
+    sell_level: 70.0
+    signal_col: null
+    mode: long_short_hold
+```
+
+### `momentum`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: momentum
+  params:
+    momentum_col: <required>
+    long_threshold: 0.0
+    short_threshold: null
+    signal_col: null
+    mode: long_short_hold
+```
+
+### `stochastic`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: stochastic
+  params:
+    k_col: <required>
+    buy_level: 20.0
+    sell_level: 80.0
+    signal_col: null
+    mode: long_short_hold
+```
+
+### `stc_roofing_hilbert`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: stc_roofing_hilbert
+  params:
+    mode: long_short
+    ema_fast_col: ema_50
+    ema_slow_col: ema_100
+    roofing_col: roofing_filter
+    roofing_slope_col: roofing_slope
+    stc_col: stc
+    hilbert_cycle_ok_col: hilbert_cycle_ok
+    hilbert_amplitude_rising_col: hilbert_amplitude_rising
+    zscore_momentum_col: zscore_momentum_20
+    adx_col: adx_14
+    volatility_regime_col: volatility_regime
+    stc_long_cross_level: 25.0
+    stc_short_cross_level: 75.0
+    roofing_slope_bars: 3
+    use_ema_regime: true
+    use_roofing_filter: true
+    use_roofing_slope: true
+    use_hilbert_filter: false
+    use_zscore_filter: false
+    use_adx_filter: false
+    adx_min: 18.0
+    use_atr_vol_filter: false
+    allowed_volatility_regimes:
+    - 0
+    - 1
+    entry_delay_bars: 0
+    long_candidate_col: stc_roofing_long_candidate
+    short_candidate_col: stc_roofing_short_candidate
+    signal_col: stc_roofing_signal
+    candidate_col: stc_roofing_signal_candidate
+    hilbert_long_candidate_col: stc_roofing_hilbert_long_candidate
+    hilbert_short_candidate_col: stc_roofing_hilbert_short_candidate
+    hilbert_signal_col: stc_roofing_hilbert_signal
+    ema_bullish_col: stc_roofing_ema_bullish
+    ema_bearish_col: stc_roofing_ema_bearish
+    roofing_positive_col: stc_roofing_roofing_positive
+    roofing_negative_col: stc_roofing_roofing_negative
+    roofing_slope_positive_col: stc_roofing_roofing_slope_positive
+    roofing_slope_negative_col: stc_roofing_roofing_slope_negative
+    stc_cross_up_col: stc_roofing_stc_cross_up
+    stc_cross_down_col: stc_roofing_stc_cross_down
+    hilbert_pass_col: stc_roofing_hilbert_pass
+    zscore_long_pass_col: stc_roofing_zscore_long_pass
+    zscore_short_pass_col: stc_roofing_zscore_short_pass
+    adx_pass_col: stc_roofing_adx_pass
+    volatility_pass_col: stc_roofing_volatility_pass
+    output_cols:
+    - stc_roofing_long_candidate
+    - stc_roofing_short_candidate
+    - stc_roofing_signal
+    - stc_roofing_signal_candidate
+    - stc_roofing_hilbert_long_candidate
+    - stc_roofing_hilbert_short_candidate
+    - stc_roofing_hilbert_pass
+    - stc_roofing_zscore_long_pass
+    - stc_roofing_zscore_short_pass
+    - stc_roofing_adx_pass
+    - stc_roofing_volatility_pass
+```
+
+### `volatility_regime`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: volatility_regime
+  params:
+    vol_col: <required>
+    quantile: 0.5
+    signal_col: null
+    mode: long_short_hold
+```
+
+### `weekday_prev_daily_return_reversal`
+
+Emit a fixed-time weekday reversal signal after a weak previous daily return. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: weekday_prev_daily_return_reversal
+  params:
+    close_col: close
+    timestamp_col: timestamp
+    timezone_input: UTC
+    timezone: America/New_York
+    weekday: 3
+    signal_hour: 9
+    signal_minute: 0
+    prev_daily_return_max: -0.0006369942365362478
+    side: 1.0
+    signal_col: null
+    candidate_col: signal_candidate
+    prev_daily_return_col: prev_daily_return
+    local_weekday_col: local_weekday
+    local_hour_col: local_hour
+```
+
+### `vwap_rms_ema_cross_long_fractal_filter`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: vwap_rms_ema_cross_long_fractal_filter
+  params:
+    ema_mid_col: ema_50
+    ema_slow_col: ema_96
+    ema_mid_rms_col: ema_50__root_mean_square
+    vwap_rms_col: vwap_40__root_mean_square
+    ppo_col: ppo_12_36
+    ppo_signal_col: ppo_signal_9
+    ppo_hist_min: 0.0002
+    fractal_col: fractal_dimension_128
+    fractal_max: 1.45
+    regime_col: ema_50_above_ema_96
+    cross_up_col: vwap_40_rms_cross_above_ema_50_rms
+    ppo_hist_col: ppo_hist_12_36_9
+    ppo_hist_positive_col: ppo_hist_12_36_9_positive
+    ppo_above_signal_col: ppo_12_36_above_ppo_signal_9
+    fractal_ok_col: fractal_dimension_128_trend_ok
+    long_setup_col: vwap_40_rms_ema_50_cross_long_fractal_setup
+    signal_col: signal_side
+    candidate_col: signal_candidate
+    output_cols:
+    - signal_side
+    - signal_candidate
+```
+
+### `vwap_rms_ema_cross_long_hmm_gate`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: vwap_rms_ema_cross_long_hmm_gate
+  params:
+    ema_mid_col: ema_50
+    ema_slow_col: ema_96
+    ema_mid_rms_col: ema_50__root_mean_square
+    vwap_rms_col: vwap_40__root_mean_square
+    ppo_col: ppo_12_36
+    ppo_signal_col: ppo_signal_9
+    ppo_hist_min: 0.0002
+    hmm_regime_col: hmm_regime
+    hmm_min_regime: 1
+    hmm_prob_col: null
+    hmm_prob_min: null
+    regime_col: ema_50_above_ema_96
+    cross_up_col: vwap_40_rms_cross_above_ema_50_rms
+    ppo_hist_col: ppo_hist_12_36_9
+    ppo_hist_positive_col: ppo_hist_12_36_9_positive
+    ppo_above_signal_col: ppo_12_36_above_ppo_signal_9
+    hmm_ok_col: hmm_regime_ok
+    long_setup_col: vwap_40_rms_ema_50_cross_long_hmm_setup
+    signal_col: signal_side
+    candidate_col: signal_candidate
+    output_cols:
+    - signal_side
+    - signal_candidate
+```
+
+### `vwap_rms_ema_cross_long`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: vwap_rms_ema_cross_long
+  params:
+    ema_mid_col: ema_50
+    ema_slow_col: ema_100
+    ema_mid_rms_col: ema_50__root_mean_square
+    vwap_rms_col: vwap_20__root_mean_square
+    ppo_col: ppo
+    ppo_signal_col: ppo_signal
+    ppo_hist_min: 0.0
+    use_ppo_confirmation: true
+    use_ema_regime: true
+    use_vwap_rms_cross: true
+    use_mfi_confirmation: false
+    mfi_col: mfi_14
+    mfi_lower: 40.0
+    mfi_upper: 80.0
+    entry_delay_bars: 0
+    mode: long_only
+    regime_col: ema_50_above_ema_100
+    short_regime_col: ema_50_below_ema_100
+    cross_up_col: vwap_rms_cross_above_ema_50_rms
+    cross_down_col: vwap_rms_cross_below_ema_50_rms
+    ppo_hist_col: ppo_hist
+    ppo_hist_positive_col: ppo_hist_positive
+    ppo_hist_negative_col: ppo_hist_negative
+    ppo_above_signal_col: ppo_above_signal
+    ppo_below_signal_col: ppo_below_signal
+    mfi_confirmation_col: mfi_confirmation
+    long_setup_col: vwap_rms_ema_cross_long_setup
+    short_setup_col: vwap_rms_ema_cross_short_setup
+    signal_col: signal_side
+    candidate_col: signal_candidate
+    output_cols:
+    - signal_side
+    - signal_candidate
+```
+
+### `regime_filtered`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: regime_filtered
+  params:
+    base_signal_col: <required>
+    regime_col: <required>
+    signal_col: null
+    active_value: 1.0
+```
+
+## Deprecated signal aliases
+
+### `ehlers_continuation_long_signal`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Κατάσταση: **deprecated alias**.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: ehlers_continuation_long_signal
+  params:
+    entry_mode: state
+    entry_delay_bars: 0
+    long_only: true
+    use_ema_regime: true
+    use_mama_fama: true
+    use_roofing_gt_slope: true
+    use_decycler: true
+    ema_fast_col: ema_50
+    ema_slow_col: ema_100
+    mama_col: mama
+    fama_col: fama
+    roofing_col: roofing_filter_48_10
+    roofing_slope_col: roofing_filter_48_10_slope
+    decycler_osc_col: decycler_oscillator_30_60
+    ema_condition_col: ehlers_continuation_ema50_gt_ema100
+    mama_condition_col: ehlers_continuation_mama_gt_fama
+    roofing_positive_col: ehlers_continuation_roofing_gt_zero
+    roofing_slope_positive_col: ehlers_continuation_roofing_slope_gt_zero
+    roofing_gt_slope_col: ehlers_continuation_roofing_gt_slope
+    decycler_positive_col: ehlers_continuation_decycler_osc_gt_zero
+    state_col: ehlers_continuation_long_state
+    entry_col: ehlers_continuation_long_entry
+    signal_col: ehlers_continuation_signal
+    candidate_col: ehlers_continuation_candidate
+    output_cols:
+    - ehlers_continuation_signal
+    - ehlers_continuation_candidate
+```
+
+### `ehlers_continuation_short_signal`
+
+This signal uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η έξοδος εκφράζει απόφαση ή έκθεση: θετική τιμή σημαίνει long, αρνητική short και μηδέν flat· candidate/score στήλες είναι διαγνωστικές και δεν αποτελούν από μόνες τους εκτελέσιμη θέση.
+
+Κατάσταση: **deprecated alias**.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+signals:
+  kind: ehlers_continuation_short_signal
+  params:
+    entry_mode: state
+    entry_delay_bars: 0
+    short_only: true
+    use_ema_regime: true
+    use_mama_fama: true
+    use_roofing_lt_slope: true
+    use_decycler: true
+    ema_fast_col: ema_50
+    ema_slow_col: ema_100
+    mama_col: mama
+    fama_col: fama
+    roofing_col: roofing_filter_48_10
+    roofing_slope_col: roofing_filter_48_10_slope
+    decycler_osc_col: decycler_oscillator_30_60
+    ema_condition_col: ehlers_continuation_ema50_lt_ema100
+    mama_condition_col: ehlers_continuation_mama_lt_fama
+    roofing_negative_col: ehlers_continuation_roofing_lt_zero
+    roofing_slope_negative_col: ehlers_continuation_roofing_slope_lt_zero
+    roofing_lt_slope_col: ehlers_continuation_roofing_lt_slope
+    decycler_negative_col: ehlers_continuation_decycler_osc_lt_zero
+    state_col: ehlers_continuation_short_state
+    entry_col: ehlers_continuation_short_entry
+    signal_col: ehlers_continuation_signal
+    candidate_col: ehlers_continuation_candidate
+    output_cols:
+    - ehlers_continuation_signal
+    - ehlers_continuation_candidate
+```
+
+<!-- END GENERATED EXHAUSTIVE REFERENCE -->

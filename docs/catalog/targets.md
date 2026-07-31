@@ -868,3 +868,755 @@ Config validation απαιτεί structural και cost/slippage parity με τ�
 `portfolio_barrier` path. Synthetic regression diagnostics ελέγχουν R equality
 με absolute tolerance `1e-12` για stop, trailing, trend flip, max holding,
 emergency cap, bid/ask, gap και same-bar tie.
+
+<!-- BEGIN GENERATED EXHAUSTIVE REFERENCE -->
+
+# Πλήρης registry-backed αναφορά
+
+Η ενότητα αυτή παράγεται από τα ενεργά registries και τις υπογραφές του κώδικα. Έτσι κάθε διαθέσιμο component έχει αυτοτελή παράγραφο και copy-ready YAML. Τιμές όπως `<required>` πρέπει να αντικατασταθούν, ενώ `<configured>` δηλώνει runtime επιλογή που δεν έχει ασφαλές καθολικό default.
+
+## Canonical targets
+
+### `forward_return`
+
+This target uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η τιμή είναι αποκλειστικά label μελλοντικού outcome για training ή evaluation· δεν επιτρέπεται να επιστρέψει ως feature ή signal, ενώ τα τελευταία rows χωρίς πλήρη ορίζοντα αναμένονται να είναι NaN.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+target:
+  kind: forward_return
+  params:
+    fwd_col: <configured>
+    horizon: 1
+    label_col: label
+    price_col: close
+    quantiles: <required>
+    returns_col: <required>
+    returns_type: simple
+    threshold: 0.0
+```
+
+### `future_return_regression`
+
+This target uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η τιμή είναι αποκλειστικά label μελλοντικού outcome για training ή evaluation· δεν επιτρέπεται να επιστρέψει ως feature ή signal, ενώ τα τελευταία rows χωρίς πλήρη ορίζοντα αναμένονται να είναι NaN.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+target:
+  kind: future_return_regression
+  params:
+    clip: <required>
+    fwd_col: <configured>
+    horizon: 1
+    horizon_bars: <configured>
+    label_col: <configured>
+    normalize_by_volatility: false
+    normalizer_col: <configured>
+    price_col: close
+    raw_fwd_col: <configured>
+    returns_col: <required>
+    returns_type: simple
+    target_col: <configured>
+    volatility_col: atr_14
+    volatility_floor: 1.0e-12
+```
+
+### `volatility_normalized_future_return`
+
+target: kind: volatility_normalized_future_return params: price_col: close volatility_col: atr_14 horizon_bars: 1. Η τιμή είναι αποκλειστικά label μελλοντικού outcome για training ή evaluation· δεν επιτρέπεται να επιστρέψει ως feature ή signal, ενώ τα τελευταία rows χωρίς πλήρη ορίζοντα αναμένονται να είναι NaN.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+target:
+  kind: volatility_normalized_future_return
+  params:
+    price_col: close
+    volatility_col: atr_14
+    horizon_bars: 1
+    returns_type: simple
+    volatility_floor: 1.0e-12
+    raw_fwd_col: <configured>
+    normalizer_col: <configured>
+    fwd_col: <configured>
+    label_col: <configured>
+    clip: <required>
+```
+
+### `risk_adjusted_future_return`
+
+target: kind: risk_adjusted_future_return params: price_col: close horizon_bars: 2. Η τιμή είναι αποκλειστικά label μελλοντικού outcome για training ή evaluation· δεν επιτρέπεται να επιστρέψει ως feature ή signal, ενώ τα τελευταία rows χωρίς πλήρη ορίζοντα αναμένονται να είναι NaN.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+target:
+  kind: risk_adjusted_future_return
+  params:
+    price_col: close
+    horizon_bars: 2
+    returns_type: simple
+    volatility_floor: 1.0e-12
+    raw_fwd_col: <configured>
+    realized_vol_col: <configured>
+    fwd_col: <configured>
+    label_col: <configured>
+    clip: <required>
+```
+
+### `r_multiple_regression`
+
+target: kind: r_multiple_regression params: price_col: close volatility_col: atr_14 atr_multiple: 2.0. Η τιμή είναι αποκλειστικά label μελλοντικού outcome για training ή evaluation· δεν επιτρέπεται να επιστρέψει ως feature ή signal, ενώ τα τελευταία rows χωρίς πλήρη ορίζοντα αναμένονται να είναι NaN.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+target:
+  kind: r_multiple_regression
+  params:
+    price_col: close
+    volatility_col: atr_14
+    atr_multiple: 2.0
+    returns_type: simple
+    volatility_floor: 1.0e-12
+    raw_fwd_col: <configured>
+    risk_distance_col: <configured>
+    fwd_col: <configured>
+    label_col: <configured>
+    clip: <required>
+```
+
+### `mfe_regression`
+
+target: kind: mfe_regression params: price_col: close high_col: high low_col: low. Η τιμή είναι αποκλειστικά label μελλοντικού outcome για training ή evaluation· δεν επιτρέπεται να επιστρέψει ως feature ή signal, ενώ τα τελευταία rows χωρίς πλήρη ορίζοντα αναμένονται να είναι NaN.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+target:
+  kind: mfe_regression
+  params:
+    price_col: close
+    high_col: high
+    low_col: low
+    normalize_by_volatility: false
+    volatility_col: atr_14
+    volatility_floor: 1.0e-12
+    fwd_col: <configured>
+    label_col: <configured>
+    direction: long
+    clip: <required>
+```
+
+### `mae_regression`
+
+target: kind: mae_regression params: price_col: close high_col: high low_col: low. Η τιμή είναι αποκλειστικά label μελλοντικού outcome για training ή evaluation· δεν επιτρέπεται να επιστρέψει ως feature ή signal, ενώ τα τελευταία rows χωρίς πλήρη ορίζοντα αναμένονται να είναι NaN.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+target:
+  kind: mae_regression
+  params:
+    price_col: close
+    high_col: high
+    low_col: low
+    normalize_by_volatility: false
+    volatility_col: atr_14
+    volatility_floor: 1.0e-12
+    fwd_col: <configured>
+    label_col: <configured>
+    direction: long
+    clip: <required>
+```
+
+### `mfe_mae_ratio_regression`
+
+target: kind: mfe_mae_ratio_regression params: direction: long mode: ratio. Η τιμή είναι αποκλειστικά label μελλοντικού outcome για training ή evaluation· δεν επιτρέπεται να επιστρέψει ως feature ή signal, ενώ τα τελευταία rows χωρίς πλήρη ορίζοντα αναμένονται να είναι NaN.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+target:
+  kind: mfe_mae_ratio_regression
+  params:
+    direction: long
+    mode: ratio
+    price_col: close
+    high_col: high
+    low_col: low
+    denominator_floor: 1.0e-12
+    mfe_col: <configured>
+    mae_col: <configured>
+    fwd_col: <configured>
+    label_col: <configured>
+    clip: <required>
+```
+
+### `downside_adjusted_future_return`
+
+target: kind: downside_adjusted_future_return params: direction: long penalty_lambda: 1.0. Η τιμή είναι αποκλειστικά label μελλοντικού outcome για training ή evaluation· δεν επιτρέπεται να επιστρέψει ως feature ή signal, ενώ τα τελευταία rows χωρίς πλήρη ορίζοντα αναμένονται να είναι NaN.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+target:
+  kind: downside_adjusted_future_return
+  params:
+    direction: long
+    penalty_lambda: 1.0
+    price_col: close
+    high_col: high
+    low_col: low
+    normalize_by_volatility: false
+    volatility_col: atr_14
+    volatility_floor: 1.0e-12
+    raw_fwd_col: <configured>
+    mae_col: <configured>
+    fwd_col: <configured>
+    label_col: <configured>
+    clip: <required>
+```
+
+### `future_trend_slope`
+
+target: kind: future_trend_slope params: price_col: close horizon_bars: 5. Η τιμή είναι αποκλειστικά label μελλοντικού outcome για training ή evaluation· δεν επιτρέπεται να επιστρέψει ως feature ή signal, ενώ τα τελευταία rows χωρίς πλήρη ορίζοντα αναμένονται να είναι NaN.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+target:
+  kind: future_trend_slope
+  params:
+    price_col: close
+    horizon_bars: 5
+    normalize_by_price: true
+    normalize_by_volatility: false
+    volatility_col: atr_14
+    volatility_floor: 1.0e-12
+    fwd_col: <configured>
+    label_col: <configured>
+    clip: <required>
+```
+
+### `future_path_efficiency`
+
+target: kind: future_path_efficiency params: price_col: close horizon_bars: 2. Η τιμή είναι αποκλειστικά label μελλοντικού outcome για training ή evaluation· δεν επιτρέπεται να επιστρέψει ως feature ή signal, ενώ τα τελευταία rows χωρίς πλήρη ορίζοντα αναμένονται να είναι NaN.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+target:
+  kind: future_path_efficiency
+  params:
+    price_col: close
+    horizon_bars: 2
+    signed: true
+    path_floor: 1.0e-12
+    fwd_col: <configured>
+    label_col: <configured>
+    clip: <required>
+```
+
+### `excess_return_regression`
+
+target: kind: excess_return_regression params: benchmark_price_col: benchmark_close. Η τιμή είναι αποκλειστικά label μελλοντικού outcome για training ή evaluation· δεν επιτρέπεται να επιστρέψει ως feature ή signal, ενώ τα τελευταία rows χωρίς πλήρη ορίζοντα αναμένονται να είναι NaN.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+target:
+  kind: excess_return_regression
+  params:
+    benchmark_price_col: benchmark_close
+    price_col: close
+    returns_type: simple
+    benchmark_fwd_col: <configured>
+    fwd_col: <configured>
+    label_col: <configured>
+    clip: <required>
+```
+
+### `residual_return_regression`
+
+target: kind: residual_return_regression params: benchmark_price_col: benchmark_close beta_window: 100. Η τιμή είναι αποκλειστικά label μελλοντικού outcome για training ή evaluation· δεν επιτρέπεται να επιστρέψει ως feature ή signal, ενώ τα τελευταία rows χωρίς πλήρη ορίζοντα αναμένονται να είναι NaN.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+target:
+  kind: residual_return_regression
+  params:
+    benchmark_price_col: benchmark_close
+    beta_window: 100
+    price_col: close
+    returns_type: simple
+    min_periods: <configured>
+    raw_fwd_col: <configured>
+    benchmark_fwd_col: <configured>
+    beta_col: <configured>
+    fwd_col: <configured>
+    label_col: <configured>
+    clip: <required>
+```
+
+### `future_range_regression`
+
+target: kind: future_range_regression params: normalize: price. Η τιμή είναι αποκλειστικά label μελλοντικού outcome για training ή evaluation· δεν επιτρέπεται να επιστρέψει ως feature ή signal, ενώ τα τελευταία rows χωρίς πλήρη ορίζοντα αναμένονται να είναι NaN.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+target:
+  kind: future_range_regression
+  params:
+    normalize: price
+    price_col: close
+    high_col: high
+    low_col: low
+    volatility_col: atr_14
+    volatility_floor: 1.0e-12
+    fwd_col: <configured>
+    label_col: <configured>
+    clip: <required>
+```
+
+### `future_realized_volatility`
+
+target: kind: future_realized_volatility params: price_col: close horizon_bars: 5. Η τιμή είναι αποκλειστικά label μελλοντικού outcome για training ή evaluation· δεν επιτρέπεται να επιστρέψει ως feature ή signal, ενώ τα τελευταία rows χωρίς πλήρη ορίζοντα αναμένονται να είναι NaN.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+target:
+  kind: future_realized_volatility
+  params:
+    price_col: close
+    horizon_bars: 5
+    periods_per_year: <required>
+    returns_type: simple
+    annualize: false
+    fwd_col: <configured>
+    label_col: <configured>
+    clip: <required>
+```
+
+### `future_drawdown_regression`
+
+target: kind: future_drawdown_regression params: direction: long. Η τιμή είναι αποκλειστικά label μελλοντικού outcome για training ή evaluation· δεν επιτρέπεται να επιστρέψει ως feature ή signal, ενώ τα τελευταία rows χωρίς πλήρη ορίζοντα αναμένονται να είναι NaN.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+target:
+  kind: future_drawdown_regression
+  params:
+    direction: long
+    price_col: close
+    high_col: high
+    low_col: low
+    normalize_by_volatility: false
+    volatility_col: atr_14
+    volatility_floor: 1.0e-12
+    fwd_col: <configured>
+    label_col: <configured>
+    clip: <required>
+```
+
+### `triple_barrier`
+
+This target uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η τιμή είναι αποκλειστικά label μελλοντικού outcome για training ή evaluation· δεν επιτρέπεται να επιστρέψει ως feature ή signal, ενώ τα τελευταία rows χωρίς πλήρη ορίζοντα αναμένονται να είναι NaN.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+target:
+  kind: triple_barrier
+  params:
+    add_r_multiple: false
+    candidate_col: <required>
+    candidate_mode: all_nonzero
+    candidate_out_col: <configured>
+    entry_price_mode: current_close
+    event_ret_col: tb_event_ret
+    fwd_col: <configured>
+    high_col: high
+    hit_step_col: <configured>
+    hit_type_col: <configured>
+    horizon: 24
+    label_col: label
+    label_mode: <required>
+    low_col: low
+    lower_barrier_col: <configured>
+    lower_mult: <configured>
+    max_holding: <configured>
+    meta_side_col: <configured>
+    min_vol: 0.0001
+    neutral_label: drop
+    open_col: open
+    oriented_r_col: tb_oriented_r
+    oriented_ret_col: <configured>
+    price_col: close
+    r_clip: <required>
+    r_col: tb_event_r
+    returns_col: <required>
+    side_col: <required>
+    tie_break: closest_to_open
+    upper_barrier_col: <configured>
+    upper_mult: 2.0
+    vol_source_col: <configured>
+    vol_window: 24
+    volatility_col: <required>
+```
+
+### `directional_triple_barrier`
+
+This target uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η τιμή είναι αποκλειστικά label μελλοντικού outcome για training ή evaluation· δεν επιτρέπεται να επιστρέψει ως feature ή signal, ενώ τα τελευταία rows χωρίς πλήρη ορίζοντα αναμένονται να είναι NaN.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+target:
+  kind: directional_triple_barrier
+  params:
+    add_r_multiple: false
+    candidate_col: <required>
+    candidate_out_col: <required>
+    direction_col: <configured>
+    entry_price_mode: current_close
+    event_ret_col: <required>
+    fwd_col: <required>
+    high_col: <required>
+    hit_step_col: <required>
+    hit_type_col: <required>
+    horizon: 4
+    label_col: <required>
+    low_col: <required>
+    lower_barrier_col: <required>
+    lower_mult: 1.0
+    max_holding: <configured>
+    meta_side_col: <required>
+    min_vol: 1.0e-12
+    neutral_label: drop
+    open_col: <required>
+    oriented_r_col: <required>
+    oriented_ret_col: <required>
+    price_col: <required>
+    profit_barrier_r: <configured>
+    r_clip: <required>
+    r_col: <required>
+    side_col: <required>
+    stop_barrier_r: <configured>
+    tie_break: closest_to_open
+    upper_barrier_col: <required>
+    upper_mult: 1.4
+    vertical_barrier_bars: <configured>
+    volatility_col: <required>
+```
+
+### `first_passage_barrier_multiclass`
+
+Build a causal, next-executable-bar first-passage multiclass target. Η τιμή είναι αποκλειστικά label μελλοντικού outcome για training ή evaluation· δεν επιτρέπεται να επιστρέψει ως feature ή signal, ενώ τα τελευταία rows χωρίς πλήρη ορίζοντα αναμένονται να είναι NaN.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+target:
+  kind: first_passage_barrier_multiclass
+  params:
+    horizon_bars: <configured>
+    upper_atr_multiplier: 1.0
+    lower_atr_multiplier: <configured>
+    atr_period: 14
+    atr_col: <configured>
+    entry_delay_bars: 1
+    entry_price_type: open
+    ambiguous_policy: exclude
+    use_intrabar_resolution: false
+    minimum_barrier_to_cost_ratio: 0.0
+    round_trip_cost: 0.0
+    open_col: open
+    high_col: high
+    low_col: low
+    close_col: close
+    label_col: first_passage_label
+    fwd_col: first_passage_exit_return
+    intrabar_open_col: <configured>
+    intrabar_high_col: <configured>
+    intrabar_low_col: <configured>
+    horizon: 12
+    time_to_first_hit_col: time_to_first_hit
+    mfe_col: mfe
+    mae_col: mae
+    mfe_atr_col: mfe_atr
+    mae_atr_col: mae_atr
+    terminal_return_col: terminal_return
+    terminal_return_atr_col: terminal_return_atr
+    upper_distance_col: upper_distance
+    lower_distance_col: lower_distance
+    ambiguous_col: ambiguous
+    intrabar_resolved_col: intrabar_resolved
+    entry_price_col: entry_price
+    exit_price_col: exit_price
+    exit_reason_col: exit_reason
+    upper_barrier_col: upper_barrier
+    lower_barrier_col: lower_barrier
+    eligible_col: barrier_cost_eligible
+    barrier_cost_ratio_col: barrier_cost_ratio
+    stop_first_label_col: first_passage_label_stop_first
+    target_first_label_col: first_passage_label_target_first
+    intrabar_data: <required>
+```
+
+### `r_multiple`
+
+This target uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η τιμή είναι αποκλειστικά label μελλοντικού outcome για training ή evaluation· δεν επιτρέπεται να επιστρέψει ως feature ή signal, ενώ τα τελευταία rows χωρίς πλήρη ορίζοντα αναμένονται να είναι NaN.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+target:
+  kind: r_multiple
+  params:
+    allow_partial_horizon: false
+    bars_held_col: r_target_bars_held
+    candidate_col: manual_long_signal
+    candidate_out_col: r_target_candidate
+    entry_price_col: r_target_entry_price
+    entry_price_mode: next_open
+    exit_price_col: r_target_exit_price
+    exit_reason_col: r_target_exit_reason
+    fwd_col: r_target_event_ret
+    high_col: high
+    hit_step_col: r_target_hit_step
+    hit_type_col: r_target_hit_type
+    invalid_entry: 0
+    label_col: label
+    low_col: low
+    max_holding: 16
+    max_holding_bars: <configured>
+    max_holding_close: 0
+    open_col: open
+    oriented_r_col: r_target_oriented_r
+    price_col: close
+    r_col: r_target_trade_r
+    side: long_only
+    stop_loss: 0
+    stop_loss_r: 1.0
+    stop_loss_return: 0.005
+    stop_mode: volatility_stop
+    stop_price_col: r_target_stop_price
+    take_profit: 0
+    take_profit_price_col: r_target_take_profit_price
+    take_profit_r: 2.0
+    take_profit_return: 0.01
+    target_r_min: 1.0
+    tie_break: conservative
+    trade_r_col: <configured>
+    unavailable_tail: 0
+    volatility_col: vol_rolling_24
+```
+
+### `path_dependent_r`
+
+Build path-dependent R outcomes for precomputed primary candidate rows. Η τιμή είναι αποκλειστικά label μελλοντικού outcome για training ή evaluation· δεν επιτρέπεται να επιστρέψει ως feature ή signal, ενώ τα τελευταία rows χωρίς πλήρη ορίζοντα αναμένονται να είναι NaN.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+target:
+  kind: path_dependent_r
+  params:
+    candidate_col: <required>
+    side_col: <required>
+    pred_is_oos_col: <required>
+    require_oos: true
+    open_col: <required>
+    high_col: <required>
+    low_col: <required>
+    close_col: <configured>
+    volatility_col: <required>
+    stop_mode: volatility_stop
+    take_profit_r: 5.0
+    stop_loss_r: 2.0
+    max_holding_bars: <configured>
+    risk_per_trade: 0.006
+    cost_per_unit_turnover: <configured>
+    slippage_per_unit_turnover: <configured>
+    entry_price_mode: next_open
+    tie_break: conservative
+    meta_candidate_col: <required>
+    meta_side_col: <required>
+    entry_price_col: <required>
+    exit_price_col: <required>
+    exit_reason_col: <required>
+    hit_type_col: <required>
+    hit_step_col: <required>
+    holding_bars_col: <required>
+    gross_return_col: <required>
+    net_return_col: <required>
+    gross_r_col: <required>
+    net_r_col: <required>
+    mfe_r_col: <required>
+    mae_r_col: <required>
+    positive_label_col: <required>
+    min_025_label_col: <required>
+    min_050_label_col: <required>
+    min_100_label_col: <required>
+    max_leverage: 1.0
+    max_holding: 24
+    allow_partial_horizon: false
+    apply_risk_sizing: false
+    legacy_same_bar_stop_reason: true
+    price_col: <required>
+    cost_per_turnover: 0.0
+    slippage_per_turnover: 0.0
+```
+
+### `strategy_path_r`
+
+Build long/short MATB outcomes with the exact production trade-path policy. Η τιμή είναι αποκλειστικά label μελλοντικού outcome για training ή evaluation· δεν επιτρέπεται να επιστρέψει ως feature ή signal, ενώ τα τελευταία rows χωρίς πλήρη ορίζοντα αναμένονται να είναι NaN.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+target:
+  kind: strategy_path_r
+  params:
+    candidate_col: matb_candidate
+    side_col: matb_side
+    volatility_col: matb_atr
+    trend_score_col: matb_trend_score
+    entry_price_mode: next_open
+    stop_loss_r: <configured>
+    emergency_profit_r: 8.0
+    trailing_activation_r: 1.5
+    trailing_distance_atr: 2.5
+    max_holding_bars: 1440
+    tie_break: closest_to_open
+    strict_bid_ask: true
+    allow_partial_horizon: false
+    enforce_single_position: true
+    entry_delay_bars: 0
+    cost_per_unit_turnover: <configured>
+    slippage_per_unit_turnover: <configured>
+    stop_loss_atr: 2.0
+    cost_per_turnover: 0.0
+    slippage_per_turnover: 0.0
+    overlapping_open_trade: 0
+```
+
+### `candidate_expected_r`
+
+This target labels only candidate rows and uses future OHLC data solely for target construction diagnostics. Η τιμή είναι αποκλειστικά label μελλοντικού outcome για training ή evaluation· δεν επιτρέπεται να επιστρέψει ως feature ή signal, ενώ τα τελευταία rows χωρίς πλήρη ορίζοντα αναμένονται να είναι NaN.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+target:
+  kind: candidate_expected_r
+  params:
+    candidate_col: signal_candidate
+    side: long_only
+    entry_price_mode: next_open
+    volatility_col: atr_over_price_14
+    side_col: signal_side
+    open_col: open
+    high_col: high
+    low_col: low
+    close_col: close
+    price_col: close
+    stop_mode: volatility_stop
+    stop_loss_r: 1.5
+    take_profit_r: 2.5
+    max_holding_bars: 16
+    target_r_min: 0.75
+    clip_r:
+    - -2.0
+    - 3.0
+    tie_break: conservative
+    allow_partial_horizon: false
+    stop_loss_return: 0.005
+    label_col: label
+    trade_r_col: target_trade_r
+    trade_r_clipped_col: target_trade_r_clipped
+    event_ret_col: <configured>
+    candidate_out_col: target_candidate
+    entry_price_col: target_entry_price
+    exit_price_col: target_exit_price
+    stop_price_col: target_stop_price
+    take_profit_price_col: target_take_profit_price
+    exit_reason_col: target_exit_reason
+    bars_held_col: target_bars_held
+    hit_type_col: target_hit_type
+    hit_step_col: target_hit_step
+    mfe_r_col: target_mfe_r
+    mae_r_col: target_mae_r
+    time_to_mfe_col: target_time_to_mfe
+    time_to_mae_col: target_time_to_mae
+    fwd_col: target_event_ret
+```
+
+### `expected_realized_r`
+
+Build net realized-R regression labels for causal candidate trades. Η τιμή είναι αποκλειστικά label μελλοντικού outcome για training ή evaluation· δεν επιτρέπεται να επιστρέψει ως feature ή signal, ενώ τα τελευταία rows χωρίς πλήρη ορίζοντα αναμένονται να είναι NaN.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+target:
+  kind: expected_realized_r
+  params:
+    candidate_col: signal_candidate
+    side_col: signal_side
+    volatility_col: atr_over_price_14
+    take_profit_r: 3.0
+    stop_loss_r: 1.5
+    max_holding_bars: 16
+    fwd_col: <required>
+    label_col: <required>
+```
+
+### `target_before_stop_probability`
+
+Build binary labels for whether the profit target is reached before the stop. Η τιμή είναι αποκλειστικά label μελλοντικού outcome για training ή evaluation· δεν επιτρέπεται να επιστρέψει ως feature ή signal, ενώ τα τελευταία rows χωρίς πλήρη ορίζοντα αναμένονται να είναι NaN.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+target:
+  kind: target_before_stop_probability
+  params:
+    candidate_col: signal_candidate
+    side_col: signal_side
+    volatility_col: atr_over_price_14
+    take_profit_r: 3.0
+    stop_loss_r: 1.5
+    max_holding_bars: 16
+    tie_break: conservative
+    label_col: <required>
+    fwd_col: <required>
+```
+
+### `trade_mfe_mae_regression`
+
+Build path-dependent MFE and MAE in R units and select one regression output. Η τιμή είναι αποκλειστικά label μελλοντικού outcome για training ή evaluation· δεν επιτρέπεται να επιστρέψει ως feature ή signal, ενώ τα τελευταία rows χωρίς πλήρη ορίζοντα αναμένονται να είναι NaN.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+target:
+  kind: trade_mfe_mae_regression
+  params:
+    target_col: mfe_r
+    candidate_col: signal_candidate
+    side_col: signal_side
+    volatility_col: atr_over_price_14
+    max_holding_bars: 16
+    fwd_col: <required>
+    label_col: <required>
+```
+
+<!-- END GENERATED EXHAUSTIVE REFERENCE -->

@@ -1163,3 +1163,2024 @@ candidate rows προορίζονται αποκλειστικά για next-ope
 - Rolling mean, ratio, rising και high-volatility regime flags δεν παράγονται
   πλέον από τον builder. Χρησιμοποίησε `rolling_mean`, `ratio`,
   `rising_flag` και `threshold_flag`.
+
+<!-- BEGIN GENERATED EXHAUSTIVE REFERENCE -->
+
+# Πλήρης registry-backed αναφορά
+
+Η ενότητα αυτή παράγεται από τα ενεργά registries και τις υπογραφές του κώδικα. Έτσι κάθε διαθέσιμο component έχει αυτοτελή παράγραφο και copy-ready YAML. Τιμές όπως `<required>` πρέπει να αντικατασταθούν, ενώ `<configured>` δηλώνει runtime επιλογή που δεν έχει ασφαλές καθολικό default.
+
+## Canonical features
+
+### `returns`
+
+Apply the legacy-compatible ``returns`` feature transformation. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: returns
+  params:
+    log: false
+    col_name: null
+```
+
+### `barrier_equilibrium`
+
+Describe price location relative to causal local-equilibrium estimates. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: barrier_equilibrium
+  params:
+    close_col: close
+    high_col: high
+    low_col: low
+    atr_col: atr_14
+    kalman_level_col: kalman_level
+    kalman_level_is_log: true
+    vwap_col: vwap_48
+    window: 48
+    zscore_window: 96
+    robust_median_window: 5
+    epsilon: 1.0e-12
+    inplace: false
+```
+
+### `barrier_path`
+
+Describe recent path asymmetry and excursions using trailing OHLC only. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: barrier_path
+  params:
+    open_col: open
+    high_col: high
+    low_col: low
+    close_col: close
+    atr_col: atr_14
+    window: 48
+    epsilon: 1.0e-12
+    inplace: false
+```
+
+### `barrier_persistence`
+
+Estimate persistence/mean-reversion state without assigning a trade side. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: barrier_persistence
+  params:
+    close_col: close
+    residual_col: deviation_kalman_atr
+    window: 96
+    variance_ratio_lag: 4
+    autocorrelation_lags:
+    - 1
+    - 4
+    - 8
+    include_adf: false
+    adf_stride: 24
+    epsilon: 1.0e-12
+    inplace: false
+```
+
+### `barrier_volatility`
+
+Describe volatility, jump, CUSUM, and change-point state causally. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: barrier_volatility
+  params:
+    close_col: close
+    atr_col: atr_14
+    short_window: 12
+    long_window: 48
+    percentile_window: 252
+    cusum_threshold: 5.0
+    epsilon: 1.0e-12
+    inplace: false
+```
+
+### `barrier_market_organization`
+
+Add changes and trailing percentiles to registered entropy estimates. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: barrier_market_organization
+  params:
+    shannon_entropy_col: shannon_entropy_48
+    permutation_entropy_col: permutation_entropy_48
+    returns_col: null
+    close_col: close
+    window: 48
+    percentile_window: 252
+    include_sample_entropy: false
+    inplace: false
+```
+
+### `barrier_microstructure`
+
+Build explicitly named bar/tick-activity proxies; never claim true OFI. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: barrier_microstructure
+  params:
+    open_col: open
+    high_col: high
+    low_col: low
+    close_col: close
+    volume_col: volume
+    window: 48
+    baseline_window: 252
+    volume_is_tick_activity: false
+    epsilon: 1.0e-12
+    inplace: false
+```
+
+### `barrier_session`
+
+Add session timing and causal spread/activity percentiles. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: barrier_session
+  params:
+    timezone: UTC
+    spread_col: spread_bps
+    activity_col: volume
+    percentile_window: 252
+    sessions: null
+    inplace: false
+```
+
+### `impulse_12_96`
+
+Add a trailing, native-observation volatility-normalized price impulse. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: impulse_12_96
+  params:
+    close_col: close
+    returns_col: close_ret
+    return_bars: 12
+    volatility_window: 96
+    output_col: impulse_12_96
+```
+
+### `volatility`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: volatility
+  params:
+    returns_col: close_logret
+    rolling_windows:
+    - 10
+    - 20
+    - 60
+    ewma_spans:
+    - 10
+    - 20
+    annualization_factor: 252.0
+    inplace: false
+```
+
+### `trend`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: trend
+  params:
+    price_col: close
+    sma_windows:
+    - 20
+    - 50
+    - 200
+    ema_spans:
+    - 20
+    - 50
+    sma_col_template: null
+    ema_col_template: null
+    add_ratios: false
+    inplace: false
+```
+
+### `trend_regime`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: trend_regime
+  params:
+    price_col: close
+    fast_span: 20
+    slow_span: 50
+    neutral_threshold: 0.0
+    output_col: null
+    method: ema
+    base_sma_for_sign: null
+    short_sma: null
+    long_sma: null
+```
+
+### `bollinger`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: bollinger
+  params:
+    price_col: close
+    window: 20
+    n_std: 2.0
+    inplace: false
+```
+
+### `macd`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: macd
+  params:
+    price_col: close
+    fast: 12
+    slow: 26
+    signal: 9
+    inplace: false
+```
+
+### `ppo`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: ppo
+  params:
+    price_col: close
+    fast: 12
+    slow: 26
+    signal: 9
+    ppo_col: null
+    ppo_signal_col: null
+    ppo_hist_col: null
+    inplace: false
+```
+
+### `roc`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: roc
+  params:
+    price_col: close
+    windows:
+    - 10
+    - 20
+    window: null
+    output_col: null
+    inplace: false
+```
+
+### `atr`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: atr
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    window: 14
+    windows: null
+    method: wilder
+    add_over_price: false
+    atr_col: null
+    over_price_col: null
+    inplace: false
+```
+
+### `adx`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: adx
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    window: 14
+    windows: null
+    inplace: false
+```
+
+### `twap`
+
+TWAP is the trailing arithmetic mean of each bar's typical price, so every bar receives equal weight. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: twap
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    window: 20
+    windows: null
+    add_distance: false
+    twap_col: null
+    distance_col: null
+    inplace: false
+```
+
+### `vwap`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: vwap
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    volume_col: volume
+    window: 20
+    windows: null
+    add_distance: false
+    vwap_col: null
+    distance_col: null
+    inplace: false
+```
+
+### `mfi`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: mfi
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    volume_col: volume
+    window: 14
+    inplace: false
+```
+
+### `rsi`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: rsi
+  params:
+    price_col: close
+    windows:
+    - 14
+    method: wilder
+    inplace: false
+```
+
+### `stochastic`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: stochastic
+  params:
+    price_col: close
+    high_col: high
+    low_col: low
+    window: 14
+    smooth: 3
+    inplace: false
+```
+
+### `stochastic_rsi`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: stochastic_rsi
+  params:
+    price_col: close
+    rsi_period: 14
+    stoch_period: 14
+    k_period: 3
+    d_period: 3
+    oversold: 0.2
+    overbought: 0.8
+    prefix: stoch_rsi
+    method: wilder
+    inplace: false
+```
+
+### `session_context`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: session_context
+  params:
+    timezone: UTC
+    add_cyclical_time: true
+    include_weekend_flag: true
+    sessions: null
+```
+
+### `regime_context`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: regime_context
+  params:
+    price_col: close
+    returns_col: close_ret
+    vol_short_window: 24
+    vol_long_window: 168
+    trend_fast_span: 24
+    trend_slow_span: 72
+    vol_ratio_high_threshold: 1.25
+    vol_ratio_low_threshold: 0.85
+    vol_window_pairs: null
+```
+
+### `shock_context`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: shock_context
+  params:
+    price_col: close
+    high_col: high
+    low_col: low
+    returns_col: close_logret
+    ema_col: null
+    ema_window: 24
+    atr_col: null
+    atr_window: 24
+    short_horizon: 1
+    medium_horizon: 4
+    horizon_unit: hours
+    vol_window: 24
+    ret_z_threshold: 2.0
+    atr_mult_threshold: 1.5
+    distance_from_mean_threshold: 1.0
+    post_shock_active_bars: 1
+    use_log_returns: true
+    inplace: false
+```
+
+### `support_resistance`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: support_resistance
+  params:
+    price_col: close
+    high_col: high
+    low_col: low
+    windows:
+    - 24
+    - 72
+    - 168
+    atr_col: null
+    atr_window: 24
+    include_pct_distance: false
+    include_atr_distance: false
+    inplace: false
+```
+
+### `support_resistance_v2`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: support_resistance_v2
+  params:
+    price_col: close
+    high_col: high
+    low_col: low
+    atr_col: null
+    atr_window: 24
+    pivot_left_window: 24
+    pivot_confirm_bars: 6
+    touch_tolerance_atr: 0.25
+    breakout_tolerance_atr: 0.05
+    retest_expiry_bars: 24
+    inplace: false
+```
+
+### `macro_context`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: macro_context
+  params:
+    columns: <required>
+    availability_lag: 1
+    lags:
+    - 1
+    - 24
+    pct_change_periods:
+    - 1
+    - 24
+    zscore_window: 168
+    ema_spans: []
+    allow_missing: false
+```
+
+### `multi_timeframe`
+
+This feature resamples the base OHLCV input to each configured higher timeframe and aligns the last fully closed higher-timeframe raw candle to the base frame. It does not compute derived returns, indicators, helpers, or normalizations; downstream feature steps should derive those explicitly from the raw ``mtf_{timeframe}_*`` candle columns. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: multi_timeframe
+  params:
+    base_interval_minutes: 30
+    timeframes:
+    - 1h
+    - 4h
+    price_col: close
+    high_col: high
+    low_col: low
+    open_col: open
+    volume_col: volume
+    returns_col: close_logret
+    timezone: UTC
+    shift_to_last_closed: true
+    timestamp_convention: bar_close
+    timestamp_col: timestamp
+    asset_col: asset
+    volatility_window: 12
+    trend_ema_span: 8
+    trend_sma_window: 20
+    atr_window: 14
+    adx_window: 14
+    regime_short_window: 12
+    regime_long_window: 48
+```
+
+### `multi_asset_trend_breakout`
+
+Build the causal Multi-Asset Trend Breakout feature and candidate set. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: multi_asset_trend_breakout
+  params:
+    open_col: open
+    high_col: high
+    low_col: low
+    close_col: close
+    spread_col: spread_bps
+    bars_per_day: 48
+    atr_window: 48
+    short_vol_days: 5
+    long_vol_days: 60
+    momentum_days:
+    - 5
+    - 20
+    - 60
+    donchian_days: 20
+    spread_median_days: 20
+    decision_hours_utc:
+    - 3
+    - 7
+    - 11
+    - 15
+    - 19
+    - 23
+    expected_bar_minutes: 30
+    maximum_gap_multiple: 1.5
+    trend_threshold: 0.2
+    maximum_breakout_distance_atr: 0.5
+    minimum_channel_width_atr: 4.0
+    minimum_volatility_ratio: 0.5
+    maximum_volatility_ratio: 2.5
+    maximum_spread_to_median: 2.0
+```
+
+### `opening_range_breakout`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: opening_range_breakout
+  params:
+    sessions: null
+    enabled_sessions: null
+    asset_session_map: null
+    asset_alias_map: null
+    timestamp_col: timestamp
+    timezone_input: UTC
+    price_col: close
+    open_col: open
+    high_col: high
+    low_col: low
+    close_col: close
+    atr_col: atr_24
+    volatility_col: vol_rolling_24
+    min_range_atr: 0.4
+    max_range_atr: 2.5
+    breakout_buffer_atr: 0.1
+    post_breakout_active_bars: 3
+    max_breakouts_per_session: 1
+    use_close_breakout: true
+    allow_reversal_same_session: false
+    opening_range_bars: null
+    use_extended_trade_until: false
+    asset_col: asset
+    asset: null
+```
+
+### `swing_extrema_context`
+
+Only confirmed extrema and context derived from those confirmed events are emitted. Raw extrema require ``right_bars`` future observations and remain internal to the confirmation calculation; they are never live/model feature outputs. A pivot at bar ``i`` first appears as confirmed at ``i + right_bars``. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: swing_extrema_context
+  params:
+    high_col: high
+    low_col: low
+    close_col: close
+    normalizer_col: mtf_1h_atr
+    normalizer_mode: price
+    left_bars: 3
+    right_bars: 3
+    near_high_threshold_atr: 0.25
+    near_low_threshold_atr: 0.25
+    overextended_long_threshold_atr: 2.0
+    include_research_labels: false
+    research_label_lead_bars: 3
+    prefix: swing
+```
+
+### `indicator_pullback`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: indicator_pullback
+  params:
+    asset: null
+    asset_vocab: null
+    asset_aliases: null
+    open_col: open
+    high_col: high
+    low_col: low
+    close_col: close
+    ema_fast_period: 20
+    ema_mid_period: 50
+    ema_slow_period: 100
+    ema_fast_col: null
+    ema_mid_col: null
+    ema_slow_col: null
+    atr_period: 14
+    atr_col: null
+    atr_pct_col: atr_pct
+    atr_pct_rank_window: 100
+    macd_hist_col: macd_hist
+    rsi_period: 14
+    rsi_col: null
+    stoch_k_col: stoch_rsi_k
+    stoch_d_col: stoch_rsi_d
+    bollinger_bandwidth_col: bollinger_bandwidth
+    bollinger_percent_b_col: bollinger_percent_b
+    realized_vol_windows:
+    - 10
+    - 20
+    return_windows:
+    - 1
+    - 2
+    - 3
+    - 6
+    rolling_return_windows:
+    - 4
+    - 8
+    bb_bandwidth_rank_window: 100
+    include_asset_id: true
+    inplace: false
+```
+
+### `ehlers_ml_long_candidate`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: ehlers_ml_long_candidate
+  params:
+    amplitude_col: hilbert_amplitude
+    cycle_period_col: dominant_cycle_period
+    roofing_col: roofing_filter
+    mama_col: mama
+    fama_col: fama
+    close_col: close
+    decycler_col: decycler
+    instantaneous_trendline_col: instantaneous_trendline
+    frama_col: frama
+    supersmoother_col: supersmoother
+    dominant_cycle_phase_col: dominant_cycle_phase
+    dominant_cycle_phase_unit: degrees
+    atr_col: null
+    amplitude_lookback: 128
+    amplitude_min_quantile: 0.5
+    min_cycle_period: 8.0
+    max_cycle_period: 60.0
+    slope_bars: 1
+    candidate_col: ehlers_ml_candidate
+    side_col: signal_side
+```
+
+### `trend_vwap_pullback_candidate`
+
+Add the cumulative causal feature/candidate ladder through ``stage``. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: trend_vwap_pullback_candidate
+  params:
+    stage: 8
+    timezone: America/New_York
+    session_open: 09:30
+    session_close: '16:00'
+    timestamp_convention: bar_start
+```
+
+### `mama`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: mama
+  params:
+    price_col: close
+    fast_limit: 0.5
+    slow_limit: 0.05
+    output_col: null
+```
+
+### `fama`
+
+Add John Ehlers' causal Following Adaptive Moving Average. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: fama
+  params:
+    price_col: close
+    fast_limit: 0.5
+    slow_limit: 0.05
+    output_col: null
+```
+
+### `dominant_cycle_period`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: dominant_cycle_period
+  params:
+    price_col: close
+    output_col: null
+```
+
+### `dominant_cycle_phase`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: dominant_cycle_phase
+  params:
+    price_col: close
+    output_col: null
+    unit: degrees
+```
+
+### `instantaneous_trendline`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: instantaneous_trendline
+  params:
+    price_col: close
+    alpha: 0.07
+    output_col: null
+    trigger_col: null
+    add_trigger: true
+```
+
+### `fisher_transform`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: fisher_transform
+  params:
+    price_col: close
+    window: 10
+    clip: 0.999
+    output_col: null
+    signal_col: null
+    add_signal: false
+```
+
+### `inverse_fisher_transform`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: inverse_fisher_transform
+  params:
+    input_col: close
+    window: 10
+    scale: 1.0
+    normalize: true
+    output_col: null
+```
+
+### `sinewave_indicator`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: sinewave_indicator
+  params:
+    price_col: close
+    lead_degrees: 45.0
+    output_col: null
+    lead_output_col: null
+```
+
+### `cyber_cycle`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: cyber_cycle
+  params:
+    price_col: close
+    alpha: 0.07
+    output_col: null
+    trigger_col: null
+    add_trigger: false
+```
+
+### `decycler`
+
+Add Ehlers' causal decycler trend filter. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: decycler
+  params:
+    price_col: close
+    period: 60
+    output_col: null
+```
+
+### `decycler_oscillator`
+
+Add a causal Ehlers decycler oscillator from fast and slow decyclers. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: decycler_oscillator
+  params:
+    price_col: close
+    fast_period: 30
+    slow_period: 60
+    output_col: null
+```
+
+### `laguerre_rsi`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: laguerre_rsi
+  params:
+    price_col: close
+    gamma: 0.5
+    output_col: null
+    as_percent: false
+```
+
+### `frama`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: frama
+  params:
+    price_col: close
+    high_col: high
+    low_col: low
+    window: 16
+    fast_period: 4
+    slow_period: 300
+    output_col: null
+    alpha_col: null
+    fractal_dimension_col: null
+    add_diagnostics: false
+```
+
+### `center_of_gravity`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: center_of_gravity
+  params:
+    price_col: close
+    window: 10
+    output_col: null
+```
+
+### `even_better_sinewave`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: even_better_sinewave
+  params:
+    price_col: close
+    duration: 40
+    smoothing_period: 10
+    power_window: 3
+    output_col: null
+```
+
+### `autocorrelation_periodogram`
+
+Add a causal autocorrelation periodogram dominant-period estimate. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: autocorrelation_periodogram
+  params:
+    price_col: close
+    min_period: 10
+    max_period: 48
+    window: 96
+    output_col: null
+    power_col: null
+    add_power: false
+```
+
+### `homodyne_discriminator`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: homodyne_discriminator
+  params:
+    price_col: close
+    use_smoothed_period: false
+    output_col: null
+```
+
+### `parkinson_volatility`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: parkinson_volatility
+  params:
+    high_col: high
+    low_col: low
+    window: 20
+    output_col: null
+```
+
+### `path_efficiency`
+
+Add causal price-path efficiency for arbitrary horizons. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: path_efficiency
+  params:
+    price_col: close
+    windows:
+    - 24
+    - 48
+    - 96
+    - 192
+    use_log_prices: true
+    min_periods: null
+    eps: 1.0e-12
+    output_template: eff_{window}
+    clip: true
+    inplace: false
+```
+
+### `garman_klass_volatility`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: garman_klass_volatility
+  params:
+    open_col: open
+    high_col: high
+    low_col: low
+    close_col: close
+    window: 20
+    output_col: null
+```
+
+### `yang_zhang_volatility`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: yang_zhang_volatility
+  params:
+    open_col: open
+    high_col: high
+    low_col: low
+    close_col: close
+    window: 20
+    regime_window: null
+    high_vol_mult: 1.0
+    output_col: null
+    rolling_mean_col: null
+    ratio_col: null
+    rising_col: null
+    high_vol_regime_col: null
+```
+
+### `hurst_exponent`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: hurst_exponent
+  params:
+    price_col: close
+    window: 128
+    min_lag: 2
+    max_lag: null
+    output_col: null
+```
+
+### `fractal_dimension`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: fractal_dimension
+  params:
+    price_col: close
+    window: 128
+    output_col: null
+```
+
+### `volatility_regime`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: volatility_regime
+  params:
+    vol_col: null
+    price_col: close
+    returns_col: null
+    vol_window: 20
+    regime_window: 100
+    method: ratio
+    lower_quantile: 0.33
+    upper_quantile: 0.67
+    output_col: null
+```
+
+### `hmm_regime`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: hmm_regime
+  params:
+    feature_cols: null
+    price_col: close
+    returns_col: null
+    n_states: 2
+    mode: expanding
+    train_size: null
+    min_train_size: null
+    refit_interval: 1
+    covariance_type: diag
+    n_iter: 100
+    random_state: 0
+    output_col: null
+    include_probabilities: false
+    probability_prefix: hmm_regime_prob
+    standardize: false
+    standardize_eps: 1.0e-12
+```
+
+### `hilbert_transform`
+
+This raw feature computes causal Hilbert endpoint amplitude, phase, and instantaneous frequency from a trailing price window. Derived cycle-period reciprocals, range flags, and amplitude-rising flags are intentionally not produced here; use feature helpers such as ``reciprocal``, ``between_flag``, and ``rising_flag`` for those columns. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: hilbert_transform
+  params:
+    price_col: close
+    window: 64
+    amplitude_col: null
+    phase_col: null
+    instantaneous_frequency_col: null
+    dominant_cycle_col: null
+    cycle_ok_col: null
+    amplitude_rising_col: null
+    min_cycle: 10
+    max_cycle: 48
+    amplitude_slope_bars: 3
+    add_derived: false
+```
+
+### `roofing_filter`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: roofing_filter
+  params:
+    price_col: close
+    high_pass_period: 48
+    low_pass_period: 10
+    output_col: null
+```
+
+### `rolling_autocorrelation`
+
+Add causal rolling autocorrelations of a configured input series. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: rolling_autocorrelation
+  params:
+    source_col: <required>
+    windows:
+    - 48
+    - 192
+    lag: 1
+    min_periods: null
+    output_template: ac_{window}
+    inplace: false
+```
+
+### `schaff_trend_cycle`
+
+The implementation follows the common STC construction: EMA fast/slow oscillator, trailing stochastic normalization, and two causal EMA smoothing passes. The raw feature writes only STC and its signal line. Cross-up, cross-down, rising, and falling flags are derived signals and should be produced with helpers when needed. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: schaff_trend_cycle
+  params:
+    price_col: close
+    fast: 23
+    slow: 50
+    cycle: 10
+    smooth: 3
+    long_cross_level: 25.0
+    short_cross_level: 75.0
+    stc_col: stc
+    stc_signal_col: stc_signal
+    cross_up_col: null
+    cross_down_col: null
+    rising_col: null
+    falling_col: null
+    inplace: false
+```
+
+### `supersmoother`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: supersmoother
+  params:
+    price_col: close
+    period: 10
+    output_col: null
+```
+
+### `shannon_entropy`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: shannon_entropy
+  params:
+    source_col: close
+    window: 64
+    bins: 10
+    normalize: true
+    value_mode: raw
+    output_col: null
+```
+
+### `permutation_entropy`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: permutation_entropy
+  params:
+    source_col: close
+    window: 64
+    order: 3
+    delay: 1
+    normalize: true
+    output_col: null
+```
+
+### `vpin`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: vpin
+  params:
+    buy_volume_col: buy_volume
+    sell_volume_col: sell_volume
+    signed_volume_col: null
+    volume_col: volume
+    window: 50
+    bucket_volume: null
+    output_col: null
+```
+
+### `order_flow_imbalance`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: order_flow_imbalance
+  params:
+    buy_volume_col: buy_volume
+    sell_volume_col: sell_volume
+    bid_price_col: null
+    ask_price_col: null
+    bid_size_col: null
+    ask_size_col: null
+    window: 1
+    normalize: false
+    output_col: null
+```
+
+### `scalp_microstructure_proxy`
+
+This feature builds causal quote/spread/candle-flow proxy features from same-bar OHLCV and bid/ask quote columns. It computes spread outputs from bid/ask close prices; legacy ``spread_close_col`` and ``spread_bps_col`` parameters are accepted for compatibility but are not required inputs. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: scalp_microstructure_proxy
+  params:
+    open_col: open
+    high_col: high
+    low_col: low
+    close_col: close
+    volume_col: volume
+    bid_open_col: bid_open
+    bid_high_col: bid_high
+    bid_low_col: bid_low
+    bid_close_col: bid_close
+    ask_open_col: ask_open
+    ask_high_col: ask_high
+    ask_low_col: ask_low
+    ask_close_col: ask_close
+    spread_close_col: spread_close
+    spread_bps_col: spread_bps
+    eps: 1.0e-12
+    mid_open_col: mid_open
+    mid_high_col: mid_high
+    mid_low_col: mid_low
+    mid_close_col: mid_close
+    bid_ask_spread_abs_col: bid_ask_spread_abs
+    bid_ask_spread_bps_col: bid_ask_spread_bps
+    spread_bps_change_col: spread_bps_change
+    bar_range_col: bar_range
+    bar_body_col: bar_body
+    close_pos_in_bar_col: close_pos_in_bar
+    body_to_range_col: body_to_range
+    upper_wick_col: upper_wick
+    lower_wick_col: lower_wick
+    candle_pressure_col: candle_pressure
+    signed_volume_proxy_col: signed_volume_proxy
+    buy_volume_proxy_col: buy_volume_proxy
+    sell_volume_proxy_col: sell_volume_proxy
+    ofi_proxy_norm_1_col: ofi_proxy_norm_1
+```
+
+### `kds`
+
+The Kalman Directional System is a robust causal local-linear-trend filter over log midpoint close. Its posterior drift is decomposed into ADX-like directional activity and confidence diagnostics. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: kds
+  params:
+    preset: balanced
+    config: null
+    bar_minutes: 1.0
+    inplace: false
+```
+
+### `rlvs`
+
+RLVS robustly combines close-to-close, Parkinson, and Rogers-Satchell variance measurements in log-variance space, then filters a causal mean-reverting latent log-variance state. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: rlvs
+  params:
+    preset: balanced
+    config: null
+    bar_minutes: 1.0
+    inplace: false
+```
+
+### `lmds`
+
+LMDS measures changes in KDS drift, volatility-scaled price impulses, cross-horizon agreement, path efficiency, persistence, exhaustion, and trend-momentum interaction. It consumes existing KDS and RLVS columns rather than recomputing latent states. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: lmds
+  params:
+    preset: balanced
+    config: null
+    bar_minutes: 1.0
+    inplace: false
+```
+
+### `quant_market_state`
+
+The orchestrator validates market data and computes KDS, RLVS, then LMDS in dependency order. Its eight compact outputs are explicit aliases or simple composites; the underlying system columns remain available for audit. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: quant_market_state
+  params:
+    preset: balanced
+    kds_config: null
+    rlvs_config: null
+    lmds_config: null
+    bar_minutes: 1.0
+    inplace: false
+```
+
+## Compatibility-only features
+
+### `lags`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Κατάσταση: **compatibility-only**.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: lags
+  params:
+    cols: <required>
+    lags:
+    - 1
+    - 2
+    - 5
+    prefix: lag
+```
+
+### `return_momentum`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Κατάσταση: **compatibility-only**.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: return_momentum
+  params:
+    returns_col: close_logret
+    windows:
+    - 5
+    - 20
+    - 60
+    inplace: false
+```
+
+### `vol_normalized_momentum`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Κατάσταση: **compatibility-only**.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: vol_normalized_momentum
+  params:
+    returns_col: close_logret
+    vol_col: vol_rolling_20
+    vol_window: null
+    windows:
+    - 5
+    - 20
+    - 60
+    eps: 1.0e-08
+    inplace: false
+```
+
+### `volume_features`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Κατάσταση: **compatibility-only**.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: volume_features
+  params:
+    volume_col: volume
+    atr_col: null
+    high_col: high
+    low_col: low
+    close_col: close
+    atr_window: 14
+    vol_z_window: 20
+    inplace: false
+```
+
+### `price_momentum`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Κατάσταση: **compatibility-only**.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: price_momentum
+  params:
+    price_col: close
+    windows:
+    - 5
+    - 20
+    - 60
+    inplace: false
+```
+
+### `trend_slope_volatility`
+
+This feature uses configured dataframe inputs and writes deterministic outputs without changing temporal ordering assumptions. Inputs must already be available at the timestamp where the transform is evaluated. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Κατάσταση: **compatibility-only**.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: trend_slope_volatility
+  params:
+    price_col: close
+    volatility_col: null
+    window: 96
+    annualize: false
+    periods_per_year: null
+    slope_col: null
+    volatility_used_col: null
+    slope_vol_ratio_col: null
+    positive_col: null
+    rising_col: null
+    strong_trend_col: null
+    strong_threshold: 1.0
+```
+
+### `volatility_of_volatility`
+
+Add causal volatility-of-volatility diagnostics. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Κατάσταση: **compatibility-only**.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: volatility_of_volatility
+  params:
+    volatility_col: <required>
+    window: 96
+    mean_window: null
+    output_col: null
+    mean_col: null
+    ratio_col: null
+    rising_col: null
+    high_vov_col: null
+    high_vov_mult: 1.0
+```
+
+### `ehlers_semiscalp_long`
+
+Registered feature component `ehlers_semiscalp_long`. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Κατάσταση: **compatibility-only**.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: ehlers_semiscalp_long
+  params:
+    entry_mode: transition
+    require_mama_rising: false
+    roofing_trigger_mode: rising
+    price_col: close
+    mama_col: mama
+    fama_col: fama
+    decycler_col: decycler
+    roofing_col: roofing_filter_48_10
+    laguerre_col: laguerre_rsi
+    fisher_col: fisher_transform
+    hilbert_amplitude_col: hilbert_amplitude_64
+    dominant_cycle_period_col: dominant_cycle_period
+    amplitude_lookback: 100
+    laguerre_min: 0.5
+    min_cycle_period: 10.0
+    max_cycle_period: 48.0
+    use_cycle_period_filter: false
+    signal_col: signal_side
+    candidate_col: signal_candidate
+    output_cols:
+    - signal_side
+    - signal_candidate
+```
+
+### `ehlers_decycler_continuation`
+
+Registered feature component `ehlers_decycler_continuation`. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Κατάσταση: **compatibility-only**.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: ehlers_decycler_continuation
+  params:
+    decycler_osc_col: decycler_oscillator_30_60
+    decycler_ratio_col: ehlers_decycler_over_close
+    decycler_osc_min: 0.45
+    decycler_ratio_max: 0.994
+    entry_mode: state
+    signal_col: signal_side
+    candidate_col: signal_candidate
+    output_cols:
+    - signal_candidate
+```
+
+### `ema_stoch_rsi_pullback`
+
+Registered feature component `ema_stoch_rsi_pullback`. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Κατάσταση: **compatibility-only**.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: ema_stoch_rsi_pullback
+  params:
+    price_col: close
+    ema_fast_col: ema_50
+    ema_slow_col: ema_150
+    stoch_k_col: stoch_rsi_k
+    stoch_d_col: stoch_rsi_d
+    stoch_recover_col: stoch_rsi_recover_from_oversold
+    stoch_fall_col: stoch_rsi_fall_from_overbought
+    oversold: 0.2
+    overbought: 0.8
+    max_bars_after_cross: 30
+    require_k_d_confirmation: true
+    require_price_above_slow_ema_for_long: true
+    require_price_below_slow_ema_for_short: true
+    use_first_pullback_only: true
+    prefix: ema_stoch
+    side_col: signal_side
+    candidate_col: signal_candidate
+    signal_col: null
+    output_cols:
+    - configured by signal_col
+```
+
+### `indicator_model_adaptive_pullback`
+
+Registered feature component `indicator_model_adaptive_pullback`. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Κατάσταση: **compatibility-only**.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: indicator_model_adaptive_pullback
+  params:
+    close_col: close
+    ema_fast: 20
+    ema_mid: 50
+    ema_slow: 100
+    ema_fast_col: null
+    ema_mid_col: null
+    ema_slow_col: null
+    ema_slope_fast_col: null
+    ema_slope_mid_col: null
+    adx_col: null
+    min_adx: 18.0
+    max_adx: 45.0
+    rsi_col: null
+    rsi_long_min: 45.0
+    rsi_long_max: 68.0
+    rsi_short_min: 32.0
+    rsi_short_max: 55.0
+    stoch_k_col: stoch_rsi_k
+    stoch_d_col: stoch_rsi_d
+    stoch_cross_up_col: stoch_rsi_cross_up
+    stoch_cross_down_col: stoch_rsi_cross_down
+    stoch_long_max: 60.0
+    stoch_short_min: 40.0
+    macd_hist_col: macd_hist
+    macd_hist_slope_col: macd_hist_slope
+    require_macd_confirmation: true
+    atr_pct_rank_col: null
+    min_atr_pct_rank: 0.2
+    max_atr_pct_rank: 0.9
+    bb_bandwidth_col: bollinger_bandwidth
+    bb_bandwidth_rank_col: bollinger_bandwidth_rank_100
+    min_bb_bandwidth: 0.0
+    min_bb_bandwidth_rank: 0.2
+    distance_ema_fast_atr_col: null
+    max_distance_from_ema_atr: 0.75
+    candidate_long_col: candidate_long
+    candidate_short_col: candidate_short
+    direction_col: direction
+    signal_col: signal
+    candidate_col: signal_candidate
+    signal_name_col: signal_name
+    score_col: signal_score
+    signal_name: indicator_model_adaptive_pullback
+    output_cols:
+    - signal
+    - signal_candidate
+```
+
+### `roc_long_only_conditions`
+
+Registered feature component `roc_long_only_conditions`. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Κατάσταση: **compatibility-only**.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: roc_long_only_conditions
+  params:
+    roc_window: 12
+    roc_col: null
+    roc_min: 0.0015
+    vol_short_window: 24
+    vol_long_window: 168
+    regime_vol_ratio_z_col: null
+    vol_z_min: -1.5
+    vol_z_max: 1.75
+    close_z_col: close_z
+    close_z_min: -0.25
+    close_z_max: 2.25
+    close_open_ratio_col: close_open_ratio
+    close_open_ratio_min: 0.0002
+    mtf_1h_col: mtf_1h_trend_score
+    mtf_1h_min: -0.001
+    mtf_4h_col: mtf_4h_trend_score
+    mtf_4h_min: -0.002
+    is_weekend_col: is_weekend
+    macro_condition_col: null
+    min_score_required: 5
+    require_all_conditions: false
+    require_bullish_candle: false
+    required_condition_names: null
+    vol_adjustment_strength: 0.9
+    min_exposure: 0.1
+    max_exposure: 1.0
+    signal_col: null
+    long_signal_col: manual_long_signal
+    score_col: manual_conviction_score
+    all_conditions_col: manual_all_conditions_signal
+    vol_adjusted_col: manual_vol_adjusted_signal
+    short_signal_col: short_signal
+    combined_signal_col: combined_signal
+```
+
+### `quote_flow_scalp_router`
+
+Registered feature component `quote_flow_scalp_router`. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Κατάσταση: **compatibility-only**.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: quote_flow_scalp_router
+  params:
+    mode: long_short
+    close_col: close
+    atr_col: atr_14
+    vwap_distance_col: close_minus_vwap_20_atr
+    vpin_rank_col: vpin_proxy_50_rank_252
+    ofi_fast_col: ofi_proxy_5_norm
+    ofi_slow_col: ofi_proxy_15_norm
+    spread_rank_col: spread_bps_rank_252
+    spread_z_col: spread_bps_z_252
+    volume_relative_col: volume_relative_48
+    close_pos_col: close_pos_in_bar
+    signal_col: signal_side
+```
+
+### `vwap_rms_ema_cross_long`
+
+Registered feature component `vwap_rms_ema_cross_long`. Η πληροφορία του είναι point-in-time: οι υψηλότερες, χαμηλότερες ή προσημασμένες τιμές πρέπει να ερμηνεύονται σύμφωνα με τις output στήλες του builder και να χρησιμοποιούνται μόνο αφού κλείσει το bar.
+
+Κατάσταση: **compatibility-only**.
+
+Πλήρες YAML παράδειγμα με το διαθέσιμο parameter contract:
+
+```yaml
+features:
+- step: vwap_rms_ema_cross_long
+  params:
+    ema_mid_col: ema_50
+    ema_slow_col: ema_100
+    ema_mid_rms_col: ema_50__root_mean_square
+    vwap_rms_col: vwap_20__root_mean_square
+    ppo_col: ppo
+    ppo_signal_col: ppo_signal
+    ppo_hist_min: 0.0
+    use_ppo_confirmation: true
+    use_ema_regime: true
+    use_vwap_rms_cross: true
+    use_mfi_confirmation: false
+    mfi_col: mfi_14
+    mfi_lower: 40.0
+    mfi_upper: 80.0
+    entry_delay_bars: 0
+    mode: long_only
+    regime_col: ema_50_above_ema_100
+    short_regime_col: ema_50_below_ema_100
+    cross_up_col: vwap_rms_cross_above_ema_50_rms
+    cross_down_col: vwap_rms_cross_below_ema_50_rms
+    ppo_hist_col: ppo_hist
+    ppo_hist_positive_col: ppo_hist_positive
+    ppo_hist_negative_col: ppo_hist_negative
+    ppo_above_signal_col: ppo_above_signal
+    ppo_below_signal_col: ppo_below_signal
+    mfi_confirmation_col: mfi_confirmation
+    long_setup_col: vwap_rms_ema_cross_long_setup
+    short_setup_col: vwap_rms_ema_cross_short_setup
+    signal_col: signal_side
+    candidate_col: signal_candidate
+    output_cols:
+    - signal_side
+    - signal_candidate
+```
+
+<!-- END GENERATED EXHAUSTIVE REFERENCE -->
