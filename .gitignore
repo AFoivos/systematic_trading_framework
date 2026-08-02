@@ -160,6 +160,7 @@ tests/*
 !tests/experiments/
 tests/experiments/*
 !tests/experiments/test_barrier_probability_diagnostics.py
+!tests/experiments/test_btcusd_dual_trend_ftmo_pipeline.py
 !tests/experiments/evolutionary/
 !tests/experiments/evolutionary/*.py
 !tests/trade_path/

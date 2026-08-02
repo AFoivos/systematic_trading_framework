@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
@@ -37,6 +38,13 @@ from .introspection_tools import review_current_changes as review_current_change
 from .introspection_tools import run_pytest as run_pytest_impl
 from .introspection_tools import suggest_tests_for_change as suggest_tests_for_change_impl
 from .introspection_tools import target_signal_compatibility_check as target_signal_compatibility_check_impl
+from .observability import (
+    StructuredHTTPLoggingMiddleware,
+    configure_structured_logger,
+    emit_event,
+    instrument_tool_manager,
+    structured_logging_enabled,
+)
 from .project_tools import (
     execute_approved_python_script as execute_approved_python_script_impl,
 )
@@ -104,8 +112,31 @@ mcp = FastMCP(
 
 
 def _measured(tool: str, operation: Any) -> Any:
-    with get_runtime(CONFIG.repo_root).measure(tool):
-        return operation()
+    logging_enabled = structured_logging_enabled()
+    operation_kind = (
+        "git"
+        if tool.startswith("git_")
+        or tool in {"list_changed_paths", "get_repo_snapshot", "get_code_review_bundle"}
+        else "filesystem"
+    )
+    if logging_enabled:
+        emit_event("repository_operation_start", operation=tool, operation_kind=operation_kind)
+    try:
+        with get_runtime(CONFIG.repo_root).measure(tool):
+            result = operation()
+    except Exception as exc:
+        if logging_enabled:
+            emit_event(
+                "repository_operation_exception",
+                operation=tool,
+                operation_kind=operation_kind,
+                exception_type=type(exc).__name__,
+                error=str(exc)[:500],
+            )
+        raise
+    if logging_enabled:
+        emit_event("repository_operation_complete", operation=tool, operation_kind=operation_kind)
+    return result
 
 
 @mcp.tool(annotations=READ_ONLY)
@@ -449,5 +480,28 @@ def run_pytest(paths: list[str] | None = None, confirmation: str | None = None, 
     return run_pytest_impl(CONFIG, paths=paths, confirmation=confirmation, timeout_seconds=timeout_seconds)
 
 
+def run_streamable_http_server() -> None:
+    """Run the configured Streamable HTTP server with payload-safe lifecycle logging."""
+    import uvicorn
+
+    logging.basicConfig(level=logging.INFO)
+    logging_enabled = structured_logging_enabled()
+    if logging_enabled:
+        configure_structured_logger()
+    instrument_tool_manager(mcp._tool_manager, enabled=logging_enabled)
+    app = StructuredHTTPLoggingMiddleware(mcp.streamable_http_app(), enabled=logging_enabled)
+    if logging_enabled:
+        emit_event(
+            "mcp_server_start",
+            host=CONFIG.host,
+            port=CONFIG.port,
+            endpoint="/mcp",
+            transport="streamable-http",
+            repository_root=str(CONFIG.repo_root),
+            structured_logging=True,
+        )
+    uvicorn.run(app, host=CONFIG.host, port=CONFIG.port, log_level="info")
+
+
 if __name__ == "__main__":
-    mcp.run(transport="streamable-http")
+    run_streamable_http_server()

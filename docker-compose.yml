@@ -68,9 +68,16 @@ services:
       MCP_CONFIG_PATH: /app/mcp-config.yaml
       MCP_HOST: 0.0.0.0
       MCP_PORT: 8765
+      MCP_STRUCTURED_LOGGING: ${MCP_STRUCTURED_LOGGING:-1}
       PYTHONPATH: /workspace:/app
     volumes:
       - ./:/workspace
     ports:
       - "8765:8765"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.error, urllib.request; success = False; exec(\"try:\\n urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=2)\\nexcept urllib.error.HTTPError as exc:\\n success = exc.code == 404\"); raise SystemExit(0 if success else 1)"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
     restart: unless-stopped

@@ -55,7 +55,23 @@ def load_experiment_config(config_path: str | Path) -> dict[str, Any]:
     """
     Load a self-contained experiment YAML, apply defaults and validation,
     and resolve logging paths. Returns a plain dict ready for use.
+
+    Registered custom pipelines retain their strategy-specific shape and use
+    their own locked validator. Canonical configs continue through the global
+    typed schema without any relaxation.
     """
+    path = _resolve_config_path(config_path)
+    try:
+        raw = load_resolved_config(path)
+        pipeline = raw.get("pipeline")
+        kind = pipeline.get("kind") if isinstance(pipeline, dict) else None
+        if kind not in (None, "", "canonical_experiment"):
+            from src.pipelines.registry import validate_custom_pipeline_config
+
+            validate_custom_pipeline_config(str(kind), raw)
+            return raw
+    except (ConfigValidationError, KeyError, TypeError, ValueError) as exc:
+        raise ConfigError(str(exc)) from exc
     return load_experiment_config_typed(config_path).to_dict()
 
 

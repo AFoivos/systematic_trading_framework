@@ -248,3 +248,42 @@ After deployment:
 4. Call get_code_review_bundle.
 5. Call read_files.
 6. Call search_source.
+
+## Streamable HTTP diagnostics
+
+The service uses MCP Streamable HTTP on `0.0.0.0:8765`, exposed at `/mcp`.
+The Compose healthcheck probes the same Uvicorn application with a two-second
+client timeout and expects the immediate `404` response at `/health`. This
+proves that the published port completes HTTP responses without creating
+abandoned stateful MCP sessions. `docker compose ps mcp` must report `healthy`
+before a public tunnel is considered ready; deployment acceptance must
+additionally send a real MCP `initialize` request as shown below.
+
+Set `MCP_STRUCTURED_LOGGING=1` (the Compose default) to log JSON events for HTTP
+request entry, initialization, tool execution, measured filesystem/Git
+operations, response start/completion, and exception tracebacks. Request
+headers, tool argument values, and response bodies are deliberately excluded.
+
+On Docker Desktop for macOS, `com.docker.backend` owns published host ports even
+when the application process is inside a container. A TCP listener on `8765`
+therefore does not prove that the MCP container or HTTP handler is alive. If a
+request connects but returns no HTTP bytes, verify all three layers:
+
+~~~bash
+docker desktop status
+docker compose ps mcp
+docker compose logs --tail=200 mcp
+lsof -nP -iTCP:8765 -sTCP:LISTEN
+curl --max-time 5 -i \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"mcp-probe","version":"1.0"}}}' \
+  http://127.0.0.1:8765/mcp
+curl --max-time 5 http://127.0.0.1:4040/api/tunnels
+~~~
+
+The ngrok tunnel must show `config.addr` equal to
+`http://localhost:8765`. If Docker's API is unavailable while its backend still
+owns `8765`, restart Docker Desktop before restarting or testing ngrok; otherwise
+ngrok can establish TCP connections to the stale publisher and wait until its
+own upstream timeout without any request reaching Uvicorn.

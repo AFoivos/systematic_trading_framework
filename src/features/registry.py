@@ -16,6 +16,7 @@ from .barrier_state import (
     add_barrier_session_features,
     add_barrier_volatility_features,
 )
+from .btcusd_dual_trend_ftmo import add_btcusd_dual_trend_30m_features
 from .center_of_gravity import add_center_of_gravity
 from .cyber_cycle import add_cyber_cycle
 from .decycler import add_decycler
@@ -100,6 +101,7 @@ FeatureFn = Callable[..., pd.DataFrame]
 
 _FEATURE_COMPONENTS: tuple[tuple[str, FeatureFn], ...] = (
     ("returns", add_close_returns),
+    ("btcusd_dual_trend_30m", add_btcusd_dual_trend_30m_features),
     ("barrier_equilibrium", add_barrier_equilibrium_features),
     ("barrier_path", add_barrier_path_features),
     ("barrier_persistence", add_barrier_persistence_features),

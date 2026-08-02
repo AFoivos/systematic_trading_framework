@@ -2290,6 +2290,50 @@ features:
     - signal_candidate
 ```
 
+### `btcusd_dual_trend_30m`
+
+**Τι μετρά και τι πληροφορία δίνει.** Κατασκευάζει το κλειδωμένο σύνολο χαρακτηριστικών της στρατηγικής BTCUSD Dual-Trend πάνω σε πραγματικές 30λεπτες ράβδους. Συνδυάζει κατεύθυνση δύο EMA του λογαριθμικού κλεισίματος με επίμονη κατάσταση Donchian και αποδίδει συνεχή βαθμολογία από `-1` έως `+1`, μαζί με εκθετικά σταθμισμένη ετησιοποιημένη μεταβλητότητα. Οι στήλες realized execution return και adverse excursion είναι λογιστικές εκβάσεις και δεν αποτελούν είσοδο του signal.
+
+**Είσοδοι και έξοδοι.** Διαβάζει `open`, `high`, `low`, `close`, `volume` από ήδη συγκεντρωμένες 30λεπτες ράβδους UTC. Γράφει log close, EMA, prior-only Donchian boundaries, persistent Donchian state, ensemble score, μεταβλητότητα και τις τρεις δηλωμένες στήλες μελλοντικής λογιστικής αποτίμησης. Το `outputs` χαρτογραφεί τα canonical ονόματα στα κλειδωμένα ονόματα της στρατηγικής.
+
+**Χρονική ορθότητα και αποφυγή διαρροής.** Οι EMA και η μεταβλητότητα χρησιμοποιούν μόνο το κλείσιμο `t` και παλαιότερα δεδομένα με `adjust: false`. Τα όρια Donchian εφαρμόζουν υποχρεωτικά `shift(1)` πριν από το rolling window. Οι future-return στήλες απομονώνονται ως realized outcomes και το registered signal διαβάζει αποκλειστικά `ensemble_col` και `volatility_col`.
+
+**Παράμετροι.** Το κλειδωμένο contract χρησιμοποιεί EMA spans `96` και `672`, Donchian window `336`, volatility span `336`, `17520` περιόδους ανά έτος και βάρη `0.60/0.40`.
+
+**Πλήρες YAML παράδειγμα:**
+
+```yaml
+features:
+  - step: btcusd_dual_trend_30m
+    params:
+      open_col: open
+      high_col: high
+      low_col: low
+      close_col: close
+      volume_col: volume
+      ema_fast_span: 96
+      ema_slow_span: 672
+      donchian_window: 336
+      volatility_ewma_span: 336
+      periods_per_year: 17520
+      ema_weight: 0.60
+      donchian_weight: 0.40
+      execution_return_mode: next_open_to_next_open
+      adverse_excursion_mode: next_30m_high_low
+    outputs:
+      ema_fast: dual_ema_fast_96
+      ema_slow: dual_ema_slow_672
+      ema_signal: dual_ema_signal
+      prior_high: dual_prior_high_336
+      prior_low: dual_prior_low_336
+      donchian_state: dual_donchian_state
+      ensemble_signal: dual_trend_score
+      volatility_ann: dual_volatility_ann_336
+      execution_return: dual_execution_return
+      adverse_long_return: dual_adverse_long_return
+      adverse_short_price_return: dual_adverse_short_price_return
+```
+
 ### `ehlers_decycler_continuation`
 
 **Τι μετρά και τι πληροφορία δίνει.** Κατασκευάζει compatibility candidate συνέχισης τάσης με Decycler και επιβεβαιωτικά φίλτρα. Η έξοδος δηλώνει long setup όταν η τιμή και η ορμή ευθυγραμμίζονται με την εξομαλυμένη τάση· η νέα χρήση πρέπει να γίνεται ως signal.

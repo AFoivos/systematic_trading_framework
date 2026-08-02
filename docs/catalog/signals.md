@@ -268,6 +268,31 @@ signals:
     - ehlers_continuation_candidate
 ```
 
+### `btcusd_dual_trend_ensemble`
+
+**Τι μετρά και τι πληροφορία δίνει.** Μετατρέπει την κλειδωμένη βαθμολογία EMA/Donchian σε μοχλευμένη θέση μέσω στόχου ετησιοποιημένης μεταβλητότητας. Η θετική τιμή είναι long, η αρνητική short και το μέγεθος περιορίζεται από το `max_leverage`. Η διαφωνία των δύο sleeves παραμένει μικρή κατευθυντική θέση `±0.2` πριν από τη μεταβλητότητα και δεν μετατρέπεται σε flat.
+
+**Είσοδοι και έξοδοι.** Διαβάζει μόνο τη causal βαθμολογία `dual_trend_score` και τη causal μεταβλητότητα `dual_volatility_ann_336`. Γράφει την ακατέργαστη επιθυμητή θέση, την πραγματικά εφαρμοζόμενη `signal_position`, ένδειξη rebalance και τον εναπομείναντα μετρητή. Δεν διαβάζει execution return, high/low adverse excursion ή άλλο μελλοντικό outcome.
+
+**Χρονική ορθότητα και αποφυγή διαρροής.** Η θέση αποφασίζεται μετά το κλείσιμο της ράβδου `t` και εφαρμόζεται στο επόμενο open-to-open διάστημα. Αλλαγή προσήμου προκαλεί άμεσο rebalance, ενώ στην ίδια κατεύθυνση το μέγεθος διατηρείται ακριβώς για 48 εκτεθειμένες ράβδους πριν από το προγραμματισμένο rebalance. Έτσι δεν γίνεται ενδιάμεση επανακλιμάκωση από νέα volatility observations.
+
+**Παράμετροι.** Το baseline contract χρησιμοποιεί στόχο μεταβλητότητας `0.22`, μέγιστη μόχλευση `1.50`, διάστημα `48` εκτεθειμένων bars και επιτρέπει short θέσεις.
+
+**Πλήρες YAML παράδειγμα:**
+
+```yaml
+signals:
+  kind: btcusd_dual_trend_ensemble
+  params:
+    ensemble_col: dual_trend_score
+    volatility_col: dual_volatility_ann_336
+    target_volatility: 0.22
+    max_leverage: 1.50
+    rebalance_bars: 48
+    allow_short: true
+    signal_col: signal_position
+```
+
 ### `ehlers_continuation_short`
 
 **Τι μετρά και τι πληροφορία δίνει.** Εντοπίζει short continuation όταν Ehlers trend και cycle φίλτρα ευθυγραμμίζονται καθοδικά. Τιμή -1 σημαίνει επιλέξιμο short setup και 0 flat· δεν πρέπει να χρησιμοποιηθεί σε backtest όπου τα shorts δεν είναι ενεργοποιημένα.
