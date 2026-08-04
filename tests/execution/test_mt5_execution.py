@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -26,7 +27,12 @@ from src.execution.mt5_order_manager import MT5OrderManager, TradeParameters
 from src.execution.mt5_position_manager import MT5PositionManager
 from src.execution.mt5_risk_manager import MT5RiskManager, RiskConfig, calculate_position_size
 from src.execution.mt5_symbol_mapper import MT5SymbolMapper
-from src.models.artifacts import load_model_bundle, predict_with_model_bundle, save_model_artifacts
+from src.models.artifacts import (
+    load_model_bundle,
+    predict_with_model_bundle,
+    promote_model_bundle,
+    save_model_artifacts,
+)
 
 
 MAGIC = 260607
@@ -780,6 +786,52 @@ def test_model_artifact_custom_name_installs_and_predicts(tmp_path: Path) -> Non
     assert out["pred_ret"].iloc[2] == pytest.approx(7.0)
     assert out["pred_is_oos"].eq(False).all()
     assert "pred_prob" in out.columns
+
+
+def test_existing_model_bundle_can_be_promoted_without_losing_lineage(tmp_path: Path) -> None:
+    cfg = {
+        "config_path": "config/demo.yaml",
+        "logging": {"save_model": True, "install_model": False},
+        "model": {
+            "kind": "lightgbm_regressor",
+            "feature_cols": ["feature_a"],
+            "pred_ret_col": "pred_ret",
+            "pred_prob_col": "pred_prob",
+            "pred_is_oos_col": "pred_is_oos",
+        },
+        "signals": {"kind": "forecast_threshold", "params": {"forecast_col": "pred_ret"}},
+    }
+    model_meta = {
+        "model_kind": "lightgbm_regressor",
+        "task_type": "regression",
+        "feature_cols": ["feature_a"],
+        "pred_ret_col": "pred_ret",
+        "pred_prob_col": "pred_prob",
+        "pred_is_oos_col": "pred_is_oos",
+    }
+    artifacts = save_model_artifacts(
+        run_dir=tmp_path / "run",
+        model=ConstantRegressor(),
+        cfg=cfg,
+        model_meta=model_meta,
+        run_metadata={"created_at_utc": NOW.isoformat(), "git": {}, "environment": {}},
+        config_hash_sha256="a" * 64,
+        data_fingerprint={"sha256": "b" * 64},
+    )
+
+    promoted = promote_model_bundle(
+        artifacts["model_artifact"],
+        install_dir=tmp_path / "registry",
+        model_name="ftmo v2 best",
+    )
+    bundle = load_model_bundle(promoted["installed_model_artifact"])
+    manifest = json.loads(Path(promoted["installed_model_manifest"]).read_text(encoding="utf-8"))
+
+    assert Path(promoted["installed_model_artifact"]).name == "ftmo_v2_best.pkl"
+    assert bundle["model_name"] == "ftmo_v2_best"
+    assert bundle["promotion"]["source_model_sha256"] == promoted["source_model_sha256"]
+    assert manifest["promotion"] == bundle["promotion"]
+    assert manifest["reproducibility"]["config_hash_sha256"] == "a" * 64
 
 
 def _order_manager(

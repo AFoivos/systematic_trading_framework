@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import pickle
@@ -204,6 +205,7 @@ def _bundle_manifest(bundle: Mapping[str, Any], *, model_path: Path) -> dict[str
         "pred_is_oos_col": model_meta.get("pred_is_oos_col") or model_config.get("pred_is_oos_col"),
         "prob_scale": model_meta.get("prob_scale"),
         "created_at_utc": bundle.get("created_at_utc"),
+        "promotion": dict(bundle.get("promotion", {}) or {}),
         "reproducibility": dict(bundle.get("reproducibility", {}) or {}),
     }
 
@@ -293,6 +295,48 @@ def load_model_bundle(path: str | Path) -> dict[str, Any]:
     if "model" not in payload:
         raise ValueError(f"Model artifact is missing the fitted model payload: {bundle_path}")
     return payload
+
+
+def promote_model_bundle(
+    source_path: str | Path,
+    *,
+    install_dir: str | Path = "logs/models",
+    model_name: str | None = None,
+) -> dict[str, str]:
+    """Install an existing validated bundle under a stable model-registry path.
+
+    Promotion preserves the original training and reproducibility metadata. It
+    adds immutable source lineage and changes only the installed model name.
+    """
+    source = Path(source_path).resolve()
+    if not source.is_file():
+        raise FileNotFoundError(f"Source model bundle does not exist: {source}")
+    bundle = load_model_bundle(source)
+    installed_name = safe_model_name(model_name or bundle.get("model_name") or source.stem)
+    destination_dir = _resolve_install_dir(install_dir)
+    destination_model = destination_dir / f"{installed_name}{_MODEL_EXTENSION}"
+    destination_manifest = destination_dir / f"{installed_name}.manifest.json"
+    source_digest = hashlib.sha256(source.read_bytes()).hexdigest()
+
+    promoted = dict(bundle)
+    promoted["model_name"] = installed_name
+    promoted["promotion"] = {
+        "promoted_at_utc": datetime.now(timezone.utc).isoformat(),
+        "source_model_path": str(source),
+        "source_model_sha256": source_digest,
+        "source_model_name": bundle.get("model_name"),
+        "source_created_at_utc": bundle.get("created_at_utc"),
+    }
+    _atomic_write_pickle(destination_model, promoted)
+    _atomic_write_json(
+        destination_manifest,
+        _bundle_manifest(promoted, model_path=destination_model),
+    )
+    return {
+        "installed_model_artifact": str(destination_model),
+        "installed_model_manifest": str(destination_manifest),
+        "source_model_sha256": source_digest,
+    }
 
 
 def _asset_model(bundle: Mapping[str, Any], asset: str | None) -> object:
@@ -433,6 +477,7 @@ __all__ = [
     "MODEL_BUNDLE_VERSION",
     "load_model_bundle",
     "predict_with_model_bundle",
+    "promote_model_bundle",
     "safe_model_name",
     "save_model_artifacts",
 ]

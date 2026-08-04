@@ -20,6 +20,11 @@ from src.evaluation.metrics import (
     profit_factor,
 )
 from src.risk.controls import event_risk_guard_multiplier
+from src.risk.entry_modifiers import (
+    entry_risk_modifier_for_candidate,
+    normalize_entry_risk_modifiers,
+    required_entry_risk_modifier_columns,
+)
 
 
 def _require_columns(df: pd.DataFrame, columns: list[str]) -> None:
@@ -208,6 +213,7 @@ def run_manual_barrier_backtest(
     stop_cooldown_bars: int = 0,
     max_correlated_risk: float | None = None,
     portfolio_guard: dict[str, Any] | None = None,
+    entry_risk_modifiers: dict[str, Any] | None = None,
 ) -> BacktestResult:
     """
     Event-based backtest for manual rule signals.
@@ -249,6 +255,7 @@ def run_manual_barrier_backtest(
         raise ValueError("stop_cooldown_bars must be a non-negative integer.")
     if max_correlated_risk is not None and float(max_correlated_risk) <= 0.0:
         raise ValueError("max_correlated_risk must be > 0 when provided.")
+    normalized_entry_modifiers = normalize_entry_risk_modifiers(entry_risk_modifiers)
     dynamic_cfg = normalize_dynamic_exit_config(dynamic_exits)
     partial_cfg = normalize_partial_exit_config(partial_exits)
     partial_enabled = bool(partial_cfg.get("enabled", False))
@@ -270,6 +277,7 @@ def run_manual_barrier_backtest(
         required_cols.append(r_trailing_risk_col)
     if max_entry_gap_atr is not None:
         required_cols.append(str(entry_gap_atr_col))
+    required_cols.extend(required_entry_risk_modifier_columns(normalized_entry_modifiers))
     _require_columns(df, required_cols)
 
     frame = df.copy()
@@ -319,6 +327,10 @@ def run_manual_barrier_backtest(
         "daily_soft_stop": 0,
         "daily_hard_stop": 0,
         "weekly_stop": 0,
+        "entry_risk_modifier": 0,
+    }
+    entry_modifier_match_counts = {
+        str(rule["name"]): 0 for rule in normalized_entry_modifiers["rules"]
     }
 
     i = 0
@@ -370,7 +382,23 @@ def run_manual_barrier_backtest(
         if guard_multiplier <= 0.0:
             i += 1
             continue
-        effective_risk_per_trade = float(risk_per_trade) * float(guard_multiplier)
+        previous_exit_reason = trades[-1].get("exit_reason") if trades else None
+        entry_modifier, matched_entry_modifier_rules = entry_risk_modifier_for_candidate(
+            frame.iloc[i],
+            timestamp=index[i],
+            signal=raw_signal,
+            previous_exit_reason=previous_exit_reason,
+            config=normalized_entry_modifiers,
+        )
+        for rule_name in matched_entry_modifier_rules:
+            entry_modifier_match_counts[rule_name] += 1
+        if entry_modifier <= 0.0:
+            rejection_counts["entry_risk_modifier"] += 1
+            i += 1
+            continue
+        effective_risk_per_trade = (
+            float(risk_per_trade) * float(guard_multiplier) * float(entry_modifier)
+        )
         if max_correlated_risk is not None:
             effective_risk_per_trade = min(effective_risk_per_trade, float(max_correlated_risk))
         raw_size = min(abs(raw_signal), float(max_leverage))
@@ -718,6 +746,8 @@ def run_manual_barrier_backtest(
             "stop_mode": stop_mode,
             "effective_risk_per_trade": effective_risk_per_trade,
             "risk_guard_reason": guard_reason,
+            "entry_risk_modifier": float(entry_modifier),
+            "entry_risk_modifier_rules": ",".join(matched_entry_modifier_rules),
         }
         if partial_events:
             partial_fraction_total = float(sum(float(event["fraction"]) for event in partial_events))
@@ -771,6 +801,7 @@ def run_manual_barrier_backtest(
     realized_summary.update(
         {f"rejected_{key}": int(value) for key, value in rejection_counts.items()}
     )
+    realized_summary["entry_risk_modifier_match_counts"] = dict(entry_modifier_match_counts)
 
     mark_to_market_returns = mark_to_market_gross_returns - costs
     mark_to_market_returns.name = "mark_to_market_returns"
@@ -787,6 +818,7 @@ def run_manual_barrier_backtest(
     mark_to_market_summary.update(
         {f"rejected_{key}": int(value) for key, value in rejection_counts.items()}
     )
+    mark_to_market_summary["entry_risk_modifier_match_counts"] = dict(entry_modifier_match_counts)
     mark_to_market_summary["equity_source"] = "mark_to_market"
     mark_to_market_summary["realized_cumulative_return"] = realized_summary[
         "cumulative_return"

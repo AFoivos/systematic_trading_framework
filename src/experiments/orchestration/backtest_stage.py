@@ -461,10 +461,50 @@ def run_single_asset_backtest(
             stop_cooldown_bars=int(backtest_cfg.get("stop_cooldown_bars", 0) or 0),
             max_correlated_risk=risk_cfg.get("max_correlated_us_index_risk"),
             portfolio_guard=dict(risk_cfg.get("portfolio_guard", {}) or {}),
+            entry_risk_modifiers=dict(backtest_cfg.get("entry_risk_modifiers", {}) or {}),
         )
         if result.trades is not None and not result.trades.empty and "asset" not in result.trades.columns:
             result.trades = result.trades.copy()
             result.trades.insert(0, "asset", asset)
+        if oos_mask is not None and bool(oos_mask.any()):
+            aligned_oos_mask = oos_mask.reindex(result.returns.index).fillna(False).astype(bool)
+
+            def scoped_summary(
+                *,
+                returns: pd.Series,
+                gross_returns: pd.Series,
+                existing: dict[str, Any],
+            ) -> dict[str, Any]:
+                scoped = compute_backtest_metrics(
+                    net_returns=returns.loc[aligned_oos_mask],
+                    periods_per_year=int(backtest_cfg.get("periods_per_year", 252)),
+                    turnover=result.turnover.loc[aligned_oos_mask],
+                    costs=result.costs.loc[aligned_oos_mask],
+                    gross_returns=gross_returns.loc[aligned_oos_mask],
+                )
+                # Preserve event-ledger diagnostics that are independent of the
+                # leading non-OOS warm-up interval.
+                scoped.update({key: value for key, value in existing.items() if key not in scoped})
+                return scoped
+
+            result.summary = scoped_summary(
+                returns=result.returns,
+                gross_returns=result.gross_returns,
+                existing=dict(result.summary),
+            )
+            if result.mark_to_market_returns is not None:
+                result.mark_to_market_summary = scoped_summary(
+                    returns=result.mark_to_market_returns,
+                    gross_returns=result.gross_returns,
+                    existing=dict(result.mark_to_market_summary or {}),
+                )
+                result.summary = dict(result.mark_to_market_summary)
+            if result.realized_returns is not None and result.realized_gross_returns is not None:
+                result.realized_summary = scoped_summary(
+                    returns=result.realized_returns,
+                    gross_returns=result.realized_gross_returns,
+                    existing=dict(result.realized_summary or {}),
+                )
         result.summary["execution_delay_diagnostics"] = execution_delay_diagnostics
         if result.mark_to_market_summary is not None:
             result.mark_to_market_summary["execution_delay_diagnostics"] = execution_delay_diagnostics

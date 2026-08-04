@@ -297,6 +297,7 @@ def default_backtest_block(
     backtest.setdefault("slippage_per_unit_turnover", 0.0)
     backtest.setdefault("holding_cost_per_exposed_bar", 0.0)
     backtest.setdefault("allow_cost_layering", False)
+    backtest.setdefault("entry_risk_modifiers", {})
     if str(backtest.get("engine", "vectorized")) == "portfolio_barrier":
         backtest.setdefault("open_col", "open")
         backtest.setdefault("high_col", "high")

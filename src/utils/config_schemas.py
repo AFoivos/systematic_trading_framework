@@ -515,6 +515,7 @@ class BacktestConfig:
     strategy_path: dict[str, Any] = field(default_factory=dict)
     dynamic_exits: dict[str, Any] = field(default_factory=dict)
     partial_exits: dict[str, Any] = field(default_factory=dict)
+    entry_risk_modifiers: dict[str, Any] = field(default_factory=dict)
     allow_short: bool = False
     oos_mode: str = "strict"
     execution_price: str = "close_lagged"
@@ -561,6 +562,7 @@ class BacktestConfig:
             "strategy_path",
             "dynamic_exits",
             "partial_exits",
+            "entry_risk_modifiers",
             "allow_short",
             "oos_mode", "execution_price", "execution_delay_bars",
             "estimated_spread_cost_per_unit_turnover", "commission_per_unit_turnover",
@@ -623,6 +625,7 @@ class BacktestConfig:
             strategy_path=dict(data.get("strategy_path", {}) or {}),
             dynamic_exits=dict(data.get("dynamic_exits", {}) or {}),
             partial_exits=dict(data.get("partial_exits", {}) or {}),
+            entry_risk_modifiers=dict(data.get("entry_risk_modifiers", {}) or {}),
             allow_short=bool(data.get("allow_short", False)),
             oos_mode=str(data.get("oos_mode", "strict")),
             execution_price=str(data.get("execution_price", "close_lagged")),
@@ -680,6 +683,7 @@ class BacktestConfig:
             "strategy_path": dict(self.strategy_path),
             "dynamic_exits": dict(self.dynamic_exits),
             "partial_exits": dict(self.partial_exits),
+            "entry_risk_modifiers": dict(self.entry_risk_modifiers),
             "allow_short": self.allow_short,
             "oos_mode": self.oos_mode,
             "execution_price": self.execution_price,

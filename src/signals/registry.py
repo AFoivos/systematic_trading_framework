@@ -24,6 +24,7 @@ from .eurusd_session_bb_reversion import eurusd_session_bb_reversion_signal
 from .forecast_threshold_signal import forecast_threshold_signal
 from .forecast_threshold_candidate_signal import forecast_threshold_candidate_signal
 from .forecast_threshold_hysteresis_signal import forecast_threshold_hysteresis_signal
+from .forecast_threshold_mtf_momentum_gate_signal import forecast_threshold_mtf_momentum_gate_signal
 from .forecast_vol_adjusted_signal import forecast_vol_adjusted_signal
 from .indicator_model_adaptive_pullback import indicator_model_adaptive_pullback_signal
 from .manual_long_model_filter_signal import manual_long_model_filter_signal
@@ -85,6 +86,7 @@ _SIGNAL_COMPONENTS: tuple[tuple[str, SignalFn], ...] = (
     ("forecast_threshold", forecast_threshold_signal),
     ("forecast_threshold_candidate", forecast_threshold_candidate_signal),
     ("forecast_threshold_hysteresis", forecast_threshold_hysteresis_signal),
+    ("forecast_threshold_mtf_momentum_gate", forecast_threshold_mtf_momentum_gate_signal),
     ("forecast_vol_adjusted", forecast_vol_adjusted_signal),
     ("rsi", rsi_strategy),
     ("momentum", momentum_strategy),

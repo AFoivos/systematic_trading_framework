@@ -17,6 +17,7 @@ from src.experiments.orchestration.backtest_stage import (
     _apply_execution_delay_with_oos_boundary,
     build_robustness_diagnostics,
     gate_predictions_to_oos,
+    run_single_asset_backtest,
 )
 from src.experiments.orchestration.consistency import (
     apply_final_trade_accounting,
@@ -126,6 +127,68 @@ def test_strict_oos_rejects_configured_non_oos_prediction() -> None:
 
     with pytest.raises(ValueError, match="non-OOS predictions"):
         gate_predictions_to_oos(frame, cfg=cfg, model_meta={}, signal_col="signal", asset="AAA")
+
+
+def test_manual_barrier_primary_summary_excludes_leading_non_oos_warmup() -> None:
+    index = pd.date_range("2025-01-01", periods=8, freq="30min", tz="UTC")
+    frame = pd.DataFrame(
+        {
+            "open": [100.0, 100.0, 100.0, 100.0, 101.0, 101.0, 101.0, 101.0],
+            "high": [100.0, 100.0, 100.0, 101.0, 101.0, 101.0, 101.0, 101.0],
+            "low": [100.0] * 8,
+            "close": [100.0, 100.0, 100.0, 101.0, 101.0, 101.0, 101.0, 101.0],
+            "close_ret": [0.0, 0.0, 0.0, 0.01, 0.0, 0.0, 0.0, 0.0],
+            "atr_over_price": 0.01,
+            "pred_ret": [float("nan"), float("nan"), 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            "pred_is_oos": [False, False, True, True, True, True, True, True],
+            "signal": [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        },
+        index=index,
+    )
+    cfg = {
+        "model": {
+            "kind": "none",
+            "outputs": {"pred_ret_col": "pred_ret", "pred_is_oos_col": "pred_is_oos"},
+        },
+        "signals": {"params": {"forecast_col": "pred_ret"}},
+        "risk": {
+            "cost_per_turnover": 0.0,
+            "slippage_per_turnover": 0.0,
+            "target_vol": None,
+            "max_leverage": 1.0,
+            "dd_guard": {"enabled": False},
+            "portfolio_guard": {},
+            "sizing": {},
+        },
+        "backtest": {
+            "engine": "manual_barrier",
+            "signal_col": "signal",
+            "returns_col": "close_ret",
+            "returns_type": "simple",
+            "subset": "full",
+            "oos_mode": "strict",
+            "periods_per_year": 252,
+            "take_profit_r": 10.0,
+            "stop_loss_r": 10.0,
+            "risk_per_trade": 0.01,
+            "max_holding_bars": 2,
+            "allow_short": True,
+            "stop_mode": "volatility_stop",
+            "vol_col": "atr_over_price",
+        },
+    }
+
+    result = run_single_asset_backtest("ETHUSD", frame, cfg=cfg, model_meta={})
+    expected = compute_backtest_metrics(
+        net_returns=result.returns.loc[frame["pred_is_oos"]],
+        periods_per_year=252,
+        turnover=result.turnover.loc[frame["pred_is_oos"]],
+        costs=result.costs.loc[frame["pred_is_oos"]],
+        gross_returns=result.gross_returns.loc[frame["pred_is_oos"]],
+    )
+
+    assert result.summary["annualized_return"] == pytest.approx(expected["annualized_return"])
+    assert result.summary["trade_count"] == 1.0
 
 
 def test_canonical_ledger_preserves_bar_profit_factor_and_separates_units() -> None:

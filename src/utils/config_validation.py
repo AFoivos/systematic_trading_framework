@@ -25,6 +25,7 @@ from src.signals.panel.global_session_relay_laggard import GLOBAL_SESSION_RELAY_
 from src.signals.qms_alpha_strategy import validate_qms_alpha_strategy_params
 from src.models.transforms.qms_candidate import validate_qms_candidate_transform_params
 from src.models.transforms.qms_candidate_policy import validate_qms_candidate_policy_params
+from src.risk.entry_modifiers import normalize_entry_risk_modifiers
 
 _RL_SINGLE_ASSET_DQN_KINDS = {"dqn_agent"}
 _RL_PORTFOLIO_DQN_KINDS = {"dqn_portfolio_agent"}
@@ -4555,6 +4556,15 @@ def validate_backtest_block(backtest: dict[str, Any]) -> None:
         _validate_dynamic_exits_block(dynamic_exits)
         partial_exits = backtest.get("partial_exits", {}) or {}
         _validate_partial_exits_block(partial_exits)
+        entry_risk_modifiers = backtest.get("entry_risk_modifiers", {}) or {}
+        if not isinstance(entry_risk_modifiers, dict):
+            raise ConfigValidationError("backtest.entry_risk_modifiers must be a mapping.")
+        try:
+            normalize_entry_risk_modifiers(entry_risk_modifiers)
+        except (TypeError, ValueError) as exc:
+            raise ConfigValidationError(
+                f"backtest.entry_risk_modifiers is invalid: {exc}"
+            ) from exc
         max_entry_gap_atr = backtest.get("max_entry_gap_atr")
         if max_entry_gap_atr is not None:
             if _finite_number(max_entry_gap_atr, field="backtest.max_entry_gap_atr") <= 0.0:
