@@ -1,0 +1,2 @@
+asset,evaluation_rows,correlation,spearman_rank_correlation,calibration_slope,calibration_intercept,directional_accuracy,mean_prediction,mean_realized,monotonicity,monotonic_increasing_steps,quantile_count
+ETHUSD,43800,0.05544287817503983,0.060059118316274855,0.1408455778982347,0.006938249089025636,0.5263470319634703,-0.02219267321105719,0.0038125092055076143,0.9272727272727272,8,10

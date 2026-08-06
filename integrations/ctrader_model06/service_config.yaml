@@ -1,0 +1,18 @@
+server:
+  host: 127.0.0.1
+  port: 8765
+  api_token_env: MODEL06_API_TOKEN
+
+strategy:
+  config_path: config/experiments/foundation_alpha/foundation_alpha_lab/FTMO/yaml_only_risk_overlay_v2/02_conservative_0600_daily015_total075.yaml
+  model_artifact_path: config/experiments/foundation_alpha/best_runs/model06_vwap32_rz128_20260801_191133_164398_3475c432/artifacts/models/model_06_vwap_plus_robust_z.pkl
+
+contract:
+  symbol: ETHUSD
+  timeframe: M30
+  minimum_bars: 1200
+  maximum_bars: 3000
+  max_bar_age_seconds: 5400
+
+logging:
+  output_dir: logs/ctrader_model06_service

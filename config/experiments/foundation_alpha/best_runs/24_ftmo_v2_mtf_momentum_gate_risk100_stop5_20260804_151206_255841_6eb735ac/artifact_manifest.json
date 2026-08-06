@@ -1,0 +1,175 @@
+{
+  "created_at_utc": "2026-08-04T12:12:11.300459+00:00",
+  "files": {
+    "config": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/config_used.yaml",
+      "bytes": 16925,
+      "sha256": "bc9d0de46d34e202df2c104a2058b221a6555c990c2e8e9c28fac74dded406e7"
+    },
+    "costs": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/costs.csv",
+      "bytes": 2625146,
+      "sha256": "572e6446d47b2048c6bda802e4a5258b091813fa1a053891f036dc9ff6b567c7"
+    },
+    "cumulative_cost_drag": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/report_assets/cumulative_cost_drag.png",
+      "bytes": 34720,
+      "sha256": "34991f87a463531c2f25ca58ad4f721220fd1ced176184d22ef2bdde82762ae7"
+    },
+    "cumulative_returns": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/report_assets/cumulative_returns.png",
+      "bytes": 56997,
+      "sha256": "63714784cd32e2c119120365c9620dd7140f93007924800b67f8ee0b019836d2"
+    },
+    "diagnostic_trade_events": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/report_assets/trade_events.csv",
+      "bytes": 90380,
+      "sha256": "101bf0a442fa7e39dd53527f6ae898a85054c015e7aa856d03313ed174d16c83"
+    },
+    "drawdown_curve": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/report_assets/drawdown_curve.png",
+      "bytes": 56139,
+      "sha256": "eb8e68b2c0730fba9d2bc0be5892de5efe100f62f3e30dbfc0c868317ef79b87"
+    },
+    "equity_curve": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/equity_curve.csv",
+      "bytes": 3708984,
+      "sha256": "585567a7c7ff51839afb8d3ad9b7d836dc3e7b1f8a7c11f98e1b5507b0f44566"
+    },
+    "equity_curve_chart": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/report_assets/equity_curve.png",
+      "bytes": 35063,
+      "sha256": "a4e5b08ef88e0bfc7166a9a47c10e18d5321e7c643dd4efdab040bd188906e57"
+    },
+    "feature_importance": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/feature_importance.csv",
+      "bytes": 1471,
+      "sha256": "214ae2b808fb9440c5d76c0b8b7580897a07be5e6d2ef702c4de6ead3e01407c"
+    },
+    "feature_importance_chart": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/report_assets/feature_importance.png",
+      "bytes": 87461,
+      "sha256": "cfe9084c2787e5d90fb092d90a42671d9c010b675a0e768c699a8af700742f19"
+    },
+    "fold_model_summary": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/fold_model_summary.csv",
+      "bytes": 1120,
+      "sha256": "9137081b7c6942b7bcdd0c3082846330db9d1c8f20f648e151c86a111ae4a5c9"
+    },
+    "fold_net_pnl": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/report_assets/fold_net_pnl.png",
+      "bytes": 20894,
+      "sha256": "12b2e3ba2581d03b79f01ec3b339cbb7d79cc2ccea5f56eb9cf3bec6c6f8a712"
+    },
+    "gross_returns": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/gross_returns.csv",
+      "bytes": 2718729,
+      "sha256": "cf7bec3da58e23500047e62f959ad96d6b6f6ee67e977a1fd34fdf8097016785"
+    },
+    "mark_to_market_equity_curve": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/mark_to_market_equity_curve.csv",
+      "bytes": 3708999,
+      "sha256": "a53a63d8f96c2131b86d21c20997724df093fa86aa116cefd88dfeb50273ca09"
+    },
+    "mark_to_market_returns": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/mark_to_market_returns.csv",
+      "bytes": 2718766,
+      "sha256": "668ec268d31fdd4a2ebfddf2e6cb646daac2b68371becbd143594f4579df9e7d"
+    },
+    "missing_value_diagnostics": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/missing_value_diagnostics.json",
+      "bytes": 75,
+      "sha256": "7dce850be8b86dbdecced86830e34766c79c45352b7eedb0012c995efb7bb460"
+    },
+    "model_artifact": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/artifacts/models/ftmo_v2_model07_vwap32_rov64_rz256.pkl",
+      "bytes": 1336621,
+      "sha256": "d4e2b7e3ef5917d4478684be8aaaf6ce20c212272af42b873baf8ea77cb0ae7c"
+    },
+    "model_artifact_manifest": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/artifacts/models/ftmo_v2_model07_vwap32_rov64_rz256.manifest.json",
+      "bytes": 16601,
+      "sha256": "a123c767936689d1060b78e7fec079660e148cbd2df479a0661e3984ac1c6558"
+    },
+    "monthly_returns": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/report_assets/monthly_returns.png",
+      "bytes": 49267,
+      "sha256": "bff5349e4bb29a4164a2fbf2f9a4939fc9563674e9a313c740bc79b23c0d54e3"
+    },
+    "positions": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/positions.csv",
+      "bytes": 2699178,
+      "sha256": "92a099a9e763b1377bf18243c57eb4f70630eca0d64719fff0b0ecd7d50f1984"
+    },
+    "positions_turnover": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/report_assets/positions_turnover.png",
+      "bytes": 64393,
+      "sha256": "f68fc5c04e7ae43be4c20a2c6924a355a83589415c06933d4f69d1d6b1436417"
+    },
+    "prediction_coverage_by_fold": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/report_assets/prediction_coverage_by_fold.png",
+      "bytes": 25473,
+      "sha256": "27d5daea021a2504b7cd16dce5fc94be42cc49b3bd7162adbac743c53085da9f"
+    },
+    "prediction_diagnostics": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/prediction_diagnostics.json",
+      "bytes": 1910,
+      "sha256": "bb031fc9c7831e97f1a03e2917c879fea64bfe4f6fadd354bed305cb874dfec8"
+    },
+    "report": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/report.md",
+      "bytes": 70022,
+      "sha256": "0c280a9432dd7688ecff27d856d2d59b8b834f328879a0746d94bd5d2162ba87"
+    },
+    "returns": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/returns.csv",
+      "bytes": 2718766,
+      "sha256": "668ec268d31fdd4a2ebfddf2e6cb646daac2b68371becbd143594f4579df9e7d"
+    },
+    "rolling_behavior": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/report_assets/rolling_behavior.png",
+      "bytes": 92422,
+      "sha256": "0d62362ae39b932499440ba2a5ff64612c0cc378885ae576cf30925c9f4b8aee"
+    },
+    "rolling_pnl": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/report_assets/rolling_pnl.png",
+      "bytes": 75336,
+      "sha256": "1e34af6a3894de9a13657914da88e84cb74775254a10093525afd6f28942b40f"
+    },
+    "run_metadata": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/run_metadata.json",
+      "bytes": 557891,
+      "sha256": "56e8805378ebc5700548e2724f864306a5976f5f95bbc5363865c2b3734a97c0"
+    },
+    "signal_distribution": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/report_assets/signal_distribution.png",
+      "bytes": 29734,
+      "sha256": "4e98038ab125ee8dffc04ff1eef30b01dbc3559418eadd7dc311a5a44123a882"
+    },
+    "stage_tails": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/stage_tails.json",
+      "bytes": 161,
+      "sha256": "2bda34625b04850c2c773d11e7220b3588cb7c493cc5c556acede1a2af2ca0e8"
+    },
+    "summary": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/summary.json",
+      "bytes": 572594,
+      "sha256": "beb6cf134b276eb87d32fb987821329db4463ebf4007849869ccc57da3354f49"
+    },
+    "trade_events": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/trade_events.csv",
+      "bytes": 165779,
+      "sha256": "e0e6ab492562e2cc784b49b9cc87227accf79a42cad92f111d8b6b9788c86259"
+    },
+    "trades": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/report_assets/trades.csv",
+      "bytes": 148762,
+      "sha256": "5f6f8e0d2290c802450c26cad48d2e5f11da4eec82fc313fa333ba2f87976a22"
+    },
+    "turnover": {
+      "path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/turnover.csv",
+      "bytes": 2623545,
+      "sha256": "89273fbd6cd48e311087dcb25efcb68b7bd3b8196c2856f2b471d1870c96a40c"
+    }
+  }
+}

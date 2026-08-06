@@ -1,0 +1,5 @@
+{
+  "warnings": [
+    "probability_trade_quality expected_r_after_cost skipped: cost columns are not in R units"
+  ]
+}

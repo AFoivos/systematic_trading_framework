@@ -178,3 +178,6 @@ reports/
 !reports/.gitkeep
 
 data/raw/dukascopy_30m_clean/btcusd_1m.csv
+
+tmp
+data

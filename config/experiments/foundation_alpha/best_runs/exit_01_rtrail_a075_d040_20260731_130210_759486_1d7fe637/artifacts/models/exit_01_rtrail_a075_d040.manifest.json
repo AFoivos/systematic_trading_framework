@@ -1,0 +1,479 @@
+{
+  "bundle_version": 2,
+  "created_at_utc": "2026-07-31T10:02:16.336201+00:00",
+  "feature_cols": [
+    "close_ret",
+    "lag_close_ret_1",
+    "lag_close_ret_2",
+    "lag_close_ret_4",
+    "lag_close_ret_8",
+    "lag_close_ret_16",
+    "lag_close_ret_24",
+    "lag_close_ret_48",
+    "ret_1",
+    "ret_4",
+    "ret_8",
+    "ret_16",
+    "ret_24",
+    "ret_48",
+    "rolling_return_24",
+    "rolling_return_48",
+    "vol_rolling_24",
+    "vol_rolling_48",
+    "vol_rolling_96",
+    "vol_rolling_192",
+    "atr_48",
+    "atr_over_price_48",
+    "atr_pct",
+    "atr_pct_rank_192",
+    "ema_trend_48_192",
+    "close_over_bb_upper_192",
+    "close_over_bb_mid_192",
+    "bollinger_percent_b",
+    "bollinger_bandwidth",
+    "bollinger_bandwidth_rank_192",
+    "ema_alignment_score",
+    "distance_from_ema24_atr",
+    "distance_from_ema96_atr",
+    "mama_minus_fama_over_atr",
+    "close_minus_decycler_over_atr",
+    "instantaneous_trendline_slope_over_atr",
+    "decycler_slope_over_atr",
+    "frama_slope_over_atr",
+    "supersmoother_slope_over_atr",
+    "roofing_filter_over_atr",
+    "dominant_cycle_phase_normalized",
+    "body_ratio",
+    "upper_wick_ratio",
+    "lower_wick_ratio",
+    "close_location",
+    "range_to_atr"
+  ],
+  "feature_order": [
+    "close_ret",
+    "lag_close_ret_1",
+    "lag_close_ret_2",
+    "lag_close_ret_4",
+    "lag_close_ret_8",
+    "lag_close_ret_16",
+    "lag_close_ret_24",
+    "lag_close_ret_48",
+    "ret_1",
+    "ret_4",
+    "ret_8",
+    "ret_16",
+    "ret_24",
+    "ret_48",
+    "rolling_return_24",
+    "rolling_return_48",
+    "vol_rolling_24",
+    "vol_rolling_48",
+    "vol_rolling_96",
+    "vol_rolling_192",
+    "atr_48",
+    "atr_over_price_48",
+    "atr_pct",
+    "atr_pct_rank_192",
+    "ema_trend_48_192",
+    "close_over_bb_upper_192",
+    "close_over_bb_mid_192",
+    "bollinger_percent_b",
+    "bollinger_bandwidth",
+    "bollinger_bandwidth_rank_192",
+    "ema_alignment_score",
+    "distance_from_ema24_atr",
+    "distance_from_ema96_atr",
+    "mama_minus_fama_over_atr",
+    "close_minus_decycler_over_atr",
+    "instantaneous_trendline_slope_over_atr",
+    "decycler_slope_over_atr",
+    "frama_slope_over_atr",
+    "supersmoother_slope_over_atr",
+    "roofing_filter_over_atr",
+    "dominant_cycle_phase_normalized",
+    "body_ratio",
+    "upper_wick_ratio",
+    "lower_wick_ratio",
+    "close_location",
+    "range_to_atr"
+  ],
+  "final_refit": {
+    "enabled": true,
+    "labeled_rows": 108934,
+    "model_train_rows": 108598,
+    "prob_scale": 2.5284420810393855,
+    "target_horizon": 24,
+    "train_end_position": 108980,
+    "train_end_timestamp": "2026-06-09T11:30:00",
+    "train_rows_raw": 108981,
+    "train_start_position": 0,
+    "train_start_timestamp": "2020-01-01T21:00:00"
+  },
+  "model_kind": "lightgbm_regressor",
+  "model_name": "exit_01_rtrail_a075_d040",
+  "model_path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_01_rtrail_a075_d040_20260731_130210_759486_1d7fe637/artifacts/models/exit_01_rtrail_a075_d040.pkl",
+  "pred_is_oos_col": "pred_is_oos",
+  "pred_label_col": null,
+  "pred_prob_col": "pred_prob",
+  "pred_ret_col": "pred_ret",
+  "prob_scale": 2.5284420810393855,
+  "reproducibility": {
+    "config_hash_sha256": "64bf3f60401bb4d0a6936c91967f70610d32bd99271063169aad4ccff35f0dce",
+    "config_path": "/workspace/config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/01_exit_research/exit_01_rtrail_a075_d040.yaml",
+    "data_hash_sha256": "dc7e044145cad2f3c31c37fc9fc17f2cd463addbb2a9b04e09c650b40574c6bb",
+    "environment": {
+      "package_versions": {
+        "gymnasium": "1.2.3",
+        "lightgbm": "4.6.0",
+        "momentfm": "0.1.5",
+        "numpy": "1.26.4",
+        "pandas": "2.2.2",
+        "pyyaml": "6.0.1",
+        "requests": "2.32.3",
+        "scikit-learn": "1.5.1",
+        "stable-baselines3": "2.7.1",
+        "torch": "2.10.0",
+        "websockets": "16.1",
+        "xgboost": "3.1.3",
+        "yfinance": "1.1.0"
+      },
+      "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.41",
+      "python_executable": "/usr/local/bin/python",
+      "python_version": "3.11.15 (main, Mar 16 2026, 23:07:56) [GCC 14.2.0]"
+    },
+    "git": {
+      "branch": "main",
+      "commit": "7c2a73a2501d9733ff02d6e53493a89e64604eee",
+      "is_dirty": true,
+      "source": "git_cli",
+      "source_identity_complete": true,
+      "worktree_files": [
+        {
+          "bytes": 15567,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/01_exit_research/exit_00_path_engine_baseline.yaml",
+          "sha256": "b98502d49afab8e0a0c9246be303324b047e9346143dc8100b4082db3f14defd"
+        },
+        {
+          "bytes": 15695,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/01_exit_research/exit_01_rtrail_a075_d040.yaml",
+          "sha256": "c8632ec3d73c58a64fe4b3bd60be6ddc3abee7709e5df2ed797b708dd5b7ee04"
+        },
+        {
+          "bytes": 15703,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/01_exit_research/exit_02_rtrail_a075_d050.yaml",
+          "sha256": "638eab91c680a6b4fb458f2b07b7906b348f9013581365872dab3ee1f96be51b"
+        },
+        {
+          "bytes": 15689,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/01_exit_research/exit_03_rtrail_a100_d040.yaml",
+          "sha256": "9d15f9e7890cc9a6f564eafad92ee4ba1259f1992dd3531109d7433b377cf48e"
+        },
+        {
+          "bytes": 15695,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/01_exit_research/exit_04_rtrail_a100_d050.yaml",
+          "sha256": "5256677c70923f386457ee822d3574b31525136ade3601d53299758e88dfb56e"
+        },
+        {
+          "bytes": 15688,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/01_exit_research/exit_05_rtrail_a100_d075.yaml",
+          "sha256": "444af5955ef7cbf09ea368ec68ed61ebf4960de08ab6417a3a4885b42436ccbc"
+        },
+        {
+          "bytes": 15689,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/01_exit_research/exit_06_rtrail_a125_d050.yaml",
+          "sha256": "f20952bbab3f85df9595215dedc30a8a2b28e6745d3600cf7a0459363b16c722"
+        },
+        {
+          "bytes": 15696,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/01_exit_research/exit_07_rtrail_a125_d075.yaml",
+          "sha256": "e612103e66e3b93c8d357cb0456f7799066d5b96e3adcf66061b46e8f782604c"
+        },
+        {
+          "bytes": 15525,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/02_frozen_model_additions/model_01_return_over_vol48.yaml",
+          "sha256": "a714b076e50225ba8a7487518537eb505d11a9e3a7e3c6087202b7c5fb734c3d"
+        },
+        {
+          "bytes": 15528,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/02_frozen_model_additions/model_02_robust_z_return192.yaml",
+          "sha256": "e3e04bb25b3742851952237c15d6b2a60f22699616da6a114ea128b64656339f"
+        },
+        {
+          "bytes": 15643,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/02_frozen_model_additions/model_03_vwap_distance48.yaml",
+          "sha256": "d520493522875c6b1fc286cfd65e811e8d7d41f5be353515b8eba1bb72936935"
+        },
+        {
+          "bytes": 15815,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/02_frozen_model_additions/model_04_return_over_vol48_plus_robust_z.yaml",
+          "sha256": "b4377c8a4b9ede3244f8b890c327640003390a86e51747bed2e8573eedde55fe"
+        },
+        {
+          "bytes": 15955,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/02_frozen_model_additions/model_05_vwap_plus_return_over_vol48.yaml",
+          "sha256": "1cf909d40df2aa070e5137e6f5f63673a715675979de1b5227bf05f50752c2e3"
+        },
+        {
+          "bytes": 15902,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/02_frozen_model_additions/model_06_vwap_plus_robust_z.yaml",
+          "sha256": "a659d562934c3e23fe6f2e5cf76bf0e5188431e27309351f03cfe07b30aba71d"
+        },
+        {
+          "bytes": 16225,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/02_frozen_model_additions/model_07_vwap_plus_return_over_vol48_plus_robust_z.yaml",
+          "sha256": "be15b0f9f036340f1931077730d1bd63d1f5dffe590213f816cece441b7b422c"
+        },
+        {
+          "bytes": 16594,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/03_volatility_stationarity/volstat_01_add_rank_bundle.yaml",
+          "sha256": "7c56a185ea2fb28d8a15b801cb098a4113b35dbbfcab4838cf976f7f7341ac25"
+        },
+        {
+          "bytes": 17011,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/03_volatility_stationarity/volstat_02_replace_raw_volatility.yaml",
+          "sha256": "8a90c35462af2fa1716f918e2b54fbf4bb07c375d22477f65af1cd3bb614d6df"
+        },
+        {
+          "bytes": 16826,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/03_volatility_stationarity/volstat_03_hybrid_long_vol_plus_ranks.yaml",
+          "sha256": "ecd2067f08c7f63f1d0998a85f767a2c5b4b73094de3a88023a15e089358bfdc"
+        },
+        {
+          "bytes": 15675,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/04_trend_quality/trendq_01_efficiency_24_48_96.yaml",
+          "sha256": "17b2e49cb123a2add43631629169f240083bd3d31f594f552d0f191dd83b5824"
+        },
+        {
+          "bytes": 15563,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/04_trend_quality/trendq_02_signed_efficiency_48_96.yaml",
+          "sha256": "6d7926fd8e1c6af86983ff1e6959a68955bcaabe398e44c19db7c18244bf3663"
+        },
+        {
+          "bytes": 15889,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/04_trend_quality/trendq_03_ema_trend_slope_r2.yaml",
+          "sha256": "96275c5840badf757600c0e2124f47c360f85a746dbf8ee146cbc0cb11caa423"
+        },
+        {
+          "bytes": 15569,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/05_return_dynamics/retdyn_01_autocorrelation_48_192.yaml",
+          "sha256": "8e9391e2ad912076d416983160015647a25ea50eaba5bdbcd4b4a7a03be96172"
+        },
+        {
+          "bytes": 15840,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/05_return_dynamics/retdyn_02_robust_z_plus_autocorrelation.yaml",
+          "sha256": "37264db68ce8970fd2b7f9e9e32135077b1b47be246e4a3502f1a0459f958e85"
+        },
+        {
+          "bytes": 15867,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/05_return_dynamics/retdyn_03_return_over_vol_plus_autocorrelation.yaml",
+          "sha256": "7b10031f61196f089a26703649b53b141b45059ec5d550ce6ca4dce2daa5e3c1"
+        },
+        {
+          "bytes": 18737,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/06_combined_primary/combined_01_primary_hypothesis.yaml",
+          "sha256": "b46e315f5b016a05dfd4e6196901f422c20a98e820217a1f777c3fadbbfe0bdd"
+        },
+        {
+          "bytes": 5536,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/run_commands.txt",
+          "sha256": "91804e25e1ae1906b14629dfd75545b72c39c99f9073ed00b4089e8e1fc92525"
+        },
+        {
+          "exists": false,
+          "path": "scripts/analyze_ftmo_relative_value_spread.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/analyze_market_making_run.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/analyze_v37_rolling_random_bootstrap.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/apply_ppo_direction_baseline_v2.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/audit_dukascopy_30m_panel_coverage.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/audit_matb_events.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/build_ethusd_path_dependent_target_report.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/build_market_making_moment_dataset.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/build_matb_research_artifacts.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/examples/quant_market_state_example.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/generate_component_catalog_appendices.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/generate_lab_component_yaml_reference.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/generate_sparse_trend_vwap_expected_r_suite.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/generate_us100_trend_vwap_expected_r_ladder.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/qfs_diagnostics_leaderboard.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/run_bybit_demo_market_making.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/run_c2_scalp_diagnostic_grid.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/run_ethusd_exit_policy_comparison.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/run_ethusd_meta_model_comparison.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/run_fresh_alpha_discovery.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/run_funding_carry.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/run_kraken_futures_demo_mm.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/run_market_making_moment_experiment.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/run_market_making_paper.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/run_market_making_pipeline.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/run_market_making_strategy_suite.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/run_matb_declared_trials.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/run_mt5_demo_bot.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/run_trial0041_alpha_lab.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/run_trial0041_locked_confirmation.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/run_us100_trend_vwap_expected_r_ladder.py"
+        },
+        {
+          "exists": false,
+          "path": "scripts/visualize_dukascopy_30m_tft_features.py"
+        },
+        {
+          "bytes": 35829,
+          "exists": true,
+          "path": "src/backtesting/manual_barrier.py",
+          "sha256": "66188b104add0c639b2ca316a6c7633fa8afe881fd74abb58431a6c6de9e6f42"
+        },
+        {
+          "bytes": 311948,
+          "exists": true,
+          "path": "src/utils/config_validation.py",
+          "sha256": "4f7403b297c3487ca677e83084028cbcc46a0dd5ee94ce1623675717fe8f7965"
+        },
+        {
+          "bytes": 68838,
+          "exists": true,
+          "path": "src/utils/trade_path.py",
+          "sha256": "ff131062ebb02b3ecda99bbf45dee861be9e3a12656d7e2977034d93b1eff9a6"
+        },
+        {
+          "bytes": 3003,
+          "exists": true,
+          "path": "tests/backtesting/test_manual_barrier_r_trailing.py",
+          "sha256": "5cee3a0fc8ad8df3f8b1504ee406668ca699d7112b7f5a4df1fe549473ca1cae"
+        },
+        {
+          "bytes": 4670,
+          "exists": true,
+          "path": "tests/utils/test_component_catalog_documentation.py",
+          "sha256": "4cb2be508d1a84ee9d727869f8db139d7deabfc28953a1aa3cdd9d67fef26bf4"
+        }
+      ],
+      "worktree_state_sha256": "2412c5dc2aa76aa1b9c66297ba0979f8ec97644dee76977fcd400d1a806132a3"
+    },
+    "run_created_at_utc": "2026-07-31T10:02:10.704379+00:00"
+  },
+  "task_type": "regression",
+  "training_range": {
+    "end_position": 108980,
+    "end_timestamp": "2026-06-09T11:30:00",
+    "raw_rows": 108981,
+    "rows": 108598,
+    "start_position": 0,
+    "start_timestamp": "2020-01-01T21:00:00"
+  }
+}

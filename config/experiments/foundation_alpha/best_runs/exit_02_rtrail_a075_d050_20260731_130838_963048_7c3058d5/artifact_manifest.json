@@ -1,0 +1,340 @@
+{
+  "created_at_utc": "2026-07-31T10:09:03.273758+00:00",
+  "files": {
+    "config": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/config_used.yaml",
+      "bytes": 16337,
+      "sha256": "d9a02e25db600c580a167f38f3b4d9e1f356f85ed8373a3d25e0026ff0ae65dc"
+    },
+    "costs": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/costs.csv",
+      "bytes": 2646897,
+      "sha256": "b09a427dc088d4992dccf6d948a271becf1311f519ea0e929a8c9960f7ed769d"
+    },
+    "counterfactual_exit_summary": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/report_assets/counterfactual_exit_summary.csv",
+      "bytes": 2597,
+      "sha256": "597cc198731ca21a2169f0391589d95d3554216ca26a3b182721aa9005f32229"
+    },
+    "counterfactual_exit_trades": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/report_assets/counterfactual_exit_trades.csv",
+      "bytes": 319139,
+      "sha256": "eef510ffd2e51886ac6e417a0a231bc12e35c0b92839266bcc78a2a248d428b2"
+    },
+    "cumulative_cost_drag": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/report_assets/cumulative_cost_drag.png",
+      "bytes": 35076,
+      "sha256": "1c27d412e10345f30ad5cdaef1b497df8f1b751f92ae37cd931d29c6ad280833"
+    },
+    "cumulative_returns": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/report_assets/cumulative_returns.png",
+      "bytes": 71628,
+      "sha256": "3c9a5b44ed47f27c6889e96cc00192e8f7a1a5183baf42c10f75a24e8adb31f4"
+    },
+    "diagnostic_trade_events": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/report_assets/trade_events.csv",
+      "bytes": 322371,
+      "sha256": "2f963f139f56134f69bcd5ba676a6ab514a73d8a0f6aead6c5c2c81f6b03ef8e"
+    },
+    "diagnostics_cost_vs_gross_pnl": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/artifacts/diagnostics/cost_vs_gross_pnl.png",
+      "bytes": 131447,
+      "sha256": "5209416fd4599c5080cd171263d5d6a81a808016a5a2a6a5d40101c08d812045"
+    },
+    "diagnostics_lgbm_gain_importance": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/artifacts/diagnostics/lgbm_gain_importance.png",
+      "bytes": 88605,
+      "sha256": "8bfaf4e6990451d995d889465c523c720a8d09a35202a34621fd80d130b62c7a"
+    },
+    "diagnostics_lgbm_split_importance": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/artifacts/diagnostics/lgbm_split_importance.png",
+      "bytes": 88334,
+      "sha256": "137596b2c836c7bf547fb7173f79c1bf159ad49d0d76f91c7c6e7bd339fd8240"
+    },
+    "diagnostics_lightgbm_importance": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/artifacts/diagnostics/lightgbm_importance.csv",
+      "bytes": 61526,
+      "sha256": "b36a0ff11fff0fbd93035c763e5831e955276beba5768f1b1a004b68fd16b44b"
+    },
+    "diagnostics_prediction_autocorrelation": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/artifacts/diagnostics/prediction_autocorrelation.png",
+      "bytes": 21698,
+      "sha256": "75e3785a052ee9277e48cc3a8a867c8dbe4d690d386326282d3f698062b45291"
+    },
+    "diagnostics_prediction_distribution": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/artifacts/diagnostics/prediction_distribution.csv",
+      "bytes": 3636856,
+      "sha256": "215b0f6c4491cda1321638950a75da4e67b4a6d313e8fae4a130ba0b5d648b1d"
+    },
+    "diagnostics_prediction_histogram": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/artifacts/diagnostics/prediction_histogram.png",
+      "bytes": 32493,
+      "sha256": "a9a5f405537daf687e71e7337bfa43808245da4297446f2f1378f8c3d50ce7f9"
+    },
+    "diagnostics_prediction_metrics": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/artifacts/diagnostics/prediction_metrics.csv",
+      "bytes": 388,
+      "sha256": "efb042810dfecfdad1222d3c09adb9d229d25fbe449339c62d44de12e6ed659b"
+    },
+    "diagnostics_prediction_quantiles": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/artifacts/diagnostics/prediction_quantiles.png",
+      "bytes": 50546,
+      "sha256": "68f98a432cbf9202b443139ece08da2059a38773f86ba86b908b71ff10b0fc03"
+    },
+    "diagnostics_prediction_timeseries": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/artifacts/diagnostics/prediction_timeseries.png",
+      "bytes": 350842,
+      "sha256": "1b0078127fb1a86ce2a02bb236033b17ecc8af275b7e3db27d86a41958021228"
+    },
+    "diagnostics_prediction_vs_realized": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/artifacts/diagnostics/prediction_vs_realized.png",
+      "bytes": 287518,
+      "sha256": "0e1dc3e81e695a28b1b45023ba4c614e0ff815df9b0a2b1c3341bf6974a77512"
+    },
+    "diagnostics_regime_diagnostics": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/artifacts/diagnostics/regime_diagnostics.csv",
+      "bytes": 377,
+      "sha256": "59ec3c1a9bde4c1a2350e72b40a14dd06e7a311eb343f0fc7a97d895f8f3a1b7"
+    },
+    "diagnostics_residual_histogram": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/artifacts/diagnostics/residual_histogram.png",
+      "bytes": 30609,
+      "sha256": "62ce0bff6d724759cd8a9a14a727791ef1823cebd8268a1bace1227e50add653"
+    },
+    "diagnostics_summary": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/artifacts/diagnostics/summary.json",
+      "bytes": 4491,
+      "sha256": "afb790fe78395e708dd6269484f7d14514f5d4cb381c0f73d32282b235ba47ba"
+    },
+    "diagnostics_turnover_cost_timeseries": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/artifacts/diagnostics/turnover_cost_timeseries.csv",
+      "bytes": 9758016,
+      "sha256": "5e30cf8a3e1cf0d7a8a13ea1f94a9a19d4e9ff4a19da8610d0f43aa3b97f7a20"
+    },
+    "diagnostics_turnover_timeseries": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/artifacts/diagnostics/turnover_timeseries.png",
+      "bytes": 58270,
+      "sha256": "6765c03e0bd2a830c3d0eeccfa5529a307bd3309e4045f05d8e35a8c12e71115"
+    },
+    "diagnostics_turnover_vs_net_pnl": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/artifacts/diagnostics/turnover_vs_net_pnl.png",
+      "bytes": 118430,
+      "sha256": "2d8c75868978cc29ba84177ff885fd7004ef88acf2917a78f53d0ae9202c69cc"
+    },
+    "drawdown_curve": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/report_assets/drawdown_curve.png",
+      "bytes": 55802,
+      "sha256": "7b86f2466ffc0cf158615c44771d6aea17d290f85ad629ffff67ff6bd56db6d1"
+    },
+    "equity_curve": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/equity_curve.csv",
+      "bytes": 3713832,
+      "sha256": "ee0b39a6be685a473c270f8e15e973d613737c4088b2fb9637122a4a0bf7f3e3"
+    },
+    "equity_curve_chart": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/report_assets/equity_curve.png",
+      "bytes": 45579,
+      "sha256": "b837d10511478f0a7cf0928f2a2237fcf9c404e22a8675196950c8c5e79327f0"
+    },
+    "feature_importance": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/feature_importance.csv",
+      "bytes": 1469,
+      "sha256": "c85f2161507379009b2bc37e9fc4314af07326c1d20ace0dc6c92195f0e51ccb"
+    },
+    "feature_importance_chart": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/report_assets/feature_importance.png",
+      "bytes": 87487,
+      "sha256": "963b6c0d4e382afa3c0afdbcd35fe27b3d97af447ff221f645985cd2d67d4268"
+    },
+    "fold_backtest_diagnostics": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/artifacts/diagnostics/fold_backtest_diagnostics.csv",
+      "bytes": 5879,
+      "sha256": "b666384d21780052b63efa9cc336319ca582c8f5f9550ee61f7df5ed683dee99"
+    },
+    "fold_cost_to_gross_pnl": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/report_assets/fold_cost_to_gross_pnl.png",
+      "bytes": 25576,
+      "sha256": "291219063701b353ec778c653ba935f84ff35439cedc69fca78b5aa468f48328"
+    },
+    "fold_cumulative_return": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/report_assets/fold_cumulative_return.png",
+      "bytes": 28406,
+      "sha256": "557e7605c9d611e551b2f44b764df445e2da08462329220d3340b0b1ad163186"
+    },
+    "fold_model_summary": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/fold_model_summary.csv",
+      "bytes": 1119,
+      "sha256": "8a319ea8703a2ccd3151b12ba8a288165f8c780b2464e38dc8498723b6e6c538"
+    },
+    "fold_net_pnl": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/report_assets/fold_net_pnl.png",
+      "bytes": 25933,
+      "sha256": "fa7603a74eddb75acb9cc9e9a60b5c39f0a517a9c02ae3a0b9932b243c9ce947"
+    },
+    "fold_sharpe": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/report_assets/fold_sharpe.png",
+      "bytes": 17585,
+      "sha256": "747337b1affe3efd18ccec2576eb0508c01174d21c0198c535b82d41aca16635"
+    },
+    "forecast_alpha_diagnostics_summary": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/artifacts/diagnostics/forecast_alpha_diagnostics_summary.json",
+      "bytes": 23235,
+      "sha256": "f2f9503a668f4d378f024709f7be964cf093cb9890f05b5e267409aaddfd7f23"
+    },
+    "forecast_baselines": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/artifacts/diagnostics/forecast_baselines.csv",
+      "bytes": 3523,
+      "sha256": "8fd4f7c80e36953c11313094060437be0ceafacdbf9c62e2f901f658c9ff0d9c"
+    },
+    "gross_returns": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/gross_returns.csv",
+      "bytes": 2704982,
+      "sha256": "af640ae0efeabe1dee8b6926c2a75f051849f4bf6227dcec8cc37b02a1a351c8"
+    },
+    "mark_to_market_equity_curve": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/mark_to_market_equity_curve.csv",
+      "bytes": 3713847,
+      "sha256": "f3ed174c3a344d4a328cafd6b7f48dc99a5e09eb9b2f08a81f0ceae2e436f5e4"
+    },
+    "mark_to_market_returns": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/mark_to_market_returns.csv",
+      "bytes": 2705632,
+      "sha256": "69f147ec7c2439e247ddd1dd949754941988c0907fea625598250789aebec378"
+    },
+    "missing_value_diagnostics": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/missing_value_diagnostics.json",
+      "bytes": 75,
+      "sha256": "7dce850be8b86dbdecced86830e34766c79c45352b7eedb0012c995efb7bb460"
+    },
+    "model_artifact": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/artifacts/models/exit_02_rtrail_a075_d050.pkl",
+      "bytes": 1331421,
+      "sha256": "2c99b0d344a30b0a4df936877ee60a3c5b327622850a9db44a7b4adefd0f3ff7"
+    },
+    "model_artifact_manifest": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/artifacts/models/exit_02_rtrail_a075_d050.manifest.json",
+      "bytes": 17817,
+      "sha256": "25efe5f459e62942abe6635bc26799de5bbaff2e69c8a228e2f31a1c028fc9f3"
+    },
+    "monitoring": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/monitoring_report.json",
+      "bytes": 24501,
+      "sha256": "e02e059474dabbc425f3a491112f7703958635472f1ec6b54bc0e6546282e512"
+    },
+    "monthly_returns": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/report_assets/monthly_returns.png",
+      "bytes": 50461,
+      "sha256": "d57658376f49c78080756381814e8335a7484a3e75c996ab5558d8a160c8185e"
+    },
+    "positions": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/positions.csv",
+      "bytes": 2672300,
+      "sha256": "7d95c3e347216781c4a476a52fccd5df8c85e458c63aece42b146550264b9fe3"
+    },
+    "positions_turnover": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/report_assets/positions_turnover.png",
+      "bytes": 69303,
+      "sha256": "221b2e0b72a4a3ff60f8511df0f43b597d1d74442a41eff014496f23bcf3f477"
+    },
+    "prediction_coverage_by_fold": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/report_assets/prediction_coverage_by_fold.png",
+      "bytes": 25473,
+      "sha256": "27d5daea021a2504b7cd16dce5fc94be42cc49b3bd7162adbac743c53085da9f"
+    },
+    "prediction_diagnostics": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/prediction_diagnostics.json",
+      "bytes": 1909,
+      "sha256": "0d7ec0f1a9f59edd615ee3f0e13934ef51b3c0582399153cb2bb60fa4137ed14"
+    },
+    "probability_trade_quality": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/report_assets/probability_trade_quality.csv",
+      "bytes": 2510,
+      "sha256": "b7c5a22258d4aeb7f39eb1c8272af495000d3e53ef8ce95a92139e65954995ba"
+    },
+    "probability_trade_quality_diagnostics": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/report_assets/probability_trade_quality_diagnostics.json",
+      "bytes": 118,
+      "sha256": "10bb2a0a32f918f33c25aed62a08e18d725a113c017b148aed12b5bd8ded1707"
+    },
+    "regime_performance": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/artifacts/diagnostics/regime_performance.csv",
+      "bytes": 4518,
+      "sha256": "009aecb9e52c3846c7da0fc7085a58292746acd9c4144d7557a5bb08cc2277a3"
+    },
+    "report": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/report.md",
+      "bytes": 107373,
+      "sha256": "77228a466421da64c17be37fc54c93a7630d4c2d16fd13d2910b769e8c601965"
+    },
+    "returns": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/returns.csv",
+      "bytes": 2705632,
+      "sha256": "69f147ec7c2439e247ddd1dd949754941988c0907fea625598250789aebec378"
+    },
+    "rolling_behavior": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/report_assets/rolling_behavior.png",
+      "bytes": 97954,
+      "sha256": "6c6cb60f83ed40fb61cdc558318beadb9aadf2d1f0e4c2ece36b3acb349dc7fa"
+    },
+    "rolling_pnl": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/report_assets/rolling_pnl.png",
+      "bytes": 79851,
+      "sha256": "5020f4c7dc8a577821fc0255045574f690c9a5e88520d27b167cdff92e728eda"
+    },
+    "run_metadata": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/run_metadata.json",
+      "bytes": 531825,
+      "sha256": "7866d7faca8d959c100b25fa30259e16a4d1e764ec6f5a3d046c836bfd13e8a4"
+    },
+    "signal_distribution": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/report_assets/signal_distribution.png",
+      "bytes": 29808,
+      "sha256": "639ebdd4284d206d1f8d2d64cc785cda707964833ccfa06628168c3d293c3185"
+    },
+    "stage_tails": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/stage_tails.json",
+      "bytes": 161,
+      "sha256": "2bda34625b04850c2c773d11e7220b3588cb7c493cc5c556acede1a2af2ca0e8"
+    },
+    "summary": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/summary.json",
+      "bytes": 675565,
+      "sha256": "35ed8a7c15b20ff58110ee5dbcb9327e2367e8d1f2cab7f5218d0fba5f9aacdd"
+    },
+    "trade_events": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/trade_events.csv",
+      "bytes": 664220,
+      "sha256": "0e30168b9645848b8b60917d456724d1468e610d254565e93f449b64ceb0f31a"
+    },
+    "trade_path_diagnostics": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/report_assets/trade_path_diagnostics.json",
+      "bytes": 69,
+      "sha256": "9567ccba3e5ee68d3a3aae9178a2165c3d4f9d43b0b8e6dc40ccfe858f33e10d"
+    },
+    "trade_path_summary": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/report_assets/trade_path_summary.json",
+      "bytes": 8375,
+      "sha256": "8a1f89d92a8f7615253e48c4334b08cf18265a550c5adcd08f8d67e664bc521b"
+    },
+    "trade_paths": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/report_assets/trade_paths.parquet",
+      "bytes": 383666,
+      "sha256": "e6be5a672bd0debac0665299ada603479c99512a3417a4cba12a70d3182a3b15"
+    },
+    "trades": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/report_assets/trades.csv",
+      "bytes": 598972,
+      "sha256": "952e8491a13c3bbedbe24abb0f3cdec852bef9d6667ea831468911dd778d7944"
+    },
+    "trades_enriched": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/report_assets/trades_enriched.csv",
+      "bytes": 752474,
+      "sha256": "05df48dbeae745eeac8b159a0b31735c123bf25a280aebbbb490298cfa5ed298"
+    },
+    "turnover": {
+      "path": "/workspace/logs/experiments/foundation_alpha/trial0041_full_exit_model_research/exit_02_rtrail_a075_d050_20260731_130838_963048_7c3058d5/turnover.csv",
+      "bytes": 2641320,
+      "sha256": "e8afc5f687bcf7e197a92bd926c767aefa4268b576faa0136093dfe59196de8e"
+    }
+  }
+}

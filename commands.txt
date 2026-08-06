@@ -60,10 +60,8 @@ python -m src.experiments.runner docs/examples/minimal_experiment.yaml
 Το αντίστοιχο Docker command:
 
 ```bash
-docker compose run --rm app python -m src.experiments.runner config/experiments/rl/btcusd_1m_ppo_direction_baseline_v2_gross_robust.yaml
-docker compose run --rm app python scripts\prepare_ftmo_relative_value_data.py
-
-python -m src.experiments.runner config/experiments/lab/feature_signal_target_lab.yaml
+docker compose run --rm app python -m src.experiments.runner config/experiments/btcusd_dual_trend_ftmo/btcusd_1m_dual_trend_ftmo_22_16_v1.yaml
+docker compose run --rm app python -m src.experiments.runner config/experiments/eurusd_ftmo_ml_v2/eurusd_ftmo_ml_v2_reconstruction.yaml
 ```
 
 Αντιπροσωπευτικά ενεργά configs:
@@ -282,4 +280,13 @@ PowerShell path discovery:
 ```powershell
 Get-ChildItem -Recurse config\experiments -Filter *.yaml
 Get-ChildItem -Recurse config\optuna -Filter *.yaml
+```
+
+## 11. cTrader intergration 
+
+```powershell
+source .venv-ctrader/bin/activate
+export MODEL06_API_TOKEN='model06-local-demo-2026'
+python -m integrations.ctrader_model06.service \
+  --config integrations/ctrader_model06/service_config.yaml
 ```

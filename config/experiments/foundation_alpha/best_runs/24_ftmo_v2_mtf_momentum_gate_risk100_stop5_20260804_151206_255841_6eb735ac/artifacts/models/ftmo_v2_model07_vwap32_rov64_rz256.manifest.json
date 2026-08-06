@@ -1,0 +1,454 @@
+{
+  "bundle_version": 2,
+  "created_at_utc": "2026-08-04T12:12:07.668466+00:00",
+  "feature_cols": [
+    "close_ret",
+    "lag_close_ret_1",
+    "lag_close_ret_2",
+    "lag_close_ret_4",
+    "lag_close_ret_8",
+    "lag_close_ret_16",
+    "lag_close_ret_24",
+    "lag_close_ret_48",
+    "ret_1",
+    "ret_4",
+    "ret_8",
+    "ret_16",
+    "ret_24",
+    "ret_48",
+    "rolling_return_24",
+    "rolling_return_48",
+    "vol_rolling_24",
+    "vol_rolling_48",
+    "vol_rolling_96",
+    "vol_rolling_192",
+    "atr_48",
+    "atr_over_price_48",
+    "atr_pct",
+    "atr_pct_rank_192",
+    "ema_trend_48_192",
+    "close_over_bb_upper_192",
+    "close_over_bb_mid_192",
+    "bollinger_percent_b",
+    "bollinger_bandwidth",
+    "bollinger_bandwidth_rank_192",
+    "ema_alignment_score",
+    "distance_from_ema24_atr",
+    "distance_from_ema96_atr",
+    "mama_minus_fama_over_atr",
+    "close_minus_decycler_over_atr",
+    "instantaneous_trendline_slope_over_atr",
+    "decycler_slope_over_atr",
+    "frama_slope_over_atr",
+    "supersmoother_slope_over_atr",
+    "roofing_filter_over_atr",
+    "dominant_cycle_phase_normalized",
+    "body_ratio",
+    "upper_wick_ratio",
+    "lower_wick_ratio",
+    "close_location",
+    "range_to_atr",
+    "close_over_vwap_32",
+    "close_ret_over_vol_64",
+    "close_ret_robust_z_256"
+  ],
+  "feature_order": [
+    "close_ret",
+    "lag_close_ret_1",
+    "lag_close_ret_2",
+    "lag_close_ret_4",
+    "lag_close_ret_8",
+    "lag_close_ret_16",
+    "lag_close_ret_24",
+    "lag_close_ret_48",
+    "ret_1",
+    "ret_4",
+    "ret_8",
+    "ret_16",
+    "ret_24",
+    "ret_48",
+    "rolling_return_24",
+    "rolling_return_48",
+    "vol_rolling_24",
+    "vol_rolling_48",
+    "vol_rolling_96",
+    "vol_rolling_192",
+    "atr_48",
+    "atr_over_price_48",
+    "atr_pct",
+    "atr_pct_rank_192",
+    "ema_trend_48_192",
+    "close_over_bb_upper_192",
+    "close_over_bb_mid_192",
+    "bollinger_percent_b",
+    "bollinger_bandwidth",
+    "bollinger_bandwidth_rank_192",
+    "ema_alignment_score",
+    "distance_from_ema24_atr",
+    "distance_from_ema96_atr",
+    "mama_minus_fama_over_atr",
+    "close_minus_decycler_over_atr",
+    "instantaneous_trendline_slope_over_atr",
+    "decycler_slope_over_atr",
+    "frama_slope_over_atr",
+    "supersmoother_slope_over_atr",
+    "roofing_filter_over_atr",
+    "dominant_cycle_phase_normalized",
+    "body_ratio",
+    "upper_wick_ratio",
+    "lower_wick_ratio",
+    "close_location",
+    "range_to_atr",
+    "close_over_vwap_32",
+    "close_ret_over_vol_64",
+    "close_ret_robust_z_256"
+  ],
+  "final_refit": {
+    "enabled": true,
+    "labeled_rows": 108934,
+    "model_train_rows": 108598,
+    "prob_scale": 2.5284420810393855,
+    "target_horizon": 24,
+    "train_end_position": 108980,
+    "train_end_timestamp": "2026-06-09T11:30:00",
+    "train_rows_raw": 108981,
+    "train_start_position": 0,
+    "train_start_timestamp": "2020-01-01T21:00:00"
+  },
+  "model_kind": "lightgbm_regressor",
+  "model_name": "ftmo_v2_model07_vwap32_rov64_rz256",
+  "model_path": "/workspace/logs/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5_20260804_151206_255841_6eb735ac/artifacts/models/ftmo_v2_model07_vwap32_rov64_rz256.pkl",
+  "pred_is_oos_col": "pred_is_oos",
+  "pred_label_col": null,
+  "pred_prob_col": "pred_prob",
+  "pred_ret_col": "pred_ret",
+  "prob_scale": 2.5284420810393855,
+  "promotion": {},
+  "reproducibility": {
+    "config_hash_sha256": "23ed49bf195e5a2ab64bfe6c845c5a73bddc7a397ba57e8191595e28e6d787fe",
+    "config_path": "/workspace/config/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5.yaml",
+    "data_hash_sha256": "dc7e044145cad2f3c31c37fc9fc17f2cd463addbb2a9b04e09c650b40574c6bb",
+    "environment": {
+      "package_versions": {
+        "gymnasium": "1.2.3",
+        "lightgbm": "4.6.0",
+        "momentfm": "0.1.5",
+        "numpy": "1.26.4",
+        "pandas": "2.2.2",
+        "pyyaml": "6.0.1",
+        "requests": "2.32.3",
+        "scikit-learn": "1.5.1",
+        "stable-baselines3": "2.7.1",
+        "torch": "2.10.0",
+        "websockets": "16.1",
+        "xgboost": "3.1.3",
+        "yfinance": "1.1.0"
+      },
+      "platform": "Linux-6.12.76-linuxkit-aarch64-with-glibc2.41",
+      "python_executable": "/usr/local/bin/python",
+      "python_version": "3.11.15 (main, Mar 16 2026, 23:12:45) [GCC 14.2.0]"
+    },
+    "git": {
+      "branch": "main",
+      "commit": "5612e5316fa0c3169c6a73700590acb1dac40c95",
+      "is_dirty": true,
+      "source": "git_cli",
+      "source_identity_complete": true,
+      "worktree_files": [
+        {
+          "bytes": 16382,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/model06_vwap32_rz128.yaml",
+          "sha256": "6e384f694785a1e1f9e77840497434b2f0ac578ceb9e9abf3e34cd2c6b5c3bac"
+        },
+        {
+          "bytes": 16382,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/model06_vwap48_rz128.yaml",
+          "sha256": "b6cd35ad74b7e946aca82afeb1f356cb25498620162bb4920b531b7826fc3be4"
+        },
+        {
+          "bytes": 16577,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v1/10_ftmo_v1_alpha_c0_baseline.yaml",
+          "sha256": "d63cf9b49dc946a10617e08fd876d45826846f75547b23bcde5c79a9d6fbda7b"
+        },
+        {
+          "bytes": 16749,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v1/11_ftmo_v1_alpha_c1_robust_z192.yaml",
+          "sha256": "6e3da6970d933629986c945c85a05b8cf2c0a17c20284b0ca22c06088d5406c8"
+        },
+        {
+          "bytes": 18229,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v1/12_ftmo_v1_alpha_c6_clean_normalized.yaml",
+          "sha256": "283dbc87fb112d912fca5dc2158702f6245811f0cde4a9bab5d8a4c25e5c542f"
+        },
+        {
+          "bytes": 18356,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v1/13_ftmo_v1_alpha_c7_clean_normalized_robust_z192.yaml",
+          "sha256": "169a71e6b05efa147717402472a30c2c354f2211fe8c2f7cf97d4b357655c877"
+        },
+        {
+          "bytes": 15727,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v2/00_ftmo_v2_vectorized_baseline.yaml",
+          "sha256": "1d9826d13d834624053187dfb05abfb320bafc0137caf384bc148a8921774167"
+        },
+        {
+          "bytes": 15726,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v2/01_ftmo_v2_vectorized_full_oos.yaml",
+          "sha256": "7e9409f3d337dfc8e2b9221ab8b3ff862edfb83113f15a43034fdc2c678e366d"
+        },
+        {
+          "bytes": 15912,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v2/02_ftmo_v2_risk050_stop4.yaml",
+          "sha256": "7badb63d9736aa02bfd07dfeb413f454c6c032768d32d72dc4d0db019117efff"
+        },
+        {
+          "bytes": 15914,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v2/03_ftmo_v2_risk075_stop4.yaml",
+          "sha256": "b539cb181bc97ee092c293fba24e536d2e60033b362fc787d08d72cb6aa32c4f"
+        },
+        {
+          "bytes": 15910,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v2/04_ftmo_v2_risk100_stop4.yaml",
+          "sha256": "7665442acae46b425df8a38baba8e9c3bbdb3e63292167d179ad401e558586ef"
+        },
+        {
+          "bytes": 15914,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v2/05_ftmo_v2_risk125_stop4.yaml",
+          "sha256": "5e0b81224c8c6b4730a6332f3ae83b2f367af8dc0e29f632c9c26d8f9851426d"
+        },
+        {
+          "bytes": 15900,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v2/06_ftmo_v2_risk050_stop5.yaml",
+          "sha256": "57eb9cbc18a2616344e32d5489d8bb9465911926a63ddddc319ba90f071733c1"
+        },
+        {
+          "bytes": 15902,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v2/07_ftmo_v2_risk075_stop5.yaml",
+          "sha256": "ceba4ef4517c83f6759fd144bdd0d354ccd80a77619d01935c467c57ec446e79"
+        },
+        {
+          "bytes": 15898,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v2/08_ftmo_v2_risk100_stop5.yaml",
+          "sha256": "ef0b089c18517f5341712009ffd2767e920b81e9bd99de4ab8d40e10cd5ec737"
+        },
+        {
+          "bytes": 15902,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v2/09_ftmo_v2_risk125_stop5.yaml",
+          "sha256": "7941279280370663c2a79ae0380bd698822d44f6656bcc4a7f61a6ccbe15f032"
+        },
+        {
+          "bytes": 15902,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v2/10_ftmo_v2_risk075_stop6.yaml",
+          "sha256": "2334ffcf13fa58eafc5448587a2f9cd5883368e8b80580d7172853156cef94a1"
+        },
+        {
+          "bytes": 15898,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v2/11_ftmo_v2_risk100_stop6.yaml",
+          "sha256": "a516ff0efbead4d985ee256bb4aebcb0a9a59cb1a8e04dd419270a42a1b7e082"
+        },
+        {
+          "bytes": 15931,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v2/12_ftmo_v2_risk075_stop5_hold16.yaml",
+          "sha256": "c680a1f02c98a4af71d0e52a815d1de4c1c5b4ffb812d078aecfda142b23e034"
+        },
+        {
+          "bytes": 15945,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v2/13_ftmo_v2_risk075_stop5_hold32.yaml",
+          "sha256": "c6611152f59e40569734414322c629aced910e8748a80e5c9a091010d1537a99"
+        },
+        {
+          "bytes": 16053,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v2/14_ftmo_v2_after_stop_long_half.yaml",
+          "sha256": "fbc51201e76b5e74959b0cdb73cf3cc171409de5d08f95a723de0bccfca720e4"
+        },
+        {
+          "bytes": 16142,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v2/15_ftmo_v2_short_ema_zone_half.yaml",
+          "sha256": "7b6262b5309adfb624c2cc0b93913a1b1bbd061b10d6dace94abac035bc7963f"
+        },
+        {
+          "bytes": 16120,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v2/16_ftmo_v2_long_hours_09_15_half.yaml",
+          "sha256": "39eb06651a93078954d4a75e00b3343eaadcac1fe81b4a65b19a9d2bb2d0ecc5"
+        },
+        {
+          "bytes": 16403,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v2/17_ftmo_v2_combined_min_risk075.yaml",
+          "sha256": "43509119754f502df561744ae6f84049d1cc1553ee85b51bf39cf5a039e31384"
+        },
+        {
+          "bytes": 16419,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v2/18_ftmo_v2_combined_multiply_risk075.yaml",
+          "sha256": "50835dbb3f4d1d814e190160abee8d30c27634a5dc673eeb14f677c94f9f2edc"
+        },
+        {
+          "bytes": 16383,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v2/19_ftmo_v2_combined_min_risk100.yaml",
+          "sha256": "85c1ab98543f4e2a398beab0d5889714f7506dd3f7dac0e61908b0d741accd3a"
+        },
+        {
+          "bytes": 16238,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v2/20_ftmo_v2_liquid_session_risk100.yaml",
+          "sha256": "ed5b802f1e658acebac752a7d8dde91cb14650b79552d21beae8bce781524d1a"
+        },
+        {
+          "bytes": 16685,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v2/21_ftmo_v2_combined_liquid_risk100.yaml",
+          "sha256": "befdd1c67d16e73334d9d6e7567dd00225e0ea6b3e3b7bdfba4aa2e63f216f54"
+        },
+        {
+          "bytes": 16444,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v2/22_ftmo_v2_harder_threshold_combined_risk100.yaml",
+          "sha256": "0335a091e746c1e1f214ed876a89ebff638acbf80d3eabf0e9e38c3b78626fa6"
+        },
+        {
+          "bytes": 16456,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v2/23_ftmo_v2_adverse_cost_combined_risk100.yaml",
+          "sha256": "ab820a1e22f4766d77f3d14e4f48ce67f7ae2cbfddc667a35484bf48ed025e9d"
+        },
+        {
+          "bytes": 16902,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v2/24_ftmo_v2_mtf_momentum_gate_risk100_stop5.yaml",
+          "sha256": "d3ebee7e66f04375725366dd250e42a97ab80152bdab4a45cdc92acaaf632985"
+        },
+        {
+          "bytes": 3251,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v2/README.md",
+          "sha256": "536d534b96075e62d11b7064e81524877255a7935e752842a692d780342cf02f"
+        },
+        {
+          "bytes": 20301,
+          "exists": true,
+          "path": "scripts/generate_ftmo_v2_suite.py",
+          "sha256": "a5631fb6e85639e6dd09e6f2bb7c0a8ac19c4c8800b1c821e9c1a8461fe7c01b"
+        },
+        {
+          "bytes": 37367,
+          "exists": true,
+          "path": "src/backtesting/manual_barrier.py",
+          "sha256": "e8605c64cce2750d358f934bbd38c730de777be94c8422242c1098ecc389541f"
+        },
+        {
+          "bytes": 63481,
+          "exists": true,
+          "path": "src/experiments/orchestration/backtest_stage.py",
+          "sha256": "c34df33f2c08be5ee4e7c701ed153effb492344cfbaf5d6033c01c7b6481d920"
+        },
+        {
+          "bytes": 19199,
+          "exists": true,
+          "path": "src/models/artifacts.py",
+          "sha256": "8e8ec6da2c233d3e5921866cdcc4d4e78a3617b87d448843fcc7284d5dfdccb6"
+        },
+        {
+          "bytes": 607,
+          "exists": true,
+          "path": "src/risk/__init__.py",
+          "sha256": "6025bb6013af601c2e36ebb41a834c545429252cbf74f69ed83918d04df0a7a2"
+        },
+        {
+          "bytes": 7641,
+          "exists": true,
+          "path": "src/risk/entry_modifiers.py",
+          "sha256": "c4e57fe51cb6609d65fb4aae874d1f91cb65ddec891e02e8c59f6e8c05d83424"
+        },
+        {
+          "bytes": 3486,
+          "exists": true,
+          "path": "src/signals/forecast_threshold_mtf_momentum_gate_signal.py",
+          "sha256": "26cf268f253f2df35875a3ee3bdc19855478ead55e5815ad0e7687f7f9361f11"
+        },
+        {
+          "bytes": 7374,
+          "exists": true,
+          "path": "src/signals/registry.py",
+          "sha256": "37abacd94e85b0994b03d609e17ba87e34579399d1acce98232b8d85e4eea085"
+        },
+        {
+          "bytes": 23168,
+          "exists": true,
+          "path": "src/utils/config_defaults.py",
+          "sha256": "c5e1fbcf006da575442ef5b5b9c2bf19b51efb0b35e9c776a5d1e755f25a80f6"
+        },
+        {
+          "bytes": 39770,
+          "exists": true,
+          "path": "src/utils/config_schemas.py",
+          "sha256": "4e96679c012ea282b3e1ef5786927bdd848b8d7f8e3cf65dd6a49bc317805c02"
+        },
+        {
+          "bytes": 312497,
+          "exists": true,
+          "path": "src/utils/config_validation.py",
+          "sha256": "ab77b1718a99a5e454ea4f02835ebc0a51d26320c94e1cddfe70cfec99dc248c"
+        },
+        {
+          "bytes": 4555,
+          "exists": true,
+          "path": "tests/backtesting/test_manual_barrier_entry_risk_modifiers.py",
+          "sha256": "a1e8b0d203a9d99b4620c0d9016ff704add8aa6bee638ad37f8479a50fd0c967"
+        },
+        {
+          "bytes": 21451,
+          "exists": true,
+          "path": "tests/backtesting/test_safety_contract_regressions.py",
+          "sha256": "0c62007d51fc0dd94f5793fb4d5815777dde9dc3d1f1fca76bb7540b7868a351"
+        },
+        {
+          "bytes": 28345,
+          "exists": true,
+          "path": "tests/execution/test_mt5_execution.py",
+          "sha256": "083595dfbab0466687d75e7b5f877415925c8c0cc7d99dc20afaae3d55d80ea8"
+        },
+        {
+          "bytes": 3431,
+          "exists": true,
+          "path": "tests/utils/test_ftmo_v2_suite.py",
+          "sha256": "57cef4e62dfeb153f9058a541ac928498856e11f24decab9ebd80427bf6deba5"
+        }
+      ],
+      "worktree_state_sha256": "16c25b9911070141942de6b8277f79bcf9200af8979846d5090f024853fb978f"
+    },
+    "run_created_at_utc": "2026-08-04T12:12:06.246057+00:00"
+  },
+  "task_type": "regression",
+  "training_range": {
+    "end_position": 108980,
+    "end_timestamp": "2026-06-09T11:30:00",
+    "raw_rows": 108981,
+    "rows": 108598,
+    "start_position": 0,
+    "start_timestamp": "2020-01-01T21:00:00"
+  }
+}

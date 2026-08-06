@@ -1,0 +1,1185 @@
+{
+  "bundle_version": 2,
+  "created_at_utc": "2026-08-01T16:11:34.890513+00:00",
+  "feature_cols": [
+    "close_ret",
+    "lag_close_ret_1",
+    "lag_close_ret_2",
+    "lag_close_ret_4",
+    "lag_close_ret_8",
+    "lag_close_ret_16",
+    "lag_close_ret_24",
+    "lag_close_ret_48",
+    "ret_1",
+    "ret_4",
+    "ret_8",
+    "ret_16",
+    "ret_24",
+    "ret_48",
+    "rolling_return_24",
+    "rolling_return_48",
+    "vol_rolling_24",
+    "vol_rolling_48",
+    "vol_rolling_96",
+    "vol_rolling_192",
+    "atr_48",
+    "atr_over_price_48",
+    "atr_pct",
+    "atr_pct_rank_192",
+    "ema_trend_48_192",
+    "close_over_bb_upper_192",
+    "close_over_bb_mid_192",
+    "bollinger_percent_b",
+    "bollinger_bandwidth",
+    "bollinger_bandwidth_rank_192",
+    "ema_alignment_score",
+    "distance_from_ema24_atr",
+    "distance_from_ema96_atr",
+    "mama_minus_fama_over_atr",
+    "close_minus_decycler_over_atr",
+    "instantaneous_trendline_slope_over_atr",
+    "decycler_slope_over_atr",
+    "frama_slope_over_atr",
+    "supersmoother_slope_over_atr",
+    "roofing_filter_over_atr",
+    "dominant_cycle_phase_normalized",
+    "body_ratio",
+    "upper_wick_ratio",
+    "lower_wick_ratio",
+    "close_location",
+    "range_to_atr",
+    "close_over_vwap_32",
+    "close_ret_robust_z_128"
+  ],
+  "feature_order": [
+    "close_ret",
+    "lag_close_ret_1",
+    "lag_close_ret_2",
+    "lag_close_ret_4",
+    "lag_close_ret_8",
+    "lag_close_ret_16",
+    "lag_close_ret_24",
+    "lag_close_ret_48",
+    "ret_1",
+    "ret_4",
+    "ret_8",
+    "ret_16",
+    "ret_24",
+    "ret_48",
+    "rolling_return_24",
+    "rolling_return_48",
+    "vol_rolling_24",
+    "vol_rolling_48",
+    "vol_rolling_96",
+    "vol_rolling_192",
+    "atr_48",
+    "atr_over_price_48",
+    "atr_pct",
+    "atr_pct_rank_192",
+    "ema_trend_48_192",
+    "close_over_bb_upper_192",
+    "close_over_bb_mid_192",
+    "bollinger_percent_b",
+    "bollinger_bandwidth",
+    "bollinger_bandwidth_rank_192",
+    "ema_alignment_score",
+    "distance_from_ema24_atr",
+    "distance_from_ema96_atr",
+    "mama_minus_fama_over_atr",
+    "close_minus_decycler_over_atr",
+    "instantaneous_trendline_slope_over_atr",
+    "decycler_slope_over_atr",
+    "frama_slope_over_atr",
+    "supersmoother_slope_over_atr",
+    "roofing_filter_over_atr",
+    "dominant_cycle_phase_normalized",
+    "body_ratio",
+    "upper_wick_ratio",
+    "lower_wick_ratio",
+    "close_location",
+    "range_to_atr",
+    "close_over_vwap_32",
+    "close_ret_robust_z_128"
+  ],
+  "final_refit": {
+    "enabled": true,
+    "labeled_rows": 108934,
+    "model_train_rows": 108598,
+    "prob_scale": 2.5284420810393855,
+    "target_horizon": 24,
+    "train_end_position": 108980,
+    "train_end_timestamp": "2026-06-09T11:30:00",
+    "train_rows_raw": 108981,
+    "train_start_position": 0,
+    "train_start_timestamp": "2020-01-01T21:00:00"
+  },
+  "model_kind": "lightgbm_regressor",
+  "model_name": "model_06_vwap_plus_robust_z",
+  "model_path": "/workspace/logs/experiments/trial0041_validation_suite_v2/model06_vwap32_rz128_20260801_191133_164398_3475c432/artifacts/models/model_06_vwap_plus_robust_z.pkl",
+  "pred_is_oos_col": "pred_is_oos",
+  "pred_label_col": null,
+  "pred_prob_col": "pred_prob",
+  "pred_ret_col": "pred_ret",
+  "prob_scale": 2.5284420810393855,
+  "reproducibility": {
+    "config_hash_sha256": "97a1264c8089026dbed137d00d24af536c4e03e16148ec7ecc6bc85376e22e71",
+    "config_path": "/workspace/config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model06/model06_vwap32_rz128.yaml",
+    "data_hash_sha256": "dc7e044145cad2f3c31c37fc9fc17f2cd463addbb2a9b04e09c650b40574c6bb",
+    "environment": {
+      "package_versions": {
+        "gymnasium": "1.2.3",
+        "lightgbm": "4.6.0",
+        "momentfm": "0.1.5",
+        "numpy": "1.26.4",
+        "pandas": "2.2.2",
+        "pyyaml": "6.0.1",
+        "requests": "2.32.3",
+        "scikit-learn": "1.5.1",
+        "stable-baselines3": "2.7.1",
+        "torch": "2.10.0",
+        "websockets": "16.1",
+        "xgboost": "3.1.3",
+        "yfinance": "1.1.0"
+      },
+      "platform": "Linux-6.12.76-linuxkit-aarch64-with-glibc2.41",
+      "python_executable": "/usr/local/bin/python",
+      "python_version": "3.11.15 (main, Mar 16 2026, 23:12:45) [GCC 14.2.0]"
+    },
+    "git": {
+      "branch": "main",
+      "commit": "b3b126e88775a4baf7894de96597f20f580261cf",
+      "is_dirty": true,
+      "source": "git_cli",
+      "source_identity_complete": true,
+      "worktree_files": [
+        {
+          "bytes": 3962,
+          "exists": true,
+          "path": "config/experiments/btcusd_dual_trend_ftmo/btcusd_1m_dual_trend_ftmo_22_16_v1.yaml",
+          "sha256": "b41778911f7e75163fb67d37fc14934d16b824eab9edc44ada1828116925fd1b"
+        },
+        {
+          "exists": false,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_full_exit_model_research/run_commands.txt"
+        },
+        {
+          "bytes": 15893,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/01_core_vectorized/core_00_baseline.yaml",
+          "sha256": "ab004415f2afac941647080a5b3961327bed774d41123f8ba97ba0e692ae98b8"
+        },
+        {
+          "bytes": 15995,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/01_core_vectorized/core_03_vwap48.yaml",
+          "sha256": "c1664ee44f7c252aefc928d79e4c53a74a968d1a044b0316aead6d12dc1e3203"
+        },
+        {
+          "bytes": 16325,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/01_core_vectorized/core_05_vwap48_return_over_vol48.yaml",
+          "sha256": "9c67db3f24a1fca88dc319c5f2278dc7e2ec712d3929c02d759a66d885c1dfe5"
+        },
+        {
+          "bytes": 16266,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/01_core_vectorized/core_06_vwap48_robust_z192.yaml",
+          "sha256": "87b49412f52efdeef03e15a0c1284ba03c1bf7fc9d0488fee0b877d2bff7bf98"
+        },
+        {
+          "bytes": 16607,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/01_core_vectorized/core_07_vwap48_return_over_vol48_robust_z192.yaml",
+          "sha256": "0d3ed1f7204ddee69b016090b3c1fcd2382a611e4e0f5a7e790f64e3ea9389de"
+        },
+        {
+          "bytes": 16111,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/01_core_vectorized/core_trendq02_signed_efficiency_48_96.yaml",
+          "sha256": "bad9b0f325e1f079400713695a6a499d48fad30da4ae159f1b5d28bd6813f49b"
+        },
+        {
+          "bytes": 16404,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/02_cost_stress/model05_cost_x03.yaml",
+          "sha256": "7da50620bcd93793cb1d1d379d6ee58d1f855fb55a0f1ec565ea305dedf4b151"
+        },
+        {
+          "bytes": 16372,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/02_cost_stress/model05_cost_x05.yaml",
+          "sha256": "ee58bf82a26d06ed86c1ee466e9d12dc6f25c4c2ec07536034b86762d5fdaf0b"
+        },
+        {
+          "bytes": 16371,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/02_cost_stress/model05_cost_x10.yaml",
+          "sha256": "4c8d8bac2812d53f349b997dc12befbcf8d0c35e1cf6a6924ab68485471c53ae"
+        },
+        {
+          "bytes": 16351,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/02_cost_stress/model06_cost_x03.yaml",
+          "sha256": "cd04d8bf3c98dc7871596fab8ec0da6c926934f3fbd77016ac55493314fb1463"
+        },
+        {
+          "bytes": 16319,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/02_cost_stress/model06_cost_x05.yaml",
+          "sha256": "43e79d14a06f91c695e59417a70feb1b91508ae28ab83be4d2f0cb409aa3c4eb"
+        },
+        {
+          "bytes": 16318,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/02_cost_stress/model06_cost_x10.yaml",
+          "sha256": "3a1db62d244e3afff42b827ec1a238b15b3ab128ade7579edb2d212efb1ebe4a"
+        },
+        {
+          "bytes": 16674,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/02_cost_stress/model07_cost_x03.yaml",
+          "sha256": "409a823c5ffbc96b284c7033adfb9cf8c3d624be9f780b1ff9970e1d6121ff40"
+        },
+        {
+          "bytes": 16642,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/02_cost_stress/model07_cost_x05.yaml",
+          "sha256": "7ebd3d6096559b86998ef215f12a989fa32a41fc06807014263dceae2f3df487"
+        },
+        {
+          "bytes": 16641,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/02_cost_stress/model07_cost_x10.yaml",
+          "sha256": "08fed3159f052cebf3a8d557651ff5bcf9cdd4bb75630f8cda3a2548dc21c0c9"
+        },
+        {
+          "bytes": 16006,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/02_cost_stress/trendq02_cost_x03.yaml",
+          "sha256": "714fcf762709c6372c04181ab562a92172e6f695de99ec824e172344df0a9eca"
+        },
+        {
+          "bytes": 15974,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/02_cost_stress/trendq02_cost_x05.yaml",
+          "sha256": "b5bc0d56cb7000718b59c647cb4f6bc2d609f1aa8bb1e9ae02408fac68e5235f"
+        },
+        {
+          "bytes": 15973,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/02_cost_stress/trendq02_cost_x10.yaml",
+          "sha256": "190f0b4bca93f0165661931c97b4a620635b91f9e4303a3b160c53c8fb111719"
+        },
+        {
+          "bytes": 16363,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/03_delay_stress/model05_delay_1bar.yaml",
+          "sha256": "9dafb9e685b57a477e65175cbdfc153a0f58a51020e8d610d6bfb1585436e78f"
+        },
+        {
+          "bytes": 16363,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/03_delay_stress/model05_delay_2bar.yaml",
+          "sha256": "6427a1ba72ba5a9a68eae1e6bc303466e094c40ab6dde02dd051a24ce0074ab2"
+        },
+        {
+          "bytes": 16310,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/03_delay_stress/model06_delay_1bar.yaml",
+          "sha256": "709587d1bd830c640f17624eb74bcdd3c7ea0194ce83c50957ef4409ab55026e"
+        },
+        {
+          "bytes": 16310,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/03_delay_stress/model06_delay_2bar.yaml",
+          "sha256": "5187e636bfac840af479e2159040207ad9069c0ce64b81590115fea19ac3d2c5"
+        },
+        {
+          "bytes": 16633,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/03_delay_stress/model07_delay_1bar.yaml",
+          "sha256": "9b59050cd1e0f43bf7291b9cb0428a0ea8897e6c335ce85b75b59049961ffc90"
+        },
+        {
+          "bytes": 16633,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/03_delay_stress/model07_delay_2bar.yaml",
+          "sha256": "0465003ece0a24ca3e538b79cf2536c67c3fd32e049ae62b28adc7eca8d6ff4d"
+        },
+        {
+          "bytes": 15965,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/03_delay_stress/trendq02_delay_1bar.yaml",
+          "sha256": "d7aa40119a5e2b0ea552a038446f0191e1fddc7f6c063766056d4f3b06ce23f9"
+        },
+        {
+          "bytes": 15965,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/03_delay_stress/trendq02_delay_2bar.yaml",
+          "sha256": "39cc36895be49c880e41c8dadb5e372cb0e5e9da6271b92a43d8ac588475d288"
+        },
+        {
+          "bytes": 16385,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model06/model06_thr_u60_l75.yaml",
+          "sha256": "6ef612abedf52cc703aa4737392d1fe19bbf90c51dbde234f32ac648f9b2e711"
+        },
+        {
+          "bytes": 16383,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model06/model06_thr_u60_l80.yaml",
+          "sha256": "b2f9a15ef288084cd9812b46eb9906f64c37c2cd8cf02cba44be4322e61646a9"
+        },
+        {
+          "bytes": 16385,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model06/model06_thr_u60_l85.yaml",
+          "sha256": "42b5ace4def58ab4c36d6895321d9752776fbab9870b69f254cb6fe6c870c159"
+        },
+        {
+          "bytes": 16383,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model06/model06_thr_u60_l90.yaml",
+          "sha256": "5cd213fb182a9b77a5894e35eb4fd2c86397034e8d12c3f4285c2fc824fb455f"
+        },
+        {
+          "bytes": 16385,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model06/model06_thr_u60_l95.yaml",
+          "sha256": "d886637643e88a4933f64045ba57937912bfbbbdead6730219426a16163001c9"
+        },
+        {
+          "bytes": 16387,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model06/model06_thr_u65_l75.yaml",
+          "sha256": "346e57fad89165d21798000abc5e926e9cdb73a82440f76a8d8406404f97b34a"
+        },
+        {
+          "bytes": 16385,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model06/model06_thr_u65_l80.yaml",
+          "sha256": "f3b10ecb939d86935bb5eab6a18d21ac6bec65d38bcdb5579fea2edc81ae137c"
+        },
+        {
+          "bytes": 16387,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model06/model06_thr_u65_l85.yaml",
+          "sha256": "34d7dff563bb7a112f5149cf059c0c4c91c3455f08fdb0cf75166b9736f9b0c8"
+        },
+        {
+          "bytes": 16385,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model06/model06_thr_u65_l90.yaml",
+          "sha256": "2f83b12c7cb7d1b5236b2267409aa9fde321e22eeda558afc7455a3b9584b13e"
+        },
+        {
+          "bytes": 16387,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model06/model06_thr_u65_l95.yaml",
+          "sha256": "bc020ff24ab75783acda07522e54daf503a3d785ad9c4fb252e0b0ead3d4929a"
+        },
+        {
+          "bytes": 16385,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model06/model06_thr_u70_l75.yaml",
+          "sha256": "9afd30a36a03bac009393b62a48088e142c62e6bc85fc299c662ab0188dccde9"
+        },
+        {
+          "bytes": 16383,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model06/model06_thr_u70_l80.yaml",
+          "sha256": "62a0210ff4e19344dbf04e9fd9443c632bafd1278970fea67446b2e15a413a0b"
+        },
+        {
+          "bytes": 16385,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model06/model06_thr_u70_l85.yaml",
+          "sha256": "c0acd72842ad655f15b6376ce63c17364832711011f544009bda40bdcbb37871"
+        },
+        {
+          "bytes": 16383,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model06/model06_thr_u70_l90.yaml",
+          "sha256": "824495e6fdaaac0114252fc3e4d4e4d49af885b53b177da16d815ffe70b7ec18"
+        },
+        {
+          "bytes": 16385,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model06/model06_thr_u70_l95.yaml",
+          "sha256": "9a73b3b67451951b02efc658c61d4fdf048f2cf6bdc75a6078db90442a4f23f1"
+        },
+        {
+          "bytes": 16387,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model06/model06_thr_u75_l75.yaml",
+          "sha256": "7863fcc523a6c672b70ff1306d7ef047876cf7161f280ae7fded403f5ca6f302"
+        },
+        {
+          "bytes": 16385,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model06/model06_thr_u75_l80.yaml",
+          "sha256": "be883a58a6484d5d4fb62803a18b8b0f39fe6471487bf0425e6422191cc8df8f"
+        },
+        {
+          "bytes": 16387,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model06/model06_thr_u75_l85.yaml",
+          "sha256": "c7c797a9f252cbce47adf3b5462bfa4c3f051dfde1ea387b002972f50591d7c1"
+        },
+        {
+          "bytes": 16385,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model06/model06_thr_u75_l90.yaml",
+          "sha256": "b423f3de18b229a96b70f7450d67d8dfd823af4fb197dad243957a348280278b"
+        },
+        {
+          "bytes": 16387,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model06/model06_thr_u75_l95.yaml",
+          "sha256": "810593d3563e4999a247a53badeba6c43e972267d9f3d70435326eeef18e5293"
+        },
+        {
+          "bytes": 16385,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model06/model06_thr_u80_l75.yaml",
+          "sha256": "6bd5d890d7fa8e9f671eda0ae8dfdcb99cad5771df4f8d6c0b4a587da704d8eb"
+        },
+        {
+          "bytes": 16383,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model06/model06_thr_u80_l80.yaml",
+          "sha256": "40a60263330acadd69ad46c86d59f206baa075c71684f9ab16c7b99eb9154b68"
+        },
+        {
+          "bytes": 16385,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model06/model06_thr_u80_l85.yaml",
+          "sha256": "c52d877a0f767fd5219ee4c2c4a726203d2aa2598fa0fda31c70724f31c122b9"
+        },
+        {
+          "bytes": 16383,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model06/model06_thr_u80_l90.yaml",
+          "sha256": "c779b171787a88b8824a73ee41236ac8cd560e157f5ebd0bf21bf218836e5137"
+        },
+        {
+          "bytes": 16385,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model06/model06_thr_u80_l95.yaml",
+          "sha256": "8b89d14040ca4dd06ff3c5888b9db79fa2ded8b88c7c8a836649fefa57607bc0"
+        },
+        {
+          "bytes": 16708,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model07/model07_thr_u60_l75.yaml",
+          "sha256": "71b02dd0b12b9741275629fe8bbc907a1d4f7d1daea2f17b804b4a9cda3ce40d"
+        },
+        {
+          "bytes": 16706,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model07/model07_thr_u60_l80.yaml",
+          "sha256": "78aae40a11b2ad9024856a23c7a655a3484903b198582d6b984e9ff351642265"
+        },
+        {
+          "bytes": 16708,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model07/model07_thr_u60_l85.yaml",
+          "sha256": "94d929b9319259672823df549c04336200268f7954808073d01c1bd16b3c6df9"
+        },
+        {
+          "bytes": 16706,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model07/model07_thr_u60_l90.yaml",
+          "sha256": "f3e2b40034665ec243e570d6ef647d7820580ed3f924d0cd094ce18951166e08"
+        },
+        {
+          "bytes": 16708,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model07/model07_thr_u60_l95.yaml",
+          "sha256": "10c95abc60303cc778b218cf78ef0dc72e9ad203eb746c697817edcaf3a75862"
+        },
+        {
+          "bytes": 16710,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model07/model07_thr_u65_l75.yaml",
+          "sha256": "d2e7d051a02bf8362570fd3cb3091d59eb9389290ec4eb70d62676f834b9e1a8"
+        },
+        {
+          "bytes": 16708,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model07/model07_thr_u65_l80.yaml",
+          "sha256": "815a0f307a99e4df504c9b38e5b2dd899aefd7013b61adf937feea0b4d6bf3f7"
+        },
+        {
+          "bytes": 16710,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model07/model07_thr_u65_l85.yaml",
+          "sha256": "a94d1b1e21db08189742f3f8ef0cb1cf5493ea224f7f9d88a630c4345a207647"
+        },
+        {
+          "bytes": 16708,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model07/model07_thr_u65_l90.yaml",
+          "sha256": "4877b6598b7f57982fc8d14a506ff8209ce66b1c23d60e35537bad21baa716a4"
+        },
+        {
+          "bytes": 16710,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model07/model07_thr_u65_l95.yaml",
+          "sha256": "f723974130ef4a21cc4d208366c6eff73e710c4f11553e0474a8996e84f403a9"
+        },
+        {
+          "bytes": 16708,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model07/model07_thr_u70_l75.yaml",
+          "sha256": "1f298bee9454b0fb28a3e3c8b53186e6f804b3e5c53c4ac80db6bcf70282ea8a"
+        },
+        {
+          "bytes": 16706,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model07/model07_thr_u70_l80.yaml",
+          "sha256": "a4cf74dd59f8929c26f822bb2a193e83f5241721603df98eb897ab185dc5dad0"
+        },
+        {
+          "bytes": 16708,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model07/model07_thr_u70_l85.yaml",
+          "sha256": "a1208cb2e1756f952cd57a69c7291c892918b03007ffbaa535cb83015d318f33"
+        },
+        {
+          "bytes": 16706,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model07/model07_thr_u70_l90.yaml",
+          "sha256": "945ffb8b871f2a9dd61ae3b8c8b5c44df35fabcef71669c11cbcb471f6110248"
+        },
+        {
+          "bytes": 16708,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model07/model07_thr_u70_l95.yaml",
+          "sha256": "32efa1716f8cbde80a9a6459b9449d0c5e17903a381c024dbe06870dcc32aa15"
+        },
+        {
+          "bytes": 16710,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model07/model07_thr_u75_l75.yaml",
+          "sha256": "b245e91760b4b1f60b03691c88bd644bb2571954406d411c9ddeb2ee451903f6"
+        },
+        {
+          "bytes": 16708,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model07/model07_thr_u75_l80.yaml",
+          "sha256": "57d734071701e930e4eda62c62875cfdb86c917c3f398b7c34fa7edabd9546b6"
+        },
+        {
+          "bytes": 16710,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model07/model07_thr_u75_l85.yaml",
+          "sha256": "273fcc7381d3786043fc33a4bae671d067e2b501e2fd50e160f6cfda5a6feff2"
+        },
+        {
+          "bytes": 16708,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model07/model07_thr_u75_l90.yaml",
+          "sha256": "858d0c025587fc1e25cf2939cdb2b3f7e31ab38cbbfaf651ad77104edad6b31b"
+        },
+        {
+          "bytes": 16710,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model07/model07_thr_u75_l95.yaml",
+          "sha256": "a3472baf60d0f3d1c4b5ab9bfa1ac0e0746abc0a40b8b58ec503cbf297ab6d72"
+        },
+        {
+          "bytes": 16708,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model07/model07_thr_u80_l75.yaml",
+          "sha256": "5fb79793e9f433cf94e2e0443f5c9acc7ca71346e68a5b34478b779d6ed1ee08"
+        },
+        {
+          "bytes": 16706,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model07/model07_thr_u80_l80.yaml",
+          "sha256": "5d76190929c10478df61e1306b6ef41faff9be3e512e1ef29ef01c30040b9b5c"
+        },
+        {
+          "bytes": 16708,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model07/model07_thr_u80_l85.yaml",
+          "sha256": "c0d535163618e353005449cf4853c73064a0a8e747c8e5ef8aeef5a8ddab00b7"
+        },
+        {
+          "bytes": 16706,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model07/model07_thr_u80_l90.yaml",
+          "sha256": "024a7e9dfae96823bd850632e99a31f71c329572aa8d91c5e07194ac55c682bc"
+        },
+        {
+          "bytes": 16708,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/04_threshold_surface/model07/model07_thr_u80_l95.yaml",
+          "sha256": "cf507f58c1526c3b017b52113c609672435fcc6cba2b8df0db14c43cfa33054f"
+        },
+        {
+          "bytes": 16379,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/05_holding_surface/model06/model06_hold_16bars.yaml",
+          "sha256": "ad788932fdbbaea67d9da605a2e2718a32e79a919115da768393791aca8cfd55"
+        },
+        {
+          "bytes": 16380,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/05_holding_surface/model06/model06_hold_20bars.yaml",
+          "sha256": "3b8e000a7a2b8129163dbfd3e482fabbd2f48664928d8a979ba8d5a248cca6d1"
+        },
+        {
+          "bytes": 16380,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/05_holding_surface/model06/model06_hold_24bars.yaml",
+          "sha256": "f55d4ee795694e1234b9c1cd4da7fa418fac76cf7b179c993d76c19ed4291437"
+        },
+        {
+          "bytes": 16380,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/05_holding_surface/model06/model06_hold_28bars.yaml",
+          "sha256": "c55de51e1bb5804d13d527e3f6cc67f607f932e6ff0f8d95615f5777342d6d95"
+        },
+        {
+          "bytes": 16380,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/05_holding_surface/model06/model06_hold_32bars.yaml",
+          "sha256": "c271985146c4c1a4fb69ccda8f490f31943d7aa94810505ee4b41c801e1919ab"
+        },
+        {
+          "bytes": 16702,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/05_holding_surface/model07/model07_hold_16bars.yaml",
+          "sha256": "def78667ae9ef88c96766f76b83d7be8ac383434663e856b81a88093dabdef6e"
+        },
+        {
+          "bytes": 16703,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/05_holding_surface/model07/model07_hold_20bars.yaml",
+          "sha256": "28f64858f3c11f9682421b8c9e06e9c8abb804f2339cc19e1ef2271a14e2c8e0"
+        },
+        {
+          "bytes": 16703,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/05_holding_surface/model07/model07_hold_24bars.yaml",
+          "sha256": "df739b889b452001856365fcfa18fa7e7278495d5be1822b41a196a0b3007239"
+        },
+        {
+          "bytes": 16703,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/05_holding_surface/model07/model07_hold_28bars.yaml",
+          "sha256": "a9a22ab120586889fdc53f2906218c46a3653e05eef3382f77bba3dee1a4d8d1"
+        },
+        {
+          "bytes": 16703,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/05_holding_surface/model07/model07_hold_32bars.yaml",
+          "sha256": "5f210bcaac74951e20805bf4206a68409401022b0a996646121828a3b0b865a1"
+        },
+        {
+          "bytes": 16384,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model06/model06_vwap32_rz128.yaml",
+          "sha256": "c24b682ba65654411516c531a97937b1dbf192b6ba4cb420da770bb8114e41b0"
+        },
+        {
+          "bytes": 16384,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model06/model06_vwap32_rz192.yaml",
+          "sha256": "dd44068e8563e33bd46ceb539f55dc3a1cea7d18b32661be59bf515e453d4dd5"
+        },
+        {
+          "bytes": 16384,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model06/model06_vwap32_rz256.yaml",
+          "sha256": "5e6f23672dcdc7c81db6350c5619c5f7eef488f609534ead1b36fa2cb82207d9"
+        },
+        {
+          "bytes": 16384,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model06/model06_vwap48_rz128.yaml",
+          "sha256": "22f61f3211a1ac7ecf6e4136cae4c70af353a6a377f3e69110fbed7c4834a94b"
+        },
+        {
+          "bytes": 16384,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model06/model06_vwap48_rz192.yaml",
+          "sha256": "226cd76cdf6c03a399b222e455dfdd2f70abc1b0882f6ac49dd814cd81ac57fd"
+        },
+        {
+          "bytes": 16384,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model06/model06_vwap48_rz256.yaml",
+          "sha256": "cb4fb9fa6136931c06991df5a5d02193aff17f6078e0cd17704aa2ec1f534cd6"
+        },
+        {
+          "bytes": 16384,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model06/model06_vwap64_rz128.yaml",
+          "sha256": "a6a4144ca98f7e32c19f115a4e273e1f10dd27e70ccc1f7dd61aadc4310aa04e"
+        },
+        {
+          "bytes": 16384,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model06/model06_vwap64_rz192.yaml",
+          "sha256": "55b5cb7eb8086a65c722ed56a69708bfcf11867d05eb3530cc2667f031d9b4e1"
+        },
+        {
+          "bytes": 16384,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model06/model06_vwap64_rz256.yaml",
+          "sha256": "ddbc0b7806a093fb5def2c297f7465cb1335fd9f03e272946e7f9d10521687fe"
+        },
+        {
+          "bytes": 16751,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model07/model07_vwap32_rov32_rz128.yaml",
+          "sha256": "b0b1d93bfc197e61fb04f36fa4cc7d2767156420f9324fddaa8de3f443668924"
+        },
+        {
+          "bytes": 16751,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model07/model07_vwap32_rov32_rz192.yaml",
+          "sha256": "8a115675effc080539f3dc8be26b52d0ee62f766f87661692e15f3696e0d98ba"
+        },
+        {
+          "bytes": 16751,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model07/model07_vwap32_rov32_rz256.yaml",
+          "sha256": "effd1e425e5e7914f36cfa170581255a59006ddc68d4583ac46cba3a4396f204"
+        },
+        {
+          "bytes": 16742,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model07/model07_vwap32_rov48_rz128.yaml",
+          "sha256": "d9fda035e79a5ea0dd3a2ac666b3ecc360d13dad9a78af3e6cf6b83c0b1f2f8e"
+        },
+        {
+          "bytes": 16742,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model07/model07_vwap32_rov48_rz192.yaml",
+          "sha256": "b3229df46a2d6076c0611807e813cd9647b6ea94f66f6f188fbf34681b8086d7"
+        },
+        {
+          "bytes": 16742,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model07/model07_vwap32_rov48_rz256.yaml",
+          "sha256": "b903d3247dcccc6397a5534f04f2f4384e6ae9c2f49cfc8cd131e0210e32fba7"
+        },
+        {
+          "bytes": 16751,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model07/model07_vwap32_rov64_rz128.yaml",
+          "sha256": "f21c517e6e98b20eed6a56bbc89ff9006c79ae574516a73746deedd17d86d72d"
+        },
+        {
+          "bytes": 16751,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model07/model07_vwap32_rov64_rz192.yaml",
+          "sha256": "a44b10681770c12cd05b714f3d2fcf1f49691213b9e918084cd7cee19c6be006"
+        },
+        {
+          "bytes": 16751,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model07/model07_vwap32_rov64_rz256.yaml",
+          "sha256": "67ee1cceaff1e85b8697ac1e31de2b9a69e8c85dcc98536aeee68f367db6694d"
+        },
+        {
+          "bytes": 16751,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model07/model07_vwap48_rov32_rz128.yaml",
+          "sha256": "893cb964365ae804ccbeb110add183370cb689470541e7122129552cab877b4a"
+        },
+        {
+          "bytes": 16751,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model07/model07_vwap48_rov32_rz192.yaml",
+          "sha256": "25d0a2cd337a842ce5a2936f58a861e9876aa8b45c42f3851c60c7612469eb1e"
+        },
+        {
+          "bytes": 16751,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model07/model07_vwap48_rov32_rz256.yaml",
+          "sha256": "c782c8b8b7f768e121908d86b1fadf3028511432e7fd712e7ddb235c3b344216"
+        },
+        {
+          "bytes": 16742,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model07/model07_vwap48_rov48_rz128.yaml",
+          "sha256": "e6f45b45a3ba64b64e8d20fc1508b583971347cb6fde93a999ce3a2430965b21"
+        },
+        {
+          "bytes": 16742,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model07/model07_vwap48_rov48_rz192.yaml",
+          "sha256": "d16c5110287e748097d6106bff48c3e78057c95c9cd4f4e58f59bf6ba759ccf7"
+        },
+        {
+          "bytes": 16742,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model07/model07_vwap48_rov48_rz256.yaml",
+          "sha256": "79ed1f96b17a5588bf2bf4618754e88599770bcf461a4322e9c85e973574241a"
+        },
+        {
+          "bytes": 16751,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model07/model07_vwap48_rov64_rz128.yaml",
+          "sha256": "4f54e0d0f59b2c8a5857ee83af543e3f49189239b03153505a4fb1209fe4332e"
+        },
+        {
+          "bytes": 16751,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model07/model07_vwap48_rov64_rz192.yaml",
+          "sha256": "430aecad9b50bd2bb61cb8fd43cc69f5f13f63ad27837cd0b4f0a9602f993e6a"
+        },
+        {
+          "bytes": 16751,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model07/model07_vwap48_rov64_rz256.yaml",
+          "sha256": "c362e29e5d7bcf4685be66cac0498b40b1a07b992d5641edc45ceada93259796"
+        },
+        {
+          "bytes": 16751,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model07/model07_vwap64_rov32_rz128.yaml",
+          "sha256": "b9072fd89d4ede4902798796f4d4c7a05f77994ac46ec0c39211796e92170ba7"
+        },
+        {
+          "bytes": 16751,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model07/model07_vwap64_rov32_rz192.yaml",
+          "sha256": "6db611ff4732b6927e6fce7558efc675be3d25dc305173c8fe81f5f745cadf29"
+        },
+        {
+          "bytes": 16751,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model07/model07_vwap64_rov32_rz256.yaml",
+          "sha256": "3559e77cc1200c4448981f806607eb8c0a64decf67c6c19e360d0599288b731f"
+        },
+        {
+          "bytes": 16742,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model07/model07_vwap64_rov48_rz128.yaml",
+          "sha256": "eeaf0d77683476ac4a8b0c75c5543ebc8dc5b25d100ba5ad1eb10c21a0e5c1ed"
+        },
+        {
+          "bytes": 16742,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model07/model07_vwap64_rov48_rz192.yaml",
+          "sha256": "8fb922b56e969a8721e7281f13cd58e3af02e9ec87158b414a2bef2478d16a94"
+        },
+        {
+          "bytes": 16742,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model07/model07_vwap64_rov48_rz256.yaml",
+          "sha256": "95ef12d8309ae2ac69e2962e3b88cef3e79cbbbda964b1201b9f5931cbd54b65"
+        },
+        {
+          "bytes": 16751,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model07/model07_vwap64_rov64_rz128.yaml",
+          "sha256": "a3385ab3495a7b4b542a8f0951b04508c1b56acd4a67cea270943a72ef853b2b"
+        },
+        {
+          "bytes": 16751,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model07/model07_vwap64_rov64_rz192.yaml",
+          "sha256": "923eee84a1497c7601766fc247fa0ea86c247d2f9f52d2c7cd989d569c21e6d8"
+        },
+        {
+          "bytes": 16751,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/06_feature_window_surface/model07/model07_vwap64_rov64_rz256.yaml",
+          "sha256": "cf524138b605cf436cead8c0d6766489ee0dcc48136f8dbc9d8f8657b4c30079"
+        },
+        {
+          "bytes": 15796,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/07_exit_grid_manual_barrier/exit_grid_00_no_trailing.yaml",
+          "sha256": "24d63f55bbf5c1846cbab8408813874d486b10e697e12d25eefe373762c0c672"
+        },
+        {
+          "bytes": 16006,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/07_exit_grid_manual_barrier/exit_grid_rtrail_a150_d100.yaml",
+          "sha256": "a493508f4fcb8b421297461cc1631058b154dccac36f78aa4687fc549792589a"
+        },
+        {
+          "bytes": 16008,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/07_exit_grid_manual_barrier/exit_grid_rtrail_a150_d125.yaml",
+          "sha256": "60128b73ef145df1a0784515d11d8237cf7d30618b2b44a1e23bd3cccb3a0ac7"
+        },
+        {
+          "bytes": 16006,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/07_exit_grid_manual_barrier/exit_grid_rtrail_a150_d150.yaml",
+          "sha256": "2a7a4f82d5e78b2c37c659905805a49d41da6025da7fa15ba76da0041bf937e7"
+        },
+        {
+          "bytes": 16006,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/07_exit_grid_manual_barrier/exit_grid_rtrail_a150_d200.yaml",
+          "sha256": "35e610f16ebb416b8306ec55746a6d50e58ad8430ea24466e45325fbcb422f9e"
+        },
+        {
+          "bytes": 16006,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/07_exit_grid_manual_barrier/exit_grid_rtrail_a200_d100.yaml",
+          "sha256": "90afeaaa3ef5eb94d31f6e7e07e606953015810c0b5bec83df5e263670373176"
+        },
+        {
+          "bytes": 16008,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/07_exit_grid_manual_barrier/exit_grid_rtrail_a200_d125.yaml",
+          "sha256": "81b2ac28e72fc9f6ad8b81d942219fc2449ac5fdd589120f559f853e3eb31022"
+        },
+        {
+          "bytes": 16006,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/07_exit_grid_manual_barrier/exit_grid_rtrail_a200_d150.yaml",
+          "sha256": "3096a7aca214be518ded27ca667b707ad5b4b758aa1ad144fbe60d163e0a2e3b"
+        },
+        {
+          "bytes": 16006,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/07_exit_grid_manual_barrier/exit_grid_rtrail_a200_d200.yaml",
+          "sha256": "2c83e454bafa5ff08289bfa75fdf87750d16733eaabfbad043f6257a70e546f6"
+        },
+        {
+          "bytes": 16006,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/07_exit_grid_manual_barrier/exit_grid_rtrail_a250_d100.yaml",
+          "sha256": "084df6209a700b6226d222f6431a5dc37a97a239ee133d3c6ea3ddfffc1ac31f"
+        },
+        {
+          "bytes": 16008,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/07_exit_grid_manual_barrier/exit_grid_rtrail_a250_d125.yaml",
+          "sha256": "2753144091df9a4b1ac411276b83deb997c0f626791069c5b5054e510bf5c6e6"
+        },
+        {
+          "bytes": 16006,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/07_exit_grid_manual_barrier/exit_grid_rtrail_a250_d150.yaml",
+          "sha256": "dc82e16b0ace41f38ef51dbdb38d4a4434ad7e82ebbf07a22ca5730019ac0891"
+        },
+        {
+          "bytes": 16006,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/07_exit_grid_manual_barrier/exit_grid_rtrail_a250_d200.yaml",
+          "sha256": "8de1c4c5d6bc9d867ed10aee9dfeb63b068fc55fa3a05924f619f81b315c2ed0"
+        },
+        {
+          "bytes": 16006,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/07_exit_grid_manual_barrier/exit_grid_rtrail_a300_d100.yaml",
+          "sha256": "feba4ca0e74631eed89171771a6357e19f35e0357eee2c5c682e1d804872eb03"
+        },
+        {
+          "bytes": 16008,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/07_exit_grid_manual_barrier/exit_grid_rtrail_a300_d125.yaml",
+          "sha256": "8ddbd5dbbf79437e1cfe6e9a60483986aecb9a6a9ef89d8b4578e5595b094bbe"
+        },
+        {
+          "bytes": 16006,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/07_exit_grid_manual_barrier/exit_grid_rtrail_a300_d150.yaml",
+          "sha256": "45c433f2bc79ce524e9561cec6ea8b2bd25878930cd71f6f4ef3fdba32cc5575"
+        },
+        {
+          "bytes": 16006,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/07_exit_grid_manual_barrier/exit_grid_rtrail_a300_d200.yaml",
+          "sha256": "71926dad28a78d8fb62eb0c566520983a8c3570103bcf68d2a9dd772680f071f"
+        },
+        {
+          "bytes": 16230,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/08_locked_tail_holdout/holdout6_baseline_locked.yaml",
+          "sha256": "714f8cfdb5e537ce859b63543cff8aaee9f18723e568703f90d07c82d481e2ab"
+        },
+        {
+          "bytes": 16644,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/08_locked_tail_holdout/holdout6_model05_locked.yaml",
+          "sha256": "68fa6c03912a4968c54eb3dbe220815e9b617c95864d6c7a4129441bf03855ac"
+        },
+        {
+          "bytes": 16591,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/08_locked_tail_holdout/holdout6_model06_locked.yaml",
+          "sha256": "e07789ae590f2d2b43fdd4a3bf8f35e9ef48393015afda0d959f6bda28fdca52"
+        },
+        {
+          "bytes": 16914,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/08_locked_tail_holdout/holdout6_model07_locked.yaml",
+          "sha256": "b7c5098837f61f1e36bcca88239fd1e56fe3f203cbdd5c47b9e440d78bd8921e"
+        },
+        {
+          "bytes": 16246,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/BEST/ethusd/trial0041_validation_suite_v2/08_locked_tail_holdout/holdout6_trendq02_locked.yaml",
+          "sha256": "192d519da9b24ff4cc4aaf8d42dcbbc97c5b033b9be19d79cfd0d2dade0066a7"
+        },
+        {
+          "bytes": 17438,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v1/00_ftmo_v1_control_risk020_no_daily_guard.yaml",
+          "sha256": "b21ba4f242069d0ae26e7c739988979b75cf918fe5c69f120ed2ee24750065a6"
+        },
+        {
+          "bytes": 17515,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v1/01_ftmo_v1_risk015_guarded.yaml",
+          "sha256": "3584d4e56415add331dde0fcd1bf8933762c10678619e9a1d354c889f0f534f5"
+        },
+        {
+          "bytes": 17534,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v1/02_ftmo_v1_risk020_guarded.yaml",
+          "sha256": "85b7b298755e5e0c346bceffeb16167b2e8e472eabb14b50853ba40f1905add4"
+        },
+        {
+          "bytes": 17531,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v1/03_ftmo_v1_risk025_guarded.yaml",
+          "sha256": "75cd41d25f39922b8ec950208a73823ff99ccc1812487130e38ddd84c5862ca4"
+        },
+        {
+          "bytes": 17822,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v1/04_ftmo_v1_risk020_trail_a100_d050.yaml",
+          "sha256": "79bfc368ae1b829ecdbd1ad1976f5e211543c9f11d4383e493cd5f662c5a275b"
+        },
+        {
+          "bytes": 17729,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v1/05_ftmo_v1_risk020_partial50_at100.yaml",
+          "sha256": "1181bfec579140a59c50e49b626fef2876790ed993c753942c470ae9a536932e"
+        },
+        {
+          "bytes": 17773,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v1/06_ftmo_v1_risk020_noprogress_b4_mfe030.yaml",
+          "sha256": "c164f541550a82765aef483f62978826c76473237b0c5f89faadcb586a220261"
+        },
+        {
+          "bytes": 17560,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v1/07_ftmo_v1_risk020_commission_only.yaml",
+          "sha256": "dc691d19a206c5cb0bf2f426572efa9b81a2556c3d5ad54c5bc6140a0d21c185"
+        },
+        {
+          "bytes": 17510,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v1/08_ftmo_v1_risk020_adverse_cost.yaml",
+          "sha256": "003115049a589433fab73b23d490a8a954fad3326fd8b6ebbe2019641ba92bd0"
+        },
+        {
+          "bytes": 17859,
+          "exists": true,
+          "path": "config/experiments/foundation_alpha/FTMO/v1/09_ftmo_v1_risk020_trail_a100_d050_adverse_cost.yaml",
+          "sha256": "2c2ada6f25f1aac8ff45f2a8e66a91eb3b6697fb0ba5929b8636989067a6643e"
+        },
+        {
+          "exists": false,
+          "path": "config/experiments/foundation_alpha/usoil/usoil_30m_lightgbm_h24_structured_tail_alpha_v1.yaml"
+        },
+        {
+          "bytes": 7933,
+          "exists": true,
+          "path": "src/backtesting/btcusd_dual_trend_ftmo.py",
+          "sha256": "4105138f6438873be1f1ab4f86f11d8c99ade083aacdd1a841896c2f2157c63f"
+        },
+        {
+          "bytes": 18337,
+          "exists": true,
+          "path": "src/evaluation/btcusd_dual_trend_ftmo.py",
+          "sha256": "d2abcef3d96f7514d3e596041efc5f318b408be7cfe4646ae468cc8d50b09ef5"
+        },
+        {
+          "bytes": 34771,
+          "exists": true,
+          "path": "src/experiments/support/btcusd_dual_trend_ftmo.py",
+          "sha256": "8ca507e640c190bc9d1fcae353f4079f9e35044c639f673904327269f3513b8c"
+        },
+        {
+          "bytes": 10551,
+          "exists": true,
+          "path": "src/features/btcusd_dual_trend_ftmo.py",
+          "sha256": "32a55f2bb3204ab551dac89833cb9225a78235a0dd3302a78098247eeef81be9"
+        },
+        {
+          "bytes": 12109,
+          "exists": true,
+          "path": "src/features/registry.py",
+          "sha256": "f88f620f10d08eea69743269dfeac284fda9cacf9279e736d421702d00b91241"
+        },
+        {
+          "bytes": 2402,
+          "exists": true,
+          "path": "src/pipelines/registry.py",
+          "sha256": "9dbad19b41750ddd3221a616b0dadaa25d1f2d2b19a50115d401cd25d4fc64cd"
+        },
+        {
+          "bytes": 4395,
+          "exists": true,
+          "path": "src/signals/btcusd_dual_trend_ftmo_signal.py",
+          "sha256": "a4c17dab07fe0cd971114d9f8bb5048dbe063b766c0d0ae8ca1f65b7c88243e0"
+        },
+        {
+          "bytes": 7182,
+          "exists": true,
+          "path": "src/signals/registry.py",
+          "sha256": "18ddc75853fd44c712e746db2d879375fa98b208419631dcbee487e5861f812c"
+        },
+        {
+          "bytes": 2931,
+          "exists": true,
+          "path": "src/utils/config.py",
+          "sha256": "7cacaa838bd5724e4b94351f0422d208429371a42fe43f7af64202f51f934426"
+        },
+        {
+          "bytes": 4709,
+          "exists": true,
+          "path": "tests/backtesting/test_btcusd_dual_trend_ftmo.py",
+          "sha256": "c1a62a7ac1150087b65fb32a1bbf5bf6d39f8181e055226f5b26c0131be40560"
+        },
+        {
+          "bytes": 1774,
+          "exists": true,
+          "path": "tests/experiments/test_btcusd_dual_trend_ftmo_pipeline.py",
+          "sha256": "6d0cd1e3e38db6f95c940e477a722c1cc8f10410514fd1e78292079aa2089a20"
+        },
+        {
+          "bytes": 6115,
+          "exists": true,
+          "path": "tests/features/test_btcusd_dual_trend_ftmo.py",
+          "sha256": "3dad8892e719504aaa7bcb3e878a9ea13ae1eab865bf6516a89f1c2e8ad9d5af"
+        },
+        {
+          "bytes": 1542,
+          "exists": true,
+          "path": "tests/signals/test_btcusd_dual_trend_ftmo_signal.py",
+          "sha256": "f027a77b8cae15dede376d2a908258b55daa38ecb3ddedef55f95b9dd06d4adb"
+        }
+      ],
+      "worktree_state_sha256": "cd77d9abeee470d0148d1001fead351bd5ee999c209c1fdcc0563b438f3a9322"
+    },
+    "run_created_at_utc": "2026-08-01T16:11:33.157204+00:00"
+  },
+  "task_type": "regression",
+  "training_range": {
+    "end_position": 108980,
+    "end_timestamp": "2026-06-09T11:30:00",
+    "raw_rows": 108981,
+    "rows": 108598,
+    "start_position": 0,
+    "start_timestamp": "2020-01-01T21:00:00"
+  }
+}
