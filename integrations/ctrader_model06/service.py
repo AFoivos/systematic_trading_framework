@@ -125,6 +125,18 @@ class Model06Runtime:
         request_id = str(payload.get("request_id") or "")
         symbol = str(payload.get("symbol") or "")
         timeframe = str(payload.get("timeframe") or "")
+        
+        # Normalize cTrader timeframe names to model contract format.
+        timeframe_aliases = {
+            "Minute": "M1",
+            "Minute5": "M5",
+            "Minute15": "M15",
+            "Minute30": "M30",
+            "Hour": "H1",
+            "Hour4": "H4",
+        }
+        timeframe = timeframe_aliases.get(timeframe, timeframe)
+        
         if symbol != self.config.symbol:
             raise ContractError(f"symbol must be {self.config.symbol!r}, got {symbol!r}")
         if timeframe.upper() != self.config.timeframe.upper():

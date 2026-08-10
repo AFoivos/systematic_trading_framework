@@ -1,0 +1,137 @@
+strategy:
+  name: ethusd_30m_chronos2_rank_covariates_h24
+  timeframe: 30m
+  assets: [ETHUSD]
+  description: >
+    Chronos-2 ETHUSD 30m H24 experiment with selected stationary/rank past
+    covariates. The covariate set avoids raw volatility levels with strong PSI drift.
+data:
+  source: dukascopy_csv
+  interval: 30m
+  start: null
+  end: null
+  alignment: inner
+  symbol: ETHUSD
+  pit:
+    timestamp_alignment: {source_timezone: UTC, output_timezone: UTC, normalize_daily: false, duplicate_policy: last}
+    corporate_actions: {policy: none, adj_close_col: adj_close}
+    universe_snapshot: {inactive_policy: raise}
+  storage:
+    mode: cached_only
+    dataset_id: ethusd_30m_chronos2_rank_covariates_h24
+    save_raw: false
+    save_processed: true
+    load_path: data/raw/dukascopy_30m_clean/ethusd_30m.csv
+    raw_dir: data/raw
+    processed_dir: data/processed
+features:
+- step: returns
+  params: {log: false, col_name: close_ret}
+- step: volatility
+  params: {returns_col: close_ret, rolling_windows: [24, 48, 96, 192], ewma_spans: [], annualization_factor: null}
+- step: trend
+  params: {price_col: close, sma_windows: [], ema_spans: [24, 48, 96, 192], ema_col_template: "ema_{span}", add_ratios: false}
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - {numerator_col: ema_48, denominator_col: ema_192, output_col: ema_trend_48_192, subtract: 1.0}
+- step: atr
+  params: {high_col: high, low_col: low, close_col: close, window: 48, windows: [48], method: wilder, add_over_price: false, atr_col: atr_48}
+  transforms:
+    ratio:
+      enabled: true
+      items:
+      - {numerator_col: atr_48, denominator_col: close, output_col: atr_over_price_48}
+- step: bollinger
+  outputs:
+    bb_ma_192: bollinger_mid_192
+    bb_upper_192_2.0: bollinger_upper_192
+    bb_lower_192_2.0: bollinger_lower_192
+    bb_width_192_2.0: bollinger_bandwidth
+    bb_percent_b_192_2.0: bollinger_percent_b
+  params: {price_col: close, window: 192, n_std: 2.0}
+- step: macd
+  outputs: {macd_12_26: macd, macd_signal_9: macd_signal, macd_hist_12_26_9: macd_hist}
+  params: {price_col: close, fast: 12, slow: 26, signal: 9}
+- step: stochastic_rsi
+  outputs: {stoch_rsi_k: stoch_rsi_k, stoch_rsi_d: stoch_rsi_d}
+  params: {price_col: close, rsi_period: 14, stoch_period: 14, k_period: 3, d_period: 3, oversold: 0.2, overbought: 0.8, prefix: stoch_rsi}
+- step: indicator_pullback
+  params:
+    asset_vocab: [ETHUSD]
+    open_col: open
+    high_col: high
+    low_col: low
+    close_col: close
+    ema_fast_period: 24
+    ema_mid_period: 96
+    ema_slow_period: 192
+    atr_period: 48
+    atr_pct_rank_window: 192
+    macd_hist_col: macd_hist
+    rsi_period: 14
+    stoch_k_col: stoch_rsi_k
+    stoch_d_col: stoch_rsi_d
+    bollinger_bandwidth_col: bollinger_bandwidth
+    bollinger_percent_b_col: bollinger_percent_b
+    bb_bandwidth_rank_window: 192
+    realized_vol_windows: [24, 48, 96, 192]
+    return_windows: [1, 4, 8, 16, 24, 48]
+    rolling_return_windows: [24, 48]
+model:
+  kind: chronos_2_forecaster
+  use_features: true
+  feature_cols:
+  - atr_pct_rank_192
+  - bollinger_bandwidth_rank_192
+  - bollinger_percent_b
+  - ema_trend_48_192
+  - ema_alignment_score
+  - distance_from_ema24_atr
+  - distance_from_ema96_atr
+  - range_to_atr
+  - rolling_return_24
+  - rolling_return_48
+  outputs: {pred_ret_col: pred_ret, pred_is_oos_col: pred_is_oos}
+  target:
+    kind: future_return_regression
+    price_col: close
+    returns_col: close_ret
+    returns_type: simple
+    horizon_bars: 24
+    fwd_col: target_future_return_h24
+    label_col: target_future_return_h24
+  split: {method: purged, train_size: 35040, test_size: 4380, step_size: 4380, expanding: true, max_folds: 10, purge_bars: 24, embargo_bars: 24}
+  params:
+    model_id: amazon/chronos-2
+    source_col: close
+    source_kind: price
+    lookback: 512
+    min_context: 96
+    prediction_length: 24
+    quantiles: [0.1, 0.5, 0.9]
+signals:
+  kind: forecast_threshold
+  params:
+    forecast_col: pred_ret
+    signal_col: signal_pretrained_tail
+    upper: 0.01
+    lower: -0.01
+    mode: long_short
+    activation_filters:
+    - {col: atr_pct_rank_192, op: ge, value: 0.2}
+    - {col: atr_pct_rank_192, op: le, value: 0.85}
+    - {col: bollinger_bandwidth_rank_192, op: ge, value: 0.4}
+target: {}
+validation: {method: purged_walk_forward, purge_bars: 24, embargo_bars: 24}
+metrics: {primary: [sharpe, profit_factor, max_drawdown, trade_count], regression: [mae, rmse, r2, correlation, directional_accuracy]}
+runtime: {seed: 7, repro_mode: strict, deterministic: true, threads: 1, seed_torch: false}
+risk: {cost_per_turnover: 0.0001, slippage_per_turnover: 0.0, target_vol: null, max_leverage: 1.0, sizing: {}, dd_guard: {enabled: false}, portfolio_guard: {}, drawdown_sizing: {}, vol_col: null}
+backtest: {engine: vectorized, returns_col: close_ret, signal_col: signal_pretrained_tail, periods_per_year: 17520, returns_type: simple, missing_return_policy: raise_if_exposed, min_holding_bars: 24, subset: test, vol_col: null}
+portfolio: {enabled: false, construction: signal_weights, gross_target: 1.0, long_short: true}
+evaluation: {strict_oos_only: true}
+monitoring: {enabled: true, psi_threshold: 0.15, n_bins: 10}
+diagnostics: {enabled: true, model: {enabled: true}, forecast: {quantiles: 10, autocorrelation_lags: [1, 2, 4, 8, 24], volatility_col: atr_over_price_48}, regime_performance: {enabled: true}}
+execution: {enabled: false, mode: paper, capital: 100000.0, price_col: close, min_trade_notional: 0.0, current_weights: {}, current_prices: {}}
+logging: {enabled: true, output_dir: logs/experiments, run_name: ethusd_30m_chronos2_rank_covariates_h24, save_model: false, save_predictions: true, save_processed: true}

@@ -64,6 +64,7 @@ from .helpers import (
 )
 from .path_efficiency import add_path_efficiency
 from .rolling_autocorrelation import add_rolling_autocorrelation, compute_rolling_autocorrelation
+from .rolling_extrema import add_extrema_feature
 from .technical.trend import (
     compute_sma,
     compute_ema,
@@ -150,6 +151,7 @@ __all__ = [
     "add_macro_context_features",
     "add_multi_timeframe_features",
     "swing_extrema_context",
+    "add_extrema_feature",
     "add_opening_range_breakout_features",
     "add_support_resistance_features",
     "add_support_resistance_v2_features",

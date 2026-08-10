@@ -54,6 +54,7 @@ from .regime_context import add_regime_context_features
 from .helpers.normalizations.returns import add_close_returns
 from .roofing_filter import add_roofing_filter
 from .rolling_autocorrelation import add_rolling_autocorrelation
+from .rolling_extrema import add_extrema_feature
 from .scalp_microstructure_proxy import add_scalp_microstructure_proxy
 from .session_context import add_session_context_features
 from .shannon_entropy import add_shannon_entropy
@@ -167,6 +168,7 @@ _FEATURE_COMPONENTS: tuple[tuple[str, FeatureFn], ...] = (
     ("hilbert_transform", add_hilbert_transform),
     ("roofing_filter", add_roofing_filter),
     ("rolling_autocorrelation", add_rolling_autocorrelation),
+    ("extrema", add_extrema_feature),
     ("schaff_trend_cycle", add_schaff_trend_cycle_features),
     ("supersmoother", add_supersmoother),
     ("shannon_entropy", add_shannon_entropy),

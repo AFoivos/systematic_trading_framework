@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "dgSpecHash": "FjKPy4uO97g=",
+  "success": true,
+  "projectFilePath": "/Users/foivosampatzis/Projects/personal/systematic_trading_framework/integrations/ctrader_model06/standalone/parity/Model06Parity.csproj",
+  "expectedPackageFiles": [
+    "/Users/foivosampatzis/.nuget/packages/microsoft.netcore.app.ref/8.0.29/microsoft.netcore.app.ref.8.0.29.nupkg.sha512",
+    "/Users/foivosampatzis/.nuget/packages/microsoft.aspnetcore.app.ref/8.0.29/microsoft.aspnetcore.app.ref.8.0.29.nupkg.sha512",
+    "/Users/foivosampatzis/.nuget/packages/microsoft.netcore.app.host.osx-arm64/8.0.29/microsoft.netcore.app.host.osx-arm64.8.0.29.nupkg.sha512"
+  ],
+  "logs": []
+}
