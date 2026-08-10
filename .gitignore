@@ -177,7 +177,18 @@ tests/experiments/*
 reports/
 !reports/.gitkeep
 
-data/raw/dukascopy_30m_clean/btcusd_1m.csv
+# Market data is local/reproducible input and must not be versioned.
+data/
 
 tmp
+
+# Generated .NET build outputs under integration projects.
+integrations/**/[Bb]in/
+integrations/**/[Oo]bj/
+
+# Reproducible intermediate Model06 exports. Keep the generated C# deployment
+# sources and the compact contract tracked; regenerate these large inputs when needed.
+integrations/ctrader_model06/standalone/model06_lightgbm_dump.json
+integrations/ctrader_model06/standalone/model06_lightgbm_model.txt
+integrations/ctrader_model06/standalone/model06_python_reference.csv
 data

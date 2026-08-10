@@ -72,7 +72,7 @@ validation: {method: purged_walk_forward, purge_bars: 24, embargo_bars: 24}
 metrics: {primary: [sharpe, profit_factor, max_drawdown, trade_count], regression: [mae, rmse, r2, correlation, directional_accuracy]}
 runtime: {seed: 7, repro_mode: strict, deterministic: true, threads: 1, seed_torch: false}
 risk: {cost_per_turnover: 0.0001, slippage_per_turnover: 0.0, target_vol: null, max_leverage: 1.0, sizing: {}, dd_guard: {enabled: false}, portfolio_guard: {}, drawdown_sizing: {}, vol_col: null}
-backtest: {engine: vectorized, returns_col: close_ret, signal_col: signal_pretrained_tail, periods_per_year: 17520, returns_type: simple, missing_return_policy: raise_if_exposed, min_holding_bars: 24, subset: test, vol_col: null}
+backtest: {engine: vectorized, returns_col: close_ret, signal_col: signal_pretrained_tail, allow_short: true, periods_per_year: 17520, returns_type: simple, missing_return_policy: raise_if_exposed, min_holding_bars: 24, subset: test, vol_col: null}
 portfolio: {enabled: false, construction: signal_weights, gross_target: 1.0, long_short: true}
 evaluation: {strict_oos_only: true}
 monitoring: {enabled: true, psi_threshold: 0.15, n_bins: 10}

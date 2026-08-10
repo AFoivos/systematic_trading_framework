@@ -24,3 +24,12 @@ logs/
 output/
 tmp/
 plots/
+
+# Generated .NET build outputs are not part of the Python runtime image.
+integrations/**/[Bb]in/
+integrations/**/[Oo]bj/
+
+# Reproducible Model06 export intermediates are not needed in the image.
+integrations/ctrader_model06/standalone/model06_lightgbm_dump.json
+integrations/ctrader_model06/standalone/model06_lightgbm_model.txt
+integrations/ctrader_model06/standalone/model06_python_reference.csv

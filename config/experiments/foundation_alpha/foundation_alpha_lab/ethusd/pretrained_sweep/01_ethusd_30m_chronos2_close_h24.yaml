@@ -89,6 +89,7 @@ backtest:
   engine: vectorized
   returns_col: close_ret
   signal_col: signal_pretrained_tail
+  allow_short: true
   periods_per_year: 17520
   returns_type: simple
   missing_return_policy: raise_if_exposed
