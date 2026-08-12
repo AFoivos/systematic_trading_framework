@@ -12,7 +12,10 @@
     "specification_hash",
     "approval",
     "scientific_contract",
+    "data_eligibility",
+    "historical_partition",
     "snapshot_reference",
+    "historical_pseudo_oos_reference",
     "evidence_roles",
     "features",
     "horizons",
@@ -27,7 +30,7 @@
     "blockers"
   ],
   "properties": {
-    "schema_version": {"const": 1},
+    "schema_version": {"const": 2},
     "pipeline": {
       "type": "object",
       "additionalProperties": false,
@@ -94,47 +97,39 @@
         }
       }
     },
-    "snapshot_reference": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "snapshot_id",
-        "manifest_path",
-        "source_path",
-        "expected_sha256",
-        "evidence_role",
-        "source_classification",
-        "legacy_classifications",
-        "readiness"
-      ],
-      "properties": {
-        "snapshot_id": {"type": "string", "minLength": 1},
-        "manifest_path": {"type": ["string", "null"], "minLength": 1},
-        "source_path": {"type": "string", "minLength": 1},
-        "expected_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "evidence_role": {"const": "DISCOVERY"},
-        "source_classification": {
-          "enum": [
-            "VALIDATED_MARKET_DATA",
-            "PROCESSED_EXPERIMENT_ARTIFACT",
-            "LEGACY_MARKET_DATA",
-            "UNKNOWN"
-          ]
-        },
-        "legacy_classifications": {
-          "type": "array",
-          "items": {
-            "enum": [
-              "VALID",
-              "REGENERATE_REQUIRED",
-              "LEGACY_AMBIGUOUS_UNITS",
-              "NOT_RESEARCH_SOURCE"
-            ]
-          },
-          "uniqueItems": true
-        },
-        "readiness": {"type": "string", "minLength": 1}
+    "data_eligibility": {
+      "const": {
+        "canonical_bar_policy": "FULL_30_OF_30_OBSERVED_MINUTES",
+        "observed_minute_count_column": "observed_minute_count",
+        "required_observed_minutes": 30,
+        "timestamp_gap_policy": "PRESERVE_TIMELINE_INVALIDATE_DEPENDENCY_WINDOWS",
+        "feature_window_policy": "FULL_CONTIGUOUS_T_MINUS_W_THROUGH_T",
+        "target_window_policy": "FULL_CONTIGUOUS_T_THROUGH_T_PLUS_H_PLUS_1",
+        "partial_bar_repair": "FORBIDDEN",
+        "gap_imputation": "FORBIDDEN"
       }
+    },
+    "historical_partition": {
+      "const": {
+        "parent_snapshot_id": "ETHUSD-30M-CANONICAL-V1",
+        "parent_manifest_path": "data/research_snapshots/ETHUSD-30M-CANONICAL-V1/manifest.json",
+        "parent_expected_sha256": "83d182c98ccbb225220eac02b1bae57917e3b2d2feee5929c53d57c8abaf4202",
+        "cutoff_utc": "2025-07-01T00:00:00Z",
+        "assignment_rule": "TIMESTAMP_LT_CUTOFF_DISCOVERY_ELSE_HISTORICAL_PSEUDO_OOS",
+        "child_snapshot_write_mode": "IMMUTABLE_WRITE_ONCE"
+      }
+    },
+    "snapshot_reference": {
+      "allOf": [
+        {"$ref": "#/$defs/childSnapshotReference"},
+        {"properties": {"evidence_role": {"const": "DISCOVERY"}}}
+      ]
+    },
+    "historical_pseudo_oos_reference": {
+      "allOf": [
+        {"$ref": "#/$defs/childSnapshotReference"},
+        {"properties": {"evidence_role": {"const": "HISTORICAL_PSEUDO_OOS"}}}
+      ]
     },
     "evidence_roles": {
       "type": "object",
@@ -219,68 +214,68 @@
       }
     },
     "statistics": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "inference_target",
-        "net_cost_scope",
-        "minimum_observations",
-        "block_bootstrap",
-        "chronological_stability"
-      ],
-      "properties": {
-        "inference_target": {"const": "EXECUTABLE_RETURN"},
-        "net_cost_scope": {"const": "OBSERVED_BID_ASK_SPREAD_ONLY"},
-        "minimum_observations": {"type": "integer", "minimum": 2},
+      "const": {
+        "inference_target": "EXECUTABLE_RETURN",
+        "net_cost_scope": "OBSERVED_BID_ASK_SPREAD_ONLY",
+        "minimum_observations": 200,
+        "minimum_coverage_fraction": 0.5,
+        "minimum_occupied_primary_blocks": 20,
+        "hac": {
+          "estimator": "CONDITIONAL_MEAN_RATIO",
+          "kernel": "BARTLETT",
+          "primary_lag_rule": "FIXED_BARS",
+          "primary_lag_bars": 48,
+          "sensitivity_lags_bars": [96, 192],
+          "sensitivity_role": "DIAGNOSTIC_ONLY_NON_BINDING"
+        },
         "block_bootstrap": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "method",
-            "block_length_bars",
-            "resamples",
-            "confidence_level",
-            "seed"
-          ],
-          "properties": {
-            "method": {"const": "CIRCULAR_MOVING_BLOCK"},
-            "block_length_bars": {"type": "integer", "minimum": 1},
-            "resamples": {"type": "integer", "minimum": 1},
-            "confidence_level": {
-              "type": "number",
-              "exclusiveMinimum": 0,
-              "exclusiveMaximum": 1
-            },
-            "seed": {"type": "integer"}
-          }
+          "method": "STRATIFIED_SEGMENTED_MOVING_BLOCK",
+          "timeline": "FULL_UNCOMPRESSED_CANONICAL_ROWS",
+          "strata": "FROZEN_CALENDAR_PERIODS",
+          "gap_handling": "NO_BLOCK_CROSSES_GAP",
+          "primary_block_length_bars": 48,
+          "sensitivity_block_lengths_bars": [96, 192],
+          "sensitivity_role": "DIAGNOSTIC_ONLY_NON_BINDING",
+          "resamples": 2000,
+          "confidence_level": 0.95,
+          "minimum_valid_resample_fraction": 0.99,
+          "seed": 7
         },
         "chronological_stability": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["partition", "block_count"],
-          "properties": {
-            "partition": {"const": "EQUAL_OBSERVATION_COUNT"},
-            "block_count": {"type": "integer", "minimum": 2}
-          }
+          "partition": "FROZEN_CALENDAR_PERIODS",
+          "periods": [
+            {"name": "Y2020", "start_inclusive": "2020-01-01T00:00:00Z", "end_exclusive": "2021-01-01T00:00:00Z"},
+            {"name": "Y2021", "start_inclusive": "2021-01-01T00:00:00Z", "end_exclusive": "2022-01-01T00:00:00Z"},
+            {"name": "Y2022", "start_inclusive": "2022-01-01T00:00:00Z", "end_exclusive": "2023-01-01T00:00:00Z"},
+            {"name": "Y2023", "start_inclusive": "2023-01-01T00:00:00Z", "end_exclusive": "2024-01-01T00:00:00Z"},
+            {"name": "Y2024", "start_inclusive": "2024-01-01T00:00:00Z", "end_exclusive": "2025-01-01T00:00:00Z"},
+            {"name": "Y2025H1", "start_inclusive": "2025-01-01T00:00:00Z", "end_exclusive": "2025-07-01T00:00:00Z"}
+          ],
+          "minimum_observations_per_period": 30,
+          "required_periods": 6,
+          "direction_rule": "SAME_NONZERO_SIGN_IN_ALL_REQUIRED_PERIODS"
         }
       }
     },
     "multiple_testing": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["family_definition", "methods", "status"],
-      "properties": {
-        "family_definition": {
-          "const": [
-            "feature_family",
-            "horizon",
-            "target",
-            "direction",
-            "preregistered_interaction"
-          ]
-        },
-        "methods": {"const": ["BH", "BY"]},
-        "status": {"const": "IMPLEMENTED_PHASE_3"}
+      "const": {
+        "family_definition": [
+          "feature_family",
+          "horizon",
+          "target",
+          "direction",
+          "preregistered_interaction"
+        ],
+        "methods": ["BH", "BY"],
+        "global_family_scope": "ALL_PREREGISTERED_EFFECTS",
+        "global_family_size": 3792,
+        "failed_hypothesis_p_value": 1.0,
+        "retain_failed_in_denominator": true,
+        "binding_method": "GLOBAL_BY",
+        "primary_fdr_alpha": 0.05,
+        "local_fdr_alpha": 0.05,
+        "local_methods_role": "DIAGNOSTIC_ONLY_NON_BINDING",
+        "status": "IMPLEMENTED_FROZEN_CONTRACT"
       }
     },
     "promotion_gates": {
@@ -309,7 +304,7 @@
       "required": ["output_root", "layout_version", "write_mode"],
       "properties": {
         "output_root": {"const": "logs/experiments/alpha_discovery"},
-        "layout_version": {"const": 1},
+        "layout_version": {"const": 2},
         "write_mode": {"const": "IMMUTABLE_RUN_DIRECTORY"}
       }
     },
@@ -388,6 +383,48 @@
     }
   ],
   "$defs": {
+    "childSnapshotReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "snapshot_id",
+        "manifest_path",
+        "source_path",
+        "expected_sha256",
+        "evidence_role",
+        "source_classification",
+        "legacy_classifications",
+        "readiness",
+        "parent_snapshot_id",
+        "parent_sha256",
+        "partition_start_inclusive",
+        "partition_end_exclusive",
+        "expected_row_count",
+        "expected_first_timestamp",
+        "expected_last_timestamp"
+      ],
+      "properties": {
+        "snapshot_id": {"type": "string", "minLength": 1},
+        "manifest_path": {"type": "string", "minLength": 1},
+        "source_path": {"type": "string", "minLength": 1},
+        "expected_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "evidence_role": {
+          "enum": ["DISCOVERY", "HISTORICAL_PSEUDO_OOS"]
+        },
+        "source_classification": {"const": "VALIDATED_MARKET_DATA"},
+        "legacy_classifications": {"const": []},
+        "readiness": {"const": "ELIGIBLE"},
+        "parent_snapshot_id": {"const": "ETHUSD-30M-CANONICAL-V1"},
+        "parent_sha256": {
+          "const": "83d182c98ccbb225220eac02b1bae57917e3b2d2feee5929c53d57c8abaf4202"
+        },
+        "partition_start_inclusive": {"type": "string", "minLength": 1},
+        "partition_end_exclusive": {"type": "string", "minLength": 1},
+        "expected_row_count": {"type": "integer", "minimum": 1},
+        "expected_first_timestamp": {"type": "string", "minLength": 1},
+        "expected_last_timestamp": {"type": "string", "minLength": 1}
+      }
+    },
     "availableAt": {
       "type": "object",
       "additionalProperties": false,

@@ -7,11 +7,18 @@ from typing import Final, Sequence
 import numpy as np
 import pandas as pd
 
+from src.src_data.alpha_discovery_eligibility import build_bar_eligibility
+
 ALPHA_DISCOVERY_HORIZONS: Final[tuple[int, ...]] = (1, 2, 4, 8, 16, 32)
 
 
 class AlphaDiscoveryTargetError(ValueError):
     """Raised when future outcomes cannot honor the frozen quote contract."""
+
+
+def target_eligibility_column(horizon: int) -> str:
+    resolved = int(horizon)
+    return f"eligible_target__h{resolved}"
 
 
 def _forward_extreme(series: pd.Series, horizon: int, *, kind: str) -> pd.Series:
@@ -93,7 +100,13 @@ def build_alpha_discovery_targets(
             "Executable target inputs contain crossed quotes."
         )
 
-    output = pd.DataFrame({"timestamp": timestamps})
+    eligibility = build_bar_eligibility(frame)
+    output = pd.DataFrame(
+        {
+            "timestamp": timestamps,
+            "gap_segment_id": eligibility.gap_segment_id,
+        }
+    )
     one_bar_log_return = np.log(mid_close).diff()
     resolved_horizons: list[int] = []
     for raw_horizon in horizons:
@@ -142,6 +155,15 @@ def build_alpha_discovery_targets(
             next_bid_open - future_ask_high
         ) / next_bid_open
 
+        # The executable contract consumes the state bar, next-open entry,
+        # complete future path, and open[t+h+1] exit.  Every target is masked to
+        # that same strict common dependency window so no metric receives a
+        # more favorable sample through hidden target-specific coverage.
+        target_mask = eligibility.forward_window(horizon + 1)
+        for column in target_columns_for_horizon(horizon):
+            output[column] = output[column].where(target_mask)
+        output[target_eligibility_column(horizon)] = target_mask
+
     return output
 
 
@@ -165,4 +187,5 @@ __all__ = [
     "AlphaDiscoveryTargetError",
     "build_alpha_discovery_targets",
     "target_columns_for_horizon",
+    "target_eligibility_column",
 ]

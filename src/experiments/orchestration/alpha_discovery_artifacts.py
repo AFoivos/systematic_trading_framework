@@ -173,6 +173,29 @@ def write_alpha_discovery_artifacts(
         stability_path = temporary_layout.reports / "temporal_stability.csv"
         scan.temporal_stability.to_csv(stability_path, index=False)
         written.append(stability_path)
+        sensitivities_path = temporary_layout.reports / "inference_sensitivities.csv"
+        scan.inference_sensitivities.to_csv(sensitivities_path, index=False)
+        written.append(sensitivities_path)
+
+        inference_contract_path = temporary_layout.registry / "inference_contract.json"
+        automatic_fail_count = int(scan.effects["automatic_fail"].sum())
+        _write_json(
+            inference_contract_path,
+            {
+                "hac": cfg["statistics"]["hac"],
+                "block_bootstrap": cfg["statistics"]["block_bootstrap"],
+                "chronological_stability": cfg["statistics"][
+                    "chronological_stability"
+                ],
+                "multiple_testing": cfg["multiple_testing"],
+                "observed_effect_rows": int(len(scan.effects)),
+                "automatic_fail_effect_rows": automatic_fail_count,
+                "automatic_fail_p_value": 1.0,
+                "global_family_size": 3792,
+                "binding_gate": "GLOBAL_BY_AT_0.05",
+            },
+        )
+        written.append(inference_contract_path)
 
         artifact_sha256 = _artifact_hashes(temporary, written)
         created_at = datetime.now(timezone.utc).isoformat()
@@ -198,7 +221,15 @@ def write_alpha_discovery_artifacts(
             "input_row_count": int(len(loaded.frame)),
             "conditional_effect_count": int(len(scan.effects)),
             "eligible_inference_count": eligible_count,
+            "automatic_fail_effect_count": int(
+                scan.effects["automatic_fail"].sum()
+            ),
             "temporal_stability_row_count": int(len(scan.temporal_stability)),
+            "inference_sensitivity_row_count": int(
+                len(scan.inference_sensitivities)
+            ),
+            "global_multiple_testing_family_size": 3792,
+            "binding_multiple_testing_gate": "GLOBAL_BY_AT_0.05",
             "dimensions": sorted(
                 int(value) for value in scan.effects["dimension"].unique()
             ),

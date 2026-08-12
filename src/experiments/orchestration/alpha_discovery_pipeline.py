@@ -8,6 +8,8 @@ import json
 from pathlib import Path
 from typing import Any, Sequence
 
+import pandas as pd
+
 from src.experiments.alpha_discovery_scanner import (
     ScannerSettings,
     fit_discovery_quintiles,
@@ -71,6 +73,57 @@ def _snapshot_reference(cfg: dict[str, Any]) -> SnapshotReference:
     )
 
 
+def _validate_loaded_discovery_partition(
+    cfg: dict[str, Any],
+    *,
+    loaded: Any,
+) -> None:
+    """Bind runtime access to the exact frozen discovery child, never its parent."""
+
+    reference = cfg["snapshot_reference"]
+    if loaded.manifest.row_count != int(reference["expected_row_count"]):
+        raise AlphaDiscoveryExecutionRefused(
+            "Discovery child row count differs from the frozen specification."
+        )
+    if loaded.manifest.first_timestamp != reference["expected_first_timestamp"]:
+        raise AlphaDiscoveryExecutionRefused(
+            "Discovery child first timestamp differs from the frozen specification."
+        )
+    if loaded.manifest.last_timestamp != reference["expected_last_timestamp"]:
+        raise AlphaDiscoveryExecutionRefused(
+            "Discovery child last timestamp differs from the frozen specification."
+        )
+    timestamps = pd.to_datetime(loaded.frame["timestamp"], utc=True, errors="raise")
+    start = pd.Timestamp(reference["partition_start_inclusive"])
+    end = pd.Timestamp(reference["partition_end_exclusive"])
+    if timestamps.duplicated().any() or not timestamps.is_monotonic_increasing:
+        raise AlphaDiscoveryExecutionRefused(
+            "Discovery child timestamps must be unique and sorted."
+        )
+    if not (timestamps.ge(start) & timestamps.lt(end)).all():
+        raise AlphaDiscoveryExecutionRefused(
+            "Discovery child contains a timestamp outside its frozen historical partition."
+        )
+    lineage = loaded.manifest.config_version.get("historical_partition")
+    expected_lineage = {
+        "schema_version": 1,
+        "parent_snapshot_id": reference["parent_snapshot_id"],
+        "parent_sha256": reference["parent_sha256"],
+        "cutoff_utc": cfg["historical_partition"]["cutoff_utc"],
+        "assignment_rule": cfg["historical_partition"]["assignment_rule"],
+        "partition_role": "DISCOVERY",
+        "partition_start_inclusive": reference["partition_start_inclusive"],
+        "partition_end_exclusive": reference["partition_end_exclusive"],
+        "row_count": reference["expected_row_count"],
+    }
+    if not isinstance(lineage, dict) or any(
+        lineage.get(key) != value for key, value in expected_lineage.items()
+    ):
+        raise AlphaDiscoveryExecutionRefused(
+            "Discovery child lineage differs from the frozen parent/cutoff contract."
+        )
+
+
 def execute_approved_alpha_discovery(
     cfg: dict[str, Any],
     *,
@@ -93,6 +146,7 @@ def execute_approved_alpha_discovery(
             f"already exists at {layout.run_root}."
         )
     loaded = discovery_access.load_discovery(_snapshot_reference(cfg))
+    _validate_loaded_discovery_partition(cfg, loaded=loaded)
     features = build_alpha_discovery_features(loaded.frame)
     targets = build_alpha_discovery_targets(
         loaded.frame,
@@ -107,7 +161,10 @@ def execute_approved_alpha_discovery(
         features,
         targets,
         frozen_bins=frozen_bins,
-        settings=ScannerSettings.from_config(cfg["statistics"]),
+        settings=ScannerSettings.from_config(
+            cfg["statistics"],
+            cfg["multiple_testing"],
+        ),
         horizons=cfg["horizons"],
     )
     artifact_result = write_alpha_discovery_artifacts(

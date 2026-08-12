@@ -1,10 +1,10 @@
-schema_version: 1
+schema_version: 2
 pipeline:
   kind: alpha_discovery_v1
   stage: PRE_SIGNAL_RESEARCH
 research_id: AR-0001
 status: SPECIFICATION_ONLY
-specification_hash: e04d48ae21b812aedc0d2c0060855f92becdc13f6cd1c387d04652d550acfe09
+specification_hash: 38547ee331f5efe7f3dabbe7f5895974b454bf52e4fde92a0b2b6908ab725c1c
 
 approval:
   approved_to_run: false
@@ -26,15 +26,57 @@ scientific_contract:
     - PROMOTION_GATES
     - EXECUTION_SEMANTICS
 
+data_eligibility:
+  canonical_bar_policy: FULL_30_OF_30_OBSERVED_MINUTES
+  observed_minute_count_column: observed_minute_count
+  required_observed_minutes: 30
+  timestamp_gap_policy: PRESERVE_TIMELINE_INVALIDATE_DEPENDENCY_WINDOWS
+  feature_window_policy: FULL_CONTIGUOUS_T_MINUS_W_THROUGH_T
+  target_window_policy: FULL_CONTIGUOUS_T_THROUGH_T_PLUS_H_PLUS_1
+  partial_bar_repair: FORBIDDEN
+  gap_imputation: FORBIDDEN
+
+historical_partition:
+  parent_snapshot_id: ETHUSD-30M-CANONICAL-V1
+  parent_manifest_path: data/research_snapshots/ETHUSD-30M-CANONICAL-V1/manifest.json
+  parent_expected_sha256: 83d182c98ccbb225220eac02b1bae57917e3b2d2feee5929c53d57c8abaf4202
+  cutoff_utc: '2025-07-01T00:00:00Z'
+  assignment_rule: TIMESTAMP_LT_CUTOFF_DISCOVERY_ELSE_HISTORICAL_PSEUDO_OOS
+  child_snapshot_write_mode: IMMUTABLE_WRITE_ONCE
+
 snapshot_reference:
-  snapshot_id: ETHUSD-30M-CANONICAL-V1
-  manifest_path: data/research_snapshots/ETHUSD-30M-CANONICAL-V1/manifest.json
-  source_path: data/raw/dukascopy_ethusd_30m_canonical_v1/ethusd_30m_canonical.csv
-  expected_sha256: 83d182c98ccbb225220eac02b1bae57917e3b2d2feee5929c53d57c8abaf4202
+  snapshot_id: ETHUSD-30M-DISCOVERY-PRE-2025-07-01-V1
+  manifest_path: data/research_snapshots/ETHUSD-30M-DISCOVERY-PRE-2025-07-01-V1/manifest.json
+  source_path: data/research_snapshot_partitions/ETHUSD-30M-CANONICAL-V1-CUTOFF-2025-07-01/discovery.csv
+  expected_sha256: f9f5e61bc631f5ea07d5ac335363bab32a6808db9d26981c8b236261eee14fec
   evidence_role: DISCOVERY
   source_classification: VALIDATED_MARKET_DATA
   legacy_classifications: []
   readiness: ELIGIBLE
+  parent_snapshot_id: ETHUSD-30M-CANONICAL-V1
+  parent_sha256: 83d182c98ccbb225220eac02b1bae57917e3b2d2feee5929c53d57c8abaf4202
+  partition_start_inclusive: '2020-01-01T00:00:00Z'
+  partition_end_exclusive: '2025-07-01T00:00:00Z'
+  expected_row_count: 95018
+  expected_first_timestamp: '2020-01-01T21:00:00+00:00'
+  expected_last_timestamp: '2025-06-30T23:30:00+00:00'
+
+historical_pseudo_oos_reference:
+  snapshot_id: ETHUSD-30M-HISTORICAL-PSEUDO-OOS-POST-2025-07-01-V1
+  manifest_path: data/research_snapshots/ETHUSD-30M-HISTORICAL-PSEUDO-OOS-POST-2025-07-01-V1/manifest.json
+  source_path: data/research_snapshot_partitions/ETHUSD-30M-CANONICAL-V1-CUTOFF-2025-07-01/historical_pseudo_oos.csv
+  expected_sha256: ae9f6fe64ce1c3ed29cece9b09b14116f260edb1cb22372e901d614bbe3c0fa1
+  evidence_role: HISTORICAL_PSEUDO_OOS
+  source_classification: VALIDATED_MARKET_DATA
+  legacy_classifications: []
+  readiness: ELIGIBLE
+  parent_snapshot_id: ETHUSD-30M-CANONICAL-V1
+  parent_sha256: 83d182c98ccbb225220eac02b1bae57917e3b2d2feee5929c53d57c8abaf4202
+  partition_start_inclusive: '2025-07-01T00:00:00Z'
+  partition_end_exclusive: '2026-06-10T00:00:00Z'
+  expected_row_count: 16465
+  expected_first_timestamp: '2025-07-01T00:00:00+00:00'
+  expected_last_timestamp: '2026-06-09T23:30:00+00:00'
 
 evidence_roles:
   DISCOVERY:
@@ -120,16 +162,40 @@ execution_measurement:
 statistics:
   inference_target: EXECUTABLE_RETURN
   net_cost_scope: OBSERVED_BID_ASK_SPREAD_ONLY
-  minimum_observations: 30
+  minimum_observations: 200
+  minimum_coverage_fraction: 0.5
+  minimum_occupied_primary_blocks: 20
+  hac:
+    estimator: CONDITIONAL_MEAN_RATIO
+    kernel: BARTLETT
+    primary_lag_rule: FIXED_BARS
+    primary_lag_bars: 48
+    sensitivity_lags_bars: [96, 192]
+    sensitivity_role: DIAGNOSTIC_ONLY_NON_BINDING
   block_bootstrap:
-    method: CIRCULAR_MOVING_BLOCK
-    block_length_bars: 48
+    method: STRATIFIED_SEGMENTED_MOVING_BLOCK
+    timeline: FULL_UNCOMPRESSED_CANONICAL_ROWS
+    strata: FROZEN_CALENDAR_PERIODS
+    gap_handling: NO_BLOCK_CROSSES_GAP
+    primary_block_length_bars: 48
+    sensitivity_block_lengths_bars: [96, 192]
+    sensitivity_role: DIAGNOSTIC_ONLY_NON_BINDING
     resamples: 2000
     confidence_level: 0.95
+    minimum_valid_resample_fraction: 0.99
     seed: 7
   chronological_stability:
-    partition: EQUAL_OBSERVATION_COUNT
-    block_count: 6
+    partition: FROZEN_CALENDAR_PERIODS
+    periods:
+      - {name: Y2020, start_inclusive: '2020-01-01T00:00:00Z', end_exclusive: '2021-01-01T00:00:00Z'}
+      - {name: Y2021, start_inclusive: '2021-01-01T00:00:00Z', end_exclusive: '2022-01-01T00:00:00Z'}
+      - {name: Y2022, start_inclusive: '2022-01-01T00:00:00Z', end_exclusive: '2023-01-01T00:00:00Z'}
+      - {name: Y2023, start_inclusive: '2023-01-01T00:00:00Z', end_exclusive: '2024-01-01T00:00:00Z'}
+      - {name: Y2024, start_inclusive: '2024-01-01T00:00:00Z', end_exclusive: '2025-01-01T00:00:00Z'}
+      - {name: Y2025H1, start_inclusive: '2025-01-01T00:00:00Z', end_exclusive: '2025-07-01T00:00:00Z'}
+    minimum_observations_per_period: 30
+    required_periods: 6
+    direction_rule: SAME_NONZERO_SIGN_IN_ALL_REQUIRED_PERIODS
 
 multiple_testing:
   family_definition:
@@ -139,7 +205,15 @@ multiple_testing:
     - direction
     - preregistered_interaction
   methods: [BH, BY]
-  status: IMPLEMENTED_PHASE_3
+  global_family_scope: ALL_PREREGISTERED_EFFECTS
+  global_family_size: 3792
+  failed_hypothesis_p_value: 1.0
+  retain_failed_in_denominator: true
+  binding_method: GLOBAL_BY
+  primary_fdr_alpha: 0.05
+  local_fdr_alpha: 0.05
+  local_methods_role: DIAGNOSTIC_ONLY_NON_BINDING
+  status: IMPLEMENTED_FROZEN_CONTRACT
 
 promotion_gates:
   coverage:
@@ -155,7 +229,7 @@ promotion_gates:
     contract: Side-aware bid/ask costs, delay, slippage, commission, and swap must be defined.
     status: NOT_EVALUATED
   multiple_testing:
-    contract: Hierarchical family and planned BH/BY decision rule must be frozen.
+    contract: Global BY at 5% over all 3,792 preregistered effects is binding; failed hypotheses remain p=1 in the denominator.
     status: NOT_EVALUATED
   prospective_confirmation:
     contract: Final promotion requires untouched post-freeze prospective evidence.
@@ -163,7 +237,7 @@ promotion_gates:
 
 artifacts:
   output_root: logs/experiments/alpha_discovery
-  layout_version: 1
+  layout_version: 2
   write_mode: IMMUTABLE_RUN_DIRECTORY
 
 runtime:

@@ -12,6 +12,7 @@ import yaml
 from src.experiments.alpha_discovery_scanner import (
     MULTIPLE_TESTING_FAMILY_COLUMNS,
     AlphaDiscoveryScannerError,
+    ChronologicalPeriod,
     FrozenBinEdges,
     ScannerSettings,
     apply_frozen_states,
@@ -22,9 +23,11 @@ from src.experiments.alpha_discovery_scanner import (
 from src.experiments.alpha_discovery_statistics import (
     adjust_pvalues,
     chronological_block_ids,
-    moving_block_bootstrap_summary,
+    newey_west_conditional_mean_summary,
+    segmented_moving_block_bootstrap_summary,
 )
 from src.experiments.alpha_discovery_targets import build_alpha_discovery_targets
+from src.experiments.alpha_discovery_targets import target_eligibility_column
 from src.experiments.orchestration.alpha_discovery_artifacts import (
     AlphaDiscoveryArtifactError,
     AlphaDiscoveryArtifactLayout,
@@ -36,6 +39,7 @@ from src.experiments.orchestration.alpha_discovery_pipeline import (
 from src.features.alpha_discovery_primitives import (
     CONTINUOUS_FEATURE_COLUMNS,
     build_alpha_discovery_features,
+    feature_eligibility_column,
 )
 from src.src_data.research_access import (
     LoadedResearchData,
@@ -49,7 +53,9 @@ from src.utils.alpha_discovery_config import (
 )
 
 CONFIG = Path("config/research/alpha_discovery/AR-0001_ethusd_30m.yaml")
-SPECIFICATION_HASH = "e04d48ae21b812aedc0d2c0060855f92becdc13f6cd1c387d04652d550acfe09"
+SPECIFICATION_HASH = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))[
+    "specification_hash"
+]
 
 
 def _canonical_frame(length: int = 600) -> pd.DataFrame:
@@ -87,6 +93,7 @@ def _canonical_frame(length: int = 600) -> pd.DataFrame:
             "ask_high": mid_high + half_spread,
             "ask_low": mid_low + half_spread,
             "ask_close": mid_close + half_spread,
+            "observed_minute_count": 30,
         }
     )
 
@@ -161,6 +168,7 @@ def test_future_targets_use_exact_shifts_and_executable_quote_sides() -> None:
             "ask_open": mid_open + 0.1,
             "ask_high": mid_open + 1.1,
             "ask_low": mid_open - 0.4,
+            "observed_minute_count": 30,
         }
     )
     targets = build_alpha_discovery_targets(frame, horizons=[2])
@@ -196,6 +204,32 @@ def test_future_targets_use_exact_shifts_and_executable_quote_sides() -> None:
         expected_future_volatility
     )
     assert targets["executable_long_h2"].tail(3).isna().all()
+
+
+def test_partial_bars_and_timestamp_gaps_invalidate_dependency_windows() -> None:
+    frame = _canonical_frame(220)
+    frame.loc[205, "observed_minute_count"] = 29
+    frame.loc[210:, "timestamp"] = frame.loc[210:, "timestamp"] + pd.Timedelta(
+        minutes=30
+    )
+
+    features = build_alpha_discovery_features(frame)
+    targets = build_alpha_discovery_targets(frame, horizons=[2])
+
+    log_return_eligibility = features[feature_eligibility_column("log_return_4")]
+    assert not log_return_eligibility.iloc[205:214].any()
+    assert bool(log_return_eligibility.iloc[214]) is True
+    assert pd.isna(features.loc[205, "normalized_range"])
+    assert features.loc[210, "gap_segment_id"] == (
+        features.loc[209, "gap_segment_id"] + 1
+    )
+
+    target_eligibility = targets[target_eligibility_column(2)]
+    assert not target_eligibility.iloc[202:206].any()
+    assert bool(target_eligibility.iloc[206]) is True
+    assert not target_eligibility.iloc[207:210].any()
+    assert bool(target_eligibility.iloc[210]) is True
+    assert len(features) == len(frame) == len(targets)
 
 
 def test_discovery_quintiles_are_hash_bound_and_never_refit_on_application(
@@ -236,25 +270,51 @@ def test_only_preregistered_path_efficiency_volatility_interactions_exist() -> N
 
 
 def test_block_bootstrap_and_fdr_are_deterministic_and_correct() -> None:
-    values = np.sin(np.arange(80, dtype=float) / 5.0) / 100.0 + 0.001
-    first = moving_block_bootstrap_summary(
+    values = np.sin(np.arange(240, dtype=float) / 5.0) / 100.0 + 0.001
+    condition = np.ones(240, dtype=bool)
+    eligible = np.ones(240, dtype=bool)
+    continuity = np.zeros(240, dtype=int)
+    strata = np.repeat(np.arange(3), 80)
+    first = segmented_moving_block_bootstrap_summary(
         values,
-        block_length=8,
+        condition=condition,
+        eligible=eligible,
+        continuity_segment_ids=continuity,
+        stratum_ids=strata,
+        block_length_bars=8,
         resamples=199,
         confidence_level=0.95,
+        minimum_valid_resample_fraction=1.0,
         seed=17,
     )
-    second = moving_block_bootstrap_summary(
+    second = segmented_moving_block_bootstrap_summary(
         values,
-        block_length=8,
+        condition=condition,
+        eligible=eligible,
+        continuity_segment_ids=continuity,
+        stratum_ids=strata,
+        block_length_bars=8,
         resamples=199,
         confidence_level=0.95,
+        minimum_valid_resample_fraction=1.0,
         seed=17,
     )
     assert first == second
-    assert first.n == 80
-    assert first.block_length == 8
+    assert first.timeline_n == 240
+    assert first.condition_n == 240
+    assert first.block_length_bars == 8
     assert first.confidence_lower <= first.mean <= first.confidence_upper
+    hac = newey_west_conditional_mean_summary(
+        values,
+        condition=condition,
+        eligible=eligible,
+        continuity_segment_ids=continuity,
+        stratum_ids=strata,
+        lag_bars=8,
+    )
+    assert hac.estimator == "CONDITIONAL_MEAN_RATIO"
+    assert hac.kernel == "BARTLETT"
+    assert hac.lag_bars == 8
 
     p_values = np.array([0.01, 0.04, 0.03, 0.002, np.nan])
     bh = adjust_pvalues(p_values, method="BH")
@@ -271,6 +331,11 @@ def test_block_bootstrap_and_fdr_are_deterministic_and_correct() -> None:
     )
     assert np.isnan(bh[-1]) and np.isnan(by[-1])
     assert np.all(by[:4] >= bh[:4])
+    global_by = adjust_pvalues(
+        np.asarray([0.001, 1.0]), method="BY", total_hypotheses=3792
+    )
+    assert global_by[0] >= 0.001
+    assert global_by[1] == 1.0
     np.testing.assert_array_equal(
         chronological_block_ids(10, block_count=3),
         [0, 0, 0, 0, 1, 1, 1, 2, 2, 2],
@@ -287,13 +352,32 @@ def synthetic_scan():
         snapshot_id="SYNTHETIC-DISCOVERY-V1",
         specification_hash=SPECIFICATION_HASH,
     )
+    periods = (
+        ChronologicalPeriod(
+            "P1", "2024-01-01T00:00:00Z", "2024-01-05T04:00:00Z"
+        ),
+        ChronologicalPeriod(
+            "P2", "2024-01-05T04:00:00Z", "2024-01-09T08:00:00Z"
+        ),
+        ChronologicalPeriod(
+            "P3", "2024-01-09T08:00:00Z", "2024-01-13T12:00:00Z"
+        ),
+    )
     settings = ScannerSettings(
-        block_length_bars=8,
+        primary_block_length_bars=8,
+        sensitivity_block_lengths_bars=(12, 16),
         bootstrap_resamples=31,
         confidence_level=0.90,
+        minimum_valid_resample_fraction=0.50,
         seed=23,
         minimum_observations=2,
-        chronological_blocks=3,
+        minimum_coverage_fraction=0.10,
+        minimum_occupied_primary_blocks=1,
+        hac_primary_lag_bars=8,
+        hac_sensitivity_lags_bars=(12, 16),
+        stability_periods=periods,
+        minimum_period_observations=1,
+        required_stability_periods=3,
     )
     result = scan_conditional_effects(
         features,
@@ -331,8 +415,10 @@ def test_conditional_scanner_scope_family_and_temporal_outputs(synthetic_scan) -
     for _, family in effects.groupby(
         list(MULTIPLE_TESTING_FAMILY_COLUMNS), dropna=False
     ):
-        finite_count = int(family["p_value"].notna().sum())
-        assert family["multiple_testing_family_size"].eq(finite_count).all()
+        assert family["multiple_testing_family_size"].eq(len(family)).all()
+    assert effects["p_value"].notna().all()
+    assert effects["global_family_size"].eq(3792).all()
+    assert effects.loc[effects["automatic_fail"], "p_value"].eq(1.0).all()
     finite = effects["p_value"].notna()
     assert (
         effects.loc[finite, "p_value_by"] >= effects.loc[finite, "p_value_bh"]
@@ -350,6 +436,9 @@ def test_conditional_scanner_is_end_to_end_deterministic(synthetic_scan) -> None
     )
     pd.testing.assert_frame_equal(first.effects, second.effects)
     pd.testing.assert_frame_equal(first.temporal_stability, second.temporal_stability)
+    pd.testing.assert_frame_equal(
+        first.inference_sensitivities, second.inference_sensitivities
+    )
 
 
 class _SyntheticManifest:
@@ -389,6 +478,8 @@ def test_artifact_write_is_atomic_complete_and_immutable(
     assert (result.run_root / "hypotheses/frozen_quintile_edges.json").is_file()
     assert (result.run_root / "reports/conditional_effects.csv").is_file()
     assert (result.run_root / "reports/temporal_stability.csv").is_file()
+    assert (result.run_root / "reports/inference_sensitivities.csv").is_file()
+    assert (result.run_root / "registry/inference_contract.json").is_file()
     manifest = json.loads(result.run_manifest_path.read_text(encoding="utf-8"))
     assert manifest["runtime_assertions"]["prospective_access"] is False
     assert manifest["runtime_assertions"]["signal_optimization"] is False

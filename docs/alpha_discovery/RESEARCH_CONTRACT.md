@@ -1,4 +1,4 @@
-# Ερευνητικό συμβόλαιο Alpha Discovery — PHASE 0–3
+# Ερευνητικό συμβόλαιο Alpha Discovery — hardened specification
 
 ## Σκοπός και όριο
 
@@ -6,7 +6,7 @@
 
 `dataset bytes → schema → units → timestamps → data quality → evidence role → immutable snapshot`
 
-Έχουν υλοποιηθεί μόνο τα preregistered primitive features, future outcomes, conditional scanner και statistical methods που απαιτούνται από το `AR-0001`. Έχουν εκτελεστεί μόνο deterministic synthetic/unit/integration tests. Δεν έχει γίνει πραγματικό feature mining ή εκτέλεση του `AR-0001`, ούτε backtest, παραγωγή signal, Optuna ή ML. Το checked-in `AR-0001` παραμένει μη εγκεκριμένη προδιαγραφή.
+Έχουν υλοποιηθεί μόνο τα preregistered primitive features, future outcomes, conditional scanner και statistical methods που απαιτούνται από το `AR-0001`. Έχουν εκτελεστεί μόνο synthetic/unit/integration tests και read-only snapshot validation. Δεν έχει γίνει πραγματικό feature mining ή εκτέλεση του `AR-0001`, ούτε backtest, παραγωγή signal, Optuna ή ML. Το checked-in `AR-0001` παραμένει `SPECIFICATION_ONLY` και δεν είναι εγκεκριμένο για εκτέλεση.
 
 ## Evidence roles
 
@@ -95,7 +95,7 @@ spread_bps      = 10_000 × spread_fraction
 
 Ένα bar-close feature έχει `available_at={bar_offset: 0, event: CLOSE}`. Μπορεί να καταναλωθεί στο `close[t]` ή αργότερα, αλλά όχι στο `open[t]`. Next-open execution δηλώνεται στο `{bar_offset: 1, event: OPEN}`. Ο κοινός contract απορρίπτει consume-before-available.
 
-## Frozen PHASE 3 measurement contract
+## Frozen measurement contract
 
 Το `AR-0001` επιτρέπει αποκλειστικά:
 
@@ -106,7 +106,15 @@ spread_bps      = 10_000 × spread_fraction
 - future outcomes στα 1, 2, 4, 8, 16 και 32 bars,
 - discovery-fitted quintiles που αποθηκεύονται με δικό τους hash και δεν επαναπροσαρμόζονται σε validation data,
 - όλες τις 1D καταστάσεις και μόνο τα εννέα window-pairs της οικογένειας `path_efficiency × realized_volatility`,
-- circular moving-block bootstrap, BH, BY και έξι chronological stability blocks.
+- αυστηρή bar eligibility `FULL_30_OF_30_OBSERVED_MINUTES`, χωρίς repair ή imputation,
+- ακύρωση κάθε feature/target dependency window που περιέχει partial bar ή διασχίζει timestamp gap,
+- full-timeline, non-circular, segmented moving-block bootstrap, στρωματοποιημένο στα έξι παγωμένα calendar periods, με primary block 48 και diagnostic sensitivities 96/192,
+- Newey–West HAC για τον conditional-mean ratio estimator, Bartlett kernel, primary fixed lag 48 και diagnostic sensitivities 96/192,
+- global Benjamini–Yekutieli στο 5% ως binding statistical-screen gate πάνω σε ακριβώς 3.792 preregistered effects.
+
+Τα effect rows δεν φιλτράρονται πριν από το multiple-testing gate. Αποτυχία λόγω eligibility, insufficient `N`, coverage, block coverage ή primary inference παραμένει στο registry ως `AUTOMATIC_FAIL` με `p=1`. Επομένως ο global denominator δεν μπορεί να μικρύνει εκ των υστέρων. Τα local BH/BY και το global BH είναι μόνο diagnostics· δεν αντικαθιστούν το binding global BY.
+
+Τα έξι stability periods είναι ημερολογιακά (`Y2020`, …, `Y2024`, `Y2025H1`) και όχι equal-row partitions. Ο bootstrap και το HAC διατηρούν το αρχικό row spacing, δεν συμπιέζουν τα condition hits και δεν επιτρέπουν covariance/block pairs να διασχίζουν gap ή calendar-stratum boundary.
 
 Η κατάσταση παρατηρείται στο `close[t]`. Η executable είσοδος γίνεται στο `open[t+1]` και η έξοδος στο `open[t+h+1]`. Το long αγοράζει στο πραγματικό ASK και πουλά στο πραγματικό BID· το short πουλά στο BID και καλύπτει στο ASK. Το δηλωμένο `net_cost_scope` είναι `OBSERVED_BID_ASK_SPREAD_ONLY`: commission, slippage και swap δεν κατασκευάζονται χωρίς ξεχωριστή frozen παραδοχή και παραμένουν υποχρεωτικό promotion-gate θέμα πριν από strategy validation.
 
@@ -116,7 +124,9 @@ spread_bps      = 10_000 × spread_fraction
 
 Η legacy Dukascopy 30m οικογένεια εξακολουθεί να είναι ακατάλληλη ως canonical research input λόγω της παλιάς αμφίσημης μονάδας `spread_bps` και της απουσίας των αρχικών pre-merge source bytes. Δεν διορθώθηκε αναδρομικά.
 
-Αντί γι' αυτό ανακτήθηκαν ξεχωριστά genuine Dukascopy BID και ASK minute observations, παρήχθη νέο canonical 30m dataset και παγώθηκε το immutable snapshot `ETHUSD-30M-CANONICAL-V1` με ρόλο `DISCOVERY`. Η πραγματική conditional analysis δεν ξεκινά ακόμη, επειδή ο χρήστης δεν έχει εγκρίνει το frozen specification hash και το fail-closed execution boundary απορρίπτει το `SPECIFICATION_ONLY` πριν από data access.
+Αντί γι' αυτό ανακτήθηκαν ξεχωριστά genuine Dukascopy BID και ASK minute observations και παρήχθη το immutable parent `ETHUSD-30M-CANONICAL-V1`. Με παγωμένο cutoff `2025-07-01T00:00:00Z`, δημιουργήθηκαν δύο ξεχωριστά write-once children: το `ETHUSD-30M-DISCOVERY-PRE-2025-07-01-V1` και το `ETHUSD-30M-HISTORICAL-PSEUDO-OOS-POST-2025-07-01-V1`. Το pipeline δέχεται μόνο το πρώτο μέσω `DiscoveryDataAccess` και δεν έχει path που να φορτώνει αυτόματα το δεύτερο.
+
+Η πραγματική conditional analysis δεν ξεκινά ακόμη: κατόπιν ρητής οδηγίας το status παραμένει `SPECIFICATION_ONLY`, το `runtime.perform_alpha_calculation` παραμένει `false` και το fail-closed boundary απορρίπτει την εκτέλεση πριν από data access.
 
 ## Προϋποθέσεις πριν τρέξει το AR-0001
 

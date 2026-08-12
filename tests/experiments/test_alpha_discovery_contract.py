@@ -91,9 +91,12 @@ def test_ar0001_is_a_valid_frozen_spec_but_not_approved() -> None:
         "access_prospective_final": False,
     }
     assert cfg["snapshot_reference"]["source_classification"] == "VALIDATED_MARKET_DATA"
-    assert cfg["snapshot_reference"]["snapshot_id"] == "ETHUSD-30M-CANONICAL-V1"
+    assert cfg["schema_version"] == 2
+    assert cfg["snapshot_reference"]["snapshot_id"] == (
+        "ETHUSD-30M-DISCOVERY-PRE-2025-07-01-V1"
+    )
     assert cfg["snapshot_reference"]["expected_sha256"] == (
-        "83d182c98ccbb225220eac02b1bae57917e3b2d2feee5929c53d57c8abaf4202"
+        "f9f5e61bc631f5ea07d5ac335363bab32a6808db9d26981c8b236261eee14fec"
     )
     assert cfg["snapshot_reference"]["readiness"] == "ELIGIBLE"
     assert cfg["snapshot_reference"]["legacy_classifications"] == []
@@ -103,7 +106,24 @@ def test_ar0001_is_a_valid_frozen_spec_but_not_approved() -> None:
     assert {target["status"] for target in cfg["targets_planned"]} == {
         "IMPLEMENTED_PHASE_3"
     }
-    assert cfg["multiple_testing"]["status"] == "IMPLEMENTED_PHASE_3"
+    assert cfg["historical_partition"]["cutoff_utc"] == "2025-07-01T00:00:00Z"
+    assert cfg["historical_pseudo_oos_reference"]["evidence_role"] == (
+        "HISTORICAL_PSEUDO_OOS"
+    )
+    assert cfg["data_eligibility"]["canonical_bar_policy"] == (
+        "FULL_30_OF_30_OBSERVED_MINUTES"
+    )
+    assert cfg["statistics"]["hac"] == {
+        "estimator": "CONDITIONAL_MEAN_RATIO",
+        "kernel": "BARTLETT",
+        "primary_lag_rule": "FIXED_BARS",
+        "primary_lag_bars": 48,
+        "sensitivity_lags_bars": [96, 192],
+        "sensitivity_role": "DIAGNOSTIC_ONLY_NON_BINDING",
+    }
+    assert cfg["multiple_testing"]["global_family_size"] == 3792
+    assert cfg["multiple_testing"]["binding_method"] == "GLOBAL_BY"
+    assert cfg["multiple_testing"]["status"] == "IMPLEMENTED_FROZEN_CONTRACT"
     assert json.loads(SCHEMA.read_text(encoding="utf-8"))["$schema"].endswith(
         "2020-12/schema"
     )
