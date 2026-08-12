@@ -38,6 +38,8 @@ _TOP_LEVEL_KEYS = {
     "horizons",
     "targets_planned",
     "conditional_analysis",
+    "execution_measurement",
+    "statistics",
     "multiple_testing",
     "promotion_gates",
     "artifacts",
@@ -45,7 +47,13 @@ _TOP_LEVEL_KEYS = {
     "blockers",
     "config_path",
 }
-_HASH_EXCLUDED_KEYS = {"config_path", "specification_hash", "approval", "status"}
+_HASH_EXCLUDED_KEYS = {
+    "config_path",
+    "specification_hash",
+    "approval",
+    "status",
+    "blockers",
+}
 _EXPECTED_FEATURE_WINDOWS = {
     "log_returns": [1, 4, 16, 48],
     "path_efficiency": [8, 16, 48],
@@ -150,6 +158,11 @@ def compute_alpha_specification_hash(cfg: Mapping[str, Any]) -> str:
     payload = deepcopy(dict(cfg))
     for key in _HASH_EXCLUDED_KEYS:
         payload.pop(key, None)
+    runtime = payload.get("runtime")
+    if isinstance(runtime, Mapping):
+        runtime_payload = dict(runtime)
+        runtime_payload.pop("perform_alpha_calculation", None)
+        payload["runtime"] = runtime_payload
     digest, _ = compute_config_hash(payload)
     return digest
 
@@ -213,6 +226,19 @@ def _validate_snapshot_reference(
         if legacy:
             raise AlphaDiscoveryConfigError(
                 "APPROVED_TO_RUN cannot retain legacy dataset classifications."
+            )
+    if readiness == "ELIGIBLE":
+        if manifest_path is None:
+            raise AlphaDiscoveryConfigError(
+                "ELIGIBLE snapshot_reference requires a manifest_path."
+            )
+        if classification is not SourceClassification.VALIDATED_MARKET_DATA:
+            raise AlphaDiscoveryConfigError(
+                "ELIGIBLE snapshot_reference requires VALIDATED_MARKET_DATA."
+            )
+        if legacy:
+            raise AlphaDiscoveryConfigError(
+                "ELIGIBLE snapshot_reference cannot retain legacy classifications."
             )
 
 
@@ -285,9 +311,9 @@ def _validate_targets(payload: Any) -> None:
         name = _non_empty_string(target["name"], field=f"targets_planned[{index}].name")
         if name not in _EXPECTED_TARGET_AVAILABILITY:
             raise AlphaDiscoveryConfigError(f"Unknown planned target contract: {name}.")
-        if target["status"] != "PLANNED_NOT_IMPLEMENTED":
+        if target["status"] != "IMPLEMENTED_PHASE_3":
             raise AlphaDiscoveryConfigError(
-                f"targets_planned[{index}].status must be PLANNED_NOT_IMPLEMENTED."
+                f"targets_planned[{index}].status must be IMPLEMENTED_PHASE_3."
             )
         entry_available_at = AvailableAt.from_dict(target["entry_available_at"])
         if entry_available_at != _EXPECTED_TARGET_AVAILABILITY[name]:
@@ -300,6 +326,138 @@ def _validate_targets(payload: Any) -> None:
         raise AlphaDiscoveryConfigError(
             f"Planned target contract mismatch; expected {sorted(_EXPECTED_TARGETS)}."
         )
+
+
+def _positive_integer(value: Any, *, field: str, minimum: int = 1) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+        raise AlphaDiscoveryConfigError(f"{field} must be an integer >= {minimum}.")
+    return value
+
+
+def _validate_execution_measurement(payload: Any) -> None:
+    execution = _mapping(payload, field="execution_measurement")
+    expected = {
+        "state_available_at",
+        "entry",
+        "exit",
+        "quote_source",
+        "net_cost_scope",
+        "additional_costs",
+    }
+    _exact_keys(execution, expected, field="execution_measurement")
+    if execution["state_available_at"] != "CLOSE_T":
+        raise AlphaDiscoveryConfigError(
+            "execution_measurement.state_available_at must be CLOSE_T."
+        )
+    if execution["entry"] != "OPEN_T_PLUS_1":
+        raise AlphaDiscoveryConfigError(
+            "execution_measurement.entry must be OPEN_T_PLUS_1."
+        )
+    if execution["exit"] != "OPEN_T_PLUS_H_PLUS_1":
+        raise AlphaDiscoveryConfigError(
+            "execution_measurement.exit must be OPEN_T_PLUS_H_PLUS_1."
+        )
+    if execution["quote_source"] != "ACTUAL_DUKASCOPY_BID_ASK":
+        raise AlphaDiscoveryConfigError(
+            "execution_measurement.quote_source must be ACTUAL_DUKASCOPY_BID_ASK."
+        )
+    if execution["net_cost_scope"] != "OBSERVED_BID_ASK_SPREAD_ONLY":
+        raise AlphaDiscoveryConfigError(
+            "execution_measurement.net_cost_scope must be "
+            "OBSERVED_BID_ASK_SPREAD_ONLY."
+        )
+    additional = _mapping(
+        execution["additional_costs"],
+        field="execution_measurement.additional_costs",
+    )
+    _exact_keys(
+        additional,
+        {"commission", "slippage", "swap"},
+        field="execution_measurement.additional_costs",
+    )
+    expected_unavailable = "NOT_INCLUDED_NO_FROZEN_ASSUMPTION"
+    if any(value != expected_unavailable for value in additional.values()):
+        raise AlphaDiscoveryConfigError(
+            "Commission, slippage, and swap must remain explicitly unmodeled until "
+            "a separate frozen assumption is approved."
+        )
+
+
+def _validate_statistics(payload: Any) -> None:
+    statistics = _mapping(payload, field="statistics")
+    expected = {
+        "inference_target",
+        "net_cost_scope",
+        "minimum_observations",
+        "block_bootstrap",
+        "chronological_stability",
+    }
+    _exact_keys(statistics, expected, field="statistics")
+    if statistics["inference_target"] != "EXECUTABLE_RETURN":
+        raise AlphaDiscoveryConfigError(
+            "statistics.inference_target must be EXECUTABLE_RETURN."
+        )
+    if statistics["net_cost_scope"] != "OBSERVED_BID_ASK_SPREAD_ONLY":
+        raise AlphaDiscoveryConfigError(
+            "statistics.net_cost_scope must be OBSERVED_BID_ASK_SPREAD_ONLY."
+        )
+    _positive_integer(
+        statistics["minimum_observations"],
+        field="statistics.minimum_observations",
+        minimum=2,
+    )
+    bootstrap = _mapping(
+        statistics["block_bootstrap"], field="statistics.block_bootstrap"
+    )
+    _exact_keys(
+        bootstrap,
+        {"method", "block_length_bars", "resamples", "confidence_level", "seed"},
+        field="statistics.block_bootstrap",
+    )
+    if bootstrap["method"] != "CIRCULAR_MOVING_BLOCK":
+        raise AlphaDiscoveryConfigError(
+            "statistics.block_bootstrap.method must be CIRCULAR_MOVING_BLOCK."
+        )
+    _positive_integer(
+        bootstrap["block_length_bars"],
+        field="statistics.block_bootstrap.block_length_bars",
+    )
+    _positive_integer(
+        bootstrap["resamples"],
+        field="statistics.block_bootstrap.resamples",
+    )
+    confidence = bootstrap["confidence_level"]
+    if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
+        raise AlphaDiscoveryConfigError(
+            "statistics.block_bootstrap.confidence_level must be numeric."
+        )
+    if not 0.0 < float(confidence) < 1.0:
+        raise AlphaDiscoveryConfigError(
+            "statistics.block_bootstrap.confidence_level must lie in (0, 1)."
+        )
+    if isinstance(bootstrap["seed"], bool) or not isinstance(bootstrap["seed"], int):
+        raise AlphaDiscoveryConfigError(
+            "statistics.block_bootstrap.seed must be an integer."
+        )
+    chronological = _mapping(
+        statistics["chronological_stability"],
+        field="statistics.chronological_stability",
+    )
+    _exact_keys(
+        chronological,
+        {"partition", "block_count"},
+        field="statistics.chronological_stability",
+    )
+    if chronological["partition"] != "EQUAL_OBSERVATION_COUNT":
+        raise AlphaDiscoveryConfigError(
+            "statistics.chronological_stability.partition must be "
+            "EQUAL_OBSERVATION_COUNT."
+        )
+    _positive_integer(
+        chronological["block_count"],
+        field="statistics.chronological_stability.block_count",
+        minimum=2,
+    )
 
 
 def validate_alpha_discovery_config(cfg: dict[str, Any]) -> None:
@@ -437,6 +595,9 @@ def validate_alpha_discovery_config(cfg: dict[str, Any]) -> None:
     if conditional["allow_3d"] is not False:
         raise AlphaDiscoveryConfigError("3D conditional search is prohibited.")
 
+    _validate_execution_measurement(cfg["execution_measurement"])
+    _validate_statistics(cfg["statistics"])
+
     multiple = _mapping(cfg["multiple_testing"], field="multiple_testing")
     _exact_keys(
         multiple, {"family_definition", "methods", "status"}, field="multiple_testing"
@@ -447,10 +608,10 @@ def validate_alpha_discovery_config(cfg: dict[str, Any]) -> None:
         )
     if (
         multiple["methods"] != ["BH", "BY"]
-        or multiple["status"] != "PLANNED_INTERFACE_ONLY"
+        or multiple["status"] != "IMPLEMENTED_PHASE_3"
     ):
         raise AlphaDiscoveryConfigError(
-            "Multiple-testing methods must be planned BH/BY interfaces only."
+            "Multiple-testing methods must be the implemented Phase-3 BH/BY contract."
         )
 
     gates = _mapping(cfg["promotion_gates"], field="promotion_gates")
@@ -498,10 +659,29 @@ def validate_alpha_discovery_config(cfg: dict[str, Any]) -> None:
         field="runtime",
     )
     for name, value in runtime.items():
-        if _bool(value, field=f"runtime.{name}"):
-            raise AlphaDiscoveryConfigError(
-                f"PHASE 0-2 config requires runtime.{name}=false."
-            )
+        _bool(value, field=f"runtime.{name}")
+    if runtime["run_backtests"]:
+        raise AlphaDiscoveryConfigError(
+            "Alpha discovery cannot enable runtime.run_backtests."
+        )
+    if runtime["access_prospective_final"]:
+        raise AlphaDiscoveryConfigError(
+            "Alpha discovery cannot enable runtime.access_prospective_final."
+        )
+    if (
+        status is AlphaDiscoveryStatus.SPECIFICATION_ONLY
+        and runtime["perform_alpha_calculation"]
+    ):
+        raise AlphaDiscoveryConfigError(
+            "SPECIFICATION_ONLY requires runtime.perform_alpha_calculation=false."
+        )
+    if (
+        status is AlphaDiscoveryStatus.APPROVED_TO_RUN
+        and not runtime["perform_alpha_calculation"]
+    ):
+        raise AlphaDiscoveryConfigError(
+            "APPROVED_TO_RUN requires runtime.perform_alpha_calculation=true."
+        )
     if not isinstance(cfg["blockers"], list):
         raise AlphaDiscoveryConfigError("blockers must be a list.")
     if any(

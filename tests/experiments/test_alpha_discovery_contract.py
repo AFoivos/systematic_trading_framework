@@ -90,10 +90,20 @@ def test_ar0001_is_a_valid_frozen_spec_but_not_approved() -> None:
         "run_backtests": False,
         "access_prospective_final": False,
     }
-    assert cfg["snapshot_reference"]["source_classification"] == "LEGACY_MARKET_DATA"
+    assert cfg["snapshot_reference"]["source_classification"] == "VALIDATED_MARKET_DATA"
+    assert cfg["snapshot_reference"]["snapshot_id"] == "ETHUSD-30M-CANONICAL-V1"
     assert cfg["snapshot_reference"]["expected_sha256"] == (
-        "efcde7cbd74ad8d8d450bf6d7bf8127919fe3e54ebbd7715f79e6310f64b9b7d"
+        "83d182c98ccbb225220eac02b1bae57917e3b2d2feee5929c53d57c8abaf4202"
     )
+    assert cfg["snapshot_reference"]["readiness"] == "ELIGIBLE"
+    assert cfg["snapshot_reference"]["legacy_classifications"] == []
+    assert cfg["blockers"] == [
+        "Explicit APPROVED_TO_RUN authorization has not been issued."
+    ]
+    assert {target["status"] for target in cfg["targets_planned"]} == {
+        "IMPLEMENTED_PHASE_3"
+    }
+    assert cfg["multiple_testing"]["status"] == "IMPLEMENTED_PHASE_3"
     assert json.loads(SCHEMA.read_text(encoding="utf-8"))["$schema"].endswith(
         "2020-12/schema"
     )

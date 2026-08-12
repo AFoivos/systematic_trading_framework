@@ -4,7 +4,7 @@ pipeline:
   stage: PRE_SIGNAL_RESEARCH
 research_id: AR-0001
 status: SPECIFICATION_ONLY
-specification_hash: b8be0006f49a0edc5115e75a44084fce2076b83919fbec8120c2dae7d6762cd8
+specification_hash: e04d48ae21b812aedc0d2c0060855f92becdc13f6cd1c387d04652d550acfe09
 
 approval:
   approved_to_run: false
@@ -27,16 +27,14 @@ scientific_contract:
     - EXECUTION_SEMANTICS
 
 snapshot_reference:
-  snapshot_id: PENDING-ETHUSD-30M-CANONICAL-V1
-  manifest_path: null
-  source_path: data/raw/dukascopy_30m_clean/ethusd_30m.csv
-  expected_sha256: efcde7cbd74ad8d8d450bf6d7bf8127919fe3e54ebbd7715f79e6310f64b9b7d
+  snapshot_id: ETHUSD-30M-CANONICAL-V1
+  manifest_path: data/research_snapshots/ETHUSD-30M-CANONICAL-V1/manifest.json
+  source_path: data/raw/dukascopy_ethusd_30m_canonical_v1/ethusd_30m_canonical.csv
+  expected_sha256: 83d182c98ccbb225220eac02b1bae57917e3b2d2feee5929c53d57c8abaf4202
   evidence_role: DISCOVERY
-  source_classification: LEGACY_MARKET_DATA
-  legacy_classifications:
-    - REGENERATE_REQUIRED
-    - LEGACY_AMBIGUOUS_UNITS
-  readiness: BLOCKED_MISSING_ORIGINAL_BID_ASK_INPUTS
+  source_classification: VALIDATED_MARKET_DATA
+  legacy_classifications: []
+  readiness: ELIGIBLE
 
 evidence_roles:
   DISCOVERY:
@@ -79,25 +77,25 @@ horizons: [1, 2, 4, 8, 16, 32]
 
 targets_planned:
   - name: mid_close_to_close
-    status: PLANNED_NOT_IMPLEMENTED
+    status: IMPLEMENTED_PHASE_3
     entry_available_at: {bar_offset: 0, event: CLOSE}
   - name: next_open_to_future_open
-    status: PLANNED_NOT_IMPLEMENTED
+    status: IMPLEMENTED_PHASE_3
     entry_available_at: {bar_offset: 1, event: OPEN}
   - name: executable_long
-    status: PLANNED_NOT_IMPLEMENTED
+    status: IMPLEMENTED_PHASE_3
     entry_available_at: {bar_offset: 1, event: OPEN}
   - name: executable_short
-    status: PLANNED_NOT_IMPLEMENTED
+    status: IMPLEMENTED_PHASE_3
     entry_available_at: {bar_offset: 1, event: OPEN}
   - name: future_realized_volatility
-    status: PLANNED_NOT_IMPLEMENTED
+    status: IMPLEMENTED_PHASE_3
     entry_available_at: {bar_offset: 0, event: CLOSE}
   - name: mfe
-    status: PLANNED_NOT_IMPLEMENTED
+    status: IMPLEMENTED_PHASE_3
     entry_available_at: {bar_offset: 1, event: OPEN}
   - name: mae
-    status: PLANNED_NOT_IMPLEMENTED
+    status: IMPLEMENTED_PHASE_3
     entry_available_at: {bar_offset: 1, event: OPEN}
 
 conditional_analysis:
@@ -108,6 +106,31 @@ conditional_analysis:
     - [path_efficiency, realized_volatility]
   allow_3d: false
 
+execution_measurement:
+  state_available_at: CLOSE_T
+  entry: OPEN_T_PLUS_1
+  exit: OPEN_T_PLUS_H_PLUS_1
+  quote_source: ACTUAL_DUKASCOPY_BID_ASK
+  net_cost_scope: OBSERVED_BID_ASK_SPREAD_ONLY
+  additional_costs:
+    commission: NOT_INCLUDED_NO_FROZEN_ASSUMPTION
+    slippage: NOT_INCLUDED_NO_FROZEN_ASSUMPTION
+    swap: NOT_INCLUDED_NO_FROZEN_ASSUMPTION
+
+statistics:
+  inference_target: EXECUTABLE_RETURN
+  net_cost_scope: OBSERVED_BID_ASK_SPREAD_ONLY
+  minimum_observations: 30
+  block_bootstrap:
+    method: CIRCULAR_MOVING_BLOCK
+    block_length_bars: 48
+    resamples: 2000
+    confidence_level: 0.95
+    seed: 7
+  chronological_stability:
+    partition: EQUAL_OBSERVATION_COUNT
+    block_count: 6
+
 multiple_testing:
   family_definition:
     - feature_family
@@ -116,7 +139,7 @@ multiple_testing:
     - direction
     - preregistered_interaction
   methods: [BH, BY]
-  status: PLANNED_INTERFACE_ONLY
+  status: IMPLEMENTED_PHASE_3
 
 promotion_gates:
   coverage:
@@ -149,8 +172,4 @@ runtime:
   access_prospective_final: false
 
 blockers:
-  - Original Dukascopy BID and ASK source files used for the historical merge are absent.
-  - The pinned ETHUSD file stores a fraction in the legacy spread_bps column.
-  - No eligible immutable ETHUSD discovery snapshot exists.
-  - Alpha scanner and statistical execution stages are intentionally not implemented in PHASE 0-2.
   - Explicit APPROVED_TO_RUN authorization has not been issued.

@@ -1,12 +1,12 @@
-# Ερευνητικό συμβόλαιο Alpha Discovery — PHASE 0–2
+# Ερευνητικό συμβόλαιο Alpha Discovery — PHASE 0–3
 
 ## Σκοπός και όριο
 
-Η παρούσα φάση χτίζει μόνο την αλυσίδα ακεραιότητας μέτρησης:
+Η παρούσα φάση χτίζει την αλυσίδα ακεραιότητας μέτρησης:
 
 `dataset bytes → schema → units → timestamps → data quality → evidence role → immutable snapshot`
 
-Δεν γίνεται feature mining, conditional-return scanning, bootstrap/FDR υπολογισμός, backtest, παραγωγή signal, Optuna ή ML. Το `AR-0001` είναι προδιαγραφή και όχι εκτελέσιμο πείραμα.
+Έχουν υλοποιηθεί μόνο τα preregistered primitive features, future outcomes, conditional scanner και statistical methods που απαιτούνται από το `AR-0001`. Έχουν εκτελεστεί μόνο deterministic synthetic/unit/integration tests. Δεν έχει γίνει πραγματικό feature mining ή εκτέλεση του `AR-0001`, ούτε backtest, παραγωγή signal, Optuna ή ML. Το checked-in `AR-0001` παραμένει μη εγκεκριμένη προδιαγραφή.
 
 ## Evidence roles
 
@@ -95,18 +95,40 @@ spread_bps      = 10_000 × spread_fraction
 
 Ένα bar-close feature έχει `available_at={bar_offset: 0, event: CLOSE}`. Μπορεί να καταναλωθεί στο `close[t]` ή αργότερα, αλλά όχι στο `open[t]`. Next-open execution δηλώνεται στο `{bar_offset: 1, event: OPEN}`. Ο κοινός contract απορρίπτει consume-before-available.
 
+## Frozen PHASE 3 measurement contract
+
+Το `AR-0001` επιτρέπει αποκλειστικά:
+
+- log returns στα 1, 4, 16 και 48 bars,
+- path efficiency στα 8, 16 και 48 bars,
+- realized volatility στα 16, 48 και 192 bars,
+- normalized range, close location, UTC hour και weekday,
+- future outcomes στα 1, 2, 4, 8, 16 και 32 bars,
+- discovery-fitted quintiles που αποθηκεύονται με δικό τους hash και δεν επαναπροσαρμόζονται σε validation data,
+- όλες τις 1D καταστάσεις και μόνο τα εννέα window-pairs της οικογένειας `path_efficiency × realized_volatility`,
+- circular moving-block bootstrap, BH, BY και έξι chronological stability blocks.
+
+Η κατάσταση παρατηρείται στο `close[t]`. Η executable είσοδος γίνεται στο `open[t+1]` και η έξοδος στο `open[t+h+1]`. Το long αγοράζει στο πραγματικό ASK και πουλά στο πραγματικό BID· το short πουλά στο BID και καλύπτει στο ASK. Το δηλωμένο `net_cost_scope` είναι `OBSERVED_BID_ASK_SPREAD_ONLY`: commission, slippage και swap δεν κατασκευάζονται χωρίς ξεχωριστή frozen παραδοχή και παραμένουν υποχρεωτικό promotion-gate θέμα πριν από strategy validation.
+
+Δεν υπάρχει arbitrary 2D/3D search, threshold optimization, autonomous hypothesis generation, signal/stops/take-profit optimization ή model fitting.
+
 ## Γιατί δεν γίνεται alpha mining τώρα
 
-Η τρέχουσα Dukascopy 30m οικογένεια έχει αποδεδειγμένα λανθασμένη μονάδα στο `spread_bps`, ενώ λείπουν τα original pre-merge BID/ASK αρχεία. Η διόρθωση των source producers δεν αποδεικνύει αναδρομικά το historical join, τις απώλειες coverage ή τα source bytes. Η έναρξη alpha search πάνω σε αυτά τα δεδομένα θα βελτιστοποιούσε μη αξιόπιστες μετρήσεις.
+Η legacy Dukascopy 30m οικογένεια εξακολουθεί να είναι ακατάλληλη ως canonical research input λόγω της παλιάς αμφίσημης μονάδας `spread_bps` και της απουσίας των αρχικών pre-merge source bytes. Δεν διορθώθηκε αναδρομικά.
+
+Αντί γι' αυτό ανακτήθηκαν ξεχωριστά genuine Dukascopy BID και ASK minute observations, παρήχθη νέο canonical 30m dataset και παγώθηκε το immutable snapshot `ETHUSD-30M-CANONICAL-V1` με ρόλο `DISCOVERY`. Η πραγματική conditional analysis δεν ξεκινά ακόμη, επειδή ο χρήστης δεν έχει εγκρίνει το frozen specification hash και το fail-closed execution boundary απορρίπτει το `SPECIFICATION_ONLY` πριν από data access.
 
 ## Προϋποθέσεις πριν τρέξει το AR-0001
 
-1. Να ανακτηθούν τα original ETHUSD 30m Dukascopy BID και ASK αρχεία με provenance και hashes.
-2. Να γίνει regeneration με τον canonical producer και μηδενικά crossed close quotes.
-3. Να περάσουν schema, unit, timestamp, cadence, gap, duplicate, OHLC/quote, NaN/Inf και volume-semantics checks.
-4. Να παγώσει νέο `VALIDATED_MARKET_DATA` snapshot με ρόλο `DISCOVERY` και enforced SHA.
-5. Να αντικατασταθούν στο AR-0001 τα pending/legacy snapshot fields και να ανανεωθεί το specification hash.
-6. Να ολοκληρωθούν και να εγκριθούν ξεχωριστά οι PHASE 3 statistical implementations.
-7. Να δοθεί ρητή έγκριση με `status: APPROVED_TO_RUN` για το ακριβές frozen specification hash.
+Οι data-foundation και implementation προϋποθέσεις 1–6 έχουν ολοκληρωθεί και έχουν περάσει dry validation. Απομένει μόνο workflow authorization:
 
-Μέχρι να ισχύουν όλα, το pipeline αποτυγχάνει πριν από οποιοδήποτε data access ή alpha calculation.
+1. Ρητή ανθρώπινη έγκριση του ακριβούς checked-in `specification_hash`.
+2. Αλλαγή του `status` σε `APPROVED_TO_RUN` με πλήρη approval metadata.
+3. Αλλαγή του `runtime.perform_alpha_calculation` σε `true` και αφαίρεση του approval blocker. Αυτές είναι workflow μεταβολές και δεν αλλάζουν το scientific hash.
+4. Εκτέλεση του approval-gated command:
+
+```bash
+docker compose run --rm app python -m src.experiments.orchestration.alpha_discovery_pipeline --config config/research/alpha_discovery/AR-0001_ethusd_30m.yaml
+```
+
+Με την τρέχουσα `SPECIFICATION_ONLY` κατάσταση, η ίδια εντολή αποτυγχάνει πριν από οποιοδήποτε data access ή alpha calculation, όπως απαιτεί το contract.

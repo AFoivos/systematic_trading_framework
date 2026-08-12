@@ -18,6 +18,8 @@
     "horizons",
     "targets_planned",
     "conditional_analysis",
+    "execution_measurement",
+    "statistics",
     "multiple_testing",
     "promotion_gates",
     "artifacts",
@@ -187,6 +189,82 @@
         "allow_3d": {"const": false}
       }
     },
+    "execution_measurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state_available_at",
+        "entry",
+        "exit",
+        "quote_source",
+        "net_cost_scope",
+        "additional_costs"
+      ],
+      "properties": {
+        "state_available_at": {"const": "CLOSE_T"},
+        "entry": {"const": "OPEN_T_PLUS_1"},
+        "exit": {"const": "OPEN_T_PLUS_H_PLUS_1"},
+        "quote_source": {"const": "ACTUAL_DUKASCOPY_BID_ASK"},
+        "net_cost_scope": {"const": "OBSERVED_BID_ASK_SPREAD_ONLY"},
+        "additional_costs": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["commission", "slippage", "swap"],
+          "properties": {
+            "commission": {"const": "NOT_INCLUDED_NO_FROZEN_ASSUMPTION"},
+            "slippage": {"const": "NOT_INCLUDED_NO_FROZEN_ASSUMPTION"},
+            "swap": {"const": "NOT_INCLUDED_NO_FROZEN_ASSUMPTION"}
+          }
+        }
+      }
+    },
+    "statistics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inference_target",
+        "net_cost_scope",
+        "minimum_observations",
+        "block_bootstrap",
+        "chronological_stability"
+      ],
+      "properties": {
+        "inference_target": {"const": "EXECUTABLE_RETURN"},
+        "net_cost_scope": {"const": "OBSERVED_BID_ASK_SPREAD_ONLY"},
+        "minimum_observations": {"type": "integer", "minimum": 2},
+        "block_bootstrap": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "method",
+            "block_length_bars",
+            "resamples",
+            "confidence_level",
+            "seed"
+          ],
+          "properties": {
+            "method": {"const": "CIRCULAR_MOVING_BLOCK"},
+            "block_length_bars": {"type": "integer", "minimum": 1},
+            "resamples": {"type": "integer", "minimum": 1},
+            "confidence_level": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "exclusiveMaximum": 1
+            },
+            "seed": {"type": "integer"}
+          }
+        },
+        "chronological_stability": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["partition", "block_count"],
+          "properties": {
+            "partition": {"const": "EQUAL_OBSERVATION_COUNT"},
+            "block_count": {"type": "integer", "minimum": 2}
+          }
+        }
+      }
+    },
     "multiple_testing": {
       "type": "object",
       "additionalProperties": false,
@@ -202,7 +280,7 @@
           ]
         },
         "methods": {"const": ["BH", "BY"]},
-        "status": {"const": "PLANNED_INTERFACE_ONLY"}
+        "status": {"const": "IMPLEMENTED_PHASE_3"}
       }
     },
     "promotion_gates": {
@@ -240,7 +318,7 @@
       "additionalProperties": false,
       "required": ["perform_alpha_calculation", "run_backtests", "access_prospective_final"],
       "properties": {
-        "perform_alpha_calculation": {"const": false},
+        "perform_alpha_calculation": {"type": "boolean"},
         "run_backtests": {"const": false},
         "access_prospective_final": {"const": false}
       }
@@ -261,6 +339,11 @@
               "approved_by": {"const": null},
               "approved_at": {"const": null},
               "approved_specification_hash": {"const": null}
+            }
+          },
+          "runtime": {
+            "properties": {
+              "perform_alpha_calculation": {"const": false}
             }
           },
           "blockers": {"minItems": 1}
@@ -292,6 +375,11 @@
               "source_classification": {"const": "VALIDATED_MARKET_DATA"},
               "legacy_classifications": {"maxItems": 0},
               "readiness": {"const": "ELIGIBLE"}
+            }
+          },
+          "runtime": {
+            "properties": {
+              "perform_alpha_calculation": {"const": true}
             }
           },
           "blockers": {"maxItems": 0}
@@ -334,7 +422,7 @@
       "required": ["name", "status", "entry_available_at"],
       "properties": {
         "name": {"type": "string", "minLength": 1},
-        "status": {"const": "PLANNED_NOT_IMPLEMENTED"},
+        "status": {"const": "IMPLEMENTED_PHASE_3"},
         "entry_available_at": {"$ref": "#/$defs/availableAt"}
       }
     },
