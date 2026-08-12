@@ -3,14 +3,14 @@ pipeline:
   kind: alpha_discovery_v1
   stage: PRE_SIGNAL_RESEARCH
 research_id: AR-0001
-status: SPECIFICATION_ONLY
+status: APPROVED_TO_RUN
 specification_hash: 38547ee331f5efe7f3dabbe7f5895974b454bf52e4fde92a0b2b6908ab725c1c
 
 approval:
-  approved_to_run: false
-  approved_by: null
-  approved_at: null
-  approved_specification_hash: null
+  approved_to_run: true
+  approved_by: FGADev
+  approved_at: '2026-08-12T15:22:00+03:00'
+  approved_specification_hash: 38547ee331f5efe7f3dabbe7f5895974b454bf52e4fde92a0b2b6908ab725c1c
 
 scientific_contract:
   role_assignment: IMMUTABLE_PER_SNAPSHOT
@@ -241,9 +241,8 @@ artifacts:
   write_mode: IMMUTABLE_RUN_DIRECTORY
 
 runtime:
-  perform_alpha_calculation: false
+  perform_alpha_calculation: true
   run_backtests: false
   access_prospective_final: false
 
-blockers:
-  - Explicit APPROVED_TO_RUN authorization has not been issued.
+blockers: []
