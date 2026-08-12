@@ -1,0 +1,351 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "alpha_discovery_spec.schema.json",
+  "title": "Standalone Alpha Discovery Specification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "pipeline",
+    "research_id",
+    "status",
+    "specification_hash",
+    "approval",
+    "scientific_contract",
+    "snapshot_reference",
+    "evidence_roles",
+    "features",
+    "horizons",
+    "targets_planned",
+    "conditional_analysis",
+    "multiple_testing",
+    "promotion_gates",
+    "artifacts",
+    "runtime",
+    "blockers"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "pipeline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "stage"],
+      "properties": {
+        "kind": {"const": "alpha_discovery_v1"},
+        "stage": {"const": "PRE_SIGNAL_RESEARCH"}
+      }
+    },
+    "research_id": {"type": "string", "pattern": "^AR-[0-9]{4}$"},
+    "status": {"enum": ["SPECIFICATION_ONLY", "APPROVED_TO_RUN"]},
+    "specification_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approved_to_run",
+        "approved_by",
+        "approved_at",
+        "approved_specification_hash"
+      ],
+      "properties": {
+        "approved_to_run": {"type": "boolean"},
+        "approved_by": {"type": ["string", "null"], "minLength": 1},
+        "approved_at": {"type": ["string", "null"], "minLength": 1},
+        "approved_specification_hash": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "scientific_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role_assignment",
+        "validation_contamination",
+        "prospective_clock",
+        "material_changes"
+      ],
+      "properties": {
+        "role_assignment": {"const": "IMMUTABLE_PER_SNAPSHOT"},
+        "validation_contamination": {
+          "const": "MODIFICATION_AFTER_VIEW_REQUIRES_NEW_VALIDATION"
+        },
+        "prospective_clock": {"const": "MATERIAL_CHANGE_RESTARTS_CLOCK"},
+        "material_changes": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "FEATURE_DEFINITIONS",
+              "FEATURE_WINDOWS",
+              "BINS",
+              "HORIZONS",
+              "COSTS",
+              "HYPOTHESIS_CONDITIONS",
+              "PROMOTION_GATES",
+              "EXECUTION_SEMANTICS"
+            ]
+          }
+        }
+      }
+    },
+    "snapshot_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "snapshot_id",
+        "manifest_path",
+        "source_path",
+        "expected_sha256",
+        "evidence_role",
+        "source_classification",
+        "legacy_classifications",
+        "readiness"
+      ],
+      "properties": {
+        "snapshot_id": {"type": "string", "minLength": 1},
+        "manifest_path": {"type": ["string", "null"], "minLength": 1},
+        "source_path": {"type": "string", "minLength": 1},
+        "expected_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "evidence_role": {"const": "DISCOVERY"},
+        "source_classification": {
+          "enum": [
+            "VALIDATED_MARKET_DATA",
+            "PROCESSED_EXPERIMENT_ARTIFACT",
+            "LEGACY_MARKET_DATA",
+            "UNKNOWN"
+          ]
+        },
+        "legacy_classifications": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "VALID",
+              "REGENERATE_REQUIRED",
+              "LEGACY_AMBIGUOUS_UNITS",
+              "NOT_RESEARCH_SOURCE"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "readiness": {"type": "string", "minLength": 1}
+      }
+    },
+    "evidence_roles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["DISCOVERY", "VALIDATION", "HISTORICAL_PSEUDO_OOS", "PROSPECTIVE_FINAL"],
+      "properties": {
+        "DISCOVERY": {"$ref": "#/$defs/roleContract"},
+        "VALIDATION": {"$ref": "#/$defs/roleContract"},
+        "HISTORICAL_PSEUDO_OOS": {"$ref": "#/$defs/roleContract"},
+        "PROSPECTIVE_FINAL": {"$ref": "#/$defs/roleContract"}
+      }
+    },
+    "features": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": {"$ref": "#/$defs/featureContract"}
+    },
+    "horizons": {
+      "type": "array",
+      "prefixItems": [
+        {"const": 1}, {"const": 2}, {"const": 4},
+        {"const": 8}, {"const": 16}, {"const": 32}
+      ],
+      "items": false,
+      "minItems": 6,
+      "maxItems": 6
+    },
+    "targets_planned": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": {"$ref": "#/$defs/targetContract"}
+    },
+    "conditional_analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bins",
+        "freeze_bin_edges",
+        "one_dimensional_states",
+        "two_dimensional_interactions",
+        "allow_3d"
+      ],
+      "properties": {
+        "bins": {"const": "DISCOVERY_FITTED_QUINTILES"},
+        "freeze_bin_edges": {"const": true},
+        "one_dimensional_states": {"const": true},
+        "two_dimensional_interactions": {
+          "const": [["path_efficiency", "realized_volatility"]]
+        },
+        "allow_3d": {"const": false}
+      }
+    },
+    "multiple_testing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["family_definition", "methods", "status"],
+      "properties": {
+        "family_definition": {
+          "const": [
+            "feature_family",
+            "horizon",
+            "target",
+            "direction",
+            "preregistered_interaction"
+          ]
+        },
+        "methods": {"const": ["BH", "BY"]},
+        "status": {"const": "PLANNED_INTERFACE_ONLY"}
+      }
+    },
+    "promotion_gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "coverage",
+        "effect_size",
+        "temporal_stability",
+        "execution_realism",
+        "multiple_testing",
+        "prospective_confirmation"
+      ],
+      "properties": {
+        "coverage": {"$ref": "#/$defs/promotionGate"},
+        "effect_size": {"$ref": "#/$defs/promotionGate"},
+        "temporal_stability": {"$ref": "#/$defs/promotionGate"},
+        "execution_realism": {"$ref": "#/$defs/promotionGate"},
+        "multiple_testing": {"$ref": "#/$defs/promotionGate"},
+        "prospective_confirmation": {"$ref": "#/$defs/promotionGate"}
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["output_root", "layout_version", "write_mode"],
+      "properties": {
+        "output_root": {"const": "logs/experiments/alpha_discovery"},
+        "layout_version": {"const": 1},
+        "write_mode": {"const": "IMMUTABLE_RUN_DIRECTORY"}
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["perform_alpha_calculation", "run_backtests", "access_prospective_final"],
+      "properties": {
+        "perform_alpha_calculation": {"const": false},
+        "run_backtests": {"const": false},
+        "access_prospective_final": {"const": false}
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "SPECIFICATION_ONLY"}}},
+      "then": {
+        "properties": {
+          "approval": {
+            "properties": {
+              "approved_to_run": {"const": false},
+              "approved_by": {"const": null},
+              "approved_at": {"const": null},
+              "approved_specification_hash": {"const": null}
+            }
+          },
+          "blockers": {"minItems": 1}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "APPROVED_TO_RUN"}}},
+      "then": {
+        "properties": {
+          "approval": {
+            "properties": {
+              "approved_to_run": {"const": true},
+              "approved_by": {"type": "string", "minLength": 1},
+              "approved_at": {
+                "type": "string",
+                "minLength": 1,
+                "format": "date-time"
+              },
+              "approved_specification_hash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          },
+          "snapshot_reference": {
+            "properties": {
+              "manifest_path": {"type": "string", "minLength": 1},
+              "source_classification": {"const": "VALIDATED_MARKET_DATA"},
+              "legacy_classifications": {"maxItems": 0},
+              "readiness": {"const": "ELIGIBLE"}
+            }
+          },
+          "blockers": {"maxItems": 0}
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "availableAt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bar_offset", "event"],
+      "properties": {
+        "bar_offset": {"type": "integer", "minimum": 0},
+        "event": {"enum": ["OPEN", "CLOSE"]}
+      }
+    },
+    "roleContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["purpose", "access"],
+      "properties": {
+        "purpose": {"type": "string", "minLength": 1},
+        "access": {"type": "string", "minLength": 1}
+      }
+    },
+    "featureContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "windows", "available_at"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "windows": {"type": "array", "items": {"type": "integer", "minimum": 1}},
+        "available_at": {"$ref": "#/$defs/availableAt"}
+      }
+    },
+    "targetContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "status", "entry_available_at"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "status": {"const": "PLANNED_NOT_IMPLEMENTED"},
+        "entry_available_at": {"$ref": "#/$defs/availableAt"}
+      }
+    },
+    "promotionGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract", "status"],
+      "properties": {
+        "contract": {"type": "string", "minLength": 1},
+        "status": {"const": "NOT_EVALUATED"}
+      }
+    }
+  }
+}

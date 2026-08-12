@@ -27,7 +27,10 @@ def _market(index: pd.DatetimeIndex, mid: np.ndarray | None = None) -> pd.DataFr
             "spread_close": spread, "spread_bps": spread / values * 10_000,
         }
     )
-    prepared, _ = validate_and_prepare_market_data(raw)
+    prepared, audit = validate_and_prepare_market_data(raw)
+    assert audit["spread_bps_semantics"] == "CANONICAL_BPS"
+    assert audit["research_eligible"] is False
+    assert audit["research_classifications"] == ["NOT_RESEARCH_SOURCE"]
     prepared["atr48"] = 0.001
     for span in (12, 16, 20, 192):
         prepared[f"ema_{span}"] = prepared["mid_close"]

@@ -6,6 +6,12 @@ from numbers import Real
 import numpy as np
 import pandas as pd
 
+from src.src_data.quote_contract import (
+    QuoteColumnNames,
+    SpreadSemantics,
+    classify_spread_bps_semantics,
+)
+
 
 MIDPOINT_COLUMNS = ("mid_open", "mid_high", "mid_low", "mid_close")
 FALLBACK_COLUMNS = ("open", "high", "low", "close")
@@ -182,6 +188,30 @@ def prepare_market_data(df: pd.DataFrame) -> MarketData:
         source_mode = "bid_ask"
         if "spread_bps" in df.columns:
             spread = _validate_spread(df["spread_bps"])
+            quote_check = pd.DataFrame(
+                {
+                    "bid_close": bid[3],
+                    "ask_close": ask[3],
+                    "mid_close": close,
+                    "spread_bps": spread,
+                },
+                index=df.index,
+            ).dropna()
+            if not quote_check.empty:
+                semantics = classify_spread_bps_semantics(
+                    quote_check,
+                    columns=QuoteColumnNames(
+                        bid="bid_close",
+                        ask="ask_close",
+                        mid="mid_close",
+                        spread_bps="spread_bps",
+                    ),
+                )
+                if semantics is not SpreadSemantics.CANONICAL_BPS:
+                    raise ValueError(
+                        "spread_bps does not match 10000 * (ask_close - bid_close) / "
+                        f"mid_close; classified as {semantics.value}."
+                    )
         else:
             spread = 10_000.0 * (ask[3] - bid[3]) / close
             spread = spread.where(close > 0.0).astype("float64")

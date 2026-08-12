@@ -1,0 +1,156 @@
+schema_version: 1
+pipeline:
+  kind: alpha_discovery_v1
+  stage: PRE_SIGNAL_RESEARCH
+research_id: AR-0001
+status: SPECIFICATION_ONLY
+specification_hash: b8be0006f49a0edc5115e75a44084fce2076b83919fbec8120c2dae7d6762cd8
+
+approval:
+  approved_to_run: false
+  approved_by: null
+  approved_at: null
+  approved_specification_hash: null
+
+scientific_contract:
+  role_assignment: IMMUTABLE_PER_SNAPSHOT
+  validation_contamination: MODIFICATION_AFTER_VIEW_REQUIRES_NEW_VALIDATION
+  prospective_clock: MATERIAL_CHANGE_RESTARTS_CLOCK
+  material_changes:
+    - FEATURE_DEFINITIONS
+    - FEATURE_WINDOWS
+    - BINS
+    - HORIZONS
+    - COSTS
+    - HYPOTHESIS_CONDITIONS
+    - PROMOTION_GATES
+    - EXECUTION_SEMANTICS
+
+snapshot_reference:
+  snapshot_id: PENDING-ETHUSD-30M-CANONICAL-V1
+  manifest_path: null
+  source_path: data/raw/dukascopy_30m_clean/ethusd_30m.csv
+  expected_sha256: efcde7cbd74ad8d8d450bf6d7bf8127919fe3e54ebbd7715f79e6310f64b9b7d
+  evidence_role: DISCOVERY
+  source_classification: LEGACY_MARKET_DATA
+  legacy_classifications:
+    - REGENERATE_REQUIRED
+    - LEGACY_AMBIGUOUS_UNITS
+  readiness: BLOCKED_MISSING_ORIGINAL_BID_ASK_INPUTS
+
+evidence_roles:
+  DISCOVERY:
+    purpose: Hypothesis discovery, exploratory feature states, and discovery-fitted bins.
+    access: DISCOVERY_INTERFACE_ONLY
+  VALIDATION:
+    purpose: Validation of a frozen hypothesis and frozen bin edges only.
+    access: VALIDATION_INTERFACE_ONLY
+  HISTORICAL_PSEUDO_OOS:
+    purpose: Previously inspected historical diagnostics; never untouched final evidence.
+    access: HISTORICAL_DIAGNOSTIC_ONLY
+  PROSPECTIVE_FINAL:
+    purpose: Post-freeze observations collected after the prospective clock starts.
+    access: SEPARATE_EXPLICIT_ONLY
+
+features:
+  - name: log_returns
+    windows: [1, 4, 16, 48]
+    available_at: {bar_offset: 0, event: CLOSE}
+  - name: path_efficiency
+    windows: [8, 16, 48]
+    available_at: {bar_offset: 0, event: CLOSE}
+  - name: realized_volatility
+    windows: [16, 48, 192]
+    available_at: {bar_offset: 0, event: CLOSE}
+  - name: normalized_range
+    windows: []
+    available_at: {bar_offset: 0, event: CLOSE}
+  - name: close_location
+    windows: []
+    available_at: {bar_offset: 0, event: CLOSE}
+  - name: utc_hour
+    windows: []
+    available_at: {bar_offset: 0, event: CLOSE}
+  - name: weekday
+    windows: []
+    available_at: {bar_offset: 0, event: CLOSE}
+
+horizons: [1, 2, 4, 8, 16, 32]
+
+targets_planned:
+  - name: mid_close_to_close
+    status: PLANNED_NOT_IMPLEMENTED
+    entry_available_at: {bar_offset: 0, event: CLOSE}
+  - name: next_open_to_future_open
+    status: PLANNED_NOT_IMPLEMENTED
+    entry_available_at: {bar_offset: 1, event: OPEN}
+  - name: executable_long
+    status: PLANNED_NOT_IMPLEMENTED
+    entry_available_at: {bar_offset: 1, event: OPEN}
+  - name: executable_short
+    status: PLANNED_NOT_IMPLEMENTED
+    entry_available_at: {bar_offset: 1, event: OPEN}
+  - name: future_realized_volatility
+    status: PLANNED_NOT_IMPLEMENTED
+    entry_available_at: {bar_offset: 0, event: CLOSE}
+  - name: mfe
+    status: PLANNED_NOT_IMPLEMENTED
+    entry_available_at: {bar_offset: 1, event: OPEN}
+  - name: mae
+    status: PLANNED_NOT_IMPLEMENTED
+    entry_available_at: {bar_offset: 1, event: OPEN}
+
+conditional_analysis:
+  bins: DISCOVERY_FITTED_QUINTILES
+  freeze_bin_edges: true
+  one_dimensional_states: true
+  two_dimensional_interactions:
+    - [path_efficiency, realized_volatility]
+  allow_3d: false
+
+multiple_testing:
+  family_definition:
+    - feature_family
+    - horizon
+    - target
+    - direction
+    - preregistered_interaction
+  methods: [BH, BY]
+  status: PLANNED_INTERFACE_ONLY
+
+promotion_gates:
+  coverage:
+    contract: Complete common timestamp coverage with no hidden join loss.
+    status: NOT_EVALUATED
+  effect_size:
+    contract: Minimum economically meaningful effect must be preregistered before validation.
+    status: NOT_EVALUATED
+  temporal_stability:
+    contract: Direction and magnitude must remain stable across frozen chronological partitions.
+    status: NOT_EVALUATED
+  execution_realism:
+    contract: Side-aware bid/ask costs, delay, slippage, commission, and swap must be defined.
+    status: NOT_EVALUATED
+  multiple_testing:
+    contract: Hierarchical family and planned BH/BY decision rule must be frozen.
+    status: NOT_EVALUATED
+  prospective_confirmation:
+    contract: Final promotion requires untouched post-freeze prospective evidence.
+    status: NOT_EVALUATED
+
+artifacts:
+  output_root: logs/experiments/alpha_discovery
+  layout_version: 1
+  write_mode: IMMUTABLE_RUN_DIRECTORY
+
+runtime:
+  perform_alpha_calculation: false
+  run_backtests: false
+  access_prospective_final: false
+
+blockers:
+  - Original Dukascopy BID and ASK source files used for the historical merge are absent.
+  - The pinned ETHUSD file stores a fraction in the legacy spread_bps column.
+  - No eligible immutable ETHUSD discovery snapshot exists.
+  - Alpha scanner and statistical execution stages are intentionally not implemented in PHASE 0-2.
+  - Explicit APPROVED_TO_RUN authorization has not been issued.

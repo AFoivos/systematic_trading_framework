@@ -63,6 +63,16 @@ def test_invalid_bid_ask_relationship_is_rejected(quoted_m1: pd.DataFrame) -> No
         prepare_market_data(frame)
 
 
+def test_bid_ask_mode_rejects_fraction_mislabeled_as_spread_bps(
+    quoted_m1: pd.DataFrame,
+) -> None:
+    frame = quoted_m1.copy()
+    frame["spread_bps"] = frame["spread_bps"] / 10_000.0
+
+    with pytest.raises(ValueError, match="classified as LEGACY_FRACTION"):
+        prepare_market_data(frame)
+
+
 def test_all_nan_ohlc_is_preserved() -> None:
     index = pd.date_range("2025-01-01", periods=5, freq="min", tz="UTC")
     frame = pd.DataFrame(np.nan, index=index, columns=["open", "high", "low", "close"])

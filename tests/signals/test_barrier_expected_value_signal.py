@@ -16,7 +16,7 @@ def _probability_frame() -> pd.DataFrame:
             "pred_is_oos": [True, True, True],
             "atr_14": [1.0, 1.0, 1.0],
             "close": [100.0, 100.0, 100.0],
-            "spread_bps": [0.0001, 0.0001, 0.0001],
+            "spread_fraction": [0.0001, 0.0001, 0.0001],
         }
     )
 

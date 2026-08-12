@@ -7,6 +7,9 @@ from typing import Any
 from src.utils.registry import build_registry, get_registered_component, registry_names
 
 from .canonical_pipeline import run_canonical_pipeline
+from src.experiments.orchestration.alpha_discovery_pipeline import (
+    run_alpha_discovery_pipeline,
+)
 from src.experiments.support.btcusd_dual_trend_ftmo import run_pipeline as run_btcusd_dual_trend_ftmo_v1_pipeline
 from src.experiments.support.eurusd_ftmo_ml_v2 import run_reconstruction as run_eurusd_ftmo_ml_v2_pipeline
 
@@ -16,6 +19,7 @@ PipelineConfigValidator = Callable[[dict[str, Any]], None]
 
 _PIPELINE_COMPONENTS: tuple[tuple[str, PipelineFn], ...] = (
     ("canonical_experiment", run_canonical_pipeline),
+    ("alpha_discovery_v1", run_alpha_discovery_pipeline),
     ("btcusd_dual_trend_ftmo_v1", run_btcusd_dual_trend_ftmo_v1_pipeline),
     ("eurusd_ftmo_ml_v2", run_eurusd_ftmo_ml_v2_pipeline),
 )
@@ -27,6 +31,12 @@ def _validate_btcusd_dual_trend_ftmo_v1_config(cfg: dict[str, Any]) -> None:
     _validate_locked_config(cfg)
 
 
+def _validate_alpha_discovery_v1_config(cfg: dict[str, Any]) -> None:
+    from src.utils.alpha_discovery_config import validate_alpha_discovery_config
+
+    validate_alpha_discovery_config(cfg)
+
+
 def _validate_eurusd_ftmo_ml_v2_config(cfg: dict[str, Any]) -> None:
     from src.experiments.support.eurusd_ftmo_ml_v2 import _validate_locked_config
 
@@ -34,6 +44,7 @@ def _validate_eurusd_ftmo_ml_v2_config(cfg: dict[str, Any]) -> None:
 
 
 _PIPELINE_CONFIG_VALIDATOR_COMPONENTS: tuple[tuple[str, PipelineConfigValidator], ...] = (
+    ("alpha_discovery_v1", _validate_alpha_discovery_v1_config),
     ("btcusd_dual_trend_ftmo_v1", _validate_btcusd_dual_trend_ftmo_v1_config),
     ("eurusd_ftmo_ml_v2", _validate_eurusd_ftmo_ml_v2_config),
 )

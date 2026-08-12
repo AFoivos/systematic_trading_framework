@@ -68,7 +68,7 @@ features:
 - step: barrier_market_organization
   params: {shannon_entropy_col: shannon_entropy_48, permutation_entropy_col: permutation_entropy_48, returns_col: close_ret, close_col: close, window: 48, percentile_window: 252, include_sample_entropy: false}
 - step: barrier_session
-  params: {timezone: UTC, spread_col: spread_bps, activity_col: volume, percentile_window: 252}
+  params: {timezone: UTC, spread_col: spread_fraction, activity_col: volume, percentile_window: 252}
 
 model:
   kind: logistic_regression_clf
@@ -191,7 +191,7 @@ signals:
     pred_is_oos_col: pred_is_oos
     atr_col: atr_14
     price_col: close
-    spread_col: spread_bps
+    spread_col: spread_fraction
     activity_col: volume
     upper_atr_multiplier: 1.0
     lower_atr_multiplier: 1.0

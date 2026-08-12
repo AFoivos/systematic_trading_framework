@@ -39,6 +39,8 @@ features:
       momentum_days: [5, 20, 60]
       donchian_days: 20
       spread_median_days: 20
+      spread_col: spread_fraction
+      require_spread: true
       decision_hours_utc: [3, 7, 11, 15, 19, 23]
       expected_bar_minutes: 30
       maximum_gap_multiple: 1.5

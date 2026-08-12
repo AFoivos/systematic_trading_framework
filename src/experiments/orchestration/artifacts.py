@@ -1295,6 +1295,8 @@ _LAB_RAW_MARKET_COLUMNS = {
     "ask_low",
     "ask_close",
     "spread_close",
+    "spread_absolute",
+    "spread_fraction",
     "spread_bps",
 }
 _LAB_EXCLUDED_COLUMNS = {

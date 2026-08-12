@@ -7,6 +7,11 @@ import numpy as np
 import pandas as pd
 
 from src.features.eurusd_ftmo_ml_v2 import add_candidate_indicators
+from src.src_data.quote_contract import (
+    QuoteColumnNames,
+    SpreadSemantics,
+    classify_spread_bps_semantics,
+)
 from src.utils.eurusd_ftmo_ml_v2_contract import (
     PULLBACK_COMPONENTS,
     REQUIRED_MARKET_COLUMNS,
@@ -78,6 +83,23 @@ def validate_and_prepare_market_data(
     out["logret1"] = out["log_close"].diff()
     out["spread_open"] = out["ask_open"] - out["bid_open"]
     out["spread_close"] = out["spread_close"].where(out["spread_close"] > 0.0)
+    spread_semantics = classify_spread_bps_semantics(
+        out,
+        columns=QuoteColumnNames(
+            bid="bid_close",
+            ask="ask_close",
+            mid="mid_close",
+            spread_bps="spread_bps",
+        ),
+    )
+    if spread_semantics not in {
+        SpreadSemantics.CANONICAL_BPS,
+        SpreadSemantics.LEGACY_FRACTION,
+    }:
+        raise ValueError(
+            "EURUSD spread_bps matches neither canonical bps nor the explicitly "
+            "classified legacy fraction contract."
+        )
 
     deltas = out.index.to_series().diff().dropna()
     expected = pd.Timedelta(minutes=30)
@@ -93,6 +115,13 @@ def validate_and_prepare_market_data(
             for timestamp, delta in gaps.head(100).items()
         ],
         "timezone": "UTC-naive",
+        "spread_bps_semantics": spread_semantics.value,
+        "research_eligible": False,
+        "research_classifications": (
+            ["REGENERATE_REQUIRED", "LEGACY_AMBIGUOUS_UNITS"]
+            if spread_semantics is SpreadSemantics.LEGACY_FRACTION
+            else ["NOT_RESEARCH_SOURCE"]
+        ),
     }
     if enforce_reference_shape:
         if len(out) != int(REFERENCE_DATASET["rows"]):

@@ -716,7 +716,7 @@ def add_barrier_session_features(
     df: pd.DataFrame,
     *,
     timezone: str = "UTC",
-    spread_col: str | None = "spread_bps",
+    spread_col: str | None = "spread_fraction",
     activity_col: str | None = "volume",
     percentile_window: int = 252,
     sessions: Mapping[str, Sequence[int]] | None = None,
@@ -730,14 +730,15 @@ def add_barrier_session_features(
           - step: barrier_session
             params:
               timezone: UTC
-              spread_col: spread_bps
+              spread_col: spread_fraction
               activity_col: volume
               percentile_window: 252
 
     Required input columns
     ----------------------
     spread_col, activity_col:
-        Point-in-time liquidity columns when configured. The dataframe index
+        Point-in-time liquidity columns when configured. The spread input uses
+        an explicit fraction by default. The dataframe index
         must be datetime-like for timezone/session calculations.
 
     Parameters

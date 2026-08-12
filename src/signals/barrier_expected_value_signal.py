@@ -14,7 +14,7 @@ def barrier_expected_value_signal(
     pred_is_oos_col: str | None = "pred_is_oos",
     atr_col: str = "atr_14",
     price_col: str = "close",
-    spread_col: str | None = "spread_bps",
+    spread_col: str | None = "spread_fraction",
     activity_col: str | None = None,
     no_hit_long_return_col: str | None = None,
     no_hit_short_return_col: str | None = None,
@@ -72,6 +72,9 @@ def barrier_expected_value_signal(
         Cost-aware decision gates applied before emitting a side.
     entry_delay_bars:
         Execution delay including the backtest engine's next-open fill.
+    spread_col, maximum_spread:
+        ``maximum_spread`` is a price fraction and therefore defaults to the
+        canonical ``spread_fraction`` column, never to basis points.
     """
     required = [
         upper_probability_col,

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "research_contract.schema.json",
+  "title": "Alpha Research Scientific Contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["evidence_role", "source_classification", "available_at"],
+  "properties": {
+    "evidence_role": {
+      "type": "string",
+      "enum": [
+        "DISCOVERY",
+        "VALIDATION",
+        "HISTORICAL_PSEUDO_OOS",
+        "PROSPECTIVE_FINAL"
+      ]
+    },
+    "source_classification": {
+      "type": "string",
+      "enum": [
+        "VALIDATED_MARKET_DATA",
+        "PROCESSED_EXPERIMENT_ARTIFACT",
+        "LEGACY_MARKET_DATA",
+        "UNKNOWN"
+      ]
+    },
+    "available_at": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bar_offset", "event"],
+      "properties": {
+        "bar_offset": {"type": "integer", "minimum": 0},
+        "event": {"type": "string", "enum": ["OPEN", "CLOSE"]}
+      }
+    },
+    "material_changes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "FEATURE_DEFINITIONS",
+          "FEATURE_WINDOWS",
+          "BINS",
+          "HORIZONS",
+          "COSTS",
+          "HYPOTHESIS_CONDITIONS",
+          "PROMOTION_GATES",
+          "EXECUTION_SEMANTICS"
+        ]
+      }
+    }
+  }
+}

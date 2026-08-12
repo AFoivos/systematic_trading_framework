@@ -35,6 +35,9 @@ REFERENCE_DATASET = {
     "start": "2020-01-01 22:00:00",
     "end": "2026-04-27 23:30:00",
     "sha256": "384af9b40271f1598a545c79c77303922ed20d257b968c7b4718820accef4164",
+    "research_classifications": ["REGENERATE_REQUIRED", "LEGACY_AMBIGUOUS_UNITS"],
+    "spread_bps_semantics": "LEGACY_FRACTION",
+    "research_eligible": False,
 }
 
 REFERENCE_HASHES = {

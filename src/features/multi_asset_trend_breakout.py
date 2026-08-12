@@ -122,7 +122,7 @@ def add_multi_asset_trend_breakout_features(
     high_col: str = "high",
     low_col: str = "low",
     close_col: str = "close",
-    spread_col: str = "spread_bps",
+    spread_col: str = "spread_fraction",
     bars_per_day: int = 48,
     atr_window: int = 48,
     short_vol_days: int = 5,
@@ -130,6 +130,7 @@ def add_multi_asset_trend_breakout_features(
     momentum_days: Sequence[int] = (5, 20, 60),
     donchian_days: int = 20,
     spread_median_days: int = 20,
+    require_spread: bool = False,
     decision_hours_utc: Sequence[int] = (3, 7, 11, 15, 19, 23),
     expected_bar_minutes: int = 30,
     maximum_gap_multiple: float = 1.5,
@@ -165,8 +166,14 @@ def add_multi_asset_trend_breakout_features(
     open_col, high_col, low_col, close_col:
         Point-in-time OHLC columns for each closed 30-minute bar.
     spread_col:
-        Optional observed spread column. Missing spread data remains NaN and
-        never gets imputed to zero.
+        Optional observed spread-fraction column. Missing spread data remains
+        NaN and never gets imputed to zero. The default is deliberately
+        unit-explicit so legacy fractions mislabeled as ``spread_bps`` are not
+        consumed silently.
+    require_spread:
+        When true, missing, non-finite, or negative spread observations fail
+        before candidate construction. Use this for strategies whose liquidity
+        gate is part of the frozen specification.
 
     Parameters
     ----------
@@ -193,6 +200,8 @@ def add_multi_asset_trend_breakout_features(
     long_vol_days = _positive_int(long_vol_days, field="long_vol_days")
     donchian_days = _positive_int(donchian_days, field="donchian_days")
     spread_median_days = _positive_int(spread_median_days, field="spread_median_days")
+    if not isinstance(require_spread, bool):
+        raise ValueError("multi_asset_trend_breakout require_spread must be boolean.")
     expected_bar_minutes = _positive_int(expected_bar_minutes, field="expected_bar_minutes")
     maximum_gap_multiple = _finite_positive(maximum_gap_multiple, field="maximum_gap_multiple")
     if maximum_gap_multiple < 1.0:
@@ -294,8 +303,21 @@ def add_multi_asset_trend_breakout_features(
     out["matb_gap_atr"] = ((open_ - close.shift(1)).abs() / atr_valid).astype(float)
 
     spread_available = spread_col in out.columns
+    if require_spread and not spread_available:
+        raise KeyError(
+            "multi_asset_trend_breakout requires explicit spread column "
+            f"'{spread_col}'."
+        )
     if spread_available:
         spread = pd.to_numeric(out[spread_col], errors="coerce").astype(float)
+        if bool(np.isinf(spread.to_numpy(dtype=float)).any()):
+            raise ValueError("multi_asset_trend_breakout spread values must be finite or NaN.")
+        if bool((spread.dropna() < 0.0).any()):
+            raise ValueError("multi_asset_trend_breakout spread values must be >= 0.")
+        if require_spread and spread.isna().any():
+            raise ValueError(
+                "multi_asset_trend_breakout required spread values must be finite."
+            )
         spread_window = spread_median_days * bars_per_day
         trailing_median = spread.shift(1).rolling(
             spread_window,
@@ -350,6 +372,7 @@ def add_multi_asset_trend_breakout_features(
     out.attrs["matb_feature_audit"] = {
         "spread_column": spread_col,
         "spread_available": bool(spread_available),
+        "spread_required": bool(require_spread),
         "abnormal_gap_count": int(abnormal_gap.sum()),
         "bars_per_day": int(bars_per_day),
         "donchian_lookback_bars": int(donchian_lookback),

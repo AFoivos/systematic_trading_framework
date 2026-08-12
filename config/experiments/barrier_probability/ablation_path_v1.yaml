@@ -104,7 +104,7 @@ signals:
     pred_is_oos_col: pred_is_oos
     atr_col: atr_14
     price_col: close
-    spread_col: spread_bps
+    spread_col: spread_fraction
     activity_col: volume
     upper_atr_multiplier: 1.0
     lower_atr_multiplier: 1.0

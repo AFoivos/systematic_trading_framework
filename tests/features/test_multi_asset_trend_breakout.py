@@ -16,7 +16,7 @@ def _frame(periods: int = 120, *, breakout_side: int = 1) -> pd.DataFrame:
     frame["open"] = frame["close"].shift(1).fillna(frame["close"])
     frame["high"] = 200.0
     frame["low"] = 99.0
-    frame["spread_bps"] = 1.0 + 0.01 * np.cos(np.arange(periods) / 5.0)
+    frame["spread_fraction"] = 0.0001 + 0.000001 * np.cos(np.arange(periods) / 5.0)
     decision_positions = np.flatnonzero((index.hour == 19) & (index.minute == 30))
     position = int(decision_positions[-1])
     if breakout_side > 0:
@@ -161,9 +161,22 @@ def test_matb_atr_does_not_bridge_abnormal_timestamp_gap() -> None:
 
 
 def test_matb_missing_spread_remains_nan_and_is_audited() -> None:
-    frame = _frame().drop(columns=["spread_bps"])
+    frame = _frame().drop(columns=["spread_fraction"])
     out = _features(frame)
 
     assert out["matb_spread_to_median"].isna().all()
     assert out.attrs["matb_feature_audit"]["spread_available"] is False
 
+
+def test_matb_default_spread_contract_is_explicit_fraction() -> None:
+    out = _features(_frame())
+
+    assert out.attrs["matb_feature_audit"]["spread_column"] == "spread_fraction"
+    assert out.attrs["matb_feature_audit"]["spread_available"] is True
+
+
+def test_matb_required_spread_fails_closed_when_canonical_column_is_missing() -> None:
+    frame = _frame().drop(columns=["spread_fraction"])
+
+    with pytest.raises(KeyError, match="requires explicit spread column"):
+        _features(frame, require_spread=True)

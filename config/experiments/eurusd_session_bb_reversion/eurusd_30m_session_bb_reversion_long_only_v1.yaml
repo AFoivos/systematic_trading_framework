@@ -51,7 +51,7 @@ features:
   normalizations:
     rolling_percent_rank:
       enabled: true
-      source_col: spread_bps
+      source_col: spread_fraction
       window: 336
       min_periods: 200
       output_col: spread_rank_336
@@ -200,7 +200,7 @@ target:
   - close_over_ema_200
   - atr_pct_14
   - atr_pct_rank_336
-  - spread_bps
+  - spread_fraction
   - spread_rank_336
   - is_weekend
   - session_london_ny_research

@@ -1,0 +1,28 @@
+{
+  "asset": "BTCUSDT_PERP",
+  "timeframe": "30m",
+  "timezone": "UTC",
+  "cadence": "30min",
+  "timestamp_column": "timestamp",
+  "required_columns": ["open", "high", "low", "close"],
+  "ohlc_columns": ["open", "high", "low", "close"],
+  "quote_columns": null,
+  "require_canonical_quote_columns": false,
+  "volume_column": "volume",
+  "volume_semantics": "Binance perpetual kline base-asset volume in BTC; quote and taker volumes are separate columns",
+  "column_units": {
+    "timestamp": "UTC kline close timestamp",
+    "open_time": "UTC kline open timestamp",
+    "open": "USDT per BTC",
+    "high": "USDT per BTC",
+    "low": "USDT per BTC",
+    "close": "USDT per BTC",
+    "volume": "BTC",
+    "quote_volume": "USDT",
+    "trade_count": "count",
+    "taker_base_volume": "BTC",
+    "taker_quote_volume": "USDT"
+  },
+  "require_all_column_units": true,
+  "maximum_gap_multiple": 96.0
+}

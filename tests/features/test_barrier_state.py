@@ -29,7 +29,7 @@ def _market_frame(rows: int = 360) -> pd.DataFrame:
             "low": low,
             "close": close,
             "volume": rng.integers(50, 200, rows).astype(float),
-            "spread_bps": rng.uniform(0.00005, 0.00030, rows),
+            "spread_fraction": rng.uniform(0.00005, 0.00030, rows),
             "atr_14": np.full(rows, 0.25),
             "kalman_level": np.log(pd.Series(close, index=index).ewm(span=10, adjust=False).mean()),
             "vwap_48": pd.Series(close, index=index).rolling(48, min_periods=48).mean(),
