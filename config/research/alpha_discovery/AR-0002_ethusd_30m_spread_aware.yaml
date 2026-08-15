@@ -1,0 +1,264 @@
+schema_version: 3
+pipeline:
+  kind: alpha_discovery_v2
+  stage: PRE_SIGNAL_RESEARCH
+research_id: AR-0002
+status: SPECIFICATION_ONLY
+specification_hash: 595ab54bb0facdc48e74b357a473f93ca1965fe7ebbbc74ad403f78d59e3dd42
+
+approval:
+  approved_to_run: false
+  approved_by: null
+  approved_at: null
+  approved_specification_hash: null
+
+prior_research_context:
+  source_research_id: AR-0001
+  source_specification_hash: 38547ee331f5efe7f3dabbe7f5895974b454bf52e4fde92a0b2b6908ab725c1c
+  source_artifact_sha256:
+    conditional_effects: cb51b07cada37dec2e7f3efb8dad218fc570c6f40955d966c12e528a0b65f00a
+    inference_sensitivities: 945bf59fb63e0fcbe8f7f2e867783e555b9bd6947b8ba7ffd3db081358e74167
+    temporal_stability: 7434e2c2e74801b001a83003997b4b5cb16875945a795058681ff7f4ffebbdf6
+  evidence_role: DISCOVERY
+  use: POST_HOC_HYPOTHESIS_GENERATION_ONLY
+  contamination_statement: SAME_DISCOVERY_REUSED_NO_VALIDATION_OR_FINAL_CLAIM
+
+scientific_contract:
+  role_assignment: IMMUTABLE_PER_SNAPSHOT
+  validation_contamination: MODIFICATION_AFTER_VIEW_REQUIRES_NEW_VALIDATION
+  prospective_clock: MATERIAL_CHANGE_RESTARTS_CLOCK
+  material_changes:
+    - FEATURE_DEFINITIONS
+    - FEATURE_WINDOWS
+    - BINS
+    - HORIZONS
+    - COSTS
+    - HYPOTHESIS_CONDITIONS
+    - PROMOTION_GATES
+    - EXECUTION_SEMANTICS
+
+data_eligibility:
+  canonical_bar_policy: FULL_30_OF_30_OBSERVED_MINUTES
+  observed_minute_count_column: observed_minute_count
+  required_observed_minutes: 30
+  timestamp_gap_policy: PRESERVE_TIMELINE_INVALIDATE_DEPENDENCY_WINDOWS
+  feature_window_policy: FULL_CONTIGUOUS_T_MINUS_W_THROUGH_T
+  target_window_policy: FULL_CONTIGUOUS_T_THROUGH_T_PLUS_H_PLUS_1
+  partial_bar_repair: FORBIDDEN
+  gap_imputation: FORBIDDEN
+
+historical_partition:
+  parent_snapshot_id: ETHUSD-30M-CANONICAL-V1
+  parent_manifest_path: data/research_snapshots/ETHUSD-30M-CANONICAL-V1/manifest.json
+  parent_expected_sha256: 83d182c98ccbb225220eac02b1bae57917e3b2d2feee5929c53d57c8abaf4202
+  cutoff_utc: '2025-07-01T00:00:00Z'
+  assignment_rule: TIMESTAMP_LT_CUTOFF_DISCOVERY_ELSE_HISTORICAL_PSEUDO_OOS
+  child_snapshot_write_mode: IMMUTABLE_WRITE_ONCE
+
+snapshot_reference:
+  snapshot_id: ETHUSD-30M-DISCOVERY-PRE-2025-07-01-V1
+  manifest_path: data/research_snapshots/ETHUSD-30M-DISCOVERY-PRE-2025-07-01-V1/manifest.json
+  source_path: data/research_snapshot_partitions/ETHUSD-30M-CANONICAL-V1-CUTOFF-2025-07-01/discovery.csv
+  expected_sha256: f9f5e61bc631f5ea07d5ac335363bab32a6808db9d26981c8b236261eee14fec
+  evidence_role: DISCOVERY
+  source_classification: VALIDATED_MARKET_DATA
+  legacy_classifications: []
+  readiness: ELIGIBLE
+  parent_snapshot_id: ETHUSD-30M-CANONICAL-V1
+  parent_sha256: 83d182c98ccbb225220eac02b1bae57917e3b2d2feee5929c53d57c8abaf4202
+  partition_start_inclusive: '2020-01-01T00:00:00Z'
+  partition_end_exclusive: '2025-07-01T00:00:00Z'
+  expected_row_count: 95018
+  expected_first_timestamp: '2020-01-01T21:00:00+00:00'
+  expected_last_timestamp: '2025-06-30T23:30:00+00:00'
+
+historical_pseudo_oos_reference:
+  snapshot_id: ETHUSD-30M-HISTORICAL-PSEUDO-OOS-POST-2025-07-01-V1
+  manifest_path: data/research_snapshots/ETHUSD-30M-HISTORICAL-PSEUDO-OOS-POST-2025-07-01-V1/manifest.json
+  source_path: data/research_snapshot_partitions/ETHUSD-30M-CANONICAL-V1-CUTOFF-2025-07-01/historical_pseudo_oos.csv
+  expected_sha256: ae9f6fe64ce1c3ed29cece9b09b14116f260edb1cb22372e901d614bbe3c0fa1
+  evidence_role: HISTORICAL_PSEUDO_OOS
+  source_classification: VALIDATED_MARKET_DATA
+  legacy_classifications: []
+  readiness: ELIGIBLE
+  parent_snapshot_id: ETHUSD-30M-CANONICAL-V1
+  parent_sha256: 83d182c98ccbb225220eac02b1bae57917e3b2d2feee5929c53d57c8abaf4202
+  partition_start_inclusive: '2025-07-01T00:00:00Z'
+  partition_end_exclusive: '2026-06-10T00:00:00Z'
+  expected_row_count: 16465
+  expected_first_timestamp: '2025-07-01T00:00:00+00:00'
+  expected_last_timestamp: '2026-06-09T23:30:00+00:00'
+
+evidence_roles:
+  DISCOVERY:
+    purpose: Reused development data for explicitly post-hoc hypothesis generation and screening.
+    access: DISCOVERY_INTERFACE_ONLY
+  VALIDATION:
+    purpose: Separately authorized validation of a later frozen candidate only.
+    access: VALIDATION_INTERFACE_ONLY
+  HISTORICAL_PSEUDO_OOS:
+    purpose: Historical diagnostics only; never untouched final evidence.
+    access: HISTORICAL_DIAGNOSTIC_ONLY
+  PROSPECTIVE_FINAL:
+    purpose: Separately collected post-freeze observations under a restarted prospective clock.
+    access: SEPARATE_EXPLICIT_ONLY
+
+features:
+  - name: log_returns
+    windows: [48]
+    available_at: {bar_offset: 0, event: CLOSE}
+  - name: path_efficiency
+    windows: [48]
+    available_at: {bar_offset: 0, event: CLOSE}
+  - name: realized_volatility
+    windows: [48]
+    available_at: {bar_offset: 0, event: CLOSE}
+  - name: spread_fraction
+    windows: []
+    available_at: {bar_offset: 0, event: CLOSE}
+
+horizons: [16, 32, 64]
+
+targets_planned:
+  - name: mid_close_to_close
+    status: IMPLEMENTED_PHASE_3
+    entry_available_at: {bar_offset: 0, event: CLOSE}
+  - name: next_open_to_future_open
+    status: IMPLEMENTED_PHASE_3
+    entry_available_at: {bar_offset: 1, event: OPEN}
+  - name: executable_long
+    status: IMPLEMENTED_PHASE_3
+    entry_available_at: {bar_offset: 1, event: OPEN}
+  - name: executable_short
+    status: IMPLEMENTED_PHASE_3
+    entry_available_at: {bar_offset: 1, event: OPEN}
+  - name: future_realized_volatility
+    status: IMPLEMENTED_PHASE_3
+    entry_available_at: {bar_offset: 0, event: CLOSE}
+  - name: mfe
+    status: IMPLEMENTED_PHASE_3
+    entry_available_at: {bar_offset: 1, event: OPEN}
+  - name: mae
+    status: IMPLEMENTED_PHASE_3
+    entry_available_at: {bar_offset: 1, event: OPEN}
+
+conditional_analysis:
+  bins: DISCOVERY_FITTED_QUINTILES
+  freeze_bin_edges: true
+  one_dimensional_feature_columns:
+    - log_return_48
+    - path_efficiency_48
+    - realized_volatility_48
+    - spread_fraction
+  two_dimensional_interactions:
+    - [log_return_48, spread_fraction]
+    - [path_efficiency_48, spread_fraction]
+    - [realized_volatility_48, spread_fraction]
+    - [path_efficiency_48, realized_volatility_48]
+  allow_3d: false
+
+economic_gate:
+  direction: POSITIVE_NET_RETURN_ONLY
+  minimum_mean_net_return: 0.001
+  cost_scope: OBSERVED_BID_ASK_SPREAD_ONLY
+  role: BINDING_CANDIDATE_SCREEN_GATE
+
+execution_measurement:
+  state_available_at: CLOSE_T
+  entry: OPEN_T_PLUS_1
+  exit: OPEN_T_PLUS_H_PLUS_1
+  quote_source: ACTUAL_DUKASCOPY_BID_ASK
+  net_cost_scope: OBSERVED_BID_ASK_SPREAD_ONLY
+  additional_costs:
+    commission: NOT_INCLUDED_NO_FROZEN_ASSUMPTION
+    slippage: NOT_INCLUDED_NO_FROZEN_ASSUMPTION
+    swap: NOT_INCLUDED_NO_FROZEN_ASSUMPTION
+
+statistics:
+  inference_target: EXECUTABLE_RETURN
+  net_cost_scope: OBSERVED_BID_ASK_SPREAD_ONLY
+  minimum_observations: 200
+  minimum_coverage_fraction: 0.5
+  minimum_occupied_primary_blocks: 20
+  hac:
+    estimator: CONDITIONAL_MEAN_RATIO
+    kernel: BARTLETT
+    primary_lag_rule: FIXED_BARS
+    primary_lag_bars: 48
+    sensitivity_lags_bars: [96, 192]
+    sensitivity_role: DIAGNOSTIC_ONLY_NON_BINDING
+  block_bootstrap:
+    method: STRATIFIED_SEGMENTED_MOVING_BLOCK
+    timeline: FULL_UNCOMPRESSED_CANONICAL_ROWS
+    strata: FROZEN_CALENDAR_PERIODS
+    gap_handling: NO_BLOCK_CROSSES_GAP
+    primary_block_length_bars: 48
+    sensitivity_block_lengths_bars: [96, 192]
+    sensitivity_role: DIAGNOSTIC_ONLY_NON_BINDING
+    resamples: 2000
+    confidence_level: 0.95
+    minimum_valid_resample_fraction: 0.99
+    seed: 29
+  chronological_stability:
+    partition: FROZEN_CALENDAR_PERIODS
+    periods:
+      - {name: Y2020, start_inclusive: '2020-01-01T00:00:00Z', end_exclusive: '2021-01-01T00:00:00Z'}
+      - {name: Y2021, start_inclusive: '2021-01-01T00:00:00Z', end_exclusive: '2022-01-01T00:00:00Z'}
+      - {name: Y2022, start_inclusive: '2022-01-01T00:00:00Z', end_exclusive: '2023-01-01T00:00:00Z'}
+      - {name: Y2023, start_inclusive: '2023-01-01T00:00:00Z', end_exclusive: '2024-01-01T00:00:00Z'}
+      - {name: Y2024, start_inclusive: '2024-01-01T00:00:00Z', end_exclusive: '2025-01-01T00:00:00Z'}
+      - {name: Y2025H1, start_inclusive: '2025-01-01T00:00:00Z', end_exclusive: '2025-07-01T00:00:00Z'}
+    minimum_observations_per_period: 30
+    required_periods: 6
+    direction_rule: SAME_NONZERO_SIGN_IN_ALL_REQUIRED_PERIODS
+
+multiple_testing:
+  family_definition:
+    - feature_family
+    - horizon
+    - target
+    - direction
+    - preregistered_interaction
+  methods: [BH, BY]
+  global_family_scope: ALL_PREREGISTERED_EFFECTS
+  global_family_size: 720
+  failed_hypothesis_p_value: 1.0
+  retain_failed_in_denominator: true
+  binding_method: GLOBAL_BY
+  primary_fdr_alpha: 0.05
+  local_fdr_alpha: 0.05
+  local_methods_role: DIAGNOSTIC_ONLY_NON_BINDING
+  status: IMPLEMENTED_FROZEN_CONTRACT
+
+promotion_gates:
+  coverage:
+    contract: Complete common timestamp coverage with no hidden join loss.
+    status: NOT_EVALUATED
+  effect_size:
+    contract: Mean executable return must be positive and at least 0.001 after observed bid/ask spread.
+    status: NOT_EVALUATED
+  temporal_stability:
+    contract: The same positive sign must hold in all six frozen periods with at least 30 observations each.
+    status: NOT_EVALUATED
+  execution_realism:
+    contract: Observed bid/ask spread is included; commission, slippage, and swap remain mandatory before validation.
+    status: NOT_EVALUATED
+  multiple_testing:
+    contract: Global BY at 5% over all 720 preregistered effects is binding; failures remain p=1.
+    status: NOT_EVALUATED
+  prospective_confirmation:
+    contract: Reused discovery data cannot become validation or final evidence; later promotion requires separately authorized evidence.
+    status: NOT_EVALUATED
+
+artifacts:
+  output_root: logs/experiments/alpha_discovery
+  layout_version: 2
+  write_mode: IMMUTABLE_RUN_DIRECTORY
+
+runtime:
+  perform_alpha_calculation: false
+  run_backtests: false
+  access_prospective_final: false
+
+blockers:
+  - Human approval of the exact AR-0002 specification hash is required before data access.

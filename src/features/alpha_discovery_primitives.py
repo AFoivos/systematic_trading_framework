@@ -24,6 +24,9 @@ PRIMITIVE_FEATURE_COLUMNS: Final[tuple[str, ...]] = (
     *CONTINUOUS_FEATURE_COLUMNS,
     *CATEGORICAL_FEATURE_COLUMNS,
 )
+OPTIONAL_ALPHA_DISCOVERY_FEATURE_COLUMNS: Final[tuple[str, ...]] = (
+    "spread_fraction",
+)
 STATE_ELIGIBLE_COLUMN: Final[str] = "eligible_state"
 GAP_SEGMENT_COLUMN: Final[str] = "gap_segment_id"
 
@@ -33,7 +36,10 @@ class AlphaDiscoveryFeatureError(ValueError):
 
 
 def feature_eligibility_column(feature: str) -> str:
-    if feature not in PRIMITIVE_FEATURE_COLUMNS:
+    if feature not in (
+        *PRIMITIVE_FEATURE_COLUMNS,
+        *OPTIONAL_ALPHA_DISCOVERY_FEATURE_COLUMNS,
+    ):
         raise AlphaDiscoveryFeatureError(f"Unknown primitive feature column: {feature!r}.")
     return f"eligible_feature__{feature}"
 
@@ -160,6 +166,8 @@ def primitive_feature_family(column: str) -> str:
         return "realized_volatility"
     if column in {"normalized_range", "close_location", "utc_hour", "weekday"}:
         return column
+    if column == "spread_fraction":
+        return "spread_fraction"
     raise AlphaDiscoveryFeatureError(f"Unknown primitive feature column: {column!r}.")
 
 
@@ -168,6 +176,7 @@ __all__ = [
     "CATEGORICAL_FEATURE_COLUMNS",
     "CONTINUOUS_FEATURE_COLUMNS",
     "LOG_RETURN_WINDOWS",
+    "OPTIONAL_ALPHA_DISCOVERY_FEATURE_COLUMNS",
     "PATH_EFFICIENCY_WINDOWS",
     "PRIMITIVE_FEATURE_COLUMNS",
     "REALIZED_VOLATILITY_WINDOWS",

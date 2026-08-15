@@ -95,6 +95,12 @@ from .run import (
 )
 from .selection import SelectionRecord, candidate_from_research_result
 from .serialization import deterministic_json_dumps, deterministic_json_loads
+from .trend_quality import (
+    TrendQualityResearchError,
+    TrendQualityScorePolicy,
+    build_multi_horizon_trend_quality_score,
+    evaluate_multi_horizon_trend_quality_score,
+)
 
 __all__ = [
     "ASSET_ID_COLUMN",
@@ -160,6 +166,8 @@ __all__ = [
     "SelectionRecord",
     "SegmentBoundary",
     "TIMESTAMP_COLUMN",
+    "TrendQualityResearchError",
+    "TrendQualityScorePolicy",
     "TrialEvaluation",
     "TrialProposal",
     "TrialStatus",
@@ -171,6 +179,8 @@ __all__ = [
     "compute_cross_sectional_diagnostics",
     "deterministic_json_dumps",
     "deterministic_json_loads",
+    "build_multi_horizon_trend_quality_score",
+    "evaluate_multi_horizon_trend_quality_score",
     "prepare_canonical_validation",
     "rank_trials",
     "require_transition_allowed",

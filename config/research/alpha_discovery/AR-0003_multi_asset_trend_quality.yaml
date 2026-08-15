@@ -1,0 +1,266 @@
+schema_version: 4
+pipeline:
+  kind: alpha_discovery_v3
+  stage: CROSS_SECTIONAL_DISCOVERY
+research_id: AR-0003
+title: Multi-Horizon Trend Quality x Volatility Regime
+status: SPECIFICATION_ONLY
+specification_hash: 877fe0e8965a3b5ca1079f59c724c2612fc143e5c0a6349317e8cfa1a8ad9c64
+
+approval:
+  approved_to_run: false
+  approved_by: null
+  approved_at: null
+  approved_specification_hash: null
+
+hypothesis:
+  statement: >-
+    Across the canonical multi-asset universe, assets with directionally
+    consistent momentum across multiple horizons, high path efficiency, and
+    non-extreme realized volatility will exhibit stronger same-direction
+    future executable returns over the next 16 to 32 bars.
+  primary_horizon_bars: 32
+  directionality: SAME_DIRECTION
+  prior_results_role: POST_HOC_HYPOTHESIS_GENERATION_ONLY
+  prior_results_are_validation: false
+
+prior_research_context:
+  source_research_ids: [AR-0001]
+  source_specification_hashes:
+    AR-0001: 38547ee331f5efe7f3dabbe7f5895974b454bf52e4fde92a0b2b6908ab725c1c
+  evidence_role: DISCOVERY
+  use: POST_HOC_HYPOTHESIS_GENERATION_ONLY
+  contamination_statement: PREVIOUS_CONDITIONAL_EFFECTS_ARE_NOT_INDEPENDENT_VALIDATION
+
+scientific_contract:
+  role_assignment: IMMUTABLE_PER_SNAPSHOT
+  material_change_policy: NEW_RESEARCH_CYCLE_AND_NEW_HASH
+  candidate_ceiling: PENDING_CANONICAL_VALIDATION
+  canonical_validation_owner: STF_CANONICAL_EXPERIMENT
+  automatic_promotion: FORBIDDEN
+
+asset_universe:
+  reference: CANONICAL_MULTI_ASSET_UNIVERSE_UNRESOLVED
+  asset_ids: []
+  timeframe: 30m
+  timezone: UTC
+  status: UNRESOLVED
+  minimum_assets_per_timestamp: 5
+  missing_observation_policy: PRESERVE_ABSENCE_NO_DENSIFICATION
+
+dataset_contract:
+  contract_kind: PanelResearchDataset
+  dataset_id: null
+  metadata_path: null
+  data_path: null
+  dataset_sha256: null
+  source_snapshot_fingerprints: {}
+  evidence_role: DISCOVERY
+  required_segments: [TRAINING, TUNING, SCREENING]
+  row_identity: [timestamp, asset_id]
+  prediction_eligibility_required: true
+  status: UNAVAILABLE
+
+features:
+  owner: STF_FEATURE_REGISTRY
+  available_at: {bar_offset: 0, event: CLOSE}
+  missing_value_policy: PRESERVE_AND_MARK_INELIGIBLE
+  momentum:
+    kind: log_return
+    windows: [16, 32, 64]
+    output_columns: [log_return_16, log_return_32, log_return_64]
+  path_efficiency:
+    kind: path_efficiency
+    windows: [16, 32, 48]
+    output_columns: [path_efficiency_16, path_efficiency_32, path_efficiency_48]
+  realized_volatility:
+    kind: realized_volatility
+    windows: [16, 32, 64, 192]
+    primary_columns: [realized_volatility_32, realized_volatility_192]
+    secondary_model_columns:
+      - realized_volatility_16
+      - realized_volatility_32
+      - realized_volatility_64
+      - realized_volatility_192
+  volatility_ratio:
+    numerator: realized_volatility_32
+    denominator: realized_volatility_192
+    output_column: volatility_ratio_32_192
+    zero_denominator_policy: MISSING
+
+primary_score:
+  model_kind: DETERMINISTIC_INTERPRETABLE_SCORE
+  trend_agreement:
+    minimum_same_direction_horizons: 2
+    zero_return_direction: NEUTRAL
+  cross_sectional_zscore:
+    grouping: SAME_TIMESTAMP_OBSERVED_ASSETS
+    ddof: 0
+    minimum_assets: 5
+    constant_cross_section_policy: MISSING
+  trend_score:
+    aggregation: MEDIAN
+    inputs:
+      - cross_sectional_zscore(log_return_16)
+      - cross_sectional_zscore(log_return_32)
+      - cross_sectional_zscore(log_return_64)
+  quality_score:
+    aggregation: MEDIAN
+    inputs: [path_efficiency_16, path_efficiency_32, path_efficiency_48]
+  alpha_score:
+    formula: trend_score * quality_score
+  primary_test_must_precede_robustness: true
+
+regime_policy:
+  percentile_method: CROSS_SECTIONAL_AVERAGE_RANK_AT_SAME_TIMESTAMP
+  causal: true
+  inclusive_boundaries: true
+  path_efficiency_input: quality_score
+  path_efficiency_min_percentile: 0.70
+  volatility_input: volatility_ratio_32_192
+  volatility_percentile_interval: [0.20, 0.80]
+  minimum_assets: 5
+  future_rows_used: false
+
+target:
+  owner: STF_TARGET_REGISTRY
+  kind: executable_return
+  horizon_bars: 32
+  direction: SAME_AS_ALPHA_SCORE
+  information_time: CLOSE_T
+  entry_boundary: OPEN_T_PLUS_1
+  exit_boundary: OPEN_T_PLUS_H_PLUS_1
+  observed_bid_ask_required: true
+  zero_cost_fallback: FORBIDDEN
+  panel_mapping_status: UNAVAILABLE
+
+cross_sectional_evaluation:
+  prediction_scope: ELIGIBLE_SCREENING_ROWS_ONLY
+  rank_by: alpha_score
+  top_fraction: 0.20
+  bottom_fraction: 0.20
+  tie_breaker: asset_id
+  preserve_individual_asset_predictions: true
+  primary_metrics:
+    - mean_rank_ic
+    - median_rank_ic
+    - rank_ic_dispersion
+    - positive_ic_period_ratio
+    - top_tail_mean_executable_return
+    - bottom_tail_mean_executable_return
+    - top_minus_bottom_executable_return_spread
+    - per_asset_coverage
+    - per_asset_predictive_metrics
+    - temporal_stability
+  top_bottom_interpretation: DIAGNOSTIC_ONLY_NOT_A_PORTFOLIO_BACKTEST
+
+temporal_stability:
+  partition: EXPLICIT_EXISTING_SEGMENTS_THEN_CALENDAR_YEAR
+  report_fields: [n, mean_executable_return, rank_ic, coverage, hit_rate]
+  aggregate_positive_is_not_sufficient: true
+  minimum_period_threshold: NOT_HARDCODED_PENDING_DATA_CONTRACT
+
+cost_policy:
+  base: OBSERVED_BID_ASK_ONLY_WHERE_CANONICALLY_SUPPORTED
+  stress_multipliers: [1.0, 1.25, 1.5]
+  stress_status: BLOCKED_PENDING_CANONICAL_PANEL_COST_MAPPING
+  unsupported_synthetic_costs: FORBIDDEN
+  turnover_diagnostic: ONLY_IF_SUPPORTED_NO_PORTFOLIO_INTERPRETATION
+
+robustness_family:
+  evaluation_order: AFTER_PRIMARY_ONLY
+  path_efficiency_percentiles: [0.60, 0.70, 0.80]
+  volatility_percentile_intervals: [[0.10, 0.90], [0.20, 0.80]]
+  forward_horizons_bars: [16, 32]
+  total_variants: 12
+  includes_primary_variant: true
+
+multiple_testing:
+  deterministic_family_size: 12
+  family_dimensions:
+    - path_efficiency_percentile
+    - volatility_percentile_interval
+    - forward_horizon_bars
+  primary_variant:
+    path_efficiency_percentile: 0.70
+    volatility_percentile_interval: [0.20, 0.80]
+    forward_horizon_bars: 32
+  failed_or_invalid_alternatives_retained: true
+  binding_method: UNRESOLVED_PENDING_STATISTICAL_DESIGN
+  secondary_model_family_separate: true
+
+secondary_lightgbm:
+  enabled: false
+  role: OPTIONAL_DISCOVERY_ONLY
+  executor: MultiAssetSearchExecutor
+  model_kind: lightgbm_regressor
+  preprocessing: TRAIN_ONLY
+  predictions: TRUE_OOS_SCREENING_ONLY
+  replaces_primary_test: false
+  separate_search_breadth_required: true
+  feature_columns:
+    - log_return_16
+    - log_return_32
+    - log_return_64
+    - path_efficiency_16
+    - path_efficiency_32
+    - path_efficiency_48
+    - realized_volatility_16
+    - realized_volatility_32
+    - realized_volatility_64
+    - realized_volatility_192
+    - volatility_ratio_32_192
+    - cross_sectional_rank_features
+
+resource_policy:
+  preflight_required: true
+  max_assets: 100
+  max_rows: 1000000
+  max_deterministic_variants: 12
+  max_secondary_trials: 32
+  estimate_status: BLOCKED_UNTIL_DATASET_AND_UNIVERSE_ARE_BOUND
+  estimated_primary_model_fits: 0
+  estimated_secondary_model_fits: null
+
+promotion_gates:
+  specification_complete: NOT_EVALUATED
+  canonical_universe_bound: NOT_EVALUATED
+  panel_dataset_validated: NOT_EVALUATED
+  leakage_and_timing: NOT_EVALUATED
+  resource_preflight: NOT_EVALUATED
+  approval_hash_bound: NOT_EVALUATED
+  execution_cost_mapping: NOT_EVALUATED
+  multiple_testing: NOT_EVALUATED
+  canonical_validation: NOT_EVALUATED
+
+artifacts:
+  output_root: logs/experiments/alpha_discovery/AR-0003
+  layout_version: 1
+  write_mode: IMMUTABLE_RUN_DIRECTORY
+  planned:
+    - run_manifest.json
+    - contracts/resolved_specification.yaml
+    - datasets/panel_dataset_metadata.json
+    - predictions/primary_score_predictions.jsonl
+    - reports/cross_sectional_diagnostics.json
+    - reports/per_asset_diagnostics.json
+    - reports/temporal_stability.json
+    - reports/robustness_family.json
+    - reports/search_breadth.json
+
+runtime:
+  perform_alpha_calculation: false
+  run_backtests: false
+  access_validation: false
+  access_historical_pseudo_oos: false
+  access_prospective_final: false
+  paper_demo_live_execution: false
+  construct_portfolio: false
+  auto_promote_candidate: false
+
+blockers:
+  - Canonical multi-asset universe is not defined or snapshot-bound.
+  - No validated DISCOVERY PanelResearchDataset is currently available.
+  - The 32-bar executable-return panel target and observed-cost mapping are not bound.
+  - The binding multiple-testing method is not yet frozen.
+  - Human approval of the final complete AR-0003 specification hash is required.

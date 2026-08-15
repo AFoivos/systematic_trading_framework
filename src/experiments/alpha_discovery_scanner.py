@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Frozen-state conditional scanner for AR-0001.
+"""Frozen-state conditional scanner for approved alpha-discovery universes.
 
 This module measures preregistered conditional effects.  It does not optimize
 thresholds, signals, stops, take-profits, or model parameters.
@@ -31,7 +31,6 @@ from src.features.alpha_discovery_primitives import (
     CONTINUOUS_FEATURE_COLUMNS,
     GAP_SEGMENT_COLUMN,
     PATH_EFFICIENCY_WINDOWS,
-    PRIMITIVE_FEATURE_COLUMNS,
     REALIZED_VOLATILITY_WINDOWS,
     feature_eligibility_column,
     primitive_feature_family,
@@ -54,6 +53,62 @@ PREREGISTERED_EFFECT_COUNT = (
 
 class AlphaDiscoveryScannerError(ValueError):
     """Raised when scanner inputs violate the preregistered family."""
+
+
+@dataclass(frozen=True)
+class ConditionUniverse:
+    """Explicit finite condition universe supplied by a frozen specification."""
+
+    continuous_features: tuple[str, ...]
+    categorical_features: tuple[str, ...] = ()
+    interaction_pairs: tuple[tuple[str, str], ...] = ()
+
+    @property
+    def feature_columns(self) -> tuple[str, ...]:
+        return (*self.continuous_features, *self.categorical_features)
+
+    @property
+    def condition_count(self) -> int:
+        one_dimensional = 5 * len(self.continuous_features)
+        categorical = sum(
+            24 if feature == "utc_hour" else 7
+            for feature in self.categorical_features
+        )
+        return one_dimensional + categorical + 25 * len(self.interaction_pairs)
+
+    def validate(self) -> None:
+        features = self.feature_columns
+        if not features or len(set(features)) != len(features):
+            raise AlphaDiscoveryScannerError(
+                "Condition-universe features must be non-empty and unique."
+            )
+        if any(
+            not isinstance(feature, str) or not feature
+            for feature in features
+        ):
+            raise AlphaDiscoveryScannerError(
+                "Condition-universe feature names must be non-empty strings."
+            )
+        if any(
+            feature not in {"utc_hour", "weekday"}
+            for feature in self.categorical_features
+        ):
+            raise AlphaDiscoveryScannerError(
+                "Only utc_hour and weekday have approved categorical states."
+            )
+        if len(set(self.interaction_pairs)) != len(self.interaction_pairs):
+            raise AlphaDiscoveryScannerError(
+                "Condition-universe interaction pairs cannot repeat."
+            )
+        for pair in self.interaction_pairs:
+            if len(pair) != 2 or pair[0] == pair[1]:
+                raise AlphaDiscoveryScannerError(
+                    "Each interaction must contain two distinct features."
+                )
+            if any(feature not in self.continuous_features for feature in pair):
+                raise AlphaDiscoveryScannerError(
+                    "Interactions may use only declared continuous features."
+                )
 
 
 def _canonical_hash(payload: Mapping[str, Any]) -> str:
@@ -104,13 +159,13 @@ class FrozenBinEdges:
             raise AlphaDiscoveryScannerError(
                 "Frozen bins must use the preregistered quintile probabilities."
             )
-        if set(self.edges) != set(CONTINUOUS_FEATURE_COLUMNS):
+        if not self.edges:
             raise AlphaDiscoveryScannerError(
-                "Frozen bins must contain exactly the approved continuous features."
+                "Frozen bins must contain at least one continuous feature."
             )
-        if set(self.finite_counts) != set(CONTINUOUS_FEATURE_COLUMNS):
+        if set(self.finite_counts) != set(self.edges):
             raise AlphaDiscoveryScannerError(
-                "Frozen bin finite counts must match the approved continuous features."
+                "Frozen bin finite counts must match the frozen continuous features."
             )
         for feature, cuts in self.edges.items():
             if len(cuts) != 4 or not np.isfinite(np.asarray(cuts, dtype=float)).all():
@@ -177,12 +232,16 @@ def fit_discovery_quintiles(
     *,
     snapshot_id: str,
     specification_hash: str,
+    continuous_features: Sequence[str] = CONTINUOUS_FEATURE_COLUMNS,
 ) -> FrozenBinEdges:
     """Fit quintile edges once on discovery data and bind them to its snapshot."""
 
-    missing = sorted(
-        {"timestamp", *CONTINUOUS_FEATURE_COLUMNS}.difference(features.columns)
-    )
+    resolved_features = tuple(str(feature) for feature in continuous_features)
+    if not resolved_features or len(set(resolved_features)) != len(resolved_features):
+        raise AlphaDiscoveryScannerError(
+            "Bin-fit continuous features must be non-empty and unique."
+        )
+    missing = sorted({"timestamp", *resolved_features}.difference(features.columns))
     if missing:
         raise AlphaDiscoveryScannerError(f"Missing bin-fit features: {missing}.")
     timestamps = pd.to_datetime(features["timestamp"], utc=True, errors="coerce")
@@ -192,7 +251,7 @@ def fit_discovery_quintiles(
         raise AlphaDiscoveryScannerError("Bin-fit timestamps must be sorted.")
     edges: dict[str, tuple[float, ...]] = {}
     finite_counts: dict[str, int] = {}
-    for feature in CONTINUOUS_FEATURE_COLUMNS:
+    for feature in resolved_features:
         values = pd.to_numeric(features[feature], errors="coerce").to_numpy(dtype=float)
         finite = values[np.isfinite(values)]
         if len(finite) < 5:
@@ -234,12 +293,23 @@ def fit_discovery_quintiles(
 def apply_frozen_states(
     features: pd.DataFrame,
     frozen: FrozenBinEdges,
+    *,
+    continuous_features: Sequence[str] = CONTINUOUS_FEATURE_COLUMNS,
+    categorical_features: Sequence[str] = ("utc_hour", "weekday"),
 ) -> pd.DataFrame:
     """Apply existing edges; this function has no fitting path by construction."""
 
     frozen.validate()
+    resolved_continuous = tuple(str(feature) for feature in continuous_features)
+    resolved_categorical = tuple(str(feature) for feature in categorical_features)
+    if set(frozen.edges) != set(resolved_continuous):
+        raise AlphaDiscoveryScannerError(
+            "Frozen-bin features must match the declared condition universe."
+        )
     missing = sorted(
-        {"timestamp", *PRIMITIVE_FEATURE_COLUMNS}.difference(features.columns)
+        {"timestamp", *resolved_continuous, *resolved_categorical}.difference(
+            features.columns
+        )
     )
     if missing:
         raise AlphaDiscoveryScannerError(f"Missing state features: {missing}.")
@@ -249,7 +319,7 @@ def apply_frozen_states(
             "State timestamps must be unique and monotonically increasing."
         )
     states = pd.DataFrame({"timestamp": timestamps})
-    for feature in CONTINUOUS_FEATURE_COLUMNS:
+    for feature in resolved_continuous:
         values = pd.to_numeric(features[feature], errors="coerce").to_numpy(dtype=float)
         cuts = np.asarray(frozen.edges[feature], dtype=float)
         labels = np.full(len(values), None, dtype=object)
@@ -258,32 +328,24 @@ def apply_frozen_states(
         labels[finite] = np.asarray(QUINTILE_LABELS, dtype=object)[bin_numbers]
         states[f"{feature}_state"] = labels
 
-    utc_hour = pd.to_numeric(features["utc_hour"], errors="coerce")
-    weekday = pd.to_numeric(features["weekday"], errors="coerce")
-    finite_hour = utc_hour.notna()
-    finite_weekday = weekday.notna()
-    if (
-        (utc_hour[finite_hour] % 1 != 0).any()
-        or (~utc_hour[finite_hour].between(0, 23)).any()
-    ):
-        raise AlphaDiscoveryScannerError("utc_hour states must be integers in [0, 23].")
-    if (
-        (weekday[finite_weekday] % 1 != 0).any()
-        or (~weekday[finite_weekday].between(0, 6)).any()
-    ):
-        raise AlphaDiscoveryScannerError("weekday states must be integers in [0, 6].")
-    hour_labels = np.full(len(utc_hour), None, dtype=object)
-    weekday_labels = np.full(len(weekday), None, dtype=object)
-    hour_values = utc_hour.to_numpy(dtype=float, na_value=np.nan)
-    weekday_values = weekday.to_numpy(dtype=float, na_value=np.nan)
-    hour_labels[finite_hour.to_numpy(dtype=bool)] = [
-        f"H{int(value):02d}" for value in hour_values[np.isfinite(hour_values)]
-    ]
-    weekday_labels[finite_weekday.to_numpy(dtype=bool)] = [
-        f"D{int(value)}" for value in weekday_values[np.isfinite(weekday_values)]
-    ]
-    states["utc_hour_state"] = hour_labels
-    states["weekday_state"] = weekday_labels
+    for feature in resolved_categorical:
+        values = pd.to_numeric(features[feature], errors="coerce")
+        finite = values.notna()
+        upper = 23 if feature == "utc_hour" else 6
+        if (values[finite] % 1 != 0).any() or (
+            ~values[finite].between(0, upper)
+        ).any():
+            raise AlphaDiscoveryScannerError(
+                f"{feature} states must be integers in [0, {upper}]."
+            )
+        labels = np.full(len(values), None, dtype=object)
+        numeric = values.to_numpy(dtype=float, na_value=np.nan)
+        prefix = "H" if feature == "utc_hour" else "D"
+        labels[finite.to_numpy(dtype=bool)] = [
+            f"{prefix}{int(value):02d}" if prefix == "H" else f"{prefix}{int(value)}"
+            for value in numeric[np.isfinite(numeric)]
+        ]
+        states[f"{feature}_state"] = labels
     return states
 
 
@@ -297,6 +359,13 @@ def preregistered_interaction_pairs() -> tuple[tuple[str, str], ...]:
             ),
         )
     )
+
+
+AR0001_CONDITION_UNIVERSE = ConditionUniverse(
+    continuous_features=CONTINUOUS_FEATURE_COLUMNS,
+    categorical_features=("utc_hour", "weekday"),
+    interaction_pairs=preregistered_interaction_pairs(),
+)
 
 
 @dataclass(frozen=True)
@@ -352,12 +421,14 @@ class ScannerSettings:
     global_family_size: int = PREREGISTERED_EFFECT_COUNT
     global_fdr_alpha: float = 0.05
     local_fdr_alpha: float = 0.05
+    minimum_mean_net_return: float | None = None
 
     @classmethod
     def from_config(
         cls,
         statistics_payload: Mapping[str, Any],
         multiple_testing_payload: Mapping[str, Any],
+        economic_gate_payload: Mapping[str, Any] | None = None,
     ) -> ScannerSettings:
         """Resolve only already-validated, explicitly frozen settings."""
 
@@ -404,6 +475,11 @@ class ScannerSettings:
             global_family_size=int(multiple_testing_payload["global_family_size"]),
             global_fdr_alpha=float(multiple_testing_payload["primary_fdr_alpha"]),
             local_fdr_alpha=float(multiple_testing_payload["local_fdr_alpha"]),
+            minimum_mean_net_return=(
+                float(economic_gate_payload["minimum_mean_net_return"])
+                if economic_gate_payload is not None
+                else None
+            ),
         )
         settings.validate()
         return settings
@@ -465,10 +541,16 @@ class ScannerSettings:
             )
         if isinstance(self.seed, bool) or not isinstance(self.seed, int):
             raise AlphaDiscoveryScannerError("seed must be an integer.")
-        if self.global_family_size != PREREGISTERED_EFFECT_COUNT:
+        if self.global_family_size <= 0:
             raise AlphaDiscoveryScannerError(
-                f"Global family size must remain {PREREGISTERED_EFFECT_COUNT}."
+                "Global family size must be positive."
             )
+        if self.minimum_mean_net_return is not None:
+            threshold = float(self.minimum_mean_net_return)
+            if not np.isfinite(threshold) or threshold <= 0.0:
+                raise AlphaDiscoveryScannerError(
+                    "minimum_mean_net_return must be finite and strictly positive."
+                )
         if self.required_stability_periods != len(self.stability_periods):
             raise AlphaDiscoveryScannerError(
                 "Every frozen stability period must be required."
@@ -497,12 +579,15 @@ class ConditionalScanResult:
     frozen_bins: FrozenBinEdges
 
 
-def _condition_specs() -> list[dict[str, Any]]:
+def build_condition_specs(
+    universe: ConditionUniverse = AR0001_CONDITION_UNIVERSE,
+) -> list[dict[str, Any]]:
+    universe.validate()
     specs: list[dict[str, Any]] = []
-    for feature in PRIMITIVE_FEATURE_COLUMNS:
+    for feature in universe.feature_columns:
         states = (
             QUINTILE_LABELS
-            if feature in CONTINUOUS_FEATURE_COLUMNS
+            if feature in universe.continuous_features
             else (
                 tuple(f"H{hour:02d}" for hour in range(24))
                 if feature == "utc_hour"
@@ -521,37 +606,46 @@ def _condition_specs() -> list[dict[str, Any]]:
                     "eligibility_columns": (feature_eligibility_column(feature),),
                 }
             )
-    for path_feature, volatility_feature in preregistered_interaction_pairs():
-        interaction = f"{path_feature}_x_{volatility_feature}"
-        for path_state, volatility_state in itertools.product(
+    for left_feature, right_feature in universe.interaction_pairs:
+        interaction = f"{left_feature}_x_{right_feature}"
+        for left_state, right_state in itertools.product(
             QUINTILE_LABELS, QUINTILE_LABELS
         ):
             specs.append(
                 {
                     "dimension": 2,
-                    "feature_family": "path_efficiency_x_realized_volatility",
-                    "feature_columns": f"{path_feature}|{volatility_feature}",
+                    "feature_family": (
+                        f"{primitive_feature_family(left_feature)}_x_"
+                        f"{primitive_feature_family(right_feature)}"
+                    ),
+                    "feature_columns": f"{left_feature}|{right_feature}",
                     "preregistered_interaction": interaction,
                     "state": (
-                        f"{path_feature}={path_state}|"
-                        f"{volatility_feature}={volatility_state}"
+                        f"{left_feature}={left_state}|"
+                        f"{right_feature}={right_state}"
                     ),
                     "requirements": (
-                        (f"{path_feature}_state", path_state),
-                        (f"{volatility_feature}_state", volatility_state),
+                        (f"{left_feature}_state", left_state),
+                        (f"{right_feature}_state", right_state),
                     ),
                     "eligibility_columns": (
-                        feature_eligibility_column(path_feature),
-                        feature_eligibility_column(volatility_feature),
+                        feature_eligibility_column(left_feature),
+                        feature_eligibility_column(right_feature),
                     ),
                 }
             )
-    if len(specs) != PREREGISTERED_CONDITION_COUNT:
+    if len(specs) != universe.condition_count:
         raise AlphaDiscoveryScannerError(
             "Preregistered condition universe drifted: "
-            f"expected={PREREGISTERED_CONDITION_COUNT}, observed={len(specs)}."
+            f"expected={universe.condition_count}, observed={len(specs)}."
         )
     return specs
+
+
+def _condition_specs() -> list[dict[str, Any]]:
+    """Compatibility wrapper for the frozen AR-0001 condition family."""
+
+    return build_condition_specs()
 
 
 def _calendar_strata(
@@ -661,6 +755,21 @@ def _adjust_families(
         "PASS",
         "FAIL",
     )
+    if settings.minimum_mean_net_return is not None:
+        threshold = float(settings.minimum_mean_net_return)
+        output["minimum_mean_net_return_required"] = threshold
+        output["economic_effect_gate_status"] = np.where(
+            (output["inference_status"] == "ELIGIBLE")
+            & (output["mean_net_return"] >= threshold),
+            "PASS",
+            "FAIL",
+        )
+        output["candidate_screen_status"] = np.where(
+            (output["statistical_screen_status"] == "PASS")
+            & (output["economic_effect_gate_status"] == "PASS"),
+            "PASS",
+            "FAIL",
+        )
     # Compatibility aliases remain local diagnostics; the binding field is
     # explicitly p_value_global_by/global_by_gate_status.
     output["p_value_bh"] = output["p_value_local_bh"]
@@ -676,10 +785,13 @@ def scan_conditional_effects(
     frozen_bins: FrozenBinEdges,
     settings: ScannerSettings = ScannerSettings(),
     horizons: Sequence[int] = ALPHA_DISCOVERY_HORIZONS,
+    universe: ConditionUniverse = AR0001_CONDITION_UNIVERSE,
+    allowed_horizons: Sequence[int] = ALPHA_DISCOVERY_HORIZONS,
 ) -> ConditionalScanResult:
-    """Measure only approved 1D states and PE x RV 2D interactions."""
+    """Measure only the finite states declared by the frozen universe."""
 
     settings.validate()
+    universe.validate()
     frozen_bins.validate()
     if len(features) != len(targets):
         raise AlphaDiscoveryScannerError("Features and targets must have equal rows.")
@@ -698,7 +810,25 @@ def scan_conditional_effects(
         raise AlphaDiscoveryScannerError(
             "Scanner horizons must be preregistered integer horizons."
         )
-    if any(value not in ALPHA_DISCOVERY_HORIZONS for value in resolved_horizons):
+    resolved_allowed_horizons = tuple(int(value) for value in allowed_horizons)
+    if (
+        not resolved_allowed_horizons
+        or len(set(resolved_allowed_horizons)) != len(resolved_allowed_horizons)
+        or any(value <= 0 for value in resolved_allowed_horizons)
+    ):
+        raise AlphaDiscoveryScannerError(
+            "Allowed preregistered horizons must be unique positive integers."
+        )
+    expected_global_family_size = (
+        universe.condition_count * len(resolved_allowed_horizons) * 2
+    )
+    if settings.global_family_size != expected_global_family_size:
+        raise AlphaDiscoveryScannerError(
+            "Global family size does not match the declared condition universe: "
+            f"expected={expected_global_family_size}, "
+            f"observed={settings.global_family_size}."
+        )
+    if any(value not in resolved_allowed_horizons for value in resolved_horizons):
         raise AlphaDiscoveryScannerError(
             "Scanner horizons must be a subset of the preregistered horizons."
         )
@@ -706,7 +836,10 @@ def scan_conditional_effects(
         raise AlphaDiscoveryScannerError("Scanner horizons cannot repeat.")
     required_feature_metadata = {
         GAP_SEGMENT_COLUMN,
-        *(feature_eligibility_column(feature) for feature in PRIMITIVE_FEATURE_COLUMNS),
+        *(
+            feature_eligibility_column(feature)
+            for feature in universe.feature_columns
+        ),
     }
     missing_feature_metadata = sorted(
         required_feature_metadata.difference(features.columns)
@@ -749,7 +882,12 @@ def scan_conditional_effects(
             f"{missing_target_metadata}."
         )
 
-    states = apply_frozen_states(features, frozen_bins)
+    states = apply_frozen_states(
+        features,
+        frozen_bins,
+        continuous_features=universe.continuous_features,
+        categorical_features=universe.categorical_features,
+    )
     timestamps = feature_timestamps.reset_index(drop=True)
     temporal_ids, period_bounds = _calendar_strata(
         timestamps,
@@ -778,7 +916,7 @@ def scan_conditional_effects(
     effects: list[dict[str, Any]] = []
     stability: list[dict[str, Any]] = []
     sensitivities: list[dict[str, Any]] = []
-    specifications = _condition_specs()
+    specifications = build_condition_specs(universe)
 
     for spec in specifications:
         condition = np.ones(len(states), dtype=bool)
@@ -1142,7 +1280,7 @@ def scan_conditional_effects(
                     row["automatic_fail"] = True
                 effects.append(row)
 
-    expected_effects = PREREGISTERED_CONDITION_COUNT * len(resolved_horizons) * 2
+    expected_effects = universe.condition_count * len(resolved_horizons) * 2
     if len(effects) != expected_effects:
         raise AlphaDiscoveryScannerError(
             "Scanner did not retain the full requested preregistered effect universe: "
@@ -1197,7 +1335,9 @@ def scan_conditional_effects(
 
 
 __all__ = [
+    "AR0001_CONDITION_UNIVERSE",
     "AlphaDiscoveryScannerError",
+    "ConditionUniverse",
     "ConditionalScanResult",
     "ChronologicalPeriod",
     "FrozenBinEdges",
@@ -1208,6 +1348,7 @@ __all__ = [
     "PREREGISTERED_EFFECT_COUNT",
     "ScannerSettings",
     "apply_frozen_states",
+    "build_condition_specs",
     "fit_discovery_quintiles",
     "preregistered_interaction_pairs",
     "scan_conditional_effects",

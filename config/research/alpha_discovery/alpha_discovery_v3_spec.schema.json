@@ -1,0 +1,192 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "alpha_discovery_v3_spec.schema.json",
+  "title": "AR-0003 Multi-Asset Trend Quality Research Specification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "pipeline",
+    "research_id",
+    "title",
+    "status",
+    "specification_hash",
+    "approval",
+    "hypothesis",
+    "prior_research_context",
+    "scientific_contract",
+    "asset_universe",
+    "dataset_contract",
+    "features",
+    "primary_score",
+    "regime_policy",
+    "target",
+    "cross_sectional_evaluation",
+    "temporal_stability",
+    "cost_policy",
+    "robustness_family",
+    "multiple_testing",
+    "secondary_lightgbm",
+    "resource_policy",
+    "promotion_gates",
+    "artifacts",
+    "runtime",
+    "blockers"
+  ],
+  "properties": {
+    "schema_version": {"const": 4},
+    "pipeline": {
+      "const": {
+        "kind": "alpha_discovery_v3",
+        "stage": "CROSS_SECTIONAL_DISCOVERY"
+      }
+    },
+    "research_id": {"const": "AR-0003"},
+    "title": {"const": "Multi-Horizon Trend Quality x Volatility Regime"},
+    "status": {"enum": ["SPECIFICATION_ONLY", "APPROVED_TO_RUN"]},
+    "specification_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approved_to_run",
+        "approved_by",
+        "approved_at",
+        "approved_specification_hash"
+      ],
+      "properties": {
+        "approved_to_run": {"type": "boolean"},
+        "approved_by": {"type": ["string", "null"]},
+        "approved_at": {"type": ["string", "null"]},
+        "approved_specification_hash": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "hypothesis": {"type": "object"},
+    "prior_research_context": {"type": "object"},
+    "scientific_contract": {"type": "object"},
+    "asset_universe": {
+      "type": "object",
+      "required": [
+        "reference",
+        "asset_ids",
+        "timeframe",
+        "timezone",
+        "status",
+        "minimum_assets_per_timestamp",
+        "missing_observation_policy"
+      ],
+      "properties": {
+        "reference": {"type": "string", "minLength": 1},
+        "asset_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "timeframe": {"const": "30m"},
+        "timezone": {"const": "UTC"},
+        "status": {"enum": ["UNRESOLVED", "READY"]},
+        "minimum_assets_per_timestamp": {"const": 5},
+        "missing_observation_policy": {
+          "const": "PRESERVE_ABSENCE_NO_DENSIFICATION"
+        }
+      }
+    },
+    "dataset_contract": {
+      "type": "object",
+      "required": [
+        "contract_kind",
+        "dataset_id",
+        "metadata_path",
+        "data_path",
+        "dataset_sha256",
+        "source_snapshot_fingerprints",
+        "evidence_role",
+        "required_segments",
+        "row_identity",
+        "prediction_eligibility_required",
+        "status"
+      ],
+      "properties": {
+        "contract_kind": {"const": "PanelResearchDataset"},
+        "dataset_id": {"type": ["string", "null"]},
+        "metadata_path": {"type": ["string", "null"]},
+        "data_path": {"type": ["string", "null"]},
+        "dataset_sha256": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "source_snapshot_fingerprints": {"type": "object"},
+        "evidence_role": {"const": "DISCOVERY"},
+        "required_segments": {"const": ["TRAINING", "TUNING", "SCREENING"]},
+        "row_identity": {"const": ["timestamp", "asset_id"]},
+        "prediction_eligibility_required": {"const": true},
+        "status": {"enum": ["UNAVAILABLE", "READY"]}
+      }
+    },
+    "features": {"type": "object"},
+    "primary_score": {
+      "type": "object",
+      "properties": {
+        "model_kind": {"const": "DETERMINISTIC_INTERPRETABLE_SCORE"},
+        "primary_test_must_precede_robustness": {"const": true}
+      },
+      "required": ["model_kind", "primary_test_must_precede_robustness"]
+    },
+    "regime_policy": {"type": "object"},
+    "target": {"type": "object"},
+    "cross_sectional_evaluation": {"type": "object"},
+    "temporal_stability": {"type": "object"},
+    "cost_policy": {"type": "object"},
+    "robustness_family": {
+      "type": "object",
+      "properties": {"total_variants": {"const": 12}},
+      "required": ["total_variants"]
+    },
+    "multiple_testing": {
+      "type": "object",
+      "properties": {
+        "deterministic_family_size": {"const": 12},
+        "secondary_model_family_separate": {"const": true}
+      },
+      "required": ["deterministic_family_size", "secondary_model_family_separate"]
+    },
+    "secondary_lightgbm": {"type": "object"},
+    "resource_policy": {"type": "object"},
+    "promotion_gates": {"type": "object"},
+    "artifacts": {"type": "object"},
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "perform_alpha_calculation",
+        "run_backtests",
+        "access_validation",
+        "access_historical_pseudo_oos",
+        "access_prospective_final",
+        "paper_demo_live_execution",
+        "construct_portfolio",
+        "auto_promote_candidate"
+      ],
+      "properties": {
+        "perform_alpha_calculation": {"type": "boolean"},
+        "run_backtests": {"const": false},
+        "access_validation": {"const": false},
+        "access_historical_pseudo_oos": {"const": false},
+        "access_prospective_final": {"const": false},
+        "paper_demo_live_execution": {"const": false},
+        "construct_portfolio": {"const": false},
+        "auto_promote_candidate": {"const": false}
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
+  }
+}

@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "alpha_discovery_v2_spec.schema.json",
+  "title": "Spread-Aware Alpha Discovery V2 Specification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "pipeline",
+    "research_id",
+    "status",
+    "specification_hash",
+    "approval",
+    "prior_research_context",
+    "scientific_contract",
+    "data_eligibility",
+    "historical_partition",
+    "snapshot_reference",
+    "historical_pseudo_oos_reference",
+    "evidence_roles",
+    "features",
+    "horizons",
+    "targets_planned",
+    "conditional_analysis",
+    "economic_gate",
+    "execution_measurement",
+    "statistics",
+    "multiple_testing",
+    "promotion_gates",
+    "artifacts",
+    "runtime",
+    "blockers"
+  ],
+  "properties": {
+    "schema_version": {"const": 3},
+    "pipeline": {
+      "const": {"kind": "alpha_discovery_v2", "stage": "PRE_SIGNAL_RESEARCH"}
+    },
+    "research_id": {"const": "AR-0002"},
+    "status": {"enum": ["SPECIFICATION_ONLY", "APPROVED_TO_RUN"]},
+    "specification_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approved_to_run",
+        "approved_by",
+        "approved_at",
+        "approved_specification_hash"
+      ],
+      "properties": {
+        "approved_to_run": {"type": "boolean"},
+        "approved_by": {"type": ["string", "null"]},
+        "approved_at": {"type": ["string", "null"]},
+        "approved_specification_hash": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "prior_research_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_research_id",
+        "source_specification_hash",
+        "source_artifact_sha256",
+        "evidence_role",
+        "use",
+        "contamination_statement"
+      ],
+      "properties": {
+        "source_research_id": {"const": "AR-0001"},
+        "source_specification_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "source_artifact_sha256": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["conditional_effects", "inference_sensitivities", "temporal_stability"],
+          "properties": {
+            "conditional_effects": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "inference_sensitivities": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "temporal_stability": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
+        },
+        "evidence_role": {"const": "DISCOVERY"},
+        "use": {"const": "POST_HOC_HYPOTHESIS_GENERATION_ONLY"},
+        "contamination_statement": {
+          "const": "SAME_DISCOVERY_REUSED_NO_VALIDATION_OR_FINAL_CLAIM"
+        }
+      }
+    },
+    "scientific_contract": {"type": "object"},
+    "data_eligibility": {"type": "object"},
+    "historical_partition": {"type": "object"},
+    "snapshot_reference": {"type": "object"},
+    "historical_pseudo_oos_reference": {"type": "object"},
+    "evidence_roles": {"type": "object"},
+    "features": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "windows", "available_at"],
+        "properties": {
+          "name": {
+            "enum": ["log_returns", "path_efficiency", "realized_volatility", "spread_fraction"]
+          },
+          "windows": {"type": "array", "items": {"type": "integer", "minimum": 1}},
+          "available_at": {
+            "const": {"bar_offset": 0, "event": "CLOSE"}
+          }
+        }
+      }
+    },
+    "horizons": {
+      "const": [16, 32, 64]
+    },
+    "targets_planned": {"type": "array", "minItems": 7, "maxItems": 7},
+    "conditional_analysis": {
+      "const": {
+        "bins": "DISCOVERY_FITTED_QUINTILES",
+        "freeze_bin_edges": true,
+        "one_dimensional_feature_columns": [
+          "log_return_48",
+          "path_efficiency_48",
+          "realized_volatility_48",
+          "spread_fraction"
+        ],
+        "two_dimensional_interactions": [
+          ["log_return_48", "spread_fraction"],
+          ["path_efficiency_48", "spread_fraction"],
+          ["realized_volatility_48", "spread_fraction"],
+          ["path_efficiency_48", "realized_volatility_48"]
+        ],
+        "allow_3d": false
+      }
+    },
+    "economic_gate": {
+      "const": {
+        "direction": "POSITIVE_NET_RETURN_ONLY",
+        "minimum_mean_net_return": 0.001,
+        "cost_scope": "OBSERVED_BID_ASK_SPREAD_ONLY",
+        "role": "BINDING_CANDIDATE_SCREEN_GATE"
+      }
+    },
+    "execution_measurement": {"type": "object"},
+    "statistics": {"type": "object"},
+    "multiple_testing": {
+      "type": "object",
+      "required": ["global_family_size", "binding_method", "primary_fdr_alpha"],
+      "properties": {
+        "global_family_size": {"const": 720},
+        "binding_method": {"const": "GLOBAL_BY"},
+        "primary_fdr_alpha": {"const": 0.05}
+      }
+    },
+    "promotion_gates": {"type": "object"},
+    "artifacts": {
+      "const": {
+        "output_root": "logs/experiments/alpha_discovery",
+        "layout_version": 2,
+        "write_mode": "IMMUTABLE_RUN_DIRECTORY"
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["perform_alpha_calculation", "run_backtests", "access_prospective_final"],
+      "properties": {
+        "perform_alpha_calculation": {"type": "boolean"},
+        "run_backtests": {"const": false},
+        "access_prospective_final": {"const": false}
+      }
+    },
+    "blockers": {"type": "array", "items": {"type": "string", "minLength": 1}}
+  }
+}

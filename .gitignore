@@ -145,6 +145,7 @@ tests/*
 !tests/test_chronos2_covariates.py
 !tests/test_audit_portability_regressions.py
 !tests/test_model_metrics_and_artifacts.py
+!tests/test_multi_asset_trend_quality_research.py
 !tests/features/
 !tests/features/*.py
 !tests/signals/
@@ -170,6 +171,7 @@ tests/experiments/*
 !tests/experiments/test_alpha_discovery_contract.py
 !tests/experiments/test_optuna_discovery_adapter.py
 !tests/experiments/test_alpha_discovery_phase3.py
+!tests/experiments/test_alpha_discovery_ar0002.py
 !tests/experiments/test_alpha_registry.py
 !tests/experiments/evolutionary/
 !tests/experiments/evolutionary/*.py

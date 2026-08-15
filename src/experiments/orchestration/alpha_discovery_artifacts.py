@@ -14,7 +14,7 @@ import yaml
 
 from src.experiments.alpha_discovery_scanner import ConditionalScanResult
 from src.src_data.research_access import LoadedResearchData
-from src.utils.alpha_discovery_config import validate_alpha_discovery_config
+from src.utils.alpha_discovery_config import validate_alpha_discovery_any_config
 from src.utils.run_metadata import (
     collect_git_metadata,
     compute_config_hash,
@@ -40,7 +40,7 @@ class AlphaDiscoveryArtifactLayout:
 
     @classmethod
     def from_config(cls, cfg: dict[str, Any]) -> AlphaDiscoveryArtifactLayout:
-        validate_alpha_discovery_config(cfg)
+        validate_alpha_discovery_any_config(cfg)
         research_id = str(cfg["research_id"])
         specification_hash = str(cfg["specification_hash"])
         output_root = Path(str(cfg["artifacts"]["output_root"]))
@@ -110,7 +110,7 @@ def write_alpha_discovery_artifacts(
 ) -> AlphaDiscoveryArtifactResult:
     """Persist a complete run once, atomically, without mutable result files."""
 
-    validate_alpha_discovery_config(cfg)
+    validate_alpha_discovery_any_config(cfg)
     if layout.run_root.exists():
         raise AlphaDiscoveryArtifactError(
             "Immutable alpha-discovery run directory already exists: "
@@ -188,10 +188,15 @@ def write_alpha_discovery_artifacts(
                     "chronological_stability"
                 ],
                 "multiple_testing": cfg["multiple_testing"],
+                **(
+                    {"economic_gate": cfg["economic_gate"]}
+                    if "economic_gate" in cfg
+                    else {}
+                ),
                 "observed_effect_rows": int(len(scan.effects)),
                 "automatic_fail_effect_rows": automatic_fail_count,
                 "automatic_fail_p_value": 1.0,
-                "global_family_size": 3792,
+                "global_family_size": cfg["multiple_testing"]["global_family_size"],
                 "binding_gate": "GLOBAL_BY_AT_0.05",
             },
         )
@@ -228,7 +233,9 @@ def write_alpha_discovery_artifacts(
             "inference_sensitivity_row_count": int(
                 len(scan.inference_sensitivities)
             ),
-            "global_multiple_testing_family_size": 3792,
+            "global_multiple_testing_family_size": cfg["multiple_testing"][
+                "global_family_size"
+            ],
             "binding_multiple_testing_gate": "GLOBAL_BY_AT_0.05",
             "dimensions": sorted(
                 int(value) for value in scan.effects["dimension"].unique()
@@ -236,6 +243,11 @@ def write_alpha_discovery_artifacts(
             "horizons": [int(value) for value in cfg["horizons"]],
             "directions": ["LONG", "SHORT"],
             "net_cost_scope": cfg["execution_measurement"]["net_cost_scope"],
+            **(
+                {"economic_gate": cfg["economic_gate"]}
+                if "economic_gate" in cfg
+                else {}
+            ),
             "runtime_assertions": {
                 "autonomous_hypothesis_generation": False,
                 "machine_learning": False,

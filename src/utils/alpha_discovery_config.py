@@ -953,9 +953,41 @@ def validate_alpha_discovery_config(cfg: dict[str, Any]) -> None:
             )
 
 
+def validate_alpha_discovery_any_config(cfg: dict[str, Any]) -> None:
+    """Dispatch to the exact frozen validator declared by the pipeline kind."""
+
+    if not isinstance(cfg, dict):
+        raise AlphaDiscoveryConfigError("Alpha-discovery config must be a mapping.")
+    pipeline = cfg.get("pipeline")
+    if not isinstance(pipeline, Mapping):
+        raise AlphaDiscoveryConfigError("Alpha-discovery pipeline must be a mapping.")
+    kind = pipeline.get("kind")
+    if kind == "alpha_discovery_v1":
+        validate_alpha_discovery_config(cfg)
+        return
+    if kind == "alpha_discovery_v2":
+        from src.utils.alpha_discovery_v2_config import (
+            validate_alpha_discovery_v2_config,
+        )
+
+        validate_alpha_discovery_v2_config(cfg)
+        return
+    if kind == "alpha_discovery_v3":
+        from src.utils.alpha_discovery_v3_config import (
+            validate_alpha_discovery_v3_config,
+        )
+
+        validate_alpha_discovery_v3_config(cfg)
+        return
+    raise AlphaDiscoveryConfigError(
+        f"Unsupported alpha-discovery pipeline kind: {kind!r}."
+    )
+
+
 __all__ = [
     "AlphaDiscoveryConfigError",
     "AlphaDiscoveryStatus",
     "compute_alpha_specification_hash",
+    "validate_alpha_discovery_any_config",
     "validate_alpha_discovery_config",
 ]

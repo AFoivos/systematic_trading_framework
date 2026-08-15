@@ -11,6 +11,8 @@ from typing import Any, Sequence
 import pandas as pd
 
 from src.experiments.alpha_discovery_scanner import (
+    AR0001_CONDITION_UNIVERSE,
+    ConditionUniverse,
     ScannerSettings,
     fit_discovery_quintiles,
     scan_conditional_effects,
@@ -26,7 +28,7 @@ from src.src_data.research_access import DiscoveryDataAccess, SnapshotReference
 from src.src_data.research_roles import EvidenceRole
 from src.utils.alpha_discovery_config import (
     AlphaDiscoveryStatus,
-    validate_alpha_discovery_config,
+    validate_alpha_discovery_any_config,
 )
 from src.utils.config import load_experiment_config
 
@@ -61,6 +63,35 @@ class AlphaDiscoveryRunResult:
             "run_manifest_path": str(self.artifacts.run_manifest_path),
             "run_identity_sha256": self.artifacts.run_identity_sha256,
         }
+
+
+def _condition_universe(cfg: dict[str, Any]) -> ConditionUniverse:
+    kind = str(cfg["pipeline"]["kind"])
+    if kind == "alpha_discovery_v1":
+        return AR0001_CONDITION_UNIVERSE
+    if kind == "alpha_discovery_v2":
+        from src.utils.alpha_discovery_v2_config import (
+            AR0002_CONTINUOUS_FEATURES,
+            AR0002_INTERACTION_PAIRS,
+        )
+
+        return ConditionUniverse(
+            continuous_features=AR0002_CONTINUOUS_FEATURES,
+            interaction_pairs=AR0002_INTERACTION_PAIRS,
+        )
+    raise AlphaDiscoveryExecutionRefused(
+        f"Unsupported alpha-discovery pipeline kind: {kind!r}."
+    )
+
+
+def _build_features(cfg: dict[str, Any], frame: pd.DataFrame) -> pd.DataFrame:
+    if cfg["pipeline"]["kind"] == "alpha_discovery_v1":
+        return build_alpha_discovery_features(frame)
+    from src.features.alpha_discovery_liquidity import (
+        build_alpha_discovery_liquidity_features,
+    )
+
+    return build_alpha_discovery_liquidity_features(frame)
 
 
 def _snapshot_reference(cfg: dict[str, Any]) -> SnapshotReference:
@@ -131,7 +162,7 @@ def execute_approved_alpha_discovery(
 ) -> AlphaDiscoveryRunResult:
     """Measure the frozen discovery family without prospective or signal access."""
 
-    validate_alpha_discovery_config(cfg)
+    validate_alpha_discovery_any_config(cfg)
     if AlphaDiscoveryStatus(cfg["status"]) is not AlphaDiscoveryStatus.APPROVED_TO_RUN:
         raise AlphaDiscoveryExecutionRefused(
             "Alpha discovery refused: status must be APPROVED_TO_RUN."
@@ -147,7 +178,8 @@ def execute_approved_alpha_discovery(
         )
     loaded = discovery_access.load_discovery(_snapshot_reference(cfg))
     _validate_loaded_discovery_partition(cfg, loaded=loaded)
-    features = build_alpha_discovery_features(loaded.frame)
+    universe = _condition_universe(cfg)
+    features = _build_features(cfg, loaded.frame)
     targets = build_alpha_discovery_targets(
         loaded.frame,
         horizons=cfg["horizons"],
@@ -156,6 +188,7 @@ def execute_approved_alpha_discovery(
         features,
         snapshot_id=loaded.manifest.snapshot_id,
         specification_hash=cfg["specification_hash"],
+        continuous_features=universe.continuous_features,
     )
     scan = scan_conditional_effects(
         features,
@@ -164,8 +197,11 @@ def execute_approved_alpha_discovery(
         settings=ScannerSettings.from_config(
             cfg["statistics"],
             cfg["multiple_testing"],
+            cfg.get("economic_gate"),
         ),
         horizons=cfg["horizons"],
+        universe=universe,
+        allowed_horizons=cfg["horizons"],
     )
     artifact_result = write_alpha_discovery_artifacts(
         layout=layout,
@@ -191,7 +227,7 @@ def run_alpha_discovery_pipeline(
     config_path: str | Path,
 ) -> AlphaDiscoveryRunResult:
     cfg = load_experiment_config(config_path)
-    validate_alpha_discovery_config(cfg)
+    validate_alpha_discovery_any_config(cfg)
     if AlphaDiscoveryStatus(cfg["status"]) is not AlphaDiscoveryStatus.APPROVED_TO_RUN:
         raise AlphaDiscoveryExecutionRefused(
             "Alpha discovery refused before data access: configuration status is "
