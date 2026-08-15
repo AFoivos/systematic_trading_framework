@@ -11,10 +11,12 @@ The experiment does not modify `AR-0001`, `AR-0002`, or the approved
 `AR-0003`. Those research cycles are hypothesis-generation and architecture
 context only; none of their results is validation or final evidence here.
 
-Until the exact hash is approved, the YAML remains `SPECIFICATION_ONLY`, alpha
-calculation is disabled, and the stable runner refuses before data access.
-The frozen scientific hash is
-`79fc8786f6b4076f999256e0297c714b4947081049e1fe0307ece1a8142a12c8`.
+The exact frozen hash was approved by Foivos Ampatzis on
+`2026-08-15T19:36:44+03:00`. The YAML is `APPROVED_TO_RUN` for `DISCOVERY`
+calculation only. All validation, final-evidence, canonical-backtest,
+portfolio, promotion, and execution permissions remain disabled. The frozen
+scientific hash is
+`675bcf8d11e17203b66538b06392c974b0c02adb543866918e59f5d6827420d6`.
 
 ## Research question
 
@@ -197,7 +199,7 @@ resumable; the final run directory remains create-once and immutable.
 
 ## Stable command
 
-After exact hash approval, the stable command is:
+With the exact hash-bound approval recorded, the stable command is:
 
 ```bash
 mkdir -p logs/console
@@ -209,9 +211,10 @@ python -m src.experiments.runner \
   2>&1 | tee logs/console/AR-0004-lightning-native.log
 ```
 
-The runner refuses before data access while the YAML is `SPECIFICATION_ONLY`.
-Approval must bind the exact displayed scientific hash, enable
-`runtime.perform_alpha_calculation`, and remove the sole approval blocker.
+The runner accepts only the approved scientific hash. The approval enables
+`runtime.perform_alpha_calculation` for `DISCOVERY` while all non-discovery
+data roles, canonical validation, portfolio construction, promotion, and
+execution remain fail-closed.
 
 ## Artifacts and interpretation
 

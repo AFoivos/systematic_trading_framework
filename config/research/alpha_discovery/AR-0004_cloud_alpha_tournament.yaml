@@ -4,14 +4,14 @@ pipeline:
   stage: CLOUD_ML_DISCOVERY
 research_id: AR-0004
 title: Cross-Asset Walk-Forward Alpha Tournament
-status: SPECIFICATION_ONLY
-specification_hash: 79fc8786f6b4076f999256e0297c714b4947081049e1fe0307ece1a8142a12c8
+status: APPROVED_TO_RUN
+specification_hash: 675bcf8d11e17203b66538b06392c974b0c02adb543866918e59f5d6827420d6
 
 approval:
-  approved_to_run: false
-  approved_by: null
-  approved_at: null
-  approved_specification_hash: null
+  approved_to_run: true
+  approved_by: Foivos Ampatzis
+  approved_at: '2026-08-15T19:36:44+03:00'
+  approved_specification_hash: 675bcf8d11e17203b66538b06392c974b0c02adb543866918e59f5d6827420d6
 
 hypothesis:
   statement: >-
@@ -284,7 +284,7 @@ artifacts:
     - reports/final_report.md
 
 runtime:
-  perform_alpha_calculation: false
+  perform_alpha_calculation: true
   access_validation: false
   access_historical_pseudo_oos: false
   access_prospective_final: false
@@ -293,5 +293,4 @@ runtime:
   paper_demo_live_execution: false
   auto_promote_candidate: false
 
-blockers:
-  - HUMAN_APPROVAL_OF_EXACT_SPECIFICATION_HASH_REQUIRED
+blockers: []
