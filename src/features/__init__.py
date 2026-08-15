@@ -63,6 +63,7 @@ from .helpers import (
     compute_threshold_flag,
 )
 from .path_efficiency import add_path_efficiency
+from .ethusd_custom_alpha import CUSTOM_ALPHA_OUTPUT_COLUMNS, add_ethusd_custom_alpha_features
 from .rolling_autocorrelation import add_rolling_autocorrelation, compute_rolling_autocorrelation
 from .rolling_extrema import add_extrema_feature
 from .technical.trend import (
@@ -259,6 +260,8 @@ __all__ = [
     "add_yang_zhang_volatility",
     "add_momentum_features",
     "add_path_efficiency",
+    "CUSTOM_ALPHA_OUTPUT_COLUMNS",
+    "add_ethusd_custom_alpha_features",
     "add_rolling_autocorrelation",
     "compute_rolling_autocorrelation",
     "add_oscillator_features",

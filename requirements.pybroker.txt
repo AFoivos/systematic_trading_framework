@@ -1,0 +1,8 @@
+# Optional dependency set for the Phase 3B PyBroker research adapter.
+# Keep the framework's numerical stack frozen: unconstrained PyBroker installs
+# may otherwise select NumPy 2.x and pandas 3.x, breaking Phase 3A parity.
+numpy==1.26.4
+pandas==2.2.2
+scikit-learn==1.5.1
+numba==0.67.0
+lib-pybroker==1.2.14

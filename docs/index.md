@@ -1,6 +1,6 @@
 # Κέντρο τεκμηρίωσης
 
-Τελευταία ενημέρωση: 2026-07-24
+Τελευταία ενημέρωση: 2026-08-15
 
 Αυτός είναι ο κεντρικός χάρτης τεκμηρίωσης του repo. Αν χρησιμοποιείς πρώτη
 φορά το framework, ξεκίνα από το quickstart και μετά πέρασε στον οδηγό YAML.
@@ -22,6 +22,31 @@
 
 - [Αρχιτεκτονική](architecture.md): package boundaries, registries και canonical
   pipeline.
+- [Architecture V2](ARCHITECTURE_V2.md): four-layer target architecture,
+  research contracts, evidence boundary, external-adapter policy και
+  compatibility strategy.
+- [Architecture V2 roadmap](architecture_v2_roadmap.md): incremental phases,
+  risks και exit criteria για research, portfolio και event-driven backends.
+- [VectorBT Research Backend](vectorbt_backend.md): Phase 3A finite-grid
+  screening adapter, timing/cost mapping, resource guards και canonical
+  validation boundary.
+- [PyBroker ML Walk-Forward Backend](pybroker_backend.md): Phase 3B supervised
+  ML screening με STF-authoritative purged folds, train-only preprocessing,
+  explicit OOS provenance και canonical-validation boundary.
+- [STF-native Multi-Asset Research Dataset](multi_asset_research_dataset.md):
+  Phase 3C-R1 canonical `(timestamp, asset_id)` contract, chronological
+  discovery segments, prediction eligibility, missing-observation policy και
+  portable fingerprint/provenance.
+- [STF-native Multi-Asset Alpha Research](multi_asset_alpha_research.md): Phase
+  3C-R2 per-asset/cross-sectional OOS prediction research, target-horizon purge,
+  per-asset coverage, rank IC, bounded search και candidate-validation boundary.
+- [Research & Evidence Layer](research_evidence_layer.md): Phase 1 hypothesis,
+  run/search, candidate, evidence, robustness, final-holdout και promotion
+  contracts.
+- [Research Layer Inventory](research_layer_inventory.md): classification και
+  migration risk όλων των modules του `src/experiments/support`.
+- [Architecture decision records](adr/): concise canonical decisions για
+  pipeline, package boundaries, adapters, evidence και market making.
 - [Κατάλογος features](catalog/features.md): διαθέσιμα feature steps και causal
   υποθέσεις, χωρισμένα σε οικογένειες με ερμηνεία τιμών.
 - [KDS / RLVS / LMDS market-state systems](features/quant_market_state.md):

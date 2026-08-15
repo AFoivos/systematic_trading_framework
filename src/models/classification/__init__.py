@@ -6,7 +6,10 @@ from src.models.classification.base import (
 )
 from src.models.classification.elastic_net import train_elastic_net_classifier
 from src.models.classification.lightgbm import train_lightgbm_classifier
-from src.models.classification.logistic_regression import train_logistic_regression_classifier
+from src.models.classification.logistic_regression import (
+    create_logistic_regression_estimator,
+    train_logistic_regression_classifier,
+)
 from src.models.classification.event_transformer import (
     resolve_event_embedding_columns,
     train_event_transformer_encoder,
@@ -15,6 +18,7 @@ from src.models.classification.xgboost import train_xgboost_classifier
 
 __all__ = [
     "_apply_fold_feature_preprocessing",
+    "create_logistic_regression_estimator",
     "resolve_event_embedding_columns",
     "train_elastic_net_classifier",
     "train_event_transformer_encoder",

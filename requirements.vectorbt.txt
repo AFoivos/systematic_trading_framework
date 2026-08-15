@@ -1,0 +1,12 @@
+# Optional dependency set for the Phase 3A VectorBT research adapter.
+# VectorBT 1.x requires NumPy >=2.4.6 and pandas >=3.0.3, which is not
+# compatible with the framework's frozen NumPy 1.26 / pandas 2.2 stack.
+vectorbt==0.28.5
+anywidget==0.11.0
+dateparser==1.4.2
+dill==0.4.1
+imageio==2.37.4
+mypy_extensions==1.1.0
+psygnal==0.15.1
+schedule==1.2.2
+tzlocal==5.4.4

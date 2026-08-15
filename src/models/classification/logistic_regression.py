@@ -8,6 +8,22 @@ from sklearn.linear_model import LogisticRegression
 from src.models.classification.base import train_forward_classifier
 
 
+def create_logistic_regression_estimator(
+    model_params: dict[str, Any] | None = None,
+) -> LogisticRegression:
+    """Build the framework-approved logistic estimator without fitting it.
+
+    Research adapters may reuse this factory inside their own framework-owned
+    folds.  Keeping construction here avoids a second model registry and keeps
+    the canonical classifier and optional adapters on identical defaults.
+    """
+
+    params = dict(model_params or {})
+    params.setdefault("max_iter", 1000)
+    params.setdefault("solver", "lbfgs")
+    return LogisticRegression(**params)
+
+
 def train_logistic_regression_classifier(
     df: pd.DataFrame,
     model_cfg: dict[str, Any],
@@ -55,10 +71,13 @@ def train_logistic_regression_classifier(
         cfg,
         model_kind="logistic_regression_clf",
         estimator_family="sklearn",
-        estimator_factory=lambda model_params: LogisticRegression(**model_params),
+        estimator_factory=create_logistic_regression_estimator,
         returns_col=returns_col,
     )
     return out, model, meta
 
 
-__all__ = ["train_logistic_regression_classifier"]
+__all__ = [
+    "create_logistic_regression_estimator",
+    "train_logistic_regression_classifier",
+]

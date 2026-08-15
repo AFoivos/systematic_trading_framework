@@ -130,12 +130,18 @@ logs/
 processed/
 /pdfs/
 AGENTS.md
+!AGENTS.md
 notebooks/
 tests/
 !tests/
 tests/*
 !tests/optional_dependencies.py
 !tests/test_architecture_registries.py
+!tests/test_architecture_v2.py
+!tests/test_research_evidence_layer.py
+!tests/test_alpha_discovery_phase2.py
+!tests/test_vectorbt_backend.py
+!tests/test_pybroker_backend.py
 !tests/test_chronos2_covariates.py
 !tests/test_audit_portability_regressions.py
 !tests/test_model_metrics_and_artifacts.py
@@ -162,6 +168,7 @@ tests/experiments/*
 !tests/experiments/test_barrier_probability_diagnostics.py
 !tests/experiments/test_btcusd_dual_trend_ftmo_pipeline.py
 !tests/experiments/test_alpha_discovery_contract.py
+!tests/experiments/test_optuna_discovery_adapter.py
 !tests/experiments/test_alpha_discovery_phase3.py
 !tests/experiments/test_alpha_registry.py
 !tests/experiments/evolutionary/

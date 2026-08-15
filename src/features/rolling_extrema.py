@@ -29,6 +29,23 @@ def add_extrema_feature(
     minima. With OHLC inputs, a bar can theoretically make both a new rolling
     high and a new rolling low; such an ambiguous bar is encoded as ``0``.
 
+    YAML declaration::
+
+        features:
+          - step: extrema
+            params:
+              window: 24
+              price_col: close
+              output_col: extrema
+              strict: true
+
+    Required input columns
+    ----------------------
+    price_col:
+        The configured single price series when provided.
+    high_col, low_col:
+        Causal high/low series used when ``price_col`` is not provided.
+
     Parameters
     ----------
     df:
@@ -48,16 +65,6 @@ def add_extrema_feature(
         If True, maxima/minima must be strictly greater/lower than every value
         in the previous window. If False, equality with the previous rolling
         max/min also counts.
-
-    YAML example
-    ------------
-    features:
-      - step: extrema
-        params:
-          window: 24
-          price_col: close
-          output_col: extrema
-          strict: true
     """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("df must be a pandas DataFrame.")

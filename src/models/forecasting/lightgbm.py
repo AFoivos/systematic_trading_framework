@@ -36,6 +36,22 @@ def _clean_lgbm_regressor_params(params: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def create_lightgbm_regressor_estimator(
+    model_params: dict[str, Any] | None = None,
+) -> object:
+    """Create the registry-owned LightGBM regressor without fitting it.
+
+    Research adapters use this narrow factory so estimator construction remains
+    owned by ``src.models``.  The caller still owns chronological split and
+    train-only preprocessing semantics.
+    """
+
+    ensure_lightgbm_runtime_available()
+    from lightgbm import LGBMRegressor
+
+    return LGBMRegressor(**_clean_lgbm_regressor_params(dict(model_params or {})))
+
+
 def make_lightgbm_regressor_fold_predictor() -> ForecasterFoldPredictor:
     """
     Return a fold predictor compatible with train_forward_forecaster.
@@ -54,13 +70,9 @@ def make_lightgbm_regressor_fold_predictor() -> ForecasterFoldPredictor:
         model_params: dict[str, Any],
         runtime_meta: dict[str, Any],
     ) -> tuple[pd.Series, dict[str, pd.Series], object, dict[str, Any]]:
-        ensure_lightgbm_runtime_available()
-        from lightgbm import LGBMRegressor
-
         if not feature_cols:
             raise ValueError("lightgbm_regressor requires at least one feature column.")
 
-        params = _clean_lgbm_regressor_params(model_params)
         train_index = df.index[np.asarray(train_idx, dtype=int)]
         test_index = df.index[np.asarray(test_idx, dtype=int)]
 
@@ -76,7 +88,7 @@ def make_lightgbm_regressor_fold_predictor() -> ForecasterFoldPredictor:
                 "lightgbm_regressor has no complete training rows after feature/target NaN filtering."
             )
 
-        model = LGBMRegressor(**params)
+        model = create_lightgbm_regressor_estimator(model_params)
         model.fit(
             x_train_all.loc[train_complete, feature_cols],
             y_train_all.loc[train_complete],
@@ -130,4 +142,7 @@ def make_lightgbm_regressor_fold_predictor() -> ForecasterFoldPredictor:
     return _predict_fold
 
 
-__all__ = ["make_lightgbm_regressor_fold_predictor"]
+__all__ = [
+    "create_lightgbm_regressor_estimator",
+    "make_lightgbm_regressor_fold_predictor",
+]

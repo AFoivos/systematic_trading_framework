@@ -61,6 +61,7 @@ src/
   models/                ML/forecasting/RL wrappers και model registry
   pipelines/             canonical pipeline facade και registry
   portfolio/             portfolio construction και constraints
+  research/              backend-neutral candidates, evidence και adapter contracts
   risk/                  sizing, costs και exposure controls
   signals/               signal builders που διαβάζουν feature/model columns
   src_data/              data loading, PIT hardening και OHLCV validation
@@ -142,6 +143,10 @@ experiment, χωρίς άχρηστα default diagnostics.
 - [Κέντρο τεκμηρίωσης](docs/index.md)
 - [Quickstart στα ελληνικά](docs/quickstart_gr.md)
 - [Αρχιτεκτονική](docs/architecture.md)
+- [Architecture V2](docs/ARCHITECTURE_V2.md)
+- [Architecture V2 roadmap](docs/architecture_v2_roadmap.md)
+- [Research & Evidence Layer](docs/research_evidence_layer.md)
+- [Research Layer Inventory](docs/research_layer_inventory.md)
 - [Οδηγός YAML experiments](docs/yaml_experiments_guide_gr.md)
 - [Feature catalog](docs/catalog/features.md)
 - [Signal catalog](docs/catalog/signals.md)

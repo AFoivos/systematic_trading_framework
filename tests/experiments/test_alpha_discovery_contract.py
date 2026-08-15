@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+import src.experiments.orchestration.alpha_discovery_pipeline as alpha_discovery_pipeline
 from src.experiments.alpha_contracts import (
     AvailableAt,
     BarEvent,
@@ -22,6 +23,7 @@ from src.experiments.orchestration.alpha_discovery_pipeline import (
     AlphaDiscoveryExecutionRefused,
     run_alpha_discovery_pipeline,
 )
+from src.src_data.research_access import DiscoveryDataAccess
 from src.src_data.research_roles import EvidenceRole, ResearchRoleError
 from src.utils.alpha_discovery_config import (
     AlphaDiscoveryConfigError,
@@ -80,13 +82,19 @@ def test_role_relabeling_and_contamination_rules_are_fail_closed() -> None:
     )
 
 
-def test_ar0001_is_a_valid_frozen_spec_but_not_approved() -> None:
+def test_ar0001_is_a_valid_approved_frozen_spec() -> None:
     cfg = load_experiment_config(CONFIG)
 
     validate_alpha_discovery_config(cfg)
-    assert cfg["status"] == "SPECIFICATION_ONLY"
+    assert cfg["status"] == "APPROVED_TO_RUN"
+    assert cfg["approval"] == {
+        "approved_to_run": True,
+        "approved_by": "FGADev",
+        "approved_at": "2026-08-12T15:22:00+03:00",
+        "approved_specification_hash": cfg["specification_hash"],
+    }
     assert cfg["runtime"] == {
-        "perform_alpha_calculation": False,
+        "perform_alpha_calculation": True,
         "run_backtests": False,
         "access_prospective_final": False,
     }
@@ -100,9 +108,7 @@ def test_ar0001_is_a_valid_frozen_spec_but_not_approved() -> None:
     )
     assert cfg["snapshot_reference"]["readiness"] == "ELIGIBLE"
     assert cfg["snapshot_reference"]["legacy_classifications"] == []
-    assert cfg["blockers"] == [
-        "Explicit APPROVED_TO_RUN authorization has not been issued."
-    ]
+    assert cfg["blockers"] == []
     assert {target["status"] for target in cfg["targets_planned"]} == {
         "IMPLEMENTED_PHASE_3"
     }
@@ -158,18 +164,60 @@ def test_config_rejects_point_in_time_and_scientific_contract_drift() -> None:
         validate_alpha_discovery_config(drifted)
 
 
-def test_specification_only_pipeline_refuses_before_data_access(monkeypatch) -> None:
+def test_pipeline_enforces_specification_only_and_approved_access_paths(
+    monkeypatch, tmp_path: Path
+) -> None:
+    specification_only = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
+    specification_only["status"] = "SPECIFICATION_ONLY"
+    specification_only["approval"] = {
+        "approved_to_run": False,
+        "approved_by": None,
+        "approved_at": None,
+        "approved_specification_hash": None,
+    }
+    specification_only["runtime"]["perform_alpha_calculation"] = False
+    specification_only["blockers"] = [
+        "Explicit APPROVED_TO_RUN authorization has not been issued."
+    ]
+    validate_alpha_discovery_config(specification_only)
+    specification_only_path = tmp_path / "specification_only.yaml"
+    specification_only_path.write_text(
+        yaml.safe_dump(specification_only, sort_keys=False),
+        encoding="utf-8",
+    )
+
     def forbidden_constructor(*args, **kwargs):
         raise AssertionError(
             "DiscoveryDataAccess must not be constructed for SPECIFICATION_ONLY"
         )
 
     monkeypatch.setattr(
-        "src.experiments.orchestration.alpha_discovery_pipeline.DiscoveryDataAccess",
-        forbidden_constructor,
+        alpha_discovery_pipeline, "DiscoveryDataAccess", forbidden_constructor
     )
     with pytest.raises(AlphaDiscoveryExecutionRefused, match="before data access"):
-        run_alpha_discovery_pipeline(CONFIG)
+        run_alpha_discovery_pipeline(specification_only_path)
+
+    captured: dict[str, object] = {}
+    approved_result = object()
+
+    def capture_approved_access(cfg, *, discovery_access):
+        captured["status"] = cfg["status"]
+        captured["discovery_access"] = discovery_access
+        return approved_result
+
+    monkeypatch.setattr(
+        alpha_discovery_pipeline, "DiscoveryDataAccess", DiscoveryDataAccess
+    )
+    monkeypatch.setattr(
+        alpha_discovery_pipeline,
+        "execute_approved_alpha_discovery",
+        capture_approved_access,
+    )
+    result = run_alpha_discovery_pipeline(CONFIG)
+
+    assert result is approved_result
+    assert captured["status"] == "APPROVED_TO_RUN"
+    assert isinstance(captured["discovery_access"], DiscoveryDataAccess)
 
 
 def test_artifact_layout_is_stable_and_inside_existing_experiment_root() -> None:

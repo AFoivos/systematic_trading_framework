@@ -8,6 +8,7 @@ _EXPORTS = {
     "SequenceSamples": ("src.models.forecasting.sequence", "SequenceSamples"),
     "SequenceScaler": ("src.models.forecasting.sequence", "SequenceScaler"),
     "build_sequence_samples": ("src.models.forecasting.sequence", "build_sequence_samples"),
+    "create_lightgbm_regressor_estimator": ("src.models.forecasting.lightgbm", "create_lightgbm_regressor_estimator"),
     "default_feature_columns": ("src.models.forecasting.lightgbm_baseline", "default_feature_columns"),
     "fit_garch11_state": ("src.models.forecasting.garch", "fit_garch11_state"),
     "fit_sequence_scaler": ("src.models.forecasting.sequence", "fit_sequence_scaler"),

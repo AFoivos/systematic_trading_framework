@@ -33,6 +33,43 @@ def forecast_threshold_mtf_momentum_gate_signal(
 
     The momentum columns are trailing returns generated from the 30-minute base frame:
     2, 8, 12 and 24 bars respectively. Missing inputs fail closed.
+
+    YAML declaration::
+
+        signals:
+          kind: forecast_threshold_mtf_momentum_gate
+          params:
+            forecast_col: pred_ret
+            upper: 0.7
+            lower: -0.85
+            mode: long_short
+            momentum_1h_col: ret_2
+            momentum_4h_col: ret_8
+            momentum_6h_col: ret_12
+            momentum_12h_col: ret_24
+
+    Required input columns
+    ----------------------
+    forecast_col:
+        Causal forecast or OOS prediction consumed by the threshold rule.
+    momentum_1h_col, momentum_4h_col, momentum_6h_col, momentum_12h_col:
+        Trailing base-frame return columns used by the causal agreement/veto
+        gates. Columns referenced by activation filters are also required.
+
+    Parameters
+    ----------
+    upper, lower:
+        Long and short forecast thresholds.
+    mode:
+        One of ``long_only``, ``short_only`` or ``long_short``.
+    require_1h_agreement, veto_all_higher_timeframes_opposite:
+        Enable the short-horizon agreement and symmetric higher-timeframe veto.
+    activation_filters:
+        Optional causal column filters applied before signal activation.
+    inclusive:
+        Use inclusive threshold comparisons when true.
+    signal_col:
+        Optional output-column name.
     """
     if mode not in _ALLOWED_MODES:
         raise ValueError(f"mode must be one of {_ALLOWED_MODES}")

@@ -6,6 +6,11 @@
 backtesting και paper/demo execution. Η αρχιτεκτονική δίνει προτεραιότητα σε
 χρονική αιτιότητα, reproducibility και καθαρά package boundaries.
 
+Η incremental target architecture και οι αποφάσεις του Phase 0 περιγράφονται
+στο [Architecture V2](ARCHITECTURE_V2.md) και στο
+[Architecture V2 roadmap](architecture_v2_roadmap.md). Το παρόν document
+παραμένει η περιγραφή των υφιστάμενων runtime contracts.
+
 ## Υψηλού επιπέδου εικόνα
 
 ```text
