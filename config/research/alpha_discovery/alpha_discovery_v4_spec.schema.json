@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "alpha_discovery_v4_spec.schema.json",
+  "title": "AR-0004 Cloud Alpha Tournament Specification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "pipeline", "research_id", "title", "status",
+    "specification_hash", "approval", "hypothesis", "prior_research_context",
+    "scientific_contract", "asset_universe", "features", "target",
+    "walk_forward", "model_search", "screening_evaluation", "cost_policy",
+    "inference", "candidate_gates", "resource_policy", "artifacts", "runtime",
+    "blockers"
+  ],
+  "properties": {
+    "schema_version": {"const": 5},
+    "pipeline": {"const": {"kind": "alpha_discovery_v4", "stage": "CLOUD_ML_DISCOVERY"}},
+    "research_id": {"const": "AR-0004"},
+    "title": {"const": "Cross-Asset Walk-Forward Alpha Tournament"},
+    "status": {"enum": ["SPECIFICATION_ONLY", "APPROVED_TO_RUN"]},
+    "specification_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "approval": {"type": "object"},
+    "hypothesis": {"type": "object"},
+    "prior_research_context": {"type": "object"},
+    "scientific_contract": {"type": "object"},
+    "asset_universe": {"type": "object"},
+    "features": {"type": "object"},
+    "target": {"type": "object"},
+    "walk_forward": {"type": "object"},
+    "model_search": {"type": "object"},
+    "screening_evaluation": {"type": "object"},
+    "cost_policy": {"type": "object"},
+    "inference": {"type": "object"},
+    "candidate_gates": {"type": "object"},
+    "resource_policy": {"type": "object"},
+    "artifacts": {"type": "object"},
+    "runtime": {"type": "object"},
+    "blockers": {"type": "array", "items": {"type": "string"}}
+  }
+}

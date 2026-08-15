@@ -4,14 +4,14 @@ pipeline:
   stage: CROSS_SECTIONAL_DISCOVERY
 research_id: AR-0003
 title: Multi-Horizon Trend Quality x Volatility Regime
-status: SPECIFICATION_ONLY
-specification_hash: 877fe0e8965a3b5ca1079f59c724c2612fc143e5c0a6349317e8cfa1a8ad9c64
+status: APPROVED_TO_RUN
+specification_hash: 459f9bc8411843dfee1c6d352dc2a4b01115ea379ada87ed38422cc5660048e0
 
 approval:
-  approved_to_run: false
-  approved_by: null
-  approved_at: null
-  approved_specification_hash: null
+  approved_to_run: true
+  approved_by: Foivos Ampatzis
+  approved_at: '2026-08-15T00:00:00+03:00'
+  approved_specification_hash: 459f9bc8411843dfee1c6d352dc2a4b01115ea379ada87ed38422cc5660048e0
 
 hypothesis:
   statement: >-
@@ -40,26 +40,119 @@ scientific_contract:
   automatic_promotion: FORBIDDEN
 
 asset_universe:
-  reference: CANONICAL_MULTI_ASSET_UNIVERSE_UNRESOLVED
-  asset_ids: []
+  reference: AR-0003-DUKASCOPY-15-ASSET-30M-V1
+  asset_ids:
+    - AUS200
+    - BRENT
+    - ETHUSD
+    - EU50
+    - EURUSD
+    - FRA40
+    - GER40
+    - NIKKEI225
+    - SPX500
+    - UK100
+    - US100
+    - US30
+    - USOIL
+    - XAGUSD
+    - XAUUSD
   timeframe: 30m
   timezone: UTC
-  status: UNRESOLVED
+  status: READY
   minimum_assets_per_timestamp: 5
   missing_observation_policy: PRESERVE_ABSENCE_NO_DENSIFICATION
+  source_bar_policy: OBSERVED_PROVIDER_30M_BARS_NO_MINUTE_RECONSTRUCTION
+  source_files:
+    AUS200:
+      path: data/raw/dukascopy_30m_clean/aus200_30m.csv
+      sha256: d7f62330d3143a696cff7ffe9db122b4510792b723f70bef5c7fd01b137e41dd
+    BRENT:
+      path: data/raw/dukascopy_30m_clean/brent_30m.csv
+      sha256: 63bc08d53f8715ec753aaefcb8932cbdfa3050639e4ef5b97d90e1c07114075d
+    ETHUSD:
+      path: data/raw/dukascopy_30m_clean/ethusd_30m.csv
+      sha256: efcde7cbd74ad8d8d450bf6d7bf8127919fe3e54ebbd7715f79e6310f64b9b7d
+    EU50:
+      path: data/raw/dukascopy_30m_clean/eu50_30m.csv
+      sha256: 4d365e833a5fe397b2923e89ec52cd7e012ccb201b09a3ee3a62c07b502381ec
+    EURUSD:
+      path: data/raw/dukascopy_30m_clean/eurusd_30m.csv
+      sha256: 384af9b40271f1598a545c79c77303922ed20d257b968c7b4718820accef4164
+    FRA40:
+      path: data/raw/dukascopy_30m_clean/fra40_30m.csv
+      sha256: 44ee0d3e53ee98f0cba279c0b51e2f166dbdc493b8ce769b783ae28ff88db46b
+    GER40:
+      path: data/raw/dukascopy_30m_clean/ger40_30m.csv
+      sha256: 8f2a7c1dd532c07962a01cec052537a4ccbf400901e9be61865048d6d0647a75
+    NIKKEI225:
+      path: data/raw/dukascopy_30m_clean/nikkei225_30m.csv
+      sha256: 6092986793fff17e8251d6ab6345415be623ccf0cd560f8ab18cda31b4f4e61b
+    SPX500:
+      path: data/raw/dukascopy_30m_clean/spx500_30m.csv
+      sha256: ccb10edeb21af135bd9867cc335e9aef54130ca2e0c2e2bd84505e5998202279
+    UK100:
+      path: data/raw/dukascopy_30m_clean/uk100_30m.csv
+      sha256: c2bbcf58fc501ea041ea01ae657c3f8d5cd53b4f94a9cf47c6cd6d76e44b456b
+    US100:
+      path: data/raw/dukascopy_30m_clean/us100_30m.csv
+      sha256: 186674e3b04ec09f549933ece717f4b2434fcc3f5d1970514703a05f116bdb5a
+    US30:
+      path: data/raw/dukascopy_30m_clean/us30_30m.csv
+      sha256: 58af6f5e16f903194eeb89da0f2abcb12f1e018776bba45c6d77598b291e201c
+    USOIL:
+      path: data/raw/dukascopy_30m_clean/usoil_30m.csv
+      sha256: ead250e201ec44772285a6d40318ca545680aefbbdb00ec63c956b36bcd6b2eb
+    XAGUSD:
+      path: data/raw/dukascopy_30m_clean/xagusd_30m.csv
+      sha256: 8f8f46343a613fd250c9e5f138ecaafebfa1752cb15b95126f40a34fe1e8f034
+    XAUUSD:
+      path: data/raw/dukascopy_30m_clean/xauusd_30m.csv
+      sha256: 887696a68d8290c1ac4143c3bac0451ec1a731967aac013a30d25f67f5c9bddf
+  sample_start_inclusive: '2020-01-06T00:00:00Z'
+  sample_end_exclusive: '2026-04-28T00:00:00Z'
 
 dataset_contract:
   contract_kind: PanelResearchDataset
-  dataset_id: null
+  dataset_id: AR-0003-MULTI-ASSET-DISCOVERY-V1
   metadata_path: null
   data_path: null
   dataset_sha256: null
-  source_snapshot_fingerprints: {}
+  source_snapshot_fingerprints:
+    AUS200: d7f62330d3143a696cff7ffe9db122b4510792b723f70bef5c7fd01b137e41dd
+    BRENT: 63bc08d53f8715ec753aaefcb8932cbdfa3050639e4ef5b97d90e1c07114075d
+    ETHUSD: efcde7cbd74ad8d8d450bf6d7bf8127919fe3e54ebbd7715f79e6310f64b9b7d
+    EU50: 4d365e833a5fe397b2923e89ec52cd7e012ccb201b09a3ee3a62c07b502381ec
+    EURUSD: 384af9b40271f1598a545c79c77303922ed20d257b968c7b4718820accef4164
+    FRA40: 44ee0d3e53ee98f0cba279c0b51e2f166dbdc493b8ce769b783ae28ff88db46b
+    GER40: 8f2a7c1dd532c07962a01cec052537a4ccbf400901e9be61865048d6d0647a75
+    NIKKEI225: 6092986793fff17e8251d6ab6345415be623ccf0cd560f8ab18cda31b4f4e61b
+    SPX500: ccb10edeb21af135bd9867cc335e9aef54130ca2e0c2e2bd84505e5998202279
+    UK100: c2bbcf58fc501ea041ea01ae657c3f8d5cd53b4f94a9cf47c6cd6d76e44b456b
+    US100: 186674e3b04ec09f549933ece717f4b2434fcc3f5d1970514703a05f116bdb5a
+    US30: 58af6f5e16f903194eeb89da0f2abcb12f1e018776bba45c6d77598b291e201c
+    USOIL: ead250e201ec44772285a6d40318ca545680aefbbdb00ec63c956b36bcd6b2eb
+    XAGUSD: 8f8f46343a613fd250c9e5f138ecaafebfa1752cb15b95126f40a34fe1e8f034
+    XAUUSD: 887696a68d8290c1ac4143c3bac0451ec1a731967aac013a30d25f67f5c9bddf
   evidence_role: DISCOVERY
   required_segments: [TRAINING, TUNING, SCREENING]
   row_identity: [timestamp, asset_id]
   prediction_eligibility_required: true
-  status: UNAVAILABLE
+  status: BUILD_AT_RUN_FROM_FROZEN_SOURCES
+  builder_version: AR0003_PANEL_V1
+  segments:
+    - id: training
+      purpose: TRAINING
+      start_inclusive: '2020-01-06T00:00:00Z'
+      end_exclusive: '2024-01-01T00:00:00Z'
+    - id: tuning
+      purpose: TUNING
+      start_inclusive: '2024-01-01T00:00:00Z'
+      end_exclusive: '2025-01-01T00:00:00Z'
+    - id: screening
+      purpose: SCREENING
+      start_inclusive: '2025-01-01T00:00:00Z'
+      end_exclusive: '2026-04-28T00:00:00Z'
 
 features:
   owner: STF_FEATURE_REGISTRY
@@ -132,7 +225,7 @@ target:
   exit_boundary: OPEN_T_PLUS_H_PLUS_1
   observed_bid_ask_required: true
   zero_cost_fallback: FORBIDDEN
-  panel_mapping_status: UNAVAILABLE
+  panel_mapping_status: READY
 
 cross_sectional_evaluation:
   prediction_scope: ELIGIBLE_SCREENING_ROWS_ONLY
@@ -158,12 +251,12 @@ temporal_stability:
   partition: EXPLICIT_EXISTING_SEGMENTS_THEN_CALENDAR_YEAR
   report_fields: [n, mean_executable_return, rank_ic, coverage, hit_rate]
   aggregate_positive_is_not_sufficient: true
-  minimum_period_threshold: NOT_HARDCODED_PENDING_DATA_CONTRACT
+  minimum_period_threshold: 500
 
 cost_policy:
-  base: OBSERVED_BID_ASK_ONLY_WHERE_CANONICALLY_SUPPORTED
+  base: OBSERVED_BID_ASK_OPEN_T_PLUS_1_TO_OPEN_T_PLUS_H_PLUS_1
   stress_multipliers: [1.0, 1.25, 1.5]
-  stress_status: BLOCKED_PENDING_CANONICAL_PANEL_COST_MAPPING
+  stress_status: READY
   unsupported_synthetic_costs: FORBIDDEN
   turnover_diagnostic: ONLY_IF_SUPPORTED_NO_PORTFOLIO_INTERPRETATION
 
@@ -186,7 +279,17 @@ multiple_testing:
     volatility_percentile_interval: [0.20, 0.80]
     forward_horizon_bars: 32
   failed_or_invalid_alternatives_retained: true
-  binding_method: UNRESOLVED_PENDING_STATISTICAL_DESIGN
+  binding_method: GLOBAL_BENJAMINI_YEKUTIELI
+  false_discovery_rate: 0.05
+  discovery_eligibility_gate: POSITIVE_MEAN_AND_BOOTSTRAP_LOWER_GT_ZERO_AND_GLOBAL_BY
+  hac_lag_bars: 32
+  bootstrap:
+    method: STRATIFIED_SEGMENTED_MOVING_BLOCK
+    block_length_bars: 32
+    resamples: 1000
+    confidence_level: 0.95
+    minimum_valid_resample_fraction: 0.90
+    base_seed: 30003
   secondary_model_family_separate: true
 
 secondary_lightgbm:
@@ -215,22 +318,22 @@ secondary_lightgbm:
 resource_policy:
   preflight_required: true
   max_assets: 100
-  max_rows: 1000000
+  max_rows: 1500000
   max_deterministic_variants: 12
   max_secondary_trials: 32
-  estimate_status: BLOCKED_UNTIL_DATASET_AND_UNIVERSE_ARE_BOUND
+  estimate_status: READY
   estimated_primary_model_fits: 0
-  estimated_secondary_model_fits: null
+  estimated_secondary_model_fits: 0
 
 promotion_gates:
-  specification_complete: NOT_EVALUATED
-  canonical_universe_bound: NOT_EVALUATED
-  panel_dataset_validated: NOT_EVALUATED
-  leakage_and_timing: NOT_EVALUATED
-  resource_preflight: NOT_EVALUATED
-  approval_hash_bound: NOT_EVALUATED
-  execution_cost_mapping: NOT_EVALUATED
-  multiple_testing: NOT_EVALUATED
+  specification_complete: PASS
+  canonical_universe_bound: PASS
+  panel_dataset_validated: RUNTIME_FAIL_CLOSED
+  leakage_and_timing: PASS_BY_CONTRACT_RUNTIME_REVALIDATED
+  resource_preflight: RUNTIME_FAIL_CLOSED
+  approval_hash_bound: PASS
+  execution_cost_mapping: PASS
+  multiple_testing: PASS
   canonical_validation: NOT_EVALUATED
 
 artifacts:
@@ -240,8 +343,10 @@ artifacts:
   planned:
     - run_manifest.json
     - contracts/resolved_specification.yaml
-    - datasets/panel_dataset_metadata.json
-    - predictions/primary_score_predictions.jsonl
+    - datasets/panel_h16_metadata.json
+    - datasets/panel_h32_metadata.json
+    - data_quality/source_quality.json
+    - predictions/primary_score_predictions.csv.gz
     - reports/cross_sectional_diagnostics.json
     - reports/per_asset_diagnostics.json
     - reports/temporal_stability.json
@@ -249,7 +354,7 @@ artifacts:
     - reports/search_breadth.json
 
 runtime:
-  perform_alpha_calculation: false
+  perform_alpha_calculation: true
   run_backtests: false
   access_validation: false
   access_historical_pseudo_oos: false
@@ -258,9 +363,4 @@ runtime:
   construct_portfolio: false
   auto_promote_candidate: false
 
-blockers:
-  - Canonical multi-asset universe is not defined or snapshot-bound.
-  - No validated DISCOVERY PanelResearchDataset is currently available.
-  - The 32-bar executable-return panel target and observed-cost mapping are not bound.
-  - The binding multiple-testing method is not yet frozen.
-  - Human approval of the final complete AR-0003 specification hash is required.
+blockers: []

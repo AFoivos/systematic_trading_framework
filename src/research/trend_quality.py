@@ -284,6 +284,7 @@ def evaluate_multi_horizon_trend_quality_score(
     executable_target_column: str,
     minimum_assets_per_timestamp: int = 5,
     quantile_fraction: float = 0.20,
+    include_prediction_records: bool = True,
 ) -> dict[str, Any]:
     """Return prediction diagnostics without portfolio or validation semantics."""
 
@@ -318,18 +319,22 @@ def evaluate_multi_horizon_trend_quality_score(
         minimum_assets_per_timestamp=minimum_assets_per_timestamp,
         quantile_fraction=quantile_fraction,
     )
-    prediction_records = [
-        {
-            "timestamp": pd.Timestamp(row.timestamp).isoformat(),
-            "asset_id": str(row.asset_id),
-            "prediction": float(row.prediction),
-            "target": float(row.target),
-            "screening_eligible": True,
-            "model_fit_required": False,
-            "screening_stage": "DISCOVERY",
-        }
-        for row in eligible.itertuples(index=False)
-    ]
+    prediction_records = (
+        [
+            {
+                "timestamp": pd.Timestamp(row.timestamp).isoformat(),
+                "asset_id": str(row.asset_id),
+                "prediction": float(row.prediction),
+                "target": float(row.target),
+                "screening_eligible": True,
+                "model_fit_required": False,
+                "screening_stage": "DISCOVERY",
+            }
+            for row in eligible.itertuples(index=False)
+        ]
+        if include_prediction_records
+        else []
+    )
     diagnostics.update(
         {
             "eligible_prediction_rows": int(len(eligible)),

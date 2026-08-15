@@ -79,7 +79,11 @@
         "timezone",
         "status",
         "minimum_assets_per_timestamp",
-        "missing_observation_policy"
+        "missing_observation_policy",
+        "source_bar_policy",
+        "source_files",
+        "sample_start_inclusive",
+        "sample_end_exclusive"
       ],
       "properties": {
         "reference": {"type": "string", "minLength": 1},
@@ -90,11 +94,17 @@
         },
         "timeframe": {"const": "30m"},
         "timezone": {"const": "UTC"},
-        "status": {"enum": ["UNRESOLVED", "READY"]},
+        "status": {"const": "READY"},
         "minimum_assets_per_timestamp": {"const": 5},
         "missing_observation_policy": {
           "const": "PRESERVE_ABSENCE_NO_DENSIFICATION"
-        }
+        },
+        "source_bar_policy": {
+          "const": "OBSERVED_PROVIDER_30M_BARS_NO_MINUTE_RECONSTRUCTION"
+        },
+        "source_files": {"type": "object", "minProperties": 5},
+        "sample_start_inclusive": {"type": "string"},
+        "sample_end_exclusive": {"type": "string"}
       }
     },
     "dataset_contract": {
@@ -110,7 +120,9 @@
         "required_segments",
         "row_identity",
         "prediction_eligibility_required",
-        "status"
+        "status",
+        "builder_version",
+        "segments"
       ],
       "properties": {
         "contract_kind": {"const": "PanelResearchDataset"},
@@ -126,7 +138,9 @@
         "required_segments": {"const": ["TRAINING", "TUNING", "SCREENING"]},
         "row_identity": {"const": ["timestamp", "asset_id"]},
         "prediction_eligibility_required": {"const": true},
-        "status": {"enum": ["UNAVAILABLE", "READY"]}
+        "status": {"const": "BUILD_AT_RUN_FROM_FROZEN_SOURCES"},
+        "builder_version": {"const": "AR0003_PANEL_V1"},
+        "segments": {"type": "array", "minItems": 3, "maxItems": 3}
       }
     },
     "features": {"type": "object"},

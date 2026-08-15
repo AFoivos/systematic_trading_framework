@@ -979,6 +979,13 @@ def validate_alpha_discovery_any_config(cfg: dict[str, Any]) -> None:
 
         validate_alpha_discovery_v3_config(cfg)
         return
+    if kind == "alpha_discovery_v4":
+        from src.utils.alpha_discovery_v4_config import (
+            validate_alpha_discovery_v4_config,
+        )
+
+        validate_alpha_discovery_v4_config(cfg)
+        return
     raise AlphaDiscoveryConfigError(
         f"Unsupported alpha-discovery pipeline kind: {kind!r}."
     )

@@ -2,103 +2,98 @@
 
 ## Status
 
-`AR-0003` is implemented as a hash-bound `SPECIFICATION_ONLY` research
-contract. The deterministic primary-score primitive and fail-closed stable
-runner boundary exist, but a real experiment is deliberately blocked. The
-repository currently contains no canonical multi-asset research universe or
-validated `DISCOVERY` `PanelResearchDataset`; the available immutable research
-snapshots are ETHUSD-only.
-
-Raw multi-asset CSV files are not silently promoted to canonical research
-snapshots. `AR-0001` and `AR-0002` are not modified.
+`AR-0003` is an approval- and specification-hash-bound, executable
+`DISCOVERY` experiment. Its hash is
+`459f9bc8411843dfee1c6d352dc2a4b01115ea379ada87ed38422cc5660048e0`.
+It is screening-only: no result is canonical validation, a portfolio backtest,
+or authority for paper/demo/live execution. `AR-0001` and `AR-0002` are not
+modified.
 
 ## 1. Frozen hypothesis
 
-Across a future explicitly bound canonical multi-asset universe, assets with
-directionally consistent 16/32/64-bar momentum, high 16/32/48-bar path
-efficiency, and non-extreme realized volatility are hypothesized to have
-stronger same-direction future executable returns over 16–32 bars. The primary
-preregistered horizon is 32 bars.
+Across the frozen multi-asset universe, assets with directionally consistent
+16/32/64-bar momentum, high 16/32/48-bar path efficiency, and non-extreme
+realized volatility are hypothesized to have stronger same-direction future
+executable returns over 16–32 bars. The primary preregistered member uses a
+32-bar horizon, a 0.70 path-efficiency percentile, and a 0.20–0.80 volatility
+percentile interval.
 
 Previous STF conditional-effect outputs are hypothesis-generation evidence
 only. They are not independent validation or final evidence for `AR-0003`.
 
 ## 2. Data and evidence roles
 
-The intended input is the Phase 3C-R1 STF-owned `PanelResearchDataset` with
-canonical row identity `(timestamp, asset_id)`, immutable source snapshot
-fingerprints, explicit `TRAINING`, `TUNING`, and `SCREENING` segments, and
-`DISCOVERY` evidence role.
+All 15 source files and their SHA-256 values are frozen in the YAML. The runner
+verifies every hash before loading data and builds two STF-owned R1
+`PanelResearchDataset` values in memory. The chronological segments are:
 
-The deterministic primary score needs no model fit, but its evaluation still
-uses eligible `SCREENING` rows only. The optional LightGBM extension may fit on
-purged chronological `TRAINING/TUNING` rows and emit true OOS `SCREENING`
-predictions through the existing Phase 3C-R2 executor. Neither path may access
-`VALIDATION`, `HISTORICAL_PSEUDO_OOS`, or `PROSPECTIVE_FINAL` in this research
-cycle.
+- `TRAINING`: `[2020-01-06, 2024-01-01)`;
+- `TUNING`: `[2024-01-01, 2025-01-01)`;
+- `SCREENING`: `[2025-01-01, 2026-04-28)`.
 
-## 3. Asset universe
+Every segment remains `DISCOVERY`. The names `SCREENING` and “OOS” do not turn
+these data into `VALIDATION` or `PROSPECTIVE_FINAL` evidence. The deterministic
+primary score is evaluated only on prediction-eligible `SCREENING` rows.
 
-The asset universe is intentionally recorded as
-`CANONICAL_MULTI_ASSET_UNIVERSE_UNRESOLVED`, with no fabricated asset IDs. A
-ready universe must contain at least five explicit, sorted STF asset IDs, use
-30-minute UTC observations, and be exactly matched by the validated panel
-metadata.
+## 3. Frozen asset universe
 
-Missing asset/timestamp observations remain absent. No Cartesian densification,
-forward fill, backfill, or calendar substitution is permitted.
+The universe is `AR-0003-DUKASCOPY-15-ASSET-30M-V1`:
+
+`AUS200`, `BRENT`, `ETHUSD`, `EU50`, `EURUSD`, `FRA40`, `GER40`,
+`NIKKEI225`, `SPX500`, `UK100`, `US100`, `US30`, `USOIL`, `XAGUSD`,
+`XAUUSD`.
+
+The source contract is `OBSERVED_PROVIDER_30M_BARS_NO_MINUTE_RECONSTRUCTION`.
+Raw gaps remain gaps. No Cartesian densification, forward fill, backfill, or
+calendar substitution is performed. Any feature or target window crossing a
+non-30-minute transition is missing and ineligible. This contract does not
+claim exact reconstruction from 30 observed one-minute candles.
 
 ## 4. Feature definitions
 
-All inputs are framework-owned feature outputs available at `close[t]`:
+Features are computed independently per asset and are available at
+`close[t]`:
 
-- momentum: `log_return_16`, `log_return_32`, `log_return_64`;
-- path efficiency: `path_efficiency_16`, `path_efficiency_32`,
-  `path_efficiency_48`;
-- realized volatility: `realized_volatility_16/32/64/192`;
-- primary volatility ratio: `realized_volatility_32 /
-  realized_volatility_192`.
+- log return over 16, 32, and 64 bars;
+- path efficiency over 16, 32, and 48 bars;
+- realized volatility as the square root of the sum of squared one-bar log
+  returns over 16, 32, 64, and 192 bars;
+- `volatility_ratio_32_192 = RV32 / RV192`.
 
-A non-positive or missing slow-volatility denominator yields a missing ratio.
-Missing features stay missing and make the row ineligible; there is no
-imputation.
+All rolling windows require exact 30-minute continuity. Missing values remain
+missing; there is no imputation or globally fitted preprocessing.
 
-## 5. Target definition
+## 5. Target and causal timing
 
-The primary target is a framework-owned 32-bar executable return whose
-direction follows the sign of `alpha_score`. The required information and price
-mapping is:
+For horizon `h`, information is available at `close[t]`, entry is at
+`open[t+1]`, and exit is at `open[t+h+1]`. The base long coordinate used for
+cross-sectional rank IC is:
 
 ```text
-features known at close[t]
-entry at open[t+1]
-exit at open[t+h+1], h=32
-observed bid/ask sides required
+bid_open[t+h+1] / ask_open[t+1] - 1
 ```
 
-The repository does not yet have this target bound to a validated multi-asset
-panel. Therefore `panel_mapping_status=UNAVAILABLE` is a binding blocker. A
-mid-price or zero-cost substitute is not accepted.
+The corresponding short executable diagnostic is:
 
-## 6. Causal timing
+```text
+(bid_open[t+1] - ask_open[t+h+1]) / bid_open[t+1]
+```
 
-Per-asset rolling features may use only observations through `t`.
-Cross-sectional transforms use only the observed assets at the same timestamp
-`t`; they never fit on or inspect a later timestamp. The decision cannot fill at
-the same close. Target horizon overlap must be purged before any optional model
-fit.
+The same-direction return selects the long value for a non-negative score and
+the short value for a negative score. No same-close fill and no zero-cost
+fallback exist. A target is missing if the entire future bar path is not
+30-minute-contiguous.
 
-## 7. Primary alpha-score formula
+## 6. Primary alpha score and regime
 
-At each timestamp, population z-scores (`ddof=0`) are computed across observed
-assets. At least five finite assets are required; a constant cross-section is
-missing.
+At each timestamp, population z-scores (`ddof=0`) are computed only across
+currently observed assets. At least five finite assets are required.
 
 ```text
 trend_score = median(
-    cross_sectional_zscore(log_return_16),
-    cross_sectional_zscore(log_return_32),
-    cross_sectional_zscore(log_return_64)
+    zscore_cs(log_return_16),
+    zscore_cs(log_return_32),
+    zscore_cs(log_return_64)
 )
 
 quality_score = median(
@@ -110,135 +105,114 @@ quality_score = median(
 alpha_score = trend_score * quality_score
 ```
 
-At least two of the three raw momentum horizons must have the same non-zero
-direction. Zero is neutral. The deterministic implementation is
-`src.research.trend_quality.build_multi_horizon_trend_quality_score`.
+At least two momentum horizons must have the same non-zero direction. The
+primary regime requires `quality_score` percentile `>= 0.70` and an inclusive
+`volatility_ratio_32_192` percentile in `[0.20, 0.80]`, using average-tie ranks
+within the same timestamp. No future row enters either percentile.
 
-## 8. Volatility-regime policy
+## 7. Cross-sectional evaluation
 
-The primary regime uses deterministic average-tie percentile ranks within the
-same contemporaneous cross-section:
+At every eligible screening timestamp, the run records individual asset
+scores and evaluates mean/median Spearman rank IC, IC dispersion, positive-IC
+period count, top/bottom 20% executable-target means, and their spread. It also
+writes per-asset coverage/predictive diagnostics and calendar-year stability.
+Top-minus-bottom is a prediction diagnostic only; it is not a shared-capital
+portfolio return.
 
-- `quality_score` percentile is at least 0.70;
-- `volatility_ratio_32_192` percentile is inclusively between 0.20 and 0.80;
-- at least five finite observed assets are required.
+## 8. Costs
 
-This explicitly selects the cross-sectional interpretation of the prompt's
-rolling/cross-sectional choice. It uses no future row and introduces no fitted
-global percentile state.
+The base cost uses the observed entry/exit bid and ask. Cost stress widens each
+observed half-spread deterministically by `1.00×`, `1.25×`, and `1.50×` before
+recomputing long and short executable returns. These are directional screening
+diagnostics, not a portfolio ledger. Commission, funding, slippage, or other
+costs are not silently invented.
 
-## 9. Cross-sectional evaluation
+## 9. Inference and multiple testing
 
-At each eligible `SCREENING` timestamp, assets are ranked by `alpha_score`, with
-`asset_id` as deterministic tie-breaker. Top and bottom 20% target diagnostics
-are retained together with every individual asset prediction/score.
-
-The planned metrics are mean and median Spearman rank IC, IC dispersion,
-positive-IC-period ratio, top and bottom executable target means, their spread,
-per-asset coverage and predictive metrics, and temporal stability. The
-top-minus-bottom spread is a prediction-target diagnostic, not a shared-capital
-portfolio return or canonical backtest.
-
-## 10. Cost semantics
-
-Base evaluation requires the canonical observed bid/ask mapping. Stress levels
-are `1.00×`, `1.25×`, and `1.50×` only after the panel cost contract proves how
-that multiplication applies. Commission, slippage, funding, or synthetic costs
-are not invented. Turnover/cost diagnostics are permitted only when their
-units and non-portfolio interpretation are explicit.
-
-## 11. Multiple-testing family
-
-The deterministic family contains all 12 combinations of the three path-
-efficiency thresholds, two volatility intervals, and two horizons. Failed and
-invalid alternatives remain in search-breadth accounting. The primary
-preregistered member is `(0.70, 0.20–0.80, h=32)`.
-
-The binding correction method is deliberately unresolved. It must be frozen
-before approval; the framework will not borrow the AR-0001/AR-0002 correction
-mechanically without an appropriate statistical design for these dependent
-rank diagnostics.
-
-## 12. Temporal-stability policy
-
-Results are first separated by the dataset's explicit temporal segments and
-then by calendar year where supported. Every period reports `n`, mean signed
-executable return, rank IC, coverage, and hit rate where meaningful. Positive
-aggregate performance cannot compensate for unreported or unstable periods.
-A minimum-period gate will be bound only after the real dataset boundaries are
-known.
-
-## 13. Robustness family
-
-Robustness is evaluated only after the primary member:
+The full deterministic family has 12 variants:
 
 ```text
 PE percentile:       0.60, 0.70, 0.80
 volatility interval: 0.10–0.90, 0.20–0.80
 forward horizon:     16, 32
-total:               3 × 2 × 2 = 12
 ```
 
-Inspecting this family consumes discovery evidence. Any material change to the
-feature, target, score, regime, cost, timing, or promotion contract starts a
-new research cycle and produces a new hash.
+The primary member is evaluated first. Every variant, including invalid ones,
+remains in the family. Rank IC is placed back on the unsqueezed 30-minute
+screening timeline. Inference uses Newey–West with lag 32 and a calendar-year
+stratified, non-circular moving-block bootstrap with block length 32, 1,000
+resamples, 95% confidence, and deterministic per-hypothesis seeds. The binding
+correction is global Benjamini–Yekutieli at FDR 0.05 over all 12 members; an
+invalid member receives raw `p=1.0`. At least 500 finite rank-IC periods are
+required per variant. Discovery eligibility requires a positive mean rank IC,
+a bootstrap lower confidence bound above zero, and passage of the global BY
+gate. Eligibility still does not promote a candidate automatically.
 
-## 14. Optional LightGBM extension
+## 10. Optional LightGBM extension
 
-The extension is disabled by default and remains separate from the primary
-test. If enabled later, it must use the existing framework
-`lightgbm_regressor` and `MultiAssetSearchExecutor`, train-only preprocessing,
-chronological purge, deterministic seeds, true OOS `SCREENING` predictions,
-and independent search-breadth accounting. It cannot replace or retroactively
-reinterpret the preregistered deterministic result.
+The existing framework-owned `MultiAssetSearchExecutor` remains available for
+a separately approved LightGBM search, but it is disabled in this run. It is
+not part of the 12-member deterministic family and cannot replace the primary
+preregistered test. Enabling it would create separate search breadth and a new
+scientific hash.
 
-## 15. Resource estimate
+## 11. Resource and safety contract
 
-The deterministic score requires no model fit and has 12 bounded variants. Its
-dominant cost is approximately linear in panel rows plus per-timestamp
-cross-sectional sorting/ranking. The current caps are 100 assets, 1,000,000
-rows, and 12 deterministic variants.
+The frozen caps are 100 assets, 1,500,000 panel rows, 12 deterministic variants,
+and zero model fits. Resource checks occur after verified source loading and
+before alpha evaluation. The run does not construct a portfolio, run the
+canonical backtester, access validation/final evidence, promote a candidate,
+or contact a broker.
 
-An exact row count, memory estimate, prediction-record count, and optional
-LightGBM fit count cannot be reported before the universe and panel are bound.
-The resource preflight must pass before data evaluation or model fitting.
+## 12. Exact command
 
-## 16. Exact run command
-
-The stable command is reserved as:
+From the repository root in Lightning AI Studio:
 
 ```bash
+mkdir -p logs/console
+export PYTHONPATH="$PWD"
+export PYTHONHASHSEED=7
+
 python -m src.experiments.runner \
-  config/research/alpha_discovery/AR-0003_multi_asset_trend_quality.yaml
+  config/research/alpha_discovery/AR-0003_multi_asset_trend_quality.yaml \
+  2>&1 | tee logs/console/AR-0003-lightning-native.log
 ```
 
-In the checked-in state it must fail before data access with
-`SPECIFICATION_ONLY`. It is not currently an instruction to run the experiment.
-There is no legitimate command that bypasses the missing universe, panel,
-target/cost, statistical, resource, and approval gates.
+The runner refuses before alpha calculation if the approval hash, source hash,
+schema, universe, cost/timing policy, resource cap, or immutable output path
+does not match the contract.
 
-## 17. Exact artifact locations
+## 13. Artifacts
 
-No result artifacts exist yet. Once an execution implementation and all gates
-are approved, the immutable root is planned as:
+The immutable run root is:
 
 ```text
-logs/experiments/alpha_discovery/AR-0003/<run-id>/
+logs/experiments/alpha_discovery/AR-0003/459f9bc8411843df/
 ```
 
-The specification reserves the manifest, resolved contract, panel metadata,
-portable primary score records, cross-sectional diagnostics, per-asset
-diagnostics, temporal stability, robustness family, and search-breadth files.
-Native model objects and portfolio artifacts are not part of this contract.
+It contains:
 
-## 18. Approval and hash status
+- `run_manifest.json`;
+- `contracts/resolved_specification.yaml`;
+- `datasets/panel_h16_metadata.json` and `panel_h32_metadata.json`;
+- `data_quality/source_quality.json`;
+- `predictions/primary_score_predictions.csv.gz`;
+- `reports/cross_sectional_diagnostics.json`;
+- `reports/per_asset_diagnostics.json`;
+- `reports/temporal_stability.json`;
+- `reports/robustness_family.json`;
+- `reports/search_breadth.json`.
 
-The YAML stores a deterministic scientific hash while excluding mutable
-workflow approval metadata, status, blockers, and the calculation switch from
-the scientific digest. Human approval must bind the exact final complete hash.
+The full derived panels are fingerprinted but not duplicated to disk. Their
+metadata and fingerprints are immutable artifacts; the inputs remain the
+frozen source CSVs.
 
-The current hash is not approvable for execution because material bindings are
-explicitly unresolved. Completing any of those fields changes the scientific
-hash and requires a fresh review. No candidate can exceed
-`PENDING_CANONICAL_VALIDATION`; canonical validation remains STF-owned, and no
-paper/demo/live or portfolio action is authorized.
+## 14. Approval and interpretation
+
+The YAML is `APPROVED_TO_RUN`, and `approved_specification_hash` exactly matches
+the scientific hash above. Approval authorizes this discovery measurement only.
+It does not approve a strategy, canonical validation, portfolio allocation, or
+execution. Any material change to data, universe, feature/target semantics,
+timing, costs, inference, thresholds, or family breadth creates a new hash and
+requires new approval. Any later candidate remains at most
+`PENDING_CANONICAL_VALIDATION`, with canonical validation STF-owned.

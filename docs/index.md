@@ -40,6 +40,9 @@
 - [STF-native Multi-Asset Alpha Research](multi_asset_alpha_research.md): Phase
   3C-R2 per-asset/cross-sectional OOS prediction research, target-horizon purge,
   per-asset coverage, rank IC, bounded search και candidate-validation boundary.
+- [AR-0004 Cloud Alpha Tournament](alpha_discovery/AR-0004_RESEARCH_CONTRACT.md):
+  hash-bound 384-trial LightGBM search, expanding walk-forward tuning, later OOS
+  screening, global BY, observed-spread stress και pending-validation boundary.
 - [Research & Evidence Layer](research_evidence_layer.md): Phase 1 hypothesis,
   run/search, candidate, evidence, robustness, final-holdout και promotion
   contracts.

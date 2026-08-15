@@ -11,7 +11,6 @@ import pytest
 import yaml
 
 from src.experiments.orchestration.cross_sectional_alpha_pipeline import (
-    CrossSectionalAlphaExecutionRefused,
     run_alpha_discovery_v3_pipeline,
 )
 from src.pipelines.registry import get_pipeline_fn
@@ -20,6 +19,7 @@ from src.research import (
     build_multi_horizon_trend_quality_score,
     evaluate_multi_horizon_trend_quality_score,
 )
+from src.research.ar0003_runtime import build_ar0003_asset_features_and_targets
 from src.utils.alpha_discovery_config import (
     compute_alpha_specification_hash,
     validate_alpha_discovery_any_config,
@@ -63,17 +63,35 @@ def _panel() -> pd.DataFrame:
     ).reset_index(drop=True)
 
 
-def test_ar0003_is_hash_bound_specification_only_and_registered() -> None:
+def _source_bars() -> pd.DataFrame:
+    timestamps = pd.date_range("2025-01-01T00:00:00Z", periods=260, freq="30min")
+    mid = 100.0 + np.arange(len(timestamps), dtype=float) / 10.0
+    return pd.DataFrame(
+        {
+            "timestamp": timestamps,
+            "open": mid,
+            "high": mid + 0.2,
+            "low": mid - 0.2,
+            "close": mid + 0.05,
+            "bid_open": mid - 0.01,
+            "ask_open": mid + 0.01,
+            "asset_id": "SYNTHETIC",
+        }
+    )
+
+
+def test_ar0003_is_hash_bound_approved_and_registered() -> None:
     cfg = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
 
     validate_alpha_discovery_any_config(cfg)
-    assert cfg["status"] == "SPECIFICATION_ONLY"
-    assert cfg["approval"]["approved_to_run"] is False
-    assert cfg["runtime"]["perform_alpha_calculation"] is False
-    assert cfg["asset_universe"]["status"] == "UNRESOLVED"
-    assert cfg["asset_universe"]["asset_ids"] == []
-    assert cfg["dataset_contract"]["status"] == "UNAVAILABLE"
+    assert cfg["status"] == "APPROVED_TO_RUN"
+    assert cfg["approval"]["approved_to_run"] is True
+    assert cfg["runtime"]["perform_alpha_calculation"] is True
+    assert cfg["asset_universe"]["status"] == "READY"
+    assert len(cfg["asset_universe"]["asset_ids"]) == 15
+    assert cfg["dataset_contract"]["status"] == "BUILD_AT_RUN_FROM_FROZEN_SOURCES"
     assert compute_alpha_specification_hash(cfg) == cfg["specification_hash"]
+    assert cfg["approval"]["approved_specification_hash"] == cfg["specification_hash"]
     assert cfg["robustness_family"]["total_variants"] == (
         AR0003_ROBUSTNESS_VARIANTS
     )
@@ -83,14 +101,15 @@ def test_ar0003_is_hash_bound_specification_only_and_registered() -> None:
     )
 
 
-def test_ar0003_refuses_before_data_access_and_cannot_fake_readiness() -> None:
-    with pytest.raises(CrossSectionalAlphaExecutionRefused, match="before data access"):
-        run_alpha_discovery_v3_pipeline(CONFIG)
-
+def test_ar0003_cannot_change_a_frozen_source_under_a_rehashed_approval() -> None:
     cfg = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
     invented = copy.deepcopy(cfg)
-    invented["asset_universe"]["asset_ids"] = ["EURUSD", "US100"]
-    with pytest.raises(ValueError, match="unresolved.*cannot contain invented"):
+    invented["asset_universe"]["source_files"]["ETHUSD"]["sha256"] = "0" * 64
+    invented["dataset_contract"]["source_snapshot_fingerprints"]["ETHUSD"] = "0" * 64
+    invented_hash = compute_alpha_specification_hash(invented)
+    invented["specification_hash"] = invented_hash
+    invented["approval"]["approved_specification_hash"] = invented_hash
+    with pytest.raises(ValueError, match="frozen source binding drifted for ETHUSD"):
         validate_alpha_discovery_any_config(invented)
 
 
@@ -187,3 +206,23 @@ def test_cross_sectional_output_is_portable_screening_not_portfolio_evidence() -
         for record in diagnostics["prediction_records"]
     )
     json.dumps(diagnostics, allow_nan=False)
+
+
+def test_ar0003_target_uses_next_open_and_invalidates_gap_crossing_windows() -> None:
+    bars = _source_bars()
+    built = build_ar0003_asset_features_and_targets(bars)
+    row = 200
+    expected_long = bars.loc[row + 33, "bid_open"] / bars.loc[row + 1, "ask_open"] - 1.0
+    expected_short = (
+        bars.loc[row + 1, "bid_open"] - bars.loc[row + 33, "ask_open"]
+    ) / bars.loc[row + 1, "bid_open"]
+
+    assert built.loc[row, "future_executable_return_h32"] == pytest.approx(expected_long)
+    assert built.loc[row, "short_return_h32_cost_1_0"] == pytest.approx(expected_short)
+    assert built.loc[row, "future_executable_return_h32"] != pytest.approx(
+        bars.loc[row + 32, "bid_open"] / bars.loc[row, "ask_open"] - 1.0
+    )
+
+    gap_bars = bars.drop(index=205).reset_index(drop=True)
+    gap_built = build_ar0003_asset_features_and_targets(gap_bars)
+    assert pd.isna(gap_built.loc[200, "future_executable_return_h16"])

@@ -1,0 +1,297 @@
+schema_version: 5
+pipeline:
+  kind: alpha_discovery_v4
+  stage: CLOUD_ML_DISCOVERY
+research_id: AR-0004
+title: Cross-Asset Walk-Forward Alpha Tournament
+status: SPECIFICATION_ONLY
+specification_hash: 79fc8786f6b4076f999256e0297c714b4947081049e1fe0307ece1a8142a12c8
+
+approval:
+  approved_to_run: false
+  approved_by: null
+  approved_at: null
+  approved_specification_hash: null
+
+hypothesis:
+  statement: >-
+    A pooled nonlinear model using causal multi-horizon trend, path-quality,
+    volatility, and contemporaneous cross-sectional features
+    can rank a diversified liquid CFD/crypto universe by future executable
+    return, with positive and temporally stable rank IC and positive top-minus-
+    bottom directional return after stressed observed bid/ask costs.
+  mechanism: CROSS_ASSET_RELATIVE_STRENGTH_WITH_REGIME_AND_PATH_QUALITY
+  prior_results_role: POST_HOC_HYPOTHESIS_GENERATION_ONLY
+  prior_results_are_validation: false
+
+prior_research_context:
+  source_research_ids: [AR-0001, AR-0002, AR-0003]
+  source_specification_hashes:
+    AR-0001: 38547ee331f5efe7f3dabbe7f5895974b454bf52e4fde92a0b2b6908ab725c1c
+    AR-0002: 595ab54bb0facdc48e74b357a473f93ca1965fe7ebbbc74ad403f78d59e3dd42
+    AR-0003: 459f9bc8411843dfee1c6d352dc2a4b01115ea379ada87ed38422cc5660048e0
+  evidence_role: DISCOVERY
+  use: HYPOTHESIS_GENERATION_AND_ARCHITECTURE_BASELINE_ONLY
+  contamination_statement: PRIOR_RESULTS_ARE_NOT_VALIDATION_OR_FINAL_EVIDENCE
+
+scientific_contract:
+  evidence_role: DISCOVERY
+  material_change_policy: NEW_RESEARCH_CYCLE_AND_NEW_HASH
+  candidate_ceiling: PENDING_CANONICAL_VALIDATION
+  canonical_validation_owner: STF_CANONICAL_EXPERIMENT
+  automatic_promotion: FORBIDDEN
+  screening_is_validation: false
+  screening_is_final_holdout: false
+
+asset_universe:
+  reference: AR-0004-DUKASCOPY-15-ASSET-30M-V1
+  asset_ids:
+    - AUS200
+    - BRENT
+    - ETHUSD
+    - EU50
+    - EURUSD
+    - FRA40
+    - GER40
+    - NIKKEI225
+    - SPX500
+    - UK100
+    - US100
+    - US30
+    - USOIL
+    - XAGUSD
+    - XAUUSD
+  timeframe: 30m
+  timezone: UTC
+  minimum_assets_per_timestamp: 5
+  missing_observation_policy: PRESERVE_ABSENCE_NO_DENSIFICATION
+  source_bar_policy: OBSERVED_PROVIDER_30M_BARS_NO_MINUTE_RECONSTRUCTION
+  sample_start_inclusive: '2020-01-06T00:00:00Z'
+  sample_end_exclusive: '2026-04-28T00:00:00Z'
+  source_files:
+    AUS200: {path: data/raw/dukascopy_30m_clean/aus200_30m.csv, sha256: d7f62330d3143a696cff7ffe9db122b4510792b723f70bef5c7fd01b137e41dd}
+    BRENT: {path: data/raw/dukascopy_30m_clean/brent_30m.csv, sha256: 63bc08d53f8715ec753aaefcb8932cbdfa3050639e4ef5b97d90e1c07114075d}
+    ETHUSD: {path: data/raw/dukascopy_30m_clean/ethusd_30m.csv, sha256: efcde7cbd74ad8d8d450bf6d7bf8127919fe3e54ebbd7715f79e6310f64b9b7d}
+    EU50: {path: data/raw/dukascopy_30m_clean/eu50_30m.csv, sha256: 4d365e833a5fe397b2923e89ec52cd7e012ccb201b09a3ee3a62c07b502381ec}
+    EURUSD: {path: data/raw/dukascopy_30m_clean/eurusd_30m.csv, sha256: 384af9b40271f1598a545c79c77303922ed20d257b968c7b4718820accef4164}
+    FRA40: {path: data/raw/dukascopy_30m_clean/fra40_30m.csv, sha256: 44ee0d3e53ee98f0cba279c0b51e2f166dbdc493b8ce769b783ae28ff88db46b}
+    GER40: {path: data/raw/dukascopy_30m_clean/ger40_30m.csv, sha256: 8f2a7c1dd532c07962a01cec052537a4ccbf400901e9be61865048d6d0647a75}
+    NIKKEI225: {path: data/raw/dukascopy_30m_clean/nikkei225_30m.csv, sha256: 6092986793fff17e8251d6ab6345415be623ccf0cd560f8ab18cda31b4f4e61b}
+    SPX500: {path: data/raw/dukascopy_30m_clean/spx500_30m.csv, sha256: ccb10edeb21af135bd9867cc335e9aef54130ca2e0c2e2bd84505e5998202279}
+    UK100: {path: data/raw/dukascopy_30m_clean/uk100_30m.csv, sha256: c2bbcf58fc501ea041ea01ae657c3f8d5cd53b4f94a9cf47c6cd6d76e44b456b}
+    US100: {path: data/raw/dukascopy_30m_clean/us100_30m.csv, sha256: 186674e3b04ec09f549933ece717f4b2434fcc3f5d1970514703a05f116bdb5a}
+    US30: {path: data/raw/dukascopy_30m_clean/us30_30m.csv, sha256: 58af6f5e16f903194eeb89da0f2abcb12f1e018776bba45c6d77598b291e201c}
+    USOIL: {path: data/raw/dukascopy_30m_clean/usoil_30m.csv, sha256: ead250e201ec44772285a6d40318ca545680aefbbdb00ec63c956b36bcd6b2eb}
+    XAGUSD: {path: data/raw/dukascopy_30m_clean/xagusd_30m.csv, sha256: 8f8f46343a613fd250c9e5f138ecaafebfa1752cb15b95126f40a34fe1e8f034}
+    XAUUSD: {path: data/raw/dukascopy_30m_clean/xauusd_30m.csv, sha256: 887696a68d8290c1ac4143c3bac0451ec1a731967aac013a30d25f67f5c9bddf}
+
+features:
+  owner: STF_FEATURES
+  information_time: CLOSE_T
+  missing_value_policy: DROP_INCOMPLETE_WITHOUT_FILL
+  per_asset_base:
+    - log_return_16
+    - log_return_32
+    - log_return_64
+    - path_efficiency_16
+    - path_efficiency_32
+    - path_efficiency_48
+    - realized_volatility_16
+    - realized_volatility_32
+    - realized_volatility_64
+    - realized_volatility_192
+    - volatility_ratio_32_192
+  contemporaneous_cross_sectional_transforms: [ZSCORE, PERCENTILE_RANK]
+  cross_sectional_minimum_assets: 5
+  feature_sets:
+    trend:
+      - log_return_16
+      - log_return_32
+      - log_return_64
+    trend_quality:
+      - log_return_16
+      - log_return_32
+      - log_return_64
+      - path_efficiency_16
+      - path_efficiency_32
+      - path_efficiency_48
+    trend_quality_volatility:
+      - log_return_16
+      - log_return_32
+      - log_return_64
+      - path_efficiency_16
+      - path_efficiency_32
+      - path_efficiency_48
+      - realized_volatility_16
+      - realized_volatility_32
+      - realized_volatility_64
+      - realized_volatility_192
+      - volatility_ratio_32_192
+    full_cross_sectional:
+      - log_return_16
+      - log_return_32
+      - log_return_64
+      - path_efficiency_16
+      - path_efficiency_32
+      - path_efficiency_48
+      - realized_volatility_16
+      - realized_volatility_32
+      - realized_volatility_64
+      - realized_volatility_192
+      - volatility_ratio_32_192
+      - cs_z_log_return_16
+      - cs_z_log_return_32
+      - cs_z_log_return_64
+      - cs_rank_path_efficiency_16
+      - cs_rank_path_efficiency_32
+      - cs_rank_path_efficiency_48
+      - cs_rank_volatility_ratio_32_192
+
+target:
+  owner: STF_TARGETS
+  kind: FUTURE_EXECUTABLE_LONG_COORDINATE_RETURN
+  horizons_bars: [16, 32]
+  information_time: CLOSE_T
+  entry: OPEN_T_PLUS_1
+  exit: OPEN_T_PLUS_H_PLUS_1
+  observed_bid_ask_required: true
+  zero_cost_fallback: FORBIDDEN
+  target_overlap_purge_bars: HORIZON_PLUS_ONE
+
+walk_forward:
+  kind: EXPANDING
+  random_shuffle: false
+  refit_per_fold: true
+  embargo_bars: 0
+  tuning_folds:
+    - {fold_id: TUNE-2023-H1, test_start: '2023-01-01T00:00:00Z', test_end: '2023-07-01T00:00:00Z'}
+    - {fold_id: TUNE-2023-H2, test_start: '2023-07-01T00:00:00Z', test_end: '2024-01-01T00:00:00Z'}
+    - {fold_id: TUNE-2024-H1, test_start: '2024-01-01T00:00:00Z', test_end: '2024-07-01T00:00:00Z'}
+    - {fold_id: TUNE-2024-H2, test_start: '2024-07-01T00:00:00Z', test_end: '2025-01-01T00:00:00Z'}
+  screening_folds:
+    - {fold_id: SCREEN-2025-H1, test_start: '2025-01-01T00:00:00Z', test_end: '2025-07-01T00:00:00Z'}
+    - {fold_id: SCREEN-2025-H2, test_start: '2025-07-01T00:00:00Z', test_end: '2026-01-01T00:00:00Z'}
+    - {fold_id: SCREEN-2026-Q1, test_start: '2026-01-01T00:00:00Z', test_end: '2026-04-28T00:00:00Z'}
+
+model_search:
+  owner: STF_MODEL_REGISTRY
+  model_kind: lightgbm_regressor
+  method: OPTUNA_TPE
+  trials: 384
+  top_trials_for_screening: 24
+  ensemble_top_k_same_horizon: 5
+  sampler: {seed: 40004, multivariate: true, group: true, startup_trials: 64}
+  pruning: {enabled: true, startup_trials: 64, warmup_folds: 2}
+  parallel_jobs: 4
+  threads_per_model: 1
+  objective: STABILITY_ADJUSTED_MEAN_RANK_IC
+  objective_formula: MEAN_FOLD_RANK_IC_MINUS_0_50_STD_MINUS_0_25_NEGATIVE_WORST_PENALTY
+  space:
+    feature_set: [trend, trend_quality, trend_quality_volatility, full_cross_sectional]
+    horizon_bars: [16, 32]
+    n_estimators: {low: 200, high: 1600, step: 100}
+    learning_rate: {low: 0.005, high: 0.08, log: true}
+    num_leaves: {low: 15, high: 127}
+    max_depth: [-1, 5, 7, 9]
+    min_child_samples: {low: 20, high: 300, step: 10}
+    subsample: {low: 0.60, high: 1.00, step: 0.05}
+    colsample_bytree: {low: 0.50, high: 1.00, step: 0.05}
+    reg_alpha: {low: 0.00001, high: 10.0, log: true}
+    reg_lambda: {low: 0.00001, high: 10.0, log: true}
+
+screening_evaluation:
+  minimum_assets_per_timestamp: 5
+  top_fraction: 0.20
+  bottom_fraction: 0.20
+  prediction_scope: OOS_SCREENING_ROWS_ONLY
+  missing_oos_policy: PRESERVE_MISSING_NO_BACKFILL
+  primary_metric: mean_rank_correlation
+  tie_breakers: [worst_fold_rank_correlation, stressed_top_bottom_return, rmse]
+  candidate_top_k: 3
+
+cost_policy:
+  base: OBSERVED_BID_ASK_OPEN_T_PLUS_1_TO_OPEN_T_PLUS_H_PLUS_1
+  stress_multiplier: 1.50
+  commission: NOT_INCLUDED_NO_FROZEN_ASSUMPTION
+  slippage: NOT_INCLUDED_NO_FROZEN_ASSUMPTION
+  swap: NOT_INCLUDED_NO_FROZEN_ASSUMPTION
+  unsupported_cost_fallback: FORBIDDEN
+
+inference:
+  screening_family_size: 25
+  includes_ensemble: true
+  binding_method: GLOBAL_BENJAMINI_YEKUTIELI
+  false_discovery_rate: 0.05
+  hac_lag_bars: 32
+  bootstrap:
+    method: STRATIFIED_SEGMENTED_MOVING_BLOCK
+    block_length_bars: 32
+    resamples: 2000
+    confidence_level: 0.95
+    minimum_valid_resample_fraction: 0.90
+    seed: 44004
+  failed_or_invalid_alternatives_retained_as_p1: true
+
+candidate_gates:
+  minimum_oos_rows: 5000
+  minimum_oos_coverage: 0.90
+  positive_mean_rank_ic: true
+  positive_each_screening_fold_rank_ic: true
+  bootstrap_lower_rank_ic_gt_zero: true
+  global_by_pass: true
+  stressed_top_bottom_return_gt_zero: true
+  causal_features: true
+  fold_safe_preprocessing: true
+  oos_predictions_only: true
+
+resource_policy:
+  max_assets: 15
+  max_rows: 1500000
+  max_optuna_trials: 384
+  max_tuning_model_fits: 1536
+  max_screening_alternatives: 25
+  max_screening_model_fits: 84
+  max_parallel_jobs: 4
+  maximum_selected_prediction_rows_written: 500000
+  estimated_peak_memory_gb: 24
+  recommended_cpu_cores: 16
+  recommended_ram_gb: 64
+
+artifacts:
+  output_root: logs/experiments/alpha_discovery/AR-0004
+  write_mode: IMMUTABLE_RUN_DIRECTORY
+  planned:
+    - run_manifest.json
+    - contracts/resolved_specification.yaml
+    - data_quality/source_quality.json
+    - datasets/panel_metadata.json
+    - tuning/optuna_trials.csv
+    - tuning/optuna_study.db
+    - screening/lifecycle/discovery_spec.json
+    - screening/lifecycle/trials.jsonl
+    - screening/lifecycle/ranking.json
+    - screening/lifecycle/selected_candidates.json
+    - screening/lifecycle/canonical_validation_requests.json
+    - screening/lifecycle/parameter_neighborhood.json
+    - screening/lifecycle/discovery_summary.json
+    - screening/lifecycle/discovery_report.md
+    - screening/selected_predictions.csv.gz
+    - screening/fold_metrics.json
+    - screening/inference.json
+    - candidates/selected_candidates.json
+    - candidates/canonical_validation_requests.json
+    - reports/search_breadth.json
+    - reports/final_report.md
+
+runtime:
+  perform_alpha_calculation: false
+  access_validation: false
+  access_historical_pseudo_oos: false
+  access_prospective_final: false
+  run_canonical_backtest: false
+  construct_portfolio: false
+  paper_demo_live_execution: false
+  auto_promote_candidate: false
+
+blockers:
+  - HUMAN_APPROVAL_OF_EXACT_SPECIFICATION_HASH_REQUIRED

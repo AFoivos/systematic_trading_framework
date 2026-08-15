@@ -172,6 +172,7 @@ tests/experiments/*
 !tests/experiments/test_optuna_discovery_adapter.py
 !tests/experiments/test_alpha_discovery_phase3.py
 !tests/experiments/test_alpha_discovery_ar0002.py
+!tests/experiments/test_alpha_discovery_ar0004.py
 !tests/experiments/test_alpha_registry.py
 !tests/experiments/evolutionary/
 !tests/experiments/evolutionary/*.py

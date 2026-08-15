@@ -29,6 +29,28 @@ AR0003_PATH_EFFICIENCY_COLUMNS = (
 )
 AR0003_PRIMARY_HORIZON = 32
 AR0003_ROBUSTNESS_VARIANTS = 12
+AR0003_ASSETS = (
+    "AUS200", "BRENT", "ETHUSD", "EU50", "EURUSD", "FRA40", "GER40",
+    "NIKKEI225", "SPX500", "UK100", "US100", "US30", "USOIL", "XAGUSD",
+    "XAUUSD",
+)
+AR0003_SOURCE_SHA256 = {
+    "AUS200": "d7f62330d3143a696cff7ffe9db122b4510792b723f70bef5c7fd01b137e41dd",
+    "BRENT": "63bc08d53f8715ec753aaefcb8932cbdfa3050639e4ef5b97d90e1c07114075d",
+    "ETHUSD": "efcde7cbd74ad8d8d450bf6d7bf8127919fe3e54ebbd7715f79e6310f64b9b7d",
+    "EU50": "4d365e833a5fe397b2923e89ec52cd7e012ccb201b09a3ee3a62c07b502381ec",
+    "EURUSD": "384af9b40271f1598a545c79c77303922ed20d257b968c7b4718820accef4164",
+    "FRA40": "44ee0d3e53ee98f0cba279c0b51e2f166dbdc493b8ce769b783ae28ff88db46b",
+    "GER40": "8f2a7c1dd532c07962a01cec052537a4ccbf400901e9be61865048d6d0647a75",
+    "NIKKEI225": "6092986793fff17e8251d6ab6345415be623ccf0cd560f8ab18cda31b4f4e61b",
+    "SPX500": "ccb10edeb21af135bd9867cc335e9aef54130ca2e0c2e2bd84505e5998202279",
+    "UK100": "c2bbcf58fc501ea041ea01ae657c3f8d5cd53b4f94a9cf47c6cd6d76e44b456b",
+    "US100": "186674e3b04ec09f549933ece717f4b2434fcc3f5d1970514703a05f116bdb5a",
+    "US30": "58af6f5e16f903194eeb89da0f2abcb12f1e018776bba45c6d77598b291e201c",
+    "USOIL": "ead250e201ec44772285a6d40318ca545680aefbbdb00ec63c956b36bcd6b2eb",
+    "XAGUSD": "8f8f46343a613fd250c9e5f138ecaafebfa1752cb15b95126f40a34fe1e8f034",
+    "XAUUSD": "887696a68d8290c1ac4143c3bac0451ec1a731967aac013a30d25f67f5c9bddf",
+}
 
 _TOP_LEVEL_KEYS = {
     "schema_version",
@@ -116,6 +138,10 @@ def _validate_asset_and_dataset_contracts(
             "status",
             "minimum_assets_per_timestamp",
             "missing_observation_policy",
+            "source_bar_policy",
+            "source_files",
+            "sample_start_inclusive",
+            "sample_end_exclusive",
         },
         field="asset_universe",
     )
@@ -136,19 +162,23 @@ def _validate_asset_and_dataset_contracts(
         raise AlphaDiscoveryConfigError(
             "asset_universe.asset_ids must be unique and lexicographically sorted."
         )
-    if universe["status"] == "UNRESOLVED":
-        if assets or universe["reference"] != "CANONICAL_MULTI_ASSET_UNIVERSE_UNRESOLVED":
-            raise AlphaDiscoveryConfigError(
-                "An unresolved AR-0003 universe cannot contain invented asset IDs."
-            )
-    elif universe["status"] == "READY":
-        if len(assets) < 5:
-            raise AlphaDiscoveryConfigError(
-                "A ready AR-0003 universe requires at least five canonical assets."
-            )
-        _non_empty_string(universe["reference"], field="asset_universe.reference")
-    else:
-        raise AlphaDiscoveryConfigError("asset_universe.status must be UNRESOLVED or READY.")
+    if tuple(assets) != AR0003_ASSETS or universe["status"] != "READY":
+        raise AlphaDiscoveryConfigError("AR-0003 requires the frozen 15-asset universe.")
+    if universe["reference"] != "AR-0003-DUKASCOPY-15-ASSET-30M-V1":
+        raise AlphaDiscoveryConfigError("AR-0003 asset-universe reference drifted.")
+    if universe["source_bar_policy"] != "OBSERVED_PROVIDER_30M_BARS_NO_MINUTE_RECONSTRUCTION":
+        raise AlphaDiscoveryConfigError("AR-0003 source-bar policy drifted.")
+    if universe["sample_start_inclusive"] != "2020-01-06T00:00:00Z" or universe["sample_end_exclusive"] != "2026-04-28T00:00:00Z":
+        raise AlphaDiscoveryConfigError("AR-0003 sample boundaries drifted.")
+    sources = _mapping(universe["source_files"], field="asset_universe.source_files")
+    if tuple(sorted(sources)) != AR0003_ASSETS:
+        raise AlphaDiscoveryConfigError("AR-0003 source files must match the frozen universe.")
+    for asset in AR0003_ASSETS:
+        source = _mapping(sources[asset], field=f"asset_universe.source_files.{asset}")
+        _exact_keys(source, {"path", "sha256"}, field=f"asset_universe.source_files.{asset}")
+        expected_path = f"data/raw/dukascopy_30m_clean/{asset.lower()}_30m.csv"
+        if source["path"] != expected_path or source["sha256"] != AR0003_SOURCE_SHA256[asset]:
+            raise AlphaDiscoveryConfigError(f"AR-0003 frozen source binding drifted for {asset}.")
 
     dataset = _mapping(cfg["dataset_contract"], field="dataset_contract")
     _exact_keys(
@@ -165,6 +195,8 @@ def _validate_asset_and_dataset_contracts(
             "row_identity",
             "prediction_eligibility_required",
             "status",
+            "builder_version",
+            "segments",
         },
         field="dataset_contract",
     )
@@ -179,41 +211,22 @@ def _validate_asset_and_dataset_contracts(
         raise AlphaDiscoveryConfigError(
             "AR-0003 must use the STF R1 DISCOVERY panel contract."
         )
-    if dataset["status"] == "UNAVAILABLE":
-        nullable = ("dataset_id", "metadata_path", "data_path", "dataset_sha256")
-        if any(dataset[name] is not None for name in nullable):
-            raise AlphaDiscoveryConfigError(
-                "An unavailable AR-0003 panel cannot claim dataset bindings."
-            )
-        if dataset["source_snapshot_fingerprints"] != {}:
-            raise AlphaDiscoveryConfigError(
-                "An unavailable AR-0003 panel cannot claim snapshot fingerprints."
-            )
-    elif dataset["status"] == "READY":
-        for name in ("dataset_id", "metadata_path", "data_path"):
-            _non_empty_string(dataset[name], field=f"dataset_contract.{name}")
-        _sha256(dataset["dataset_sha256"], field="dataset_contract.dataset_sha256")
-        fingerprints = _mapping(
-            dataset["source_snapshot_fingerprints"],
-            field="dataset_contract.source_snapshot_fingerprints",
-        )
-        if not fingerprints:
-            raise AlphaDiscoveryConfigError(
-                "A ready AR-0003 panel requires source snapshot fingerprints."
-            )
-        for name, value in fingerprints.items():
-            _non_empty_string(name, field="source snapshot reference")
-            _sha256(value, field=f"source_snapshot_fingerprints.{name}")
-    else:
-        raise AlphaDiscoveryConfigError(
-            "dataset_contract.status must be UNAVAILABLE or READY."
-        )
-    if status is AlphaDiscoveryStatus.APPROVED_TO_RUN and (
-        universe["status"] != "READY" or dataset["status"] != "READY"
-    ):
-        raise AlphaDiscoveryConfigError(
-            "AR-0003 cannot be approved until universe and panel dataset are READY."
-        )
+    if dataset["status"] != "BUILD_AT_RUN_FROM_FROZEN_SOURCES":
+        raise AlphaDiscoveryConfigError("AR-0003 dataset must be built from frozen sources at run time.")
+    if dataset["dataset_id"] != "AR-0003-MULTI-ASSET-DISCOVERY-V1" or dataset["builder_version"] != "AR0003_PANEL_V1":
+        raise AlphaDiscoveryConfigError("AR-0003 dataset identity or builder drifted.")
+    if any(dataset[name] is not None for name in ("metadata_path", "data_path", "dataset_sha256")):
+        raise AlphaDiscoveryConfigError("Runtime-built AR-0003 panel paths/fingerprint must be derived artifacts.")
+    fingerprints = _mapping(dataset["source_snapshot_fingerprints"], field="dataset_contract.source_snapshot_fingerprints")
+    if fingerprints != AR0003_SOURCE_SHA256:
+        raise AlphaDiscoveryConfigError("AR-0003 dataset source fingerprints drifted.")
+    expected_segments = [
+        {"id": "training", "purpose": "TRAINING", "start_inclusive": "2020-01-06T00:00:00Z", "end_exclusive": "2024-01-01T00:00:00Z"},
+        {"id": "tuning", "purpose": "TUNING", "start_inclusive": "2024-01-01T00:00:00Z", "end_exclusive": "2025-01-01T00:00:00Z"},
+        {"id": "screening", "purpose": "SCREENING", "start_inclusive": "2025-01-01T00:00:00Z", "end_exclusive": "2026-04-28T00:00:00Z"},
+    ]
+    if dataset["segments"] != expected_segments:
+        raise AlphaDiscoveryConfigError("AR-0003 chronological discovery segments drifted.")
 
 
 def _validate_scientific_core(cfg: dict[str, Any]) -> None:
@@ -377,7 +390,7 @@ def _validate_scientific_core(cfg: dict[str, Any]) -> None:
             "exit_boundary": "OPEN_T_PLUS_H_PLUS_1",
             "observed_bid_ask_required": True,
             "zero_cost_fallback": "FORBIDDEN",
-            "panel_mapping_status": "UNAVAILABLE",
+            "panel_mapping_status": "READY",
         },
         field="target",
     )
@@ -420,7 +433,7 @@ def _validate_scientific_core(cfg: dict[str, Any]) -> None:
                 "hit_rate",
             ],
             "aggregate_positive_is_not_sufficient": True,
-            "minimum_period_threshold": "NOT_HARDCODED_PENDING_DATA_CONTRACT",
+            "minimum_period_threshold": 500,
         },
         field="temporal_stability",
     )
@@ -455,6 +468,10 @@ def _validate_search_and_safety(cfg: dict[str, Any], *, status: AlphaDiscoverySt
             "primary_variant",
             "failed_or_invalid_alternatives_retained",
             "binding_method",
+            "false_discovery_rate",
+            "discovery_eligibility_gate",
+            "hac_lag_bars",
+            "bootstrap",
             "secondary_model_family_separate",
         },
         field="multiple_testing",
@@ -483,12 +500,22 @@ def _validate_search_and_safety(cfg: dict[str, Any], *, status: AlphaDiscoverySt
         raise AlphaDiscoveryConfigError(
             "AR-0003 multiple-testing dimensions or primary member drifted."
         )
-    if status is AlphaDiscoveryStatus.APPROVED_TO_RUN and multiple[
-        "binding_method"
-    ] == "UNRESOLVED_PENDING_STATISTICAL_DESIGN":
-        raise AlphaDiscoveryConfigError(
-            "AR-0003 cannot be approved before a binding multiple-testing method is frozen."
-        )
+    if multiple["binding_method"] != "GLOBAL_BENJAMINI_YEKUTIELI" or multiple["false_discovery_rate"] != 0.05 or multiple["hac_lag_bars"] != 32:
+        raise AlphaDiscoveryConfigError("AR-0003 binding inference policy drifted.")
+    if multiple["discovery_eligibility_gate"] != "POSITIVE_MEAN_AND_BOOTSTRAP_LOWER_GT_ZERO_AND_GLOBAL_BY":
+        raise AlphaDiscoveryConfigError("AR-0003 discovery eligibility gate drifted.")
+    _require_exact(
+        multiple["bootstrap"],
+        {
+            "method": "STRATIFIED_SEGMENTED_MOVING_BLOCK",
+            "block_length_bars": 32,
+            "resamples": 1000,
+            "confidence_level": 0.95,
+            "minimum_valid_resample_fraction": 0.90,
+            "base_seed": 30003,
+        },
+        field="multiple_testing.bootstrap",
+    )
 
     secondary = _mapping(cfg["secondary_lightgbm"], field="secondary_lightgbm")
     expected_secondary = {
@@ -521,9 +548,9 @@ def _validate_search_and_safety(cfg: dict[str, Any], *, status: AlphaDiscoverySt
     _require_exact(
         cfg["cost_policy"],
         {
-            "base": "OBSERVED_BID_ASK_ONLY_WHERE_CANONICALLY_SUPPORTED",
+            "base": "OBSERVED_BID_ASK_OPEN_T_PLUS_1_TO_OPEN_T_PLUS_H_PLUS_1",
             "stress_multipliers": [1.0, 1.25, 1.5],
-            "stress_status": "BLOCKED_PENDING_CANONICAL_PANEL_COST_MAPPING",
+            "stress_status": "READY",
             "unsupported_synthetic_costs": "FORBIDDEN",
             "turnover_diagnostic": (
                 "ONLY_IF_SUPPORTED_NO_PORTFOLIO_INTERPRETATION"
@@ -536,26 +563,20 @@ def _validate_search_and_safety(cfg: dict[str, Any], *, status: AlphaDiscoverySt
         {
             "preflight_required": True,
             "max_assets": 100,
-            "max_rows": 1_000_000,
+            "max_rows": 1_500_000,
             "max_deterministic_variants": 12,
             "max_secondary_trials": 32,
-            "estimate_status": "BLOCKED_UNTIL_DATASET_AND_UNIVERSE_ARE_BOUND",
+            "estimate_status": "READY",
             "estimated_primary_model_fits": 0,
-            "estimated_secondary_model_fits": None,
+            "estimated_secondary_model_fits": 0,
         },
         field="resource_policy",
     )
 
     target = _mapping(cfg["target"], field="target")
     costs = _mapping(cfg["cost_policy"], field="cost_policy")
-    if status is AlphaDiscoveryStatus.APPROVED_TO_RUN and (
-        target["panel_mapping_status"] != "READY"
-        or costs["stress_status"]
-        == "BLOCKED_PENDING_CANONICAL_PANEL_COST_MAPPING"
-    ):
-        raise AlphaDiscoveryConfigError(
-            "AR-0003 cannot be approved before executable target/cost mapping is READY."
-        )
+    if target["panel_mapping_status"] != "READY" or costs["stress_status"] != "READY":
+        raise AlphaDiscoveryConfigError("AR-0003 executable target/cost mapping must remain READY.")
 
     runtime = _mapping(cfg["runtime"], field="runtime")
     expected_runtime_keys = {
@@ -624,18 +645,27 @@ def validate_alpha_discovery_v3_config(cfg: dict[str, Any]) -> None:
         "multiple_testing",
         "canonical_validation",
     }
-    if set(gates) != expected_gates or any(
-        value != "NOT_EVALUATED" for value in gates.values()
-    ):
-        raise AlphaDiscoveryConfigError(
-            "AR-0003 promotion gates must remain unevaluated in the specification."
-        )
+    expected_gate_values = {
+        "specification_complete": "PASS",
+        "canonical_universe_bound": "PASS",
+        "panel_dataset_validated": "RUNTIME_FAIL_CLOSED",
+        "leakage_and_timing": "PASS_BY_CONTRACT_RUNTIME_REVALIDATED",
+        "resource_preflight": "RUNTIME_FAIL_CLOSED",
+        "approval_hash_bound": "PASS",
+        "execution_cost_mapping": "PASS",
+        "multiple_testing": "PASS",
+        "canonical_validation": "NOT_EVALUATED",
+    }
+    if set(gates) != expected_gates or gates != expected_gate_values:
+        raise AlphaDiscoveryConfigError("AR-0003 promotion/readiness gates drifted.")
     artifacts = _mapping(cfg["artifacts"], field="artifacts")
     planned_artifacts = [
         "run_manifest.json",
         "contracts/resolved_specification.yaml",
-        "datasets/panel_dataset_metadata.json",
-        "predictions/primary_score_predictions.jsonl",
+        "datasets/panel_h16_metadata.json",
+        "datasets/panel_h32_metadata.json",
+        "data_quality/source_quality.json",
+        "predictions/primary_score_predictions.csv.gz",
         "reports/cross_sectional_diagnostics.json",
         "reports/per_asset_diagnostics.json",
         "reports/temporal_stability.json",
@@ -678,9 +708,11 @@ def validate_alpha_discovery_v3_config(cfg: dict[str, Any]) -> None:
 
 
 __all__ = [
+    "AR0003_ASSETS",
     "AR0003_MOMENTUM_COLUMNS",
     "AR0003_PATH_EFFICIENCY_COLUMNS",
     "AR0003_PRIMARY_HORIZON",
     "AR0003_ROBUSTNESS_VARIANTS",
+    "AR0003_SOURCE_SHA256",
     "validate_alpha_discovery_v3_config",
 ]
